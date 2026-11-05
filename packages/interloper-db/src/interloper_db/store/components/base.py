@@ -915,26 +915,27 @@ class ComponentStore:
                 partitionings[asset_id] = config
         return partitionings
 
-    def target_assets(self, job: Component) -> dict[UUID, str]:
+    def target_assets(self, job: Component) -> builtins.list[Component]:
         """The assets a job targets, directly or through a source it targets.
 
         Args:
             job: The job row, its relations loaded.
 
         Returns:
-            The assets' keys by id, oldest first.
+            The asset rows, oldest first, their parents loaded.
         """
         targets = [relation.dst_id for relation in job.out_relations if relation.name == "targets"]
         statement = (
-            select(col(Component.id), col(Component.key))
+            select(Component)
             .where(
                 Component.kind == "asset",
                 col(Component.id).in_(targets) | col(Component.parent_id).in_(targets),
             )
+            .options(selectinload(Component.parent))  # ty: ignore[invalid-argument-type]
             .order_by(col(Component.created_at), col(Component.id))
         )
         with session_scope(self._engine) as session:
-            return dict(session.exec(statement).all())
+            return list(session.exec(statement).all())
 
     # -- Internals -------------------------------------------------------------
 

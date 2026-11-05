@@ -46,11 +46,8 @@ class TestSnapshotPartitionConfig:
         config.check(TimePartition(dt.date(2026, 1, 1), TimeGranularity.MONTH).window)
         config.check(ListPartition("eu").window)
 
-    def test_it_is_a_time_partitioning_whose_start_bounds_no_window(self) -> None:
-        config = SnapshotPartitionConfig(column="date", start=dt.date(2026, 10, 1))
-
-        assert isinstance(config, TimePartitionConfig)
-        config.check(TimePartition(dt.date(2026, 9, 1)).window)
+    def test_it_is_a_time_partitioning(self) -> None:
+        assert isinstance(SnapshotPartitionConfig(column="date"), TimePartitionConfig)
 
     def test_the_definition_round_trips(self) -> None:
         config = SnapshotPartitionConfig(column="date", granularity=TimeGranularity.MONTH)

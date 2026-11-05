@@ -4,6 +4,7 @@
 # component class declares a relation, and the collector needs it as a real
 # class, not a lazy string.
 
+import datetime as dt
 from typing import Any, ClassVar
 
 import pytest
@@ -174,9 +175,14 @@ class TestInheritance:
         source.dataset = "other"
         assert source.plain.dataset == "other"
 
+    def test_the_history_start_reaches_the_assets_unless_one_sets_its_own(self):
+        overrides = {"plain": {}, "explicit": {"start": "2026-03-01"}}
+        source = Cascade(start=dt.date(2026, 1, 1), assets=overrides)  # ty: ignore[invalid-argument-type]
+        assert (source.plain.start, source.explicit.start) == (dt.date(2026, 1, 1), dt.date(2026, 3, 1))
+
     def test_a_spec_carries_the_assets_own_values_only(self):
         payload = (Cascade(dataset="raw").to_spec().init or {})["assets"]["plain"]
-        inherited = {"dataset", "default_destination_key", "materialization_strategy", "normalizer", "retry"}
+        inherited = {"dataset", "default_destination_key", "materialization_strategy", "normalizer", "retry", "start"}
         assert inherited.isdisjoint(payload)
 
     def test_an_assets_dataset_defaults_to_the_source_key(self):
@@ -450,6 +456,7 @@ class TestDefinition:
             ("default_destination_key", "Destination"),
             ("materialization_strategy", "Materialization"),
             ("retry", "Operation"),
+            ("start", "Partitioning"),
         ]
 
     def test_assets_show_the_less_mature_of_their_own_and_the_sources_maturity(self):

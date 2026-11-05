@@ -293,13 +293,13 @@ class InsightStore:
         assets = self._components.target_assets(job)
         partitionings = self._components.asset_partitionings(org_id)
         snapshots = {
-            asset_id: partitionings[asset_id]
-            for asset_id in assets
-            if asset_id in partitionings and not partitionings[asset_id].windowed
+            asset.id: partitionings[asset.id]
+            for asset in assets
+            if asset.id in partitionings and not partitionings[asset.id].windowed
         }
         span = PartitionSpan.from_spans([PartitionSpan.from_key(start_key), PartitionSpan.from_key(end_key)])
         overlapping = partition_keys_overlapping(col(Execution.partition_key), span.first, span.last)
-        rows = self._coverage_rows(org_id, [overlapping], asset_ids=list(assets))
+        rows = self._coverage_rows(org_id, [overlapping], asset_ids=[asset.id for asset in assets])
         return JobCoverage.from_rows(job.id, keys, assets, rows, snapshots=snapshots, now=now)
 
     def feed(self, org_id: UUID, query: PageQuery) -> Page[ActivityEntry]:

@@ -1290,13 +1290,9 @@ class TestEnsureChildrenDrift:
 
 
 class HourlySource(il.Source):
-    """Source whose hourly asset declares where its partitions start."""
+    """Source with an hourly asset beside an unpartitioned one."""
 
-    @il.asset(
-        partitioning=il.TimePartitionConfig(
-            column="date", granularity=TimeGranularity.HOUR, start=dt.datetime(2026, 1, 15)
-        )
-    )
+    @il.asset(partitioning=il.TimePartitionConfig(column="date", granularity=TimeGranularity.HOUR))
     def clicks(self) -> list[dict]:
         return []
 
@@ -1321,7 +1317,7 @@ class TestAssetPartitionings:
             **{child.id: day for child in daily.children},
             monthly.children[0].id: il.TimePartitionConfig(column="date", granularity=TimeGranularity.MONTH),
             next(child for child in hourly.children if child.key == "clicks").id: il.TimePartitionConfig(
-                column="date", granularity=TimeGranularity.HOUR, start=dt.datetime(2026, 1, 15)
+                column="date", granularity=TimeGranularity.HOUR
             ),
             standalone.id: day,
         }

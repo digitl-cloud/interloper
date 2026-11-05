@@ -10,10 +10,9 @@ past window therefore writes the current period, and a second observation within
 replaces the first: a coarser period holds the latest observation taken within it.
 
 A snapshot is a time partitioning, with the same keys, filters and slices, so destinations
-store it as any other; only the period a run writes differs. Its ``start`` is the first period
-it is owed: coverage counts every period since as owed, and one that ended without an
-observation as missed. The instant is aware, and its zone is the clock: a day, month or year is
-the zone's, while an hour is UTC's, as hourly windows are (see `TimeGranularity`).
+store it as any other; only the period a run writes differs. The instant is aware, and its zone
+is the clock: a day, month or year is the zone's, while an hour is UTC's, as hourly windows are
+(see `TimeGranularity`).
 """
 
 from __future__ import annotations
@@ -30,13 +29,7 @@ from interloper.partitioning.time import TimePartition, TimePartitionConfig, Tim
 
 @dataclass(frozen=True, kw_only=True)
 class SnapshotPartitionConfig(TimePartitionConfig):
-    """Partitioning by the period an asset observed, at one granularity.
-
-    Attributes:
-        start: Optional first period the asset is owed. It bounds no window, since a snapshot
-            ignores its run's; coverage owes every period since, and a period that ended
-            without an observation is missed.
-    """
+    """Partitioning by the period an asset observed, at one granularity."""
 
     kind: ClassVar[str] = "snapshot"
     windowed: ClassVar[bool] = False

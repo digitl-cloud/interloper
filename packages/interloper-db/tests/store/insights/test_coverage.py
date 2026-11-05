@@ -20,7 +20,7 @@ from interloper_db.store.insights.coverage import (
 )
 
 _NOW = dt.datetime(2026, 8, 13, 9, 30, tzinfo=dt.timezone.utc)
-DAILY = il.SnapshotPartitionConfig(column="date")
+DAY = il.TimeGranularity.DAY
 
 
 def _row(asset_id: UUID, key: str, verdict: str, failed_run_id: UUID | None = None) -> CoverageRow:
@@ -54,13 +54,14 @@ def _snapshot(
         granularity: The snapshot's granularity.
         keys: Its attempted partition keys, all-time.
         rows: Its coverage rows inside the window read, against a placeholder asset id.
-        start: The first period the snapshot declares it is owed, if any.
+        start: The asset's history start, if any.
 
     Returns:
         The evidence, rows rebound to the asset.
     """
-    asset = Component(org_id=uuid4(), kind="asset", key="campaigns")
-    partitioning = {asset.id: il.SnapshotPartitionConfig(column="date", granularity=granularity, start=start)}
+    config = {"start": start.isoformat()} if start else None
+    asset = Component(org_id=uuid4(), kind="asset", key="campaigns", config=config)
+    partitioning = {asset.id: il.SnapshotPartitionConfig(column="date", granularity=granularity)}
     spans = {asset.id: PartitionSpan.from_spans([PartitionSpan.from_key(key) for key in keys])}
     bound = [row._replace(asset_id=asset.id) for row in rows]
     [evidence] = AssetEvidence.from_components([asset], partitioning, bound, spans)
@@ -101,24 +102,24 @@ class TestObservations:
     def test_a_current_period_fails_and_a_past_one_is_missed(self):
         failed_run = uuid4()
         observations = Observations(
-            [_row(uuid4(), "2026-08-12", "failed"), _row(uuid4(), "2026-08-13", "failed", failed_run)], DAILY
+            [_row(uuid4(), "2026-08-12", "failed"), _row(uuid4(), "2026-08-13", "failed", failed_run)], DAY, None
         )
 
         assert observations.verdict(Period.from_key("2026-08-12"), _NOW) == (Verdict.MISSED, None)
         assert observations.verdict(Period.from_key("2026-08-13"), _NOW) == (Verdict.FAILED, failed_run)
 
     def test_a_period_never_attempted_is_owed_nothing(self):
-        observations = Observations([_row(uuid4(), "2026-08-10", "success")], DAILY)
+        observations = Observations([_row(uuid4(), "2026-08-10", "success")], DAY, None)
 
         assert observations.verdict(Period.from_key("2026-08-11"), _NOW) is None
 
     def test_an_attempt_without_a_verdict_is_pending_while_current(self):
-        observations = Observations([_row(uuid4(), "2026-08-13", "open")], DAILY)
+        observations = Observations([_row(uuid4(), "2026-08-13", "open")], DAY, None)
 
         assert observations.verdict(Period.from_key("2026-08-13"), _NOW) == (Verdict.PENDING, None)
 
     def test_a_coarser_period_covers_every_finer_cell_inside_it(self):
-        observations = Observations([_row(uuid4(), "2026-07", "success")], DAILY)
+        observations = Observations([_row(uuid4(), "2026-07", "success")], DAY, None)
 
         assert observations.verdict(Period.from_key("2026-07-01"), _NOW) == (Verdict.COVERED, None)
         assert observations.verdict(Period.from_key("2026-07-31"), _NOW) == (Verdict.COVERED, None)
@@ -126,39 +127,53 @@ class TestObservations:
 
     def test_a_coarser_cell_is_covered_once_any_finer_period_is(self):
         observations = Observations(
-            [_row(uuid4(), "2026-08-12T05", "failed"), _row(uuid4(), "2026-08-12T09", "success")], DAILY
+            [_row(uuid4(), "2026-08-12T05", "failed"), _row(uuid4(), "2026-08-12T09", "success")], DAY, None
         )
 
         assert observations.verdict(Period.from_key("2026-08-12"), _NOW) == (Verdict.COVERED, None)
 
-    def test_since_a_declared_start_an_ended_period_without_an_observation_is_missed(self):
-        observations = Observations([], il.SnapshotPartitionConfig(column="date", start=dt.date(2026, 8, 10)))
+    def test_since_the_history_start_an_ended_period_without_an_observation_is_missed(self):
+        observations = Observations([], DAY, dt.date(2026, 8, 10))
 
         assert observations.verdict(Period.from_key("2026-08-09"), _NOW) is None
         assert observations.verdict(Period.from_key("2026-08-10"), _NOW) == (Verdict.MISSED, None)
         assert observations.verdict(Period.from_key("2026-08-13"), _NOW) is None
 
     def test_a_day_of_a_month_still_current_is_not_missed(self):
-        monthly = il.SnapshotPartitionConfig(
-            column="date", granularity=il.TimeGranularity.MONTH, start=dt.date(2026, 7, 1)
-        )
-        observations = Observations([], monthly)
+        observations = Observations([], il.TimeGranularity.MONTH, dt.date(2026, 7, 1))
 
         assert observations.verdict(Period.from_key("2026-07-15"), _NOW) == (Verdict.MISSED, None)
         assert observations.verdict(Period.from_key("2026-08-01"), _NOW) is None
 
 
+def _asset(key: str, start: str | None = None, source: Component | None = None) -> Component:
+    """An asset row, with its history start and its source.
+
+    Args:
+        key: The asset's key.
+        start: Its own history start, as stored.
+        source: The source it belongs to.
+
+    Returns:
+        The row.
+    """
+    asset = Component(org_id=uuid4(), kind="asset", key=key, config={"start": start} if start else None, parent=source)
+    if source is not None:
+        asset.parent_id = source.id
+    return asset
+
+
 class TestJobCoverage:
     def test_a_success_covers_a_key_and_only_an_unhealed_failure_fails_it(self):
-        orders, refunds = uuid4(), uuid4()
+        orders, refunds = _asset("orders"), _asset("r")
         rows = [
-            CoverageRow(orders, "2026-07-01", succeeded=True, failed=True, failed_run_id=uuid4()),
-            CoverageRow(orders, "2026-07-02", succeeded=False, failed=True, failed_run_id=uuid4()),
-            CoverageRow(orders, "2026-07-03", succeeded=False, failed=False, failed_run_id=None),
+            CoverageRow(orders.id, "2026-07-01", succeeded=True, failed=True, failed_run_id=uuid4()),
+            CoverageRow(orders.id, "2026-07-02", succeeded=False, failed=True, failed_run_id=uuid4()),
+            CoverageRow(orders.id, "2026-07-03", succeeded=False, failed=False, failed_run_id=None),
         ]
         keys = ["2026-07-01", "2026-07-02"]
 
-        coverage = JobCoverage.from_rows(uuid4(), keys, {orders: "orders", refunds: "r"}, rows, snapshots={}, now=_NOW)
+        coverage = JobCoverage.from_rows(uuid4(), keys, [orders, refunds], rows, snapshots={}, now=_NOW)
 
         assert [(a.asset_key, a.expected, a.covered, a.failed) for a in coverage.assets] == [
             ("orders", set(keys), {"2026-07-01"}, {"2026-07-02"}),
@@ -166,22 +181,22 @@ class TestJobCoverage:
         ]
 
     def test_a_snapshot_owes_only_the_keys_it_observed_in_and_misses_the_past_ones(self):
-        monthly, daily = uuid4(), uuid4()
+        monthly, daily = _asset("m"), _asset("d")
         rows = [
-            _row(monthly, "2026-07", "success"),
-            _row(daily, "2026-07-30", "failed"),
-            _row(daily, "2026-08-13", "failed"),
+            _row(monthly.id, "2026-07", "success"),
+            _row(daily.id, "2026-07-30", "failed"),
+            _row(daily.id, "2026-08-13", "failed"),
         ]
         keys = ["2026-07-30", "2026-07-31", "2026-08-13"]
 
         coverage = JobCoverage.from_rows(
             uuid4(),
             keys,
-            {monthly: "m", daily: "d"},
+            [monthly, daily],
             rows,
             snapshots={
-                monthly: il.SnapshotPartitionConfig(column="date", granularity=il.TimeGranularity.MONTH),
-                daily: DAILY,
+                monthly.id: il.SnapshotPartitionConfig(column="date", granularity=il.TimeGranularity.MONTH),
+                daily.id: il.SnapshotPartitionConfig(column="date"),
             },
             now=_NOW,
         )
@@ -194,19 +209,29 @@ class TestJobCoverage:
             {"2026-07-30"},
         )
 
-    def test_since_its_start_a_snapshot_misses_the_keys_it_never_observed(self):
-        entities = uuid4()
-        rows = [_row(entities, "2026-08-11", "success")]
+    def test_since_its_sources_start_a_snapshot_misses_the_keys_it_never_observed(self):
+        source = Component(org_id=uuid4(), kind="source", key="ads", config={"start": "2026-08-10"})
+        entities = _asset("e", source=source)
+        rows = [_row(entities.id, "2026-08-11", "success")]
         keys = ["2026-08-09", "2026-08-10", "2026-08-11", "2026-08-12", "2026-08-13"]
-        snapshots = {entities: il.SnapshotPartitionConfig(column="date", start=dt.date(2026, 8, 10))}
+        snapshots = {entities.id: il.SnapshotPartitionConfig(column="date")}
 
-        [coverage] = JobCoverage.from_rows(uuid4(), keys, {entities: "e"}, rows, snapshots=snapshots, now=_NOW).assets
+        [coverage] = JobCoverage.from_rows(uuid4(), keys, [entities], rows, snapshots=snapshots, now=_NOW).assets
 
         assert (coverage.expected, coverage.covered, coverage.missed) == (
             {"2026-08-11"},
             {"2026-08-11"},
             {"2026-08-10", "2026-08-12"},
         )
+
+    def test_a_dated_asset_owes_the_keys_from_its_own_start_over_its_sources(self):
+        source = Component(org_id=uuid4(), kind="source", key="ads", config={"start": "2026-07-01"})
+        orders = _asset("orders", start="2026-07-02", source=source)
+        keys = ["2026-07-01", "2026-07-02", "2026-07-03"]
+
+        [coverage] = JobCoverage.from_rows(uuid4(), keys, [orders], [], snapshots={}, now=_NOW).assets
+
+        assert coverage.expected == {"2026-07-02", "2026-07-03"}
 
 
 class TestDayCounts:

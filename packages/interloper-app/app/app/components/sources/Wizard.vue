@@ -112,6 +112,17 @@ async function wireCrossDeps(saved: ComponentRecord) {
 
 const stepper = useTemplateRef('stepper')
 
+/**
+ * A source without a time-partitioned asset has no history to start, so its form leaves `start` out.
+ * An edited source's type is known before the stepper mounts, so its seeded config never loses the field.
+ */
+const exclude = computed(() => {
+    const key = props.source?.key ?? stepper.value?.definition?.key
+    const definition = key ? catalogStore.getSourceDefinition(key) : undefined
+    const dated = definition?.assets?.some(asset => ['time', 'snapshot'].includes(String(asset.partitioning?.kind)))
+    return dated ? [] : ['start']
+})
+
 defineExpose({
     canProceed: computed(() => stepper.value?.canProceed ?? false),
     hasPrev: computed(() => stepper.value?.hasPrev ?? false),
@@ -133,6 +144,7 @@ defineExpose({
                              :definitions="catalogStore.sourceDefinitions"
                              name-optional
                              :extra-steps="extraSteps"
+                             :exclude="exclude"
                              :options-context="optionsContext"
                              :extra-input="extraInput"
                              :after-save="wireCrossDeps"

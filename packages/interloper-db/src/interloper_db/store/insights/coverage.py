@@ -4,15 +4,15 @@ Coverage is a property of an asset's data, not of what triggered it: runs of
 every target count (a job, a source, the asset itself, a backfill, a deleted
 target). An asset-partition is *covered* once any execution of it succeeded,
 and *failed* when one failed and none succeeded; one attempted but still in
-flight, or canceled, is neither. What an asset *owes* runs from its declared
-start (else its first attempt) to its last attempt, and on to the last closed
-period while it is scheduled.
+flight, or canceled, is neither. What an asset *owes* runs from its history
+start (its own ``start``, else its source's; else its first attempt) to its
+last attempt, and on to the last closed period while it is scheduled.
 
 A snapshot asset owes only what it can still deliver: it observes the vendor's
 current state, so a period is owed only once a run observed in it, and stops
 being owed when it ends. Its *missed* periods, ended without a success, are
-neutral, since nothing can backfill them. A snapshot that declares a start
-also misses every period since that ended with no observation at all. A cell of another granularity takes
+neutral, since nothing can backfill them. Once a history start is set, a
+snapshot also misses every period since that ended with no observation at all. A cell of another granularity takes
 the verdict of the observations overlapping it (see `Observations`).
 
 Two views read the same evidence: by day, for the calendar, and by partition
@@ -169,20 +169,21 @@ class Observations:
     so the periods overlapping a cell are found by bisecting their starts.
     """
 
-    def __init__(self, rows: list[CoverageRow], partitioning: TimePartitionConfig) -> None:
+    def __init__(self, rows: list[CoverageRow], granularity: TimeGranularity, start: dt.date | None) -> None:
         """Order the asset's evidence rows by period.
 
         Args:
             rows: The asset's coverage rows, one per attempted period.
-            partitioning: The asset's snapshot partitioning, whose granularity
-                and declared start decide the periods owed without an observation.
+            granularity: The asset's granularity, whose periods are owed
+                without an observation once *start* is set.
+            start: The asset's history start, ``None`` when unset.
         """
         observed = sorted(((Period.from_key(row.partition_key), row) for row in rows), key=lambda pair: pair[0])
         self._periods = [period for period, _ in observed]
         self._rows = [row for _, row in observed]
         self._starts = [period.start for period in self._periods]
-        self._granularity = partitioning.granularity
-        self._start = coerce_to_datetime(partitioning.start) if partitioning.start is not None else None
+        self._granularity = granularity
+        self._start = coerce_to_datetime(start) if start is not None else None
 
     def verdict(self, cell: Period, now: dt.datetime) -> tuple[Verdict, UUID | None] | None:
         """What the periods overlapping a cell came to.
@@ -198,7 +199,7 @@ class Observations:
             The verdict, with the greatest failed run id among the current
             periods when it is ``failed``; ``None`` when nothing is owed for
             the cell: no period overlapping it was attempted, and none ended
-            since the declared start.
+            since the history start.
         """
         index = max(bisect_right(self._starts, cell.start) - 1, 0)
         overlapping: list[tuple[Period, CoverageRow]] = []
@@ -219,14 +220,14 @@ class Observations:
         return None
 
     def _ended_since_start(self, cell: Period, now: dt.datetime) -> bool:
-        """Whether the cell reaches past the declared start and its last period has ended.
+        """Whether the cell reaches past the history start and its last period has ended.
 
         Args:
             cell: The cell's period, of any granularity.
             now: The reference instant, aware UTC.
 
         Returns:
-            False when the asset declares no start, or the cell ends by it.
+            False when no history start is set, or the cell ends by it.
         """
         if self._start is None or cell.end <= self._start:
             return False
@@ -322,8 +323,9 @@ class AssetEvidence:
     def expected_span(self, now: dt.datetime) -> tuple[dt.date, dt.date] | None:
         """The days the asset owes partitions for, before clipping to a window.
 
-        The span starts at the declared ``start`` when there is one, else on
-        the first day of the earliest attempted partition. It ends on the last
+        The span starts at the asset's history start (see `Component.start`)
+        when one is set, else on the first day of the earliest attempted
+        partition. It ends on the last
         day of the latest attempted partition; a scheduled asset that is
         enabled, under an enabled group, also owes every period closed before
         *now*: up to yesterday for a daily asset, the end of last month or
@@ -335,15 +337,11 @@ class AssetEvidence:
 
         Returns:
             The first and last day owed, inclusive, or ``None`` when nothing
-            is owed: no evidence and no declared start, or a declared start
+            is owed: no evidence and no history start, or a history start
             with no evidence and no schedule.
         """
         granularity = self.partitioning.granularity
-        start = self.partitioning.start if isinstance(self.partitioning, TimePartitionConfig) else None
-        if start is not None:
-            first = start.date() if isinstance(start, dt.datetime) else start
-        else:
-            first = self.bounds.first if self.bounds else None
+        first = self.asset.start or (self.bounds.first if self.bounds else None)
         last = self.bounds.last if self.bounds else None
         if self.scheduled and self.asset.enabled and self.group.enabled:
             if granularity is TimeGranularity.HOUR:
@@ -358,10 +356,9 @@ class AssetEvidence:
     def slots(self, first: dt.date, length: int, now: dt.datetime) -> list[int]:
         """How many partitions the asset owes on each day of a run of days.
 
-        An hourly asset owes the hours of a day from its declared start, when
-        the start falls on that day, to *now*'s hour, when the day is today
-        (the hours elapsed since midnight UTC), else to midnight: 24 on a
-        full day, at least one. Any other asset owes one slot a day.
+        An hourly asset owes the hours of a day up to *now*'s hour when the
+        day is today (the hours elapsed since midnight UTC), else all 24, and
+        at least one. Any other asset owes one slot a day.
 
         Args:
             first: The first day of the run, inside the asset's expected span.
@@ -374,15 +371,10 @@ class AssetEvidence:
         """
         if self.partitioning.granularity is not TimeGranularity.HOUR:
             return [1] * length
-        start = self.partitioning.start if isinstance(self.partitioning, TimePartitionConfig) else None
-        partial_days = {now.date(), start.date()} if isinstance(start, dt.datetime) else {now.date()}
         slots = [24] * length
-        for day in partial_days:
-            index = (day - first).days
-            if 0 <= index < length:
-                first_hour = start.hour if isinstance(start, dt.datetime) and start.date() == day else 0
-                end_hour = now.hour if day == now.date() else 24
-                slots[index] = max(1, end_hour - first_hour)
+        today = (now.date() - first).days
+        if 0 <= today < length:
+            slots[today] = max(1, now.hour)
         return slots
 
 
@@ -489,7 +481,9 @@ class DayCounts:
         first, last = max(span[0], since), min(span[1], until, now.date())
         if first > last:
             return None
-        observations = Observations([row for _, row in asset.evidence], asset.partitioning)
+        observations = Observations(
+            [row for _, row in asset.evidence], asset.partitioning.granularity, asset.asset.start
+        )
         length = (last - first).days + 1
         days = cls(start=first, expected=[0] * length, covered=[0] * length, failed=[0] * length, failed_run_ids={})
         for i in range(length):
@@ -580,13 +574,13 @@ class AssetKeyCoverage:
     Attributes:
         asset_id: The asset.
         asset_key: The asset's key.
-        expected: The keys the asset owes: every key of the range for an asset
-            partitioned on the run's window; for a snapshot, the keys an
-            observation was attempted in and not missed.
+        expected: The keys the asset owes: every key of the range from its
+            history start for an asset partitioned on the run's window; for a
+            snapshot, the keys an observation was attempted in and not missed.
         covered: The keys with a successful execution.
         failed: The keys with a failed execution and no successful one.
         missed: The keys whose snapshot observations ended without a success,
-            or, since a declared start, without an observation: not owed, and
+            or, since the history start, without an observation: not owed, and
             never worth a backfill.
     """
 
@@ -668,7 +662,7 @@ class JobCoverage:
         cls,
         job_id: UUID,
         keys: list[str],
-        assets: dict[UUID, str],
+        assets: list[Component],
         rows: list[CoverageRow],
         *,
         snapshots: Mapping[UUID, TimePartitionConfig],
@@ -677,13 +671,14 @@ class JobCoverage:
         """Read each target asset's coverage off the evidence rows.
 
         An asset partitioned on the run's window reads the rows keyed in the
-        range; a snapshot reads every row overlapping it, of its own
-        granularity (see `AssetKeyCoverage.from_observations`).
+        range and owes the keys from its history start; a snapshot reads
+        every row overlapping it, of its own granularity (see
+        `AssetKeyCoverage.from_observations`).
 
         Args:
             job_id: The job.
             keys: Every key of the range, oldest first.
-            assets: The job's target assets, their keys by id.
+            assets: The job's target asset rows, their parents loaded.
             rows: The evidence rows of those assets overlapping the range, of any granularity.
             snapshots: The partitioning of the target assets that are snapshot-partitioned, by id.
             now: The reference instant, aware UTC.
@@ -696,13 +691,14 @@ class JobCoverage:
         for row in rows:
             rows_by_asset[row.asset_id].append(row)
         coverages = []
-        for asset_id, asset_key in assets.items():
-            evidence = rows_by_asset[asset_id]
-            if asset_id in snapshots:
-                observations = Observations(evidence, snapshots[asset_id])
-                coverage = AssetKeyCoverage.from_observations(asset_id, asset_key, keys, observations, now)
+        for asset in assets:
+            evidence = rows_by_asset[asset.id]
+            if asset.id in snapshots:
+                observations = Observations(evidence, snapshots[asset.id].granularity, asset.start)
+                coverage = AssetKeyCoverage.from_observations(asset.id, asset.key, keys, observations, now)
             else:
+                owed = [key for key in keys if asset.start is None or PartitionSpan.from_key(key).last >= asset.start]
                 kept = [row for row in evidence if row.partition_key in in_range]
-                coverage = AssetKeyCoverage.from_rows(asset_id, asset_key, keys, kept)
+                coverage = AssetKeyCoverage.from_rows(asset.id, asset.key, owed, kept)
             coverages.append(coverage)
         return cls(job_id=job_id, keys=keys, assets=coverages)

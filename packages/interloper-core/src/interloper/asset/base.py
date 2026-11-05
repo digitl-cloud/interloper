@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import functools
 import inspect
 import warnings
@@ -178,6 +179,7 @@ class Asset(Operation, metaclass=AssetMeta):
         ),
     )
     normalizer: Normalizer | None = Field(default=None, json_schema_extra={"x-inherit": True})
+    start: dt.date | None = Field(default=None, json_schema_extra={"x-inherit": True})
 
     # -- Construction ----------------------------------------------------------
 

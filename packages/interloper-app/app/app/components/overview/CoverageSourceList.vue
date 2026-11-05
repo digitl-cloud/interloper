@@ -17,11 +17,15 @@ const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
 const editor = useCanEdit()
 
-/** A window's owed days, each counted once by its worst state: failed, else missing, else covered. */
+/**
+ * A window's owed days, each counted once by its worst state: failed, else missing, else covered;
+ * and the days a snapshot was missed, which are neutral and never owed.
+ */
 interface DayTally {
     covered: number
     missing: number
     failed: number
+    missed: number
 }
 
 interface SourceRow extends DayTally {
@@ -44,9 +48,11 @@ function missingOn(day: DayAggregate | undefined): boolean {
 }
 
 function tally(days: (DayAggregate | undefined)[]): DayTally {
-    const counts = { covered: 0, missing: 0, failed: 0 }
+    const counts = { covered: 0, missing: 0, failed: 0, missed: 0 }
     for (const day of days) {
         if (!day) continue
+        if (day.missed) counts.missed++
+        if (!day.expected) continue
         if (day.failed) counts.failed++
         else if (missingOn(day)) counts.missing++
         else counts.covered++
@@ -59,7 +65,8 @@ function dayCounts(counts: DayTally) {
         { key: 'covered', icon: 'i-lucide-circle-check', color: 'text-success', label: 'covered', value: counts.covered },
         { key: 'missing', icon: 'i-lucide-circle-dashed', color: 'text-warning', label: 'missing', value: counts.missing },
         { key: 'failed', icon: 'i-lucide-circle-alert', color: 'text-error', label: 'failed', value: counts.failed },
-    ]
+        { key: 'missed', icon: 'i-lucide-circle-slash', color: 'text-muted', label: 'missed', value: counts.missed },
+    ].filter(count => count.key !== 'missed' || count.value)
 }
 
 function byTrouble(a: { failed: number, missing: number }, b: { failed: number, missing: number }): number {
@@ -121,9 +128,11 @@ const summary = computed(() => {
     const expected = owed.reduce((n, day) => n + day.expected, 0)
     const covered = owed.reduce((n, day) => n + day.covered, 0)
     const failed = owed.reduce((n, day) => n + day.failed, 0)
-    const parts = [`${covered} of ${expected} assets covered`]
+    const missed = owed.reduce((n, day) => n + day.missed, 0)
+    const parts = expected ? [`${covered} of ${expected} assets covered`] : []
     if (failed) parts.push(`${failed} failed`)
     if (covered + failed < expected) parts.push(`${expected - covered - failed} missing`)
+    if (missed) parts.push(`${missed} snapshot${missed === 1 ? '' : 's'} missed`)
     return parts.join(' · ')
 })
 
@@ -156,7 +165,7 @@ function run(row: SourceRow) {
     runOpen.value = true
 }
 
-const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_10rem_minmax(0,1fr)_6.5rem] items-center gap-3 border-t border-default py-2 text-sm'
+const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_12.5rem_minmax(0,1fr)_6.5rem] items-center gap-3 border-t border-default py-2 text-sm'
 </script>
 
 <template>
