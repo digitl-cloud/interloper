@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v0.125.0 (2026-11-05)
+
+### Features
+
+- **core**: A source's history start says which partitions are owed
+  ([`5080e3c`](https://github.com/digitl-cloud/interloper/commit/5080e3c338aefa3c5a811fe0ca56ea8b89055f77))
+
+### Refactoring
+
+- **core**: A run holds its operations' records, and a child executes its one operation without a
+  walk
+  ([`20960a9`](https://github.com/digitl-cloud/interloper/commit/20960a95c9c30702ec7c3da88a70c48fffe28c63))
+
+### Breaking Changes
+
+- **core**: `interloper.runner.RunState` is gone; a custom `Run` reads `self.executions`,
+  `self.dag`, `self.window`, `self.metadata` and `self.run_id` and calls the verbs on itself.
+  `RunState.operation_event_id` is `Run.operation_event_id`. The run's own `Run.start()` and
+  `Run.finish(error)` are private steps of `Run.walk()`. `EventRecorder(component_id=)`,
+  `init_telemetry(operation=)` and `OtelMetricsHandler.DESTINATION_EVENT_TYPES` are removed. A child
+  executes in process whatever runner it is configured with.
+
+- **core**: `TimePartitionConfig` takes no `start`, and the partitioning in definition JSON carries
+  none; `TimePartitionWindow.lookback` takes no `start` and always returns a window. A source or
+  asset's history start is its `start` setting.
+
+
 ## v0.124.0 (2026-11-03)
 
 ### Bug Fixes
