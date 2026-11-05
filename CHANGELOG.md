@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.126.0 (2026-11-05)
+
+### Features
+
+- **app**: Coverage shades covered days with missed snapshots and shows cell tooltips instantly
+  ([`63c12e7`](https://github.com/digitl-cloud/interloper/commit/63c12e745185986e222876319d94e5e1c00c8be2))
+
+
 ## v0.125.0 (2026-11-05)
 
 ### Features

@@ -3,7 +3,7 @@
 # ###############
 [project]
 name = "interloper-core"
-version = "0.125.0"
+version = "0.126.0"
 description = "Interloper"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 readme = "README.md"
