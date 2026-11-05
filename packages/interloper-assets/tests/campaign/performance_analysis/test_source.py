@@ -38,7 +38,7 @@ def test_dag_binds_the_star_schema_facts_and_the_matcher(tmp_path: Path) -> None
     )
     memory = il.MemoryDestination()
     facebook = FacebookAdsStarSchema(destinations=[warehouse])
-    trade_desk = TheTradeDeskStarSchema(destinations=[memory])
+    trade_desk = TheTradeDeskStarSchema(destinations=[warehouse])
     matcher = CampaignMatcher(destinations=[memory])
     analysis = CampaignPerformanceAnalysis(destinations=[memory])
 
@@ -47,6 +47,7 @@ def test_dag_binds_the_star_schema_facts_and_the_matcher(tmp_path: Path) -> None
     # the finer facts (Facebook's ad fact, The Trade Desk's ad group fact) are platform-internal
     assert set(dag.get_predecessors(analysis.campaign_performance.id)) == {
         facebook.fact_campaign_performance.id,
+        trade_desk.fact_campaign_performance.id,
         matcher.campaign_matches.id,
     }
 
