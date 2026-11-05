@@ -31,18 +31,18 @@ from interloper.connection import CheckResult
 from interloper_db.models import Backfill, Component, Event, Execution, Run
 from interloper_db.store.insights import (
     Activity,
-    AssetKeyCoverage,
     Attention,
     ErrorCause,
     JobCoverage,
     JobHealth,
     JobOutcome,
+    KeyCoverage,
     KindInventory,
     OrgHealth,
 )
 from pydantic import BaseModel
 
-_MISSING_RANGES_LIMIT = 20
+_UNSUCCESSFUL_RANGES_LIMIT = 20
 
 
 class ToolError(BaseModel):
@@ -912,56 +912,55 @@ class PartitionRange(BaseModel):
 class AssetCoverageRow(BaseModel):
     """One asset's partition coverage over a range.
 
-    A partition is ``covered`` once any run's execution of the asset
-    succeeded, ``failed`` when executions of it only failed, and
-    ``never_run`` when it is owed and no execution of it reached a verdict.
-    A snapshot asset (an entity read as the vendor holds it now) owes only
-    the periods a run observed in while they are current; one that ended
-    without a success is ``missed``, which no backfill can recover.
-    ``missing`` lists the owed, uncovered partitions as ranges, at most 20
-    of them, missed ones excluded.
+    A partition is ``successful`` once any run's execution of the asset
+    succeeded, ``failed`` when executions of it only failed, and ``missing``
+    when neither happened yet. A snapshot asset (an entity read as the vendor
+    holds it now) counts only the periods a run observed in while they are
+    current; one that ended without a success is ``missed``, which no backfill
+    can recover. ``unsuccessful`` lists the failed and missing partitions as
+    ranges, at most 20 of them, missed ones excluded.
     """
 
     asset_id: UUID
     asset_key: str | None = None
-    covered: int
+    successful: int
     failed: int
+    missing: int
     missed: int
-    never_run: int
-    missing: list[PartitionRange]
-    missing_ranges_total: int
+    unsuccessful: list[PartitionRange]
+    unsuccessful_ranges_total: int
 
     @classmethod
-    def from_coverage(cls, asset: AssetKeyCoverage, keys: list[str]) -> AssetCoverageRow:
-        """Count an asset's keys by state and range its owed, uncovered ones.
+    def from_coverage(cls, asset: KeyCoverage, keys: list[str]) -> AssetCoverageRow:
+        """Count an asset's keys by state and range its failed and missing ones.
 
         Args:
-            asset: The asset's owed, covered, failed and missed keys.
+            asset: The asset's successful, failed, missing and missed keys.
             keys: Every key of the range, in order.
 
         Returns:
             The row.
         """
-        owed = [key for key in keys if key in asset.expected and key not in asset.covered]
-        ranges = PartitionRange.from_keys(owed, keys)
+        unsuccessful = [key for key in keys if key in asset.failed or key in asset.missing]
+        ranges = PartitionRange.from_keys(unsuccessful, keys)
         return cls(
             asset_id=asset.asset_id,
             asset_key=asset.asset_key,
-            covered=len(asset.covered),
+            successful=len(asset.successful),
             failed=len(asset.failed),
+            missing=len(asset.missing),
             missed=len(asset.missed),
-            never_run=len(asset.expected) - len(asset.covered) - len(asset.failed),
-            missing=ranges[:_MISSING_RANGES_LIMIT],
-            missing_ranges_total=len(ranges),
+            unsuccessful=ranges[:_UNSUCCESSFUL_RANGES_LIMIT],
+            unsuccessful_ranges_total=len(ranges),
         )
 
 
 class AssetCoverage(BaseModel):
-    """Per-asset partition coverage of a job over a range, least covered first.
+    """Per-asset partition coverage of a job over a range, least successful first.
 
-    The rollup counts the range's partitions by how many of the assets owing
-    them are covered: all, some, or none. A partition no asset owes (only
-    snapshot assets, none observing in it) counts in none of the three.
+    The rollup counts the range's partitions by how many of the assets that
+    have them are successful: all, some, or none. A partition no asset has
+    (only snapshot assets, none observing in it) counts in none of the three.
     """
 
     status: Literal["success"] = "success"
@@ -969,16 +968,16 @@ class AssetCoverage(BaseModel):
     start_key: str
     end_key: str
     partitions: int
-    all_covered: int
-    partly_covered: int
-    none_covered: int
+    all_successful: int
+    partly_successful: int
+    none_successful: int
     count: int
     total: int
     assets: list[AssetCoverageRow]
 
     @classmethod
     def from_coverage(cls, coverage: JobCoverage, *, limit: int, offset: int) -> AssetCoverage:
-        """Page a job's coverage, least covered asset first, and roll its partitions up.
+        """Page a job's coverage, least successful asset first, and roll its partitions up.
 
         Args:
             coverage: The job's coverage over the range.
@@ -991,12 +990,14 @@ class AssetCoverage(BaseModel):
         keys = coverage.keys
         assets = sorted(
             (AssetCoverageRow.from_coverage(asset, keys) for asset in coverage.assets),
-            key=lambda row: (row.covered, row.asset_key or ""),
+            key=lambda row: (row.successful, row.asset_key or ""),
         )
         per_key = [
             (
-                sum(key in asset.covered for asset in coverage.assets),
-                sum(key in asset.expected for asset in coverage.assets),
+                sum(key in asset.successful for asset in coverage.assets),
+                sum(
+                    key in asset.successful or key in asset.failed or key in asset.missing for asset in coverage.assets
+                ),
             )
             for key in keys
         ]
@@ -1006,9 +1007,9 @@ class AssetCoverage(BaseModel):
             start_key=keys[0],
             end_key=keys[-1],
             partitions=len(keys),
-            all_covered=sum(0 < owed == count for count, owed in per_key),
-            partly_covered=sum(0 < count < owed for count, owed in per_key),
-            none_covered=sum(count == 0 < owed for count, owed in per_key),
+            all_successful=sum(0 < present == count for count, present in per_key),
+            partly_successful=sum(0 < count < present for count, present in per_key),
+            none_successful=sum(count == 0 < present for count, present in per_key),
             count=len(page),
             total=len(assets),
             assets=page,

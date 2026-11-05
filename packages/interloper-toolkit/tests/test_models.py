@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from interloper_db import ComponentStatus
 from interloper_db.models import Component
-from interloper_db.store.insights import AssetKeyCoverage, Attention, ErrorCause, ErrorGroup, JobCoverage
+from interloper_db.store.insights import Attention, ErrorCause, ErrorGroup, JobCoverage, KeyCoverage
 
 from interloper_toolkit.models import AssetCoverage, AttentionRow
 
@@ -64,18 +64,18 @@ class TestAttentionRow:
 class TestAssetCoverage:
     def test_a_missed_snapshot_is_counted_but_never_offered_for_a_backfill(self):
         keys = ["2026-07-01", "2026-07-02", "2026-07-03"]
-        snapshot = AssetKeyCoverage(
+        snapshot = KeyCoverage(
             uuid4(),
             "campaigns",
-            expected=frozenset({"2026-07-03"}),
-            covered=frozenset(),
+            successful=frozenset(),
             failed=frozenset({"2026-07-03"}),
+            missing=frozenset(),
             missed=frozenset({"2026-07-01"}),
         )
 
         coverage = AssetCoverage.from_coverage(JobCoverage(uuid4(), keys, [snapshot]), limit=10, offset=0)
 
         [row] = coverage.assets
-        assert (row.covered, row.failed, row.missed, row.never_run) == (0, 1, 1, 0)
-        assert [(r.start_key, r.end_key) for r in row.missing] == [("2026-07-03", "2026-07-03")]
-        assert (coverage.all_covered, coverage.partly_covered, coverage.none_covered) == (0, 0, 1)
+        assert (row.successful, row.failed, row.missed, row.missing) == (0, 1, 1, 0)
+        assert [(r.start_key, r.end_key) for r in row.unsuccessful] == [("2026-07-03", "2026-07-03")]
+        assert (coverage.all_successful, coverage.partly_successful, coverage.none_successful) == (0, 0, 1)

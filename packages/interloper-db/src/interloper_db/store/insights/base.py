@@ -40,13 +40,7 @@ from interloper_db.session import session_scope
 from interloper_db.store.backfills import BackfillQuery, BackfillStore
 from interloper_db.store.components import ComponentQuery, ComponentStore
 from interloper_db.store.executions import ExecutionQuery, ExecutionStore
-from interloper_db.store.insights.coverage import (
-    AssetEvidence,
-    CoverageGroup,
-    CoverageRow,
-    JobCoverage,
-    PartitionSpan,
-)
+from interloper_db.store.insights.coverage import GroupCoverage, JobCoverage, PartitionResult, Period
 from interloper_db.store.insights.failures import GROUP_KEYS, ErrorGroup, ErrorGroups, ErrorRow
 from interloper_db.store.insights.feed import ActivityEntry
 from interloper_db.store.insights.health import (
@@ -240,35 +234,37 @@ class InsightStore:
         kept = rows[:MAX_ERROR_ROWS]
         return ErrorGroups(ErrorGroup.merge(kept, group_by), rows=len(kept), truncated=len(rows) > MAX_ERROR_ROWS)
 
-    def coverage_by_day(self, org_id: UUID, *, since: dt.date, until: dt.date, now: dt.datetime) -> list[CoverageGroup]:
-        """Per source and day, the asset-partitions owed, covered and failed over a window.
+    def coverage_by_day(self, org_id: UUID, *, since: dt.date, until: dt.date, now: dt.datetime) -> list[GroupCoverage]:
+        """Per source and day, the asset-partitions successful, failed, missing and missed over a window.
 
         Args:
             org_id: Organisation UUID.
             since: First day of the window.
             until: Last day of the window, inclusive.
             now: The reference instant, aware UTC: it decides which periods
-                have closed and how much of today is owed.
+                have closed and how much of today counts.
 
         Returns:
-            The groups with a day expected in the window, by name.
+            The groups with a day in the window, by name.
         """
         query = ComponentQuery(kind=["source", "asset", "job"], roots_only=False, limit=None)
         window = partition_keys_overlapping(col(Execution.partition_key), since, min(until, now.date()))
-        assets = AssetEvidence.from_components(
+        return GroupCoverage.from_components(
             self._components.list(org_id, query).items,
             self._components.asset_partitionings(org_id),
-            self._coverage_rows(org_id, [window]),
+            self._partition_results(org_id, [window]),
             self._attempted_spans(org_id),
+            since=since,
+            until=until,
+            now=now,
         )
-        return CoverageGroup.from_assets(assets, since, until, now)
 
     def coverage_by_key(
         self, org_id: UUID, job_id: UUID, *, start_key: str, end_key: str, now: dt.datetime
     ) -> JobCoverage:
         """The coverage of a job's target assets over a range of partition keys.
 
-        The evidence read is every key overlapping the range's days, so a
+        The results read are every key overlapping the range's days, so a
         snapshot target's observations of another granularity are read too.
 
         Args:
@@ -280,7 +276,7 @@ class InsightStore:
                 periods have ended.
 
         Returns:
-            Every target asset with the keys it owes, and its covered, failed and missed ones.
+            Every target asset with its successful, failed, missing and missed keys.
 
         Raises:
             ConfigError: If the keys are of different granularities.
@@ -291,16 +287,12 @@ class InsightStore:
             raise ConfigError(f"{start_key!r} and {end_key!r} are keys of different granularities")
         keys = [first.granularity.format(value) for value in first.granularity.period_range(first.value, last.value)]
         assets = self._components.target_assets(job)
-        partitionings = self._components.asset_partitionings(org_id)
-        snapshots = {
-            asset.id: partitionings[asset.id]
-            for asset in assets
-            if asset.id in partitionings and not partitionings[asset.id].windowed
-        }
-        span = PartitionSpan.from_spans([PartitionSpan.from_key(start_key), PartitionSpan.from_key(end_key)])
-        overlapping = partition_keys_overlapping(col(Execution.partition_key), span.first, span.last)
-        rows = self._coverage_rows(org_id, [overlapping], asset_ids=[asset.id for asset in assets])
-        return JobCoverage.from_rows(job.id, keys, assets, rows, snapshots=snapshots, now=now)
+        first_day, last_day = Period.from_key(start_key).first_day, Period.from_key(end_key).last_day
+        overlapping = partition_keys_overlapping(col(Execution.partition_key), first_day, last_day)
+        results = self._partition_results(org_id, [overlapping], asset_ids=[asset.id for asset in assets])
+        return JobCoverage.from_results(
+            job.id, keys, assets, self._components.asset_partitionings(org_id), results, now=now
+        )
 
     def feed(self, org_id: UUID, query: PageQuery) -> Page[ActivityEntry]:
         """A derived activity feed for one organisation, newest first.
@@ -517,9 +509,9 @@ class InsightStore:
                 rows.append(ErrorRow(run.component_id, run.id, None, "run_failed", run.error or "", 1, ended, ended))
         return rows
 
-    def _coverage_rows(
+    def _partition_results(
         self, org_id: UUID, keys: Sequence[Any], *, asset_ids: Sequence[UUID] | None = None
-    ) -> list[CoverageRow]:
+    ) -> list[PartitionResult]:
         """Per asset and time partition, whether any execution of it succeeded or failed.
 
         Runs of every target count: the partition key is the one stamped on
@@ -551,7 +543,7 @@ class InsightStore:
         parsed: dict[str, UUID] = {}
         with session_scope(self._engine) as session:
             return [
-                CoverageRow(
+                PartitionResult(
                     parsed.get(asset_text) or parsed.setdefault(asset_text, UUID(asset_text)),
                     partition_key,
                     succeeded=bool(succeeded),
@@ -561,8 +553,8 @@ class InsightStore:
                 for asset_text, partition_key, succeeded, failed in session.execute(statement).all()  # ty: ignore[deprecated]
             ]
 
-    def _attempted_spans(self, org_id: UUID) -> dict[UUID, PartitionSpan]:
-        """Each asset's attempted partitions, all-time, as the days from its first to its last.
+    def _attempted_spans(self, org_id: UUID) -> dict[UUID, Period]:
+        """The period each asset's attempted partitions span, all-time, from its first to its last.
 
         Two index probes per asset of the organisation, whatever its history:
         its smallest and greatest time partition key, which sort
@@ -572,7 +564,7 @@ class InsightStore:
             org_id: Organisation UUID.
 
         Returns:
-            The span per asset that was ever attempted.
+            The period per asset that was ever attempted.
         """
         key = col(Execution.partition_key)
         lengths = [
@@ -598,7 +590,7 @@ class InsightStore:
         )
         with session_scope(self._engine) as session:
             return {
-                asset_id: PartitionSpan.from_spans([PartitionSpan.from_key(first), PartitionSpan.from_key(last)])
+                asset_id: Period.enclosing([Period.from_key(first), Period.from_key(last)])
                 for asset_id, first, last in session.execute(statement).all()  # ty: ignore[deprecated]
                 if first is not None
             }

@@ -115,11 +115,11 @@ def asset_coverage(
 ) -> AssetCoverage | ToolError:
     """Per-asset partition coverage of a job over a range of partition keys.
 
-    An asset counts as covered for a partition once any run's execution of it
+    An asset's partition is successful once any run's execution of it
     succeeded, whatever the run targeted, so a run where most assets
     succeeded shows what is actually missing. Every asset the job targets
     appears, directly or through a source it targets. A snapshot asset (an
-    entity read as the vendor holds it now) owes only the periods a run
+    entity read as the vendor holds it now) counts only the periods a run
     observed in; a past one without a success is missed, and is never
     offered for a backfill, which cannot read the past.
 
@@ -132,10 +132,11 @@ def asset_coverage(
         limit: Maximum number of assets to return (default 50).
         offset: Number of assets to skip, for paging past the first page.
 
-    Returns the page of assets, least covered first, each with its covered,
-    failed, missed and never-run partition counts and its missing partitions as
-    ranges ready for a backfill, plus a rollup of the range's partitions by
-    whether all, some or none of the assets are covered.
+    Returns the page of assets, least successful first, each with its
+    successful, failed, missing and missed partition counts and its failed and
+    missing partitions as ranges ready for a backfill, plus a rollup of the
+    range's partitions by whether all, some or none of the assets are
+    successful.
     """
     try:
         coverage = ctx.store.insights.coverage_by_key(

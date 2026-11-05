@@ -164,15 +164,20 @@ class TestAssetCoverage:
         result = analytics.asset_coverage(ctx, str(job_id), "2026-07-01", "2026-07-04")
 
         assert result.status == "success"
-        assert (result.partitions, result.all_covered, result.partly_covered, result.none_covered) == (4, 1, 1, 2)
+        assert (result.partitions, result.all_successful, result.partly_successful, result.none_successful) == (
+            4,
+            1,
+            1,
+            2,
+        )
         assert [a.asset_id for a in result.assets] == [revenue, orders]
         worst = result.assets[0]
-        assert (worst.covered, worst.failed, worst.never_run) == (1, 1, 2)
-        assert [(r.start_key, r.end_key) for r in worst.missing] == [
+        assert (worst.successful, worst.failed, worst.missing) == (1, 1, 2)
+        assert [(r.start_key, r.end_key) for r in worst.unsuccessful] == [
             ("2026-07-01", "2026-07-01"),
             ("2026-07-03", "2026-07-04"),
         ]
-        assert [(r.start_key, r.end_key) for r in result.assets[1].missing] == [("2026-07-03", "2026-07-04")]
+        assert [(r.start_key, r.end_key) for r in result.assets[1].unsuccessful] == [("2026-07-03", "2026-07-04")]
 
     def test_mixed_granularities_are_refused(
         self, ctx: ToolkitContext, create_source: Callable[[UUID, str], Component]

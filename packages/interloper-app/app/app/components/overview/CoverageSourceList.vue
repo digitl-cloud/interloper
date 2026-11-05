@@ -18,11 +18,11 @@ const componentsStore = useComponentsStore()
 const editor = useCanEdit()
 
 /**
- * A window's owed days, each counted once by its worst state: failed, else missing, else covered;
- * and the days a snapshot was missed, which are neutral and never owed.
+ * A window's days with partitions, each counted once by its worst state: failed, else missing, else successful;
+ * and the days a snapshot was missed, which are neutral and never among them.
  */
 interface DayTally {
-    covered: number
+    successful: number
     missing: number
     failed: number
     missed: number
@@ -44,25 +44,25 @@ interface TypeGroup extends DayTally {
 const dates = computed(() => windowDates(props.coverage))
 
 function missingOn(day: DayAggregate | undefined): boolean {
-    return !!day && day.covered + day.failed < day.expected
+    return !!day && day.missing > 0
 }
 
 function tally(days: (DayAggregate | undefined)[]): DayTally {
-    const counts = { covered: 0, missing: 0, failed: 0, missed: 0 }
+    const counts = { successful: 0, missing: 0, failed: 0, missed: 0 }
     for (const day of days) {
         if (!day) continue
         if (day.missed) counts.missed++
-        if (!day.expected) continue
+        if (!partitionCount(day)) continue
         if (day.failed) counts.failed++
         else if (missingOn(day)) counts.missing++
-        else counts.covered++
+        else counts.successful++
     }
     return counts
 }
 
 function dayCounts(counts: DayTally) {
     return [
-        { key: 'covered', icon: 'i-lucide-circle-check', color: 'text-success', label: 'covered', value: counts.covered },
+        { key: 'successful', icon: 'i-lucide-circle-check', color: 'text-success', label: 'successful', value: counts.successful },
         { key: 'missing', icon: 'i-lucide-circle-dashed', color: 'text-warning', label: 'missing', value: counts.missing },
         { key: 'failed', icon: 'i-lucide-circle-alert', color: 'text-error', label: 'failed', value: counts.failed },
         { key: 'missed', icon: 'i-lucide-circle-slash', color: 'text-muted', label: 'missed', value: counts.missed },
@@ -84,13 +84,13 @@ const groups = computed<TypeGroup[]>(() => {
     return [...rowsByKey.entries()]
         .map(([key, rows]) => {
             const days = dates.value.map((_, i) => {
-                const owed = rows.flatMap(row => row.days[i] ?? [])
-                if (!owed.length) return undefined
+                const present = rows.flatMap(row => row.days[i] ?? [])
+                if (!present.length) return undefined
                 return {
-                    expected: owed.reduce((n, day) => n + day.expected, 0),
-                    covered: owed.reduce((n, day) => n + day.covered, 0),
-                    failed: owed.reduce((n, day) => n + day.failed, 0),
-                    missed: owed.reduce((n, day) => n + day.missed, 0),
+                    successful: present.reduce((n, day) => n + day.successful, 0),
+                    failed: present.reduce((n, day) => n + day.failed, 0),
+                    missing: present.reduce((n, day) => n + day.missing, 0),
+                    missed: present.reduce((n, day) => n + day.missed, 0),
                 }
             })
             return {
@@ -123,15 +123,16 @@ function toggle(key: string) {
 }
 
 const summary = computed(() => {
-    const owed = groups.value.flatMap(group => group.rows.flatMap(row => row.days[dates.value.indexOf(props.date)] ?? []))
-    if (!owed.length) return 'Nothing expected on this day'
-    const expected = owed.reduce((n, day) => n + day.expected, 0)
-    const covered = owed.reduce((n, day) => n + day.covered, 0)
-    const failed = owed.reduce((n, day) => n + day.failed, 0)
-    const missed = owed.reduce((n, day) => n + day.missed, 0)
-    const parts = expected ? [`${covered} of ${expected} assets covered`] : []
+    const present = groups.value.flatMap(group => group.rows.flatMap(row => row.days[dates.value.indexOf(props.date)] ?? []))
+    if (!present.length) return 'No partitions on this day'
+    const successful = present.reduce((n, day) => n + day.successful, 0)
+    const failed = present.reduce((n, day) => n + day.failed, 0)
+    const missing = present.reduce((n, day) => n + day.missing, 0)
+    const missed = present.reduce((n, day) => n + day.missed, 0)
+    const total = successful + failed + missing
+    const parts = total ? [`${successful} of ${total} assets successful`] : []
     if (failed) parts.push(`${failed} failed`)
-    if (covered + failed < expected) parts.push(`${expected - covered - failed} missing`)
+    if (missing) parts.push(`${missing} missing`)
     if (missed) parts.push(`${missed} snapshot${missed === 1 ? '' : 's'} missed`)
     return parts.join(' · ')
 })
@@ -285,7 +286,7 @@ const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_12.5rem_minmax(0,1fr)_6.5rem
         </template>
         <p v-else
            class="text-sm text-muted">
-            Nothing expected in this window
+            No partitions in this window
         </p>
         <ExecutionsRunModal v-if="runTarget"
                             v-model:open="runOpen"

@@ -20,7 +20,7 @@ const cells = computed(() => {
         const day = props.days[i]
         return {
             date,
-            owed: !!day,
+            present: !!day,
             color: CELL[CELL_ORDER[cellStatus(day)]][mode],
             title: describeDay(date, day, ' · '),
         }
@@ -38,7 +38,7 @@ function onPointerOver(event: PointerEvent) {
 
 function onClick(event: MouseEvent) {
     const date = (event.target as HTMLElement).dataset.date
-    if (date && cells.value.some(cell => cell.date === date && cell.owed)) emit('select', date)
+    if (date && cells.value.some(cell => cell.date === date && cell.present)) emit('select', date)
 }
 </script>
 

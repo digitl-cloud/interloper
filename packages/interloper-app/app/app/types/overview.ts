@@ -48,8 +48,9 @@ export interface Overview {
 
 /**
  * A calendar group and its days: index `i` of each array is the day `start + i`, from the group's first to its last
- * expected day in the window. A day inside that run with nothing expected is a zero. `missed` counts the snapshot
- * observations that ended without a success: not expected, and not recoverable by a backfill.
+ * day in the window with partitions. A day inside that run without any is a zero. A day's partitions are its
+ * `successful`, `failed` and `missing` ones; `missed` counts the snapshot periods that ended without a success, which
+ * are not among them and no backfill can recover.
  */
 export interface CoverageSource {
     id: string
@@ -57,9 +58,9 @@ export interface CoverageSource {
     name: string
     kind: 'source' | 'asset'
     start: string
-    expected: number[]
-    covered: number[]
+    successful: number[]
     failed: number[]
+    missing: number[]
     missed: number[]
     failed_run_ids: Record<string, string>
 }
@@ -74,9 +75,9 @@ export interface Coverage {
 export interface CoverageDay {
     date: string
     source_id: string
-    expected: number
-    covered: number
+    successful: number
     failed: number
+    missing: number
     missed: number
     failed_run_id: string | null
 }
