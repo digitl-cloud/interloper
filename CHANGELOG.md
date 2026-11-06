@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v0.128.0 (2026-11-06)
+
+### Bug Fixes
+
+- A fetched option's label is the vendor's name, without the id repeated
+  ([`b9eaad9`](https://github.com/digitl-cloud/interloper/commit/b9eaad9dfe7e86a97123870b6f0351b40713006f))
+
+### Features
+
+- Super-admins manage operator OAuth clients from the admin portal
+  ([`d08193b`](https://github.com/digitl-cloud/interloper/commit/d08193be78d2e5ecc8cdd1f2ba67486792dd81dd))
+
+- **app**: A generated form's date field picks from Nuxt UI's calendar
+  ([`2ba733e`](https://github.com/digitl-cloud/interloper/commit/2ba733e1d413a656c672a56d2ffd547ee7efacb0))
+
+- **app**: The coverage source list counts partitions as badges, and day tooltips list only the
+  states they have
+  ([`71f9e62`](https://github.com/digitl-cloud/interloper/commit/71f9e6267aa62c10121add31923331c6eb274bc1))
+
+### Testing
+
+- **aws**: The AWS tests no longer shadow the Google Cloud connection tests
+  ([`b603abc`](https://github.com/digitl-cloud/interloper/commit/b603abce70b21958d7cf9e35ad5b1b11590611ed))
+
+
 ## v0.127.0 (2026-11-06)
 
 ### Features
