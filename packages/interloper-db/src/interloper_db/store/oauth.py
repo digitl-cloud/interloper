@@ -135,7 +135,9 @@ class OAuthStore:
         with session_scope(self._engine) as session:
             return list(session.exec(statement).all())
 
-    def delete_client(self, client_id: str) -> bool:
+    def delete_client(
+        self, client_id: str, *, registered_by: Literal["dynamic", "operator"] | None = None
+    ) -> OAuthClient | None:
         """Delete a client together with every grant it holds.
 
         Its codes and refresh tokens are removed and its access tokens revoked,
@@ -144,15 +146,19 @@ class OAuthStore:
 
         Args:
             client_id: The client to delete.
+            registered_by: Delete it only if it was registered that way, so an
+                operator's surface never reaches a client a user registered;
+                ``None`` deletes it however it was registered.
 
         Returns:
-            ``False`` when no client has that id, ``True`` once it is deleted.
+            The deleted client, or ``None`` when no client has that id (or
+            none registered that way), in which case nothing changes.
         """
         now = datetime.now(timezone.utc)
         with session_scope(self._engine) as session:
             client = session.get(OAuthClient, client_id)
-            if client is None:
-                return False
+            if client is None or (registered_by is not None and client.registered_by != registered_by):
+                return None
             session.connection().execute(
                 update(Token)
                 .where(
@@ -167,7 +173,7 @@ class OAuthStore:
             self._delete_conversations(session, client_id, None)
             session.delete(client)
             commit(session)
-        return True
+        return client
 
     def authorised_clients(self, user_id: UUID) -> list[OAuthClient]:
         """List the clients a user has authorised: those holding a live refresh token.

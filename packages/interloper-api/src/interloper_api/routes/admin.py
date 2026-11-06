@@ -2,7 +2,8 @@
 
 These endpoints are gated by :func:`require_super_admin` and are NOT bound to
 the session's active organisation: every organisation (soft-deleted ones
-included), every user, quotas and the instance configuration. Managing one
+included), every user, quotas, the operator OAuth clients and the instance
+configuration. Managing one
 organisation's members and invitations goes through the organisation routes,
 which admit super-admins (:mod:`interloper_api.routes.organisations`). They
 deliberately grant no access to org-scoped *data* (sources, jobs, runs, …).
@@ -17,14 +18,18 @@ from importlib import metadata
 from typing import Annotated, Any
 from uuid import UUID
 
+from authlib.oauth2.rfc7591 import InvalidRedirectURIError
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from interloper_db import Organisation, OrganisationQuery, Page, PageQuery, Profile, ProfileQuery, UsageQuery
+from interloper_db.models import OAuthClient
 from interloper_db.store.insights import ActivityEntry
 from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, QUOTAS
-from pydantic import BaseModel, RootModel, field_validator
+from pydantic import BaseModel, Field, RootModel, field_validator
 
+from interloper_api.authorization import CLIENT_NAME_MAX_LENGTH, Client
 from interloper_api.dependencies import SettingsDep, StateDep, StoreDep, SuperAdminDep
 from interloper_api.notifications import SuperAdminPromotionEmail
+from interloper_api.routes.apps import AppResponse
 from interloper_api.routes.organisations import CreateOrganisationRequest
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -111,6 +116,57 @@ class AdminUserUpdateRequest(BaseModel):
     """Platform-wide privileges a super-admin may change on another user."""
 
     is_super_admin: bool
+
+
+class AdminOAuthClientCreateRequest(BaseModel):
+    """An operator client to register: its name and the URIs its codes may be sent to."""
+
+    name: str = Field(min_length=1, max_length=CLIENT_NAME_MAX_LENGTH)
+    redirect_uris: list[str]
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, name: str) -> str:
+        """Refuse a name of whitespace only, which the consent page would show blank.
+
+        Args:
+            name: The name as sent.
+
+        Returns:
+            The name without surrounding whitespace.
+
+        Raises:
+            ValueError: When nothing is left once stripped.
+        """
+        stripped = name.strip()
+        if not stripped:
+            raise ValueError("A client needs a name")
+        return stripped
+
+
+class AdminOAuthClientCreatedResponse(AppResponse):
+    """A client just registered, carrying its secret: the only response that ever does."""
+
+    client_secret: str
+
+    @classmethod
+    def from_registration(cls, client: OAuthClient, secret: str | None) -> AdminOAuthClientCreatedResponse:
+        """Describe a client just registered, with the secret the store returned once.
+
+        Args:
+            client: The stored client.
+            secret: The raw secret; an operator client is confidential, so it
+                always has one.
+
+        Returns:
+            The response model.
+
+        Raises:
+            ValueError: When the client came back without a secret.
+        """
+        if secret is None:
+            raise ValueError(f"Client {client.client_id} was registered without a secret")
+        return cls(**AppResponse.from_client(client).model_dump(), client_secret=secret)
 
 
 class AdminLauncherConfig(BaseModel):
@@ -877,4 +933,80 @@ def delete_user(
     if user_id == user.id:
         raise HTTPException(status_code=400, detail="You cannot delete your own account")
     store.profiles.delete(user_id)
+    return Response(status_code=204)
+
+
+# -- OAuth clients -------------------------------------------------------------
+
+
+@router.get("/oauth-clients")
+def list_oauth_clients(user: SuperAdminDep, store: StoreDep) -> list[AppResponse]:
+    """List the operator-registered OAuth clients, the ones ``interloper oauth list`` shows.
+
+    Clients that registered themselves are left out: anyone may register one,
+    and each belongs to the users who approve it, who revoke it from their own
+    settings.
+
+    Args:
+        user: The calling super-admin, resolved from the session.
+        store: The database store backing the request.
+
+    Returns:
+        The operator clients by name, without secret material.
+    """
+    return [AppResponse.from_client(client) for client in store.oauth.list_clients(registered_by="operator")]
+
+
+@router.post("/oauth-clients", status_code=201)
+def create_oauth_client(
+    body: AdminOAuthClientCreateRequest,
+    user: SuperAdminDep,
+    store: StoreDep,
+) -> AdminOAuthClientCreatedResponse:
+    """Register a confidential operator client, as ``interloper oauth create`` does.
+
+    Args:
+        body: The client's name and redirect URIs.
+        user: The calling super-admin, resolved from the session.
+        store: The database store backing the request.
+
+    Returns:
+        The client with its secret, which only its hash is stored of: this
+        response is the one chance to read it.
+
+    Raises:
+        HTTPException: 422 when no redirect URI is given or one could not
+            safely receive codes.
+    """
+    try:
+        Client.check_redirect_uris(body.redirect_uris)
+    except InvalidRedirectURIError as error:
+        raise HTTPException(status_code=422, detail=error.description) from error
+    client, secret = store.oauth.register_client(
+        body.name, body.redirect_uris, registered_by="operator", confidential=True
+    )
+    return AdminOAuthClientCreatedResponse.from_registration(client, secret)
+
+
+@router.delete("/oauth-clients/{client_id}", status_code=204)
+def delete_oauth_client(client_id: str, user: SuperAdminDep, store: StoreDep) -> Response:
+    """Delete an operator client and every grant it holds, as ``interloper oauth delete`` does.
+
+    Its codes and refresh tokens are removed and its access tokens revoked for
+    every user, and the conversations it started are deleted.
+
+    Args:
+        client_id: The client to delete.
+        user: The calling super-admin, resolved from the session.
+        store: The database store backing the request.
+
+    Returns:
+        An empty 204 response.
+
+    Raises:
+        HTTPException: 404 when no operator client has that id; a client that
+            registered itself is never deleted here.
+    """
+    if store.oauth.delete_client(client_id, registered_by="operator") is None:
+        raise HTTPException(status_code=404, detail=f"No operator client {client_id}")
     return Response(status_code=204)

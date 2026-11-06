@@ -112,3 +112,16 @@ export interface AdminUser {
     organisations: AdminUserOrganisation[]
     created_at: string | null
 }
+
+/** An OAuth client an operator registered for the instance; `id` is its client id. Never carries the secret. */
+export interface AdminOAuthClient {
+    id: string
+    name: string
+    redirect_uris: string[]
+    created_at: string | null
+}
+
+/** Creation response: the only place the client secret ever appears. */
+export interface CreatedOAuthClient extends AdminOAuthClient {
+    client_secret: string
+}

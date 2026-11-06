@@ -104,15 +104,18 @@ refresh token.
 
 A client that registers itself needs no setup, and it is shown to the user by the name it gave.
 An application that cannot, because it is configured with a fixed client id and secret (a Slack
-app, a connector a vendor hosts), is registered by an operator from the command line:
+app, a connector a vendor hosts), is registered by an operator. A super-admin does it from the
+admin portal's **OAuth clients** page, which lists these clients, registers one (its name and one
+or more redirect URIs) and deletes one, with the same rules and effects as the commands below.
+From the command line:
 
 ```sh
 interloper oauth create --name "Acme connector" \
     --redirect-uri https://connector.example.com/oauth/callback
 ```
 
-The command prints the `client_id` and the `client_secret`. The secret is shown once and cannot
-be recovered: only its hash is stored, so a lost secret means deleting the client and creating
+The command, like the page, shows the `client_id` and the `client_secret`. The secret is shown
+once and cannot be recovered: only its hash is stored, so a lost secret means deleting the client and creating
 another. Repeat `--redirect-uri` to register several. A redirect URI must be `https`, `http` on
 `localhost`, `127.0.0.1` or `[::1]`, or the private-use scheme of a known client (`cursor`,
 `vscode`, `vscode-insiders`, `windsurf`); the same rule applies to clients that register
@@ -124,8 +127,10 @@ interloper oauth list
 interloper oauth delete <client_id>
 ```
 
-`list` shows the clients an operator registered, not the ones that registered themselves.
-`delete` removes a client together with its codes and refresh tokens and revokes its access
-tokens for every user, so nothing it was given keeps working. The commands read and write the
+`list` shows the clients an operator registered, not the ones that registered themselves; the
+page leaves them out too, since each belongs to the users who approved it, who revoke it under
+Authorised apps. `delete` removes a client together with its codes and refresh tokens, revokes its
+access tokens for every user and deletes the conversations it started, so nothing it was given
+keeps working: every user of the client is signed out of it. The commands read and write the
 database the settings point at, so run them where the database is configured, like
 `interloper db`. Every flag is in [CLI](../reference/cli.md#interloper-oauth).

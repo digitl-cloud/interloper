@@ -136,7 +136,7 @@ def test_clients_create_prints_secret_once(clients: Store, capsys: pytest.Captur
 
 def test_clients_create_refuses_an_unsafe_redirect_uri(clients: Store) -> None:
     """A redirect URI dynamic registration would refuse is refused here and nothing is registered."""
-    with pytest.raises(SystemExit, match="javascript:alert"):
+    with pytest.raises(SystemExit, match="must use https"):
         _run("create", "--name", "Evil", "--redirect-uri", "javascript:alert(1)")
 
     assert clients.oauth.list_clients() == []

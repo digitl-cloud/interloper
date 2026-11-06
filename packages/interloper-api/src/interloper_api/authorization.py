@@ -332,6 +332,29 @@ class Client(ClientMixin):
         return parts.scheme in PRIVATE_USE_SCHEMES
 
     @staticmethod
+    def check_redirect_uris(redirect_uris: list[str]) -> None:
+        """Refuse a registration whose redirect URIs could not all safely receive codes.
+
+        Dynamic registration and every operator registration (the CLI, the
+        admin portal) apply this one rule.
+
+        Args:
+            redirect_uris: The URIs the client asks to register.
+
+        Raises:
+            InvalidRedirectURIError: When the list is empty or a URI is not
+                :meth:`is_safe_redirect_uri`. The description never quotes the
+                URI, which may carry characters an OAuth error must not.
+        """
+        if not redirect_uris:
+            raise InvalidRedirectURIError("At least one redirect URI is required.")
+        if not all(Client.is_safe_redirect_uri(uri) for uri in redirect_uris):
+            raise InvalidRedirectURIError(
+                "A redirect URI must use https, http on a loopback host, or the private-use scheme of a known "
+                f"client ({', '.join(sorted(PRIVATE_USE_SCHEMES))})."
+            )
+
+    @staticmethod
     def without_loopback_port(uri: str) -> str:
         """Drop the port of a loopback ``http`` URI, which a native app picks per request.
 
@@ -800,6 +823,9 @@ class Registration(ClientRegistrationEndpoint):
     def create_registration_response(self, request: RegistrationRequest) -> tuple[int, dict[str, Any], list]:
         """Register a client from validated metadata.
 
+        Its redirect URIs pass :meth:`Client.check_redirect_uris` first, which
+        refuses the registration when none is given or one is unsafe.
+
         Args:
             request: The registration request.
 
@@ -807,20 +833,10 @@ class Registration(ClientRegistrationEndpoint):
             ``(201, body, headers)``; the body carries the client's secret
             once, for a confidential client only, and its name as stored, cut
             to :data:`CLIENT_NAME_MAX_LENGTH`.
-
-        Raises:
-            InvalidRedirectURIError: When no redirect URI is registered, or
-                one is unsafe.
         """
         metadata = self.extract_client_metadata(request)
-        redirect_uris = metadata.get("redirect_uris")
-        if not redirect_uris:
-            raise InvalidRedirectURIError("'redirect_uris' is required.")
-        if not all(Client.is_safe_redirect_uri(uri) for uri in redirect_uris):
-            raise InvalidRedirectURIError(
-                "A redirect URI must use https, http on a loopback host, or the private-use scheme of a known "
-                f"client ({', '.join(sorted(PRIVATE_USE_SCHEMES))})."
-            )
+        redirect_uris = metadata.get("redirect_uris") or []
+        Client.check_redirect_uris(redirect_uris)
         auth_method = metadata.get("token_endpoint_auth_method", "client_secret_basic")
         client, secret = self.server.store.oauth.register_client(
             (metadata.get("client_name") or "Unnamed application")[:CLIENT_NAME_MAX_LENGTH],

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 
+from authlib.oauth2.rfc7591 import InvalidRedirectURIError
 from interloper.catalog import Catalog
 from interloper.cli.console import configure_console_logging
 from interloper.settings import AppSettings
@@ -76,7 +77,8 @@ def register_oauth(subparsers: argparse._SubParsersAction) -> None:
         "oauth",
         help="Manage operator-registered OAuth clients",
         description="Manage the OAuth clients an operator registers for apps that cannot register themselves "
-        "(a Slack app, a shared connector). Clients that register dynamically are not listed or deleted here.",
+        "(a Slack app, a shared connector), as the admin portal's OAuth clients page does. Clients that register "
+        "dynamically are not listed or deleted here.",
     )
     commands = parser.add_subparsers(dest="oauth_command")
 
@@ -116,11 +118,10 @@ def _cmd_oauth_create(args: argparse.Namespace) -> None:
     Raises:
         SystemExit: When a redirect URI is one dynamic registration would refuse.
     """
-    for uri in args.redirect_uri:
-        if not Client.is_safe_redirect_uri(uri):
-            raise SystemExit(
-                f"Refusing redirect URI {uri!r}: it must use https, http on a loopback host, or a private-use scheme."
-            )
+    try:
+        Client.check_redirect_uris(args.redirect_uri)
+    except InvalidRedirectURIError as error:
+        raise SystemExit(error.description) from error
     client, secret = Store.from_settings(catalog=Catalog()).oauth.register_client(
         args.name, args.redirect_uri, registered_by="operator", confidential=True
     )
@@ -149,9 +150,7 @@ def _cmd_oauth_delete(args: argparse.Namespace) -> None:
     Raises:
         SystemExit: When no operator client has that id.
     """
-    oauth = Store.from_settings(catalog=Catalog()).oauth
-    client = oauth.get_client(args.client_id)
-    if client is None or client.registered_by != "operator":
+    client = Store.from_settings(catalog=Catalog()).oauth.delete_client(args.client_id, registered_by="operator")
+    if client is None:
         raise SystemExit(f"No operator client {args.client_id}.")
-    oauth.delete_client(client.client_id)
     print(f"Deleted {client.name} ({client.client_id}) and revoked its tokens.")

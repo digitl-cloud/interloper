@@ -16,8 +16,11 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper_db import NotFoundError, OrganisationQuery, Page, PageQuery, ProfileQuery, UsageQuery
+from interloper_db import NotFoundError, OrganisationQuery, Page, PageQuery, ProfileQuery, Store, UsageQuery
+from interloper_db.crypto import hash_token
+from interloper_db.models import Audience, Conversation
 from interloper_db.organisation_keys import derive_key
+from interloper_db.session import session_scope
 from interloper_db.store.insights import ActivityEntry
 from interloper_db.store.quotas import QUOTAS
 
@@ -180,7 +183,7 @@ def _profile(*, is_super_admin: bool):
     )
 
 
-def _app(store: FakeStore, *, is_super_admin: bool) -> FastAPI:
+def _app(store: FakeStore | Store, *, is_super_admin: bool) -> FastAPI:
     app = FastAPI()
     install_error_handlers(app)
     app.include_router(admin_module.router)
@@ -189,7 +192,7 @@ def _app(store: FakeStore, *, is_super_admin: bool) -> FastAPI:
     return app
 
 
-def _client(store: FakeStore, *, is_super_admin: bool) -> TestClient:
+def _client(store: FakeStore | Store, *, is_super_admin: bool) -> TestClient:
     """A client for the probe app.
 
     Args:
@@ -776,3 +779,105 @@ class TestRegistryDefaults:
         snapshot = admin_module.AdminConfigResponse.from_settings(fake_settings, {"agent": True})
 
         assert snapshot.deployment.version is None
+
+
+class TestOAuthClients:
+    """The operator OAuth clients, over a real store so the delete cascade is the one the CLI runs."""
+
+    def test_non_super_admins_are_refused(self, oauth_store: Store) -> None:
+        operator, _ = oauth_store.oauth.register_client(
+            "Slack", ["https://slack.example.com/cb"], registered_by="operator", confidential=True
+        )
+        client = _client(oauth_store, is_super_admin=False)
+
+        listed = client.get("/admin/oauth-clients")
+        created = client.post("/admin/oauth-clients", json={"name": "X", "redirect_uris": ["https://x.example/cb"]})
+        deleted = client.delete(f"/admin/oauth-clients/{operator.client_id}")
+
+        assert [listed.status_code, created.status_code, deleted.status_code] == [403, 403, 403]
+        assert [row.name for row in oauth_store.oauth.list_clients()] == ["Slack"]
+
+    def test_lists_operator_clients_only_without_secret_material(self, oauth_store: Store) -> None:
+        oauth_store.oauth.register_client("Claude Code", ["http://localhost/cb"], registered_by="dynamic")
+        operator, secret = oauth_store.oauth.register_client(
+            "Slack", ["https://slack.example.com/cb"], registered_by="operator", confidential=True
+        )
+
+        response = _client(oauth_store, is_super_admin=True).get("/admin/oauth-clients")
+
+        assert response.status_code == 200
+        [row] = response.json()
+        assert row["id"] == operator.client_id
+        assert row["name"] == "Slack"
+        assert row["redirect_uris"] == ["https://slack.example.com/cb"]
+        assert set(row) == {"id", "name", "redirect_uris", "created_at"}
+        assert secret is not None
+        assert secret not in response.text
+        assert str(operator.secret_hash) not in response.text
+
+    def test_create_returns_the_secret_once(self, oauth_store: Store) -> None:
+        client = _client(oauth_store, is_super_admin=True)
+
+        response = client.post(
+            "/admin/oauth-clients",
+            json={"name": "  Slack  ", "redirect_uris": ["https://slack.example.com/cb", "cursor://cb"]},
+        )
+
+        assert response.status_code == 201
+        body = response.json()
+        stored = oauth_store.oauth.get_client(body["id"])
+        assert stored is not None
+        assert stored.name == "Slack"
+        assert stored.registered_by == "operator"
+        assert stored.redirect_uris == ["https://slack.example.com/cb", "cursor://cb"]
+        assert body["client_secret"].startswith("ilc_")
+        assert stored.secret_hash == hash_token(body["client_secret"])
+        assert body["client_secret"] not in client.get("/admin/oauth-clients").text
+
+    @pytest.mark.parametrize(
+        "redirect_uris", [[], ["javascript:alert(1)"], ["http://slack.example.com/cb"], ["https://ok.example/cb", "x"]]
+    )
+    def test_create_refuses_what_registration_refuses(self, oauth_store: Store, redirect_uris: list[str]) -> None:
+        response = _client(oauth_store, is_super_admin=True).post(
+            "/admin/oauth-clients", json={"name": "Slack", "redirect_uris": redirect_uris}
+        )
+
+        assert response.status_code == 422
+        assert oauth_store.oauth.list_clients() == []
+
+    @pytest.mark.parametrize("name", ["", "   ", "x" * 101])
+    def test_create_refuses_a_blank_or_overlong_name(self, oauth_store: Store, name: str) -> None:
+        response = _client(oauth_store, is_super_admin=True).post(
+            "/admin/oauth-clients", json={"name": name, "redirect_uris": ["https://slack.example.com/cb"]}
+        )
+
+        assert response.status_code == 422
+        assert oauth_store.oauth.list_clients() == []
+
+    def test_delete_ends_every_grant_the_client_holds(self, oauth_store: Store) -> None:
+        client = _client(oauth_store, is_super_admin=True)
+        client_id = client.post(
+            "/admin/oauth-clients", json={"name": "Slack", "redirect_uris": ["https://slack.example.com/cb"]}
+        ).json()["id"]
+        user = oauth_store.profiles.upsert(google_id="g-user", email="user@example.com", name="User")
+        organisation = oauth_store.organisations.create(name="Acme", creator_id=user.id)
+        access = oauth_store.tokens.create_access(user.id, client_id, Audience.API)
+        refresh = oauth_store.oauth.issue_refresh(user.id, client_id, Audience.API)
+        conversation = oauth_store.conversations.create(organisation.id, user.id, client_id)
+
+        response = client.delete(f"/admin/oauth-clients/{client_id}")
+
+        assert response.status_code == 204
+        assert oauth_store.oauth.get_client(client_id) is None
+        assert oauth_store.tokens.resolve(access, Audience.API) is None
+        assert oauth_store.oauth.find_refresh(refresh) is None
+        with session_scope(oauth_store.engine) as session:
+            assert session.get(Conversation, conversation.id) is None
+
+    def test_delete_never_reaches_a_self_registered_client(self, oauth_store: Store) -> None:
+        dynamic, _ = oauth_store.oauth.register_client("Claude Code", ["http://localhost/cb"], registered_by="dynamic")
+        client = _client(oauth_store, is_super_admin=True)
+
+        assert client.delete(f"/admin/oauth-clients/{dynamic.client_id}").status_code == 404
+        assert client.delete("/admin/oauth-clients/no-such-client").status_code == 404
+        assert oauth_store.oauth.get_client(dynamic.client_id) is not None
