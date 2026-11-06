@@ -1,10 +1,12 @@
 import type {
     AdminActivityEntry,
     AdminConfig,
+    AdminOAuthClient,
     AdminOrganisation,
     AdminQuotaLimits,
     AdminQuotas,
     AdminUser,
+    CreatedOAuthClient,
 } from '~/types/admin'
 
 /** Cross-organisation management API, restricted to super-admins server-side. */
@@ -58,6 +60,23 @@ export const useAdminStore = defineStore('admin', () => {
         })
     }
 
+    /** The OAuth clients registered by an operator; self-registered clients are not listed. */
+    function listOAuthClients() {
+        return apiFetch<AdminOAuthClient[]>('/admin/oauth-clients')
+    }
+
+    function createOAuthClient(name: string, redirectUris: string[]) {
+        return apiFetch<CreatedOAuthClient>('/admin/oauth-clients', {
+            method: 'POST',
+            body: { name, redirect_uris: redirectUris },
+        })
+    }
+
+    /** Delete a client and end every grant it holds, for every user. */
+    function deleteOAuthClient(clientId: string) {
+        return apiFetch(`/admin/oauth-clients/${encodeURIComponent(clientId)}`, { method: 'DELETE' })
+    }
+
     return {
         getConfig,
         getQuotas,
@@ -68,5 +87,8 @@ export const useAdminStore = defineStore('admin', () => {
         deleteUser,
         listOrganisations,
         createOrganisation,
+        listOAuthClients,
+        createOAuthClient,
+        deleteOAuthClient,
     }
 })

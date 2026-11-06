@@ -160,7 +160,9 @@ class TestClients:
         access = store.tokens.create_access(profile.id, client.client_id, Audience.MCP)
         _issue_code(store, profile, client)
 
-        assert store.oauth.delete_client(client.client_id) is True
+        deleted = store.oauth.delete_client(client.client_id)
+        assert deleted is not None
+        assert deleted.client_id == client.client_id
 
         assert store.oauth.get_client(client.client_id) is None
         assert store.oauth.rotate_refresh(refresh, client.client_id) is None
@@ -179,12 +181,19 @@ class TestClients:
     ):
         conversations = _Conversations(store, profile, client)
 
-        assert store.oauth.delete_client(client.client_id) is True
+        deleted = store.oauth.delete_client(client.client_id)
+        assert deleted is not None
+        assert deleted.client_id == client.client_id
 
         assert conversations.remaining() == {conversations.other_client, conversations.app}
 
-    def test_delete_unknown_client_is_false(self, store: Store):
-        assert store.oauth.delete_client("no-such-client") is False
+    def test_delete_unknown_client_is_none(self, store: Store):
+        assert store.oauth.delete_client("no-such-client") is None
+
+    def test_delete_client_spares_a_client_registered_otherwise(self, store: Store, client: OAuthClient):
+        assert store.oauth.delete_client(client.client_id, registered_by="operator") is None
+
+        assert store.oauth.get_client(client.client_id) is not None
 
 
 class TestCodes:

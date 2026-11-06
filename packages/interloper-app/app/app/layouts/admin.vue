@@ -23,6 +23,12 @@ const items = computed<NavigationMenuItem[]>(() => [
         active: route.path.startsWith('/admin/users'),
     },
     {
+        label: 'OAuth clients',
+        icon: 'i-lucide-key-round',
+        to: '/admin/oauth-clients',
+        active: route.path.startsWith('/admin/oauth-clients'),
+    },
+    {
         label: 'Config',
         icon: 'i-lucide-settings-2',
         to: '/admin/config',
