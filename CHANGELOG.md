@@ -2,6 +2,40 @@
 
 <!-- version list -->
 
+## v0.127.0 (2026-11-06)
+
+### Features
+
+- **app**: A coverage day's tooltip breaks its partitions down by state
+  ([`af11b32`](https://github.com/digitl-cloud/interloper/commit/af11b3299ca585d85406f3072f17651ed9c14ed8))
+
+- **assets**: Bing Ads accounts, campaigns, ad groups and ads entities
+  ([`de456c7`](https://github.com/digitl-cloud/interloper/commit/de456c750a89e629ba6cbb0a6661891d2bb9f006))
+
+- **assets**: Bing Ads star schema dimensions take each entity's snapshot first
+  ([`8323157`](https://github.com/digitl-cloud/interloper/commit/8323157ea3fce1f1468e3f50f736e15e4fc31f4a))
+
+- **assets**: The Trade Desk collects its entities through GraphQL and publishes its star schema
+  ([`56d4795`](https://github.com/digitl-cloud/interloper/commit/56d4795a838669803fb290732dde51e496a45752))
+
+### Refactoring
+
+- Coverage reads each asset's partitions once, and a partition is successful, failed, missing or
+  missed
+  ([`8a0cc5d`](https://github.com/digitl-cloud/interloper/commit/8a0cc5df427dda1a36a97fc29e9f8ef4e9d82156))
+
+### Breaking Changes
+
+- `GET /organisations/{id}/overview/coverage` sources carry `successful`, `failed`, `missing` and
+  `missed` arrays instead of `expected`, `covered`, `failed` and `missed`. The `asset_coverage`
+  tool's rows carry `successful`, `failed`, `missing`, `missed`, `unsuccessful` (failed and missing
+  ranges) and `unsuccessful_ranges_total` instead of `covered`, `never_run`, `missing` and
+  `missing_ranges_total`, and its rollup `all_successful`/`partly_successful`/`none_successful`. The
+  `interloper_db.store.insights` exports are renamed as above, and `PartitionSpan` is gone. A dated
+  asset's partitions before its history start no longer count as successful in a job's per-key
+  coverage.
+
+
 ## v0.126.0 (2026-11-05)
 
 ### Features
