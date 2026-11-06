@@ -31,7 +31,9 @@
  * fields when there is no sign-in.
  */
 
+import type { CalendarDate } from '@internationalized/date'
 import type { FormError, TabsItem } from '@nuxt/ui'
+import { parseDate } from '@internationalized/date'
 import cronstrue from 'cronstrue'
 
 interface FetchMeta {
@@ -413,6 +415,17 @@ function cronText(value: unknown): string {
     }
     catch {
         return ''
+    }
+}
+
+/** A date field's ISO `YYYY-MM-DD` value as a calendar date, or undefined when unset or unparsable. */
+function dateValue(value: unknown): CalendarDate | undefined {
+    if (!value || typeof value !== 'string') return undefined
+    try {
+        return parseDate(value)
+    }
+    catch {
+        return undefined
     }
 }
 
@@ -848,11 +861,26 @@ defineExpose({ setErrors })
                         </div>
 
                         <!-- Date: an empty picker clears the value -->
-                        <UInput v-else-if="field.widget === 'date'"
-                                :model-value="data[field.key] ?? ''"
-                                type="date"
-                                class="w-full"
-                                @update:model-value="(v: string | number) => data[field.key] = v || null" />
+                        <UInputDate v-else-if="field.widget === 'date'"
+                                    :model-value="dateValue(data[field.key])"
+                                    class="w-full"
+                                    @update:model-value="(v: unknown) => data[field.key] = v ? String(v) : null">
+                            <template #trailing>
+                                <UPopover>
+                                    <UButton color="neutral"
+                                             variant="link"
+                                             size="sm"
+                                             icon="i-lucide-calendar"
+                                             aria-label="Select a date"
+                                             class="px-0" />
+                                    <template #content>
+                                        <UCalendar :model-value="dateValue(data[field.key])"
+                                                   class="p-2"
+                                                   @update:model-value="(v: unknown) => data[field.key] = v ? String(v) : null" />
+                                    </template>
+                                </UPopover>
+                            </template>
+                        </UInputDate>
 
                         <!-- JSON / code -->
                         <UTextarea v-else-if="field.widget === 'json'"
