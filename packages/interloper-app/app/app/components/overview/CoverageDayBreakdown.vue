@@ -21,7 +21,7 @@ const counts = computed(() => (props.day ? stateCounts(props.day) : []))
         <span v-for="count in counts"
               :key="count.key"
               class="flex items-center gap-1.5"
-              :class="count.value ? count.color : 'text-dimmed'">
+              :class="count.color">
             <UIcon :name="count.icon"
                    class="size-3.5 shrink-0" />
             <span class="flex-1">{{ count.label }}</span>

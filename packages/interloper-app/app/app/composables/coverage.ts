@@ -42,19 +42,29 @@ export function cellStatus(day: DayAggregate | undefined): 0 | 1 | 2 | 3 | 4 | 5
 
 export type PartitionState = 'successful' | 'missing' | 'failed' | 'missed'
 
-/** How each partition state is drawn wherever it is counted: the day tallies and a day's breakdown. */
-export const PARTITION_STATES: { key: PartitionState, icon: string, color: string, label: string }[] = [
-    { key: 'successful', icon: 'i-lucide-circle-check', color: 'text-success', label: 'successful' },
-    { key: 'missing', icon: 'i-lucide-circle-dashed', color: 'text-warning', label: 'missing' },
-    { key: 'failed', icon: 'i-lucide-circle-alert', color: 'text-error', label: 'failed' },
-    { key: 'missed', icon: 'i-lucide-circle-slash', color: 'text-muted', label: 'missed' },
+/** How each partition state is drawn wherever it is counted: the source list's badges and a day's breakdown. */
+export const PARTITION_STATES: {
+    key: PartitionState
+    icon: string
+    color: string
+    badge: 'success' | 'warning' | 'error' | 'neutral'
+    label: string
+}[] = [
+    { key: 'successful', icon: 'i-lucide-circle-check', color: 'text-success', badge: 'success', label: 'successful' },
+    { key: 'missing', icon: 'i-lucide-circle-dashed', color: 'text-warning', badge: 'warning', label: 'missing' },
+    { key: 'failed', icon: 'i-lucide-circle-alert', color: 'text-error', badge: 'error', label: 'failed' },
+    { key: 'missed', icon: 'i-lucide-circle-slash', color: 'text-muted', badge: 'neutral', label: 'missed' },
 ]
 
-/** Counts by state, each drawn as its state is; missed only when there is one, since it is never among the partitions. */
+/** The states with a count, in `PARTITION_STATES` order, each with its count and the words that name it. */
 export function stateCounts(counts: Record<PartitionState, number>) {
     return PARTITION_STATES
-        .map(state => ({ ...state, value: counts[state.key] }))
-        .filter(count => count.key !== 'missed' || count.value)
+        .filter(state => counts[state.key] > 0)
+        .map(state => ({
+            ...state,
+            value: counts[state.key],
+            text: `${counts[state.key].toLocaleString()} ${counts[state.key] === 1 ? 'partition' : 'partitions'} ${state.label}`,
+        }))
 }
 
 const DAY_MS = 86_400_000
