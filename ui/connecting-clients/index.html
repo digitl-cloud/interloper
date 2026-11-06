@@ -2560,12 +2560,15 @@ refresh token.</p>
 <h2 id="registering-a-client-yourself">Registering a client yourself<a class="headerlink" href="#registering-a-client-yourself" title="Permanent link">&para;</a></h2>
 <p>A client that registers itself needs no setup, and it is shown to the user by the name it gave.
 An application that cannot, because it is configured with a fixed client id and secret (a Slack
-app, a connector a vendor hosts), is registered by an operator from the command line:</p>
+app, a connector a vendor hosts), is registered by an operator. A super-admin does it from the
+admin portal's <strong>OAuth clients</strong> page, which lists these clients, registers one (its name and one
+or more redirect URIs) and deletes one, with the same rules and effects as the commands below.
+From the command line:</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>interloper<span class="w"> </span>oauth<span class="w"> </span>create<span class="w"> </span>--name<span class="w"> </span><span class="s2">"Acme connector"</span><span class="w"> </span><span class="se">\</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span>--redirect-uri<span class="w"> </span>https://connector.example.com/oauth/callback
 </span></code></pre></div>
-<p>The command prints the <code>client_id</code> and the <code>client_secret</code>. The secret is shown once and cannot
-be recovered: only its hash is stored, so a lost secret means deleting the client and creating
+<p>The command, like the page, shows the <code>client_id</code> and the <code>client_secret</code>. The secret is shown
+once and cannot be recovered: only its hash is stored, so a lost secret means deleting the client and creating
 another. Repeat <code>--redirect-uri</code> to register several. A redirect URI must be <code>https</code>, <code>http</code> on
 <code>localhost</code>, <code>127.0.0.1</code> or <code>[::1]</code>, or the private-use scheme of a known client (<code>cursor</code>,
 <code>vscode</code>, <code>vscode-insiders</code>, <code>windsurf</code>); the same rule applies to clients that register
@@ -2574,9 +2577,11 @@ one matches on any port, since a native app picks a free port for each sign-in.<
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>interloper<span class="w"> </span>oauth<span class="w"> </span>list
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>interloper<span class="w"> </span>oauth<span class="w"> </span>delete<span class="w"> </span>&lt;client_id&gt;
 </span></code></pre></div>
-<p><code>list</code> shows the clients an operator registered, not the ones that registered themselves.
-<code>delete</code> removes a client together with its codes and refresh tokens and revokes its access
-tokens for every user, so nothing it was given keeps working. The commands read and write the
+<p><code>list</code> shows the clients an operator registered, not the ones that registered themselves; the
+page leaves them out too, since each belongs to the users who approved it, who revoke it under
+Authorised apps. <code>delete</code> removes a client together with its codes and refresh tokens, revokes its
+access tokens for every user and deletes the conversations it started, so nothing it was given
+keeps working: every user of the client is signed out of it. The commands read and write the
 database the settings point at, so run them where the database is configured, like
 <code>interloper db</code>. Every flag is in <a href="../../reference/cli/#interloper-oauth">CLI</a>.</p>
 
