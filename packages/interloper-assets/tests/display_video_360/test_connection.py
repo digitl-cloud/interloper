@@ -95,8 +95,8 @@ class TestPartners:
             }
         )
         assert asyncio.run(connection.partners()) == [
-            {"partner_id": "1", "name": "Digitl (1)"},
-            {"partner_id": "2", "name": "2 (2)"},
+            {"partner_id": "1", "name": "Digitl"},
+            {"partner_id": "2", "name": "2"},
         ]
 
     def test_pagination_reuses_one_service(self):

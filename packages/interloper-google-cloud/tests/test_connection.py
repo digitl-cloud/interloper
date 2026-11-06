@@ -65,6 +65,6 @@ class TestListProjects:
         )
         projects = await _list_projects(client, "token")
         assert projects == [
-            {"project_id": "proj-b", "name": "Beta (proj-b)"},
-            {"project_id": "proj-a", "name": "proj-a (proj-a)"},
+            {"project_id": "proj-b", "name": "Beta"},
+            {"project_id": "proj-a", "name": "proj-a"},
         ]

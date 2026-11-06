@@ -97,9 +97,9 @@ class TestProfiles:
                 "profile_id": "111",
                 "account_id": "222",
                 "name": "reporting (Digitl)",
-                "account_name": "Digitl (222)",
+                "account_name": "Digitl",
             },
-            {"profile_id": "333", "account_id": "444", "name": "333 (444)", "account_name": "444 (444)"},
+            {"profile_id": "333", "account_id": "444", "name": "333 (444)", "account_name": "444"},
         ]
 
     def test_no_profiles(self):

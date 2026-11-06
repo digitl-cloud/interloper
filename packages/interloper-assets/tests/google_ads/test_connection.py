@@ -82,9 +82,9 @@ class TestCustomers:
         requests: list[httpx2.Request] = []
         _serve(monkeypatch, self._handler(requests))
         assert await _connection().customers() == [
-            {"customer_id": "111", "name": "Acme (111)"},
+            {"customer_id": "111", "name": "Acme"},
             {"customer_id": "222", "name": "222"},
-            {"customer_id": "333", "name": "333 (333)"},
+            {"customer_id": "333", "name": "333"},
         ]
 
         token_request, list_request, *search_requests = requests
