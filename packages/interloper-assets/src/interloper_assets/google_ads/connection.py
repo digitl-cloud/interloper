@@ -133,7 +133,7 @@ class GoogleAdsConnection(il.RefreshTokenOAuthConnection):
                             results.append(
                                 {
                                     "customer_id": customer_id,
-                                    "name": f"{name} ({customer_id})",
+                                    "name": name,
                                 }
                             )
                 except httpx2.HTTPStatusError:

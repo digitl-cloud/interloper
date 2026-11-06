@@ -41,7 +41,7 @@ class TheTradeDeskConnection(il.Connection):
         return [
             {
                 "partner_id": p["PartnerId"],
-                "name": f"{p.get('PartnerName', p['PartnerId'])} ({p['PartnerId']})",
+                "name": p.get("PartnerName", p["PartnerId"]),
             }
             for p in response.json().get("Result", [])
         ]

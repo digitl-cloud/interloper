@@ -67,7 +67,7 @@ class CampaignManager360Connection(il.Connection):
                 "profile_id": str(p["profileId"]),
                 "account_id": str(p["accountId"]),
                 "name": f"{p.get('userName', p['profileId'])} ({p.get('accountName', p['accountId'])})",
-                "account_name": f"{p.get('accountName', p['accountId'])} ({p['accountId']})",
+                "account_name": str(p.get("accountName", p["accountId"])),
             }
             for p in response.get("items", [])
         ]

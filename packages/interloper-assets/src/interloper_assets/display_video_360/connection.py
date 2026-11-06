@@ -93,7 +93,7 @@ class DisplayVideo360Connection(il.Connection):
         return [
             {
                 "partner_id": str(p["partnerId"]),
-                "name": f"{p.get('displayName', p['partnerId'])} ({p['partnerId']})",
+                "name": str(p.get("displayName", p["partnerId"])),
             }
             for p in partners
         ]

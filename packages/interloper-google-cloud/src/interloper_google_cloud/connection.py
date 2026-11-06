@@ -94,7 +94,7 @@ async def _list_projects(client: httpx2.AsyncClient, access_token: str) -> list[
         for project in data.get("projects", []):
             project_id = project["id"]
             name = project.get("friendlyName") or project_id
-            results.append({"project_id": project_id, "name": f"{name} ({project_id})"})
+            results.append({"project_id": project_id, "name": name})
         page_token = data.get("nextPageToken")
         if not page_token:
             break
