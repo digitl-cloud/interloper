@@ -17,10 +17,7 @@ const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
 const editor = useCanEdit()
 
-/**
- * A window's days with partitions, each counted once by its worst state: failed, else missing, else successful;
- * and the days a snapshot was missed, which are neutral and never among them.
- */
+/** A window's partitions by state, summed over its days; missed snapshots are counted apart, never among them. */
 interface DayTally {
     successful: number
     missing: number
@@ -51,11 +48,10 @@ function tally(days: (DayAggregate | undefined)[]): DayTally {
     const counts = { successful: 0, missing: 0, failed: 0, missed: 0 }
     for (const day of days) {
         if (!day) continue
-        if (day.missed) counts.missed++
-        if (!partitionCount(day)) continue
-        if (day.failed) counts.failed++
-        else if (missingOn(day)) counts.missing++
-        else counts.successful++
+        counts.successful += day.successful
+        counts.missing += day.missing
+        counts.failed += day.failed
+        counts.missed += day.missed
     }
     return counts
 }
@@ -157,7 +153,7 @@ function run(row: SourceRow) {
     runOpen.value = true
 }
 
-const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_12.5rem_minmax(0,1fr)_6.5rem] items-center gap-3 border-t border-default py-2 text-sm'
+const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_15rem_minmax(0,1fr)_6.5rem] items-center gap-3 border-t border-default py-2 text-sm'
 </script>
 
 <template>
@@ -171,7 +167,7 @@ const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_12.5rem_minmax(0,1fr)_6.5rem
                  class="border-t-0 text-xs text-muted">
                 <span />
                 <span>Source</span>
-                <span>Days</span>
+                <span>Partitions</span>
                 <span>{{ windowLabel }}</span>
                 <span />
             </div>
@@ -189,17 +185,7 @@ const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_12.5rem_minmax(0,1fr)_6.5rem
                                class="size-5 shrink-0" />
                         <span class="truncate font-medium text-highlighted">{{ group.name }}</span>
                     </span>
-                    <span class="flex gap-2.5 text-xs tabular-nums">
-                        <span v-for="count in stateCounts(group)"
-                              :key="count.key"
-                              :title="`${count.value} ${count.value === 1 ? 'day' : 'days'} ${count.label}`"
-                              class="inline-flex items-center gap-1"
-                              :class="count.value ? count.color : 'text-dimmed'">
-                            <UIcon :name="count.icon"
-                                   class="size-3.5" />
-                            {{ count.value.toLocaleString() }}
-                        </span>
-                    </span>
+                    <OverviewCoverageCounts :counts="group" />
                     <OverviewCoverageStrip :dates="dates"
                                            :days="group.days"
                                            :selected="date"
@@ -216,17 +202,7 @@ const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_12.5rem_minmax(0,1fr)_6.5rem
                                    class="size-3.5 shrink-0 text-dimmed" />
                             <span class="truncate font-mono text-xs text-highlighted">{{ row.source.name }}</span>
                         </span>
-                        <span class="flex gap-2.5 text-xs tabular-nums">
-                            <span v-for="count in stateCounts(row)"
-                                  :key="count.key"
-                                  :title="`${count.value} ${count.value === 1 ? 'day' : 'days'} ${count.label}`"
-                                  class="inline-flex items-center gap-1"
-                                  :class="count.value ? count.color : 'text-dimmed'">
-                                <UIcon :name="count.icon"
-                                       class="size-3.5" />
-                                {{ count.value.toLocaleString() }}
-                            </span>
-                        </span>
+                        <OverviewCoverageCounts :counts="row" />
                         <OverviewCoverageStrip :dates="dates"
                                                :days="row.days"
                                                :selected="date"
