@@ -176,8 +176,13 @@ class TestGraphQL:
         with pytest.raises(RuntimeError, match="AUTHENTICATION_FAILURE"):
             asyncio.run(connection.nodes(constants.ADVERTISERS_QUERY, {"partnerId": "p"}, ("partner", "advertisers")))
 
-    def test_an_unseen_parent_reads_as_no_nodes(self):
+    def test_an_unseen_parent_fails_rather_than_reading_as_no_nodes(self):
         connection, _ = _graphql(lambda body: {"data": {"advertiser": None}})
+        with pytest.raises(RuntimeError, match="returned no advertiser"):
+            asyncio.run(connection.nodes(constants.CAMPAIGNS_QUERY, {"advertiserId": "a"}, ("advertiser", "campaigns")))
+
+    def test_a_parent_without_the_connection_reads_as_no_nodes(self):
+        connection, _ = _graphql(lambda body: {"data": {"advertiser": {"campaigns": None}}})
         rows = asyncio.run(
             connection.nodes(constants.CAMPAIGNS_QUERY, {"advertiserId": "a"}, ("advertiser", "campaigns"))
         )

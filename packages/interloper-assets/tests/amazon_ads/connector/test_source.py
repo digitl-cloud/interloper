@@ -24,6 +24,7 @@ from typing import Any
 import httpx2
 import interloper as il
 import pandas as pd
+import pytest
 from interloper.asset import Asset
 from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
@@ -536,6 +537,13 @@ class TestProfiles:
         assert out.loc[0, "profile_id"] == "123"
         assert out.loc[0, "daily_budget"] == 10.0 and out.loc[0, "account_info_sub_type"] == "KDP"
         assert pd.isna(out.loc[0, "account_info_name"])
+
+    def test_a_profile_the_credentials_no_longer_see_fails(self):
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(200, json=[{"profileId": 999, "countryCode": "FR"}])
+
+        with pytest.raises(RuntimeError, match="does not list profile 123"):
+            _run(_source_with_api(handler), "profiles")
 
 
 class TestTelevisionReports:

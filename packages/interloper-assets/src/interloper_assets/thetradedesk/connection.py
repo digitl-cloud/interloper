@@ -59,14 +59,16 @@ class TheTradeDeskConnection(il.Connection):
             query: The GraphQL document.
             variables: The query's variables, without ``first`` and ``after``.
             path: The fields leading from ``data`` to the connection, such as
-                ``("partner", "advertisers")``. A null object on the way (an
-                id the key cannot see) reads as no nodes.
+                ``("partner", "advertisers")``. A null connection under an
+                existing object reads as no nodes.
 
         Returns:
             The nodes of every page, as the API returned them.
 
         Raises:
-            RuntimeError: If the API answers with GraphQL errors.
+            RuntimeError: If the API answers with GraphQL errors, or with no
+                object at the path's root: the key cannot see that id, and
+                reading it as no nodes would snapshot an empty account.
         """
         nodes: list[dict[str, Any]] = []
         after: str | None = None
@@ -80,8 +82,10 @@ class TheTradeDeskConnection(il.Connection):
             if payload.get("errors"):
                 messages = "; ".join(error.get("message", str(error)) for error in payload["errors"])
                 raise RuntimeError(f"The Trade Desk GraphQL query failed: {messages}")
-            listing = payload.get("data")
-            for field in path:
+            listing = (payload.get("data") or {}).get(path[0])
+            if listing is None:
+                raise RuntimeError(f"The Trade Desk returned no {path[0]} for {variables}: the API key cannot see it")
+            for field in path[1:]:
                 listing = listing.get(field) if listing is not None else None
             if listing is None:
                 return nodes

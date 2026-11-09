@@ -337,6 +337,8 @@ class AmazonAds(il.Source):
         response.raise_for_status()
         # the call lists every profile the credentials see; each source snapshots its own
         own = [row for row in response.json() if str(row["profileId"]) == self.profile_id]
+        if not own:
+            raise RuntimeError(f"Amazon Ads does not list profile {self.profile_id}: the credentials no longer see it")
         return [{**row, "date": context.partition_date} for row in own]
 
     @il.asset(
