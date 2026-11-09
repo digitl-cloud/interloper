@@ -15,10 +15,12 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import json
 from typing import Any
 
 import httpx2
 import interloper as il
+import pytest
 from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
@@ -197,6 +199,25 @@ class TestAdgroups:
         assert rows == [{"adgroup_id": "7", "date": day}]
         assert requests[0].url.path.endswith("/adgroup/get/")
         assert requests[0].url.params["advertiser_id"] == "123"
+
+    @pytest.mark.parametrize(
+        ("key", "path"), [("ads", "/ad/get/"), ("campaigns", "/campaign/get/"), ("adgroups", "/adgroup/get/")]
+    )
+    def test_entity_edges_ask_for_deleted_objects_too(self, key: str, path: str):
+        requests: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            return httpx2.Response(200, json={"code": 0, "data": {"list": [], "page_info": {"total_page": 1}}})
+
+        connection = TiktokAdsConnection(id="tt", access_token="x")
+        connection.__dict__["client"] = il.AsyncRESTClient(constants.BASE_URL, transport=httpx2.MockTransport(handler))
+        asset = next(
+            a for a in TiktokAds(id="src-1", advertiser_id="123", connection=connection).assets if type(a).key == key
+        )
+        asyncio.run(asset.data(context=il.ExecutionContext(asset, il.TimePartition(value=dt.date(2026, 10, 1)).window)))
+        assert requests[0].url.path.endswith(path)
+        assert json.loads(requests[0].url.params["filtering"]) == {"primary_status": "STATUS_ALL"}
 
 
 REPORT_ASSETS = (
