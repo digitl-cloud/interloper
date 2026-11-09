@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Definition-driven create/edit wizard for every component kind (ITLPR-126).
+ * Definition-driven create/edit wizard for every component kind.
  *
  * Steps derive from the catalog definition:
  *   1. Type selection, when the kind has several classes and none is pinned

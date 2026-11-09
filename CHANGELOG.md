@@ -428,7 +428,7 @@
 
 - **assets**: The existing tables hold the old column types, and BigQuery cannot retype a column in
   place, so the next load into them fails until they are rewritten with interloper-data-migration
-  retype (ITLPR-163). Release only inside that migration window.
+  retype. Release only inside that migration window.
 
 - **assets**: The snapchat_ads.ad_account asset no longer exists; use ad_accounts. No organisation
   has it enabled.
