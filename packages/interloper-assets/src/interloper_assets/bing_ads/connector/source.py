@@ -186,8 +186,9 @@ def _bulk_records(connection: BingAdsConnection, account_id: str, customer_id: s
     downloaded records leave empty are dropped, and its file-level rows
     (format version, account) are not records. Three serializations are read
     here, since the conformer would misread them: booleans are ``True`` and
-    ``False``, days are month first (``11/05/2026``), and instants are month
-    first too, in UTC.
+    ``False``, days are month first (``11/05/2026``, or ``11/05/2026 00:00:00``
+    on a campaign record, whose day is the part before the time), and
+    instants are month first too, in UTC.
 
     Args:
         connection: The connection the file is downloaded with.
@@ -224,7 +225,7 @@ def _bulk_records(connection: BingAdsConnection, account_id: str, customer_id: s
             df[column] = df[column].str.lower().map({"true": True, "false": False})
     for column in ("Start Date", "End Date"):
         if column in df.columns:
-            df[column] = pd.to_datetime(df[column], format="%m/%d/%Y").dt.date
+            df[column] = pd.to_datetime(df[column], format="%m/%d/%Y", exact=False).dt.date
     if "Modified Time" in df.columns:
         df["Modified Time"] = pd.to_datetime(df["Modified Time"], format="mixed", utc=True)
     return df.reset_index(drop=True)
