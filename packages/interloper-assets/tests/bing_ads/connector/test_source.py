@@ -31,7 +31,7 @@ from interloper_assets.bing_ads import constants
 from interloper_assets.bing_ads.connection import BingAdsConnection
 from interloper_assets.bing_ads.connector import schemas
 from interloper_assets.bing_ads.connector.schemas import AdsStats
-from interloper_assets.bing_ads.connector.source import BingAds, _translate_soap_fault
+from interloper_assets.bing_ads.connector.source import BingAds, _build_report_time, _translate_soap_fault
 
 ENTITY_ASSETS = ("accounts", "campaigns", "ad_groups", "ads")
 DAY = dt.date(2026, 11, 5)
@@ -279,6 +279,20 @@ class TestSpecRoundtrip:
         assert normalizer is not None
         normalized = normalizer.normalize(df)
         TableData.from_data(normalized).reconcile(AdsStats)  # must not raise
+
+
+class TestBuildReportTime:
+    """The report covers exactly the partition's day; Bing dates its rows in each campaign's zone."""
+
+    def test_single_day_in_a_fixed_zone(self):
+        service = SimpleNamespace(factory=SimpleNamespace(create=lambda name: SimpleNamespace()))
+
+        report_time = _build_report_time(service, dt.date(2026, 10, 29))
+
+        for day in (report_time.CustomDateRangeStart, report_time.CustomDateRangeEnd):
+            assert (day.Year, day.Month, day.Day) == (2026, 10, 29)
+        assert report_time.PredefinedTime is None
+        assert report_time.ReportTimeZone == "AmsterdamBerlinBernRomeStockholmVienna"
 
 
 def _web_fault(detail: SimpleNamespace) -> WebFault:
