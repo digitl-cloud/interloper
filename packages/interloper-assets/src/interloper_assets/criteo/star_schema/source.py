@@ -17,7 +17,7 @@ MEASURE_COLUMNS = (
     "sales_client_attribution",
     "revenue_generated_client_attribution",
 )
-REPORT, FACT = 1, 2
+ENTITY, REPORT, FACT = 1, 2, 3
 
 
 def _account(upstream: il.Upstream) -> str:
@@ -46,15 +46,24 @@ class CriteoStarSchema(il.Source):
     The campaign fact unions each advertiser's campaign report, one row per
     campaign and day; the ad fact does the same at the ad report's grain.
     Days are Criteo's report days, in UTC. Purchases are Criteo's sales under
-    the advertiser's own attribution setting, its primary conversion. The
-    reports name every campaign, ad set and ad, so the dimensions take their
-    names from the reports and fall back to the facts' keys, so every key a
-    fact carries resolves. Statuses, budgets and schedules come only from
-    Criteo's entity endpoints, which are not collected yet, so the dimensions
-    publish no such column. Every bound upstream's table must exist, or the view
-    fails when it is created. Views are recreated on every run, so they
-    follow the advertisers bound to them; an advertiser added to the
-    organisation is absent until it is bound.
+    the advertiser's own attribution setting, its primary conversion.
+    The dimensions take each advertiser, campaign, ad set and ad from its
+    latest entity snapshot where one is collected, else from its latest
+    report, else from the facts' keys, so every key a fact carries resolves.
+    Only the snapshots know an advertiser's name, a campaign's goal and spend
+    limit, and an ad set's status and budget. Criteo's advertiser endpoint
+    gives no currency, so an advertiser's currency is the one its latest
+    report states, and no time zone, so no view publishes one. Criteo
+    schedules ad sets, not campaigns, and sends the schedule as instants;
+    without the advertiser's time zone they give no local day, so no
+    dimension publishes a schedule; the ad set snapshot keeps it as Criteo
+    sends it. Campaigns carry no status, and nothing carries a creation or
+    change time. An ad's campaign comes from its ad set, since the ad's own
+    snapshot names only the ad set.
+    Every bound upstream's table must exist, or the view fails when it is
+    created. Views are recreated on every run, so they follow the advertisers
+    bound to them; an advertiser added to the organisation is absent until it
+    is bound.
     """
 
     @ibis_view(
@@ -129,25 +138,78 @@ class CriteoStarSchema(il.Source):
             revenue=summed["revenue"],
         )
 
-    @ibis_view(schema=schemas.DimAccounts, tags=["Dimension"])
-    def dim_accounts(self, fact_campaign_performance: il.Upstream) -> ibis.Table:
-        """One row per advertiser with the currency its reports state, from the facts."""
-        table = fact_campaign_performance.data
-        days = table.group_by(["account_id", "date"]).aggregate(currency=table["currency"].max())
-        rows = days.select(
-            account_id=days["account_id"],
-            currency=days["currency"],
-            as_of_date=days["date"],
+    @ibis_view(
+        schema=schemas.DimAccounts,
+        tags=["Dimension"],
+        relations={"advertisers": il.Relation("asset", "criteo.advertisers", many=True, optional=True)},
+    )
+    def dim_accounts(self, advertisers: list[il.Upstream], fact_campaign_performance: il.Upstream) -> ibis.Table:
+        """One row per advertiser with its name and the currency of its latest report.
+
+        Each advertiser comes from its entity snapshot, else the facts; its currency always comes from the facts.
+        """
+        facts = fact_campaign_performance.data
+        days = facts.group_by(["account_id", "date"]).aggregate(currency=facts["currency"].max())
+
+        def from_entity(upstream: il.Upstream) -> ibis.Table:
+            table = upstream.data
+            return table.select(
+                account_id=ibis.literal(_account(upstream)),
+                account_name=table["advertiser_name"],
+                as_of_date=table["date"],
+                priority=ibis.literal(ENTITY),
+            )
+
+        def from_fact(table: ibis.Table) -> ibis.Table:
+            return table.select(
+                account_id=table["account_id"],
+                account_name=ibis.null("string"),
+                as_of_date=table["date"],
+                priority=ibis.literal(FACT),
+            )
+
+        rows = ibis.union(*(from_entity(upstream) for upstream in advertisers), from_fact(days), distinct=False)
+        kept = latest(rows, "account_id", rows["priority"].asc(), rows["as_of_date"].desc())
+        currencies = latest(days, "account_id", days["date"].desc())
+        joined = kept.left_join(currencies, kept["account_id"] == currencies["account_id"])
+        return joined.select(
+            account_id=kept["account_id"],
+            account_name=kept["account_name"],
+            currency=currencies["currency"],
+            as_of_date=kept["as_of_date"],
         )
-        return latest(rows, "account_id", rows["as_of_date"].desc())
 
     @ibis_view(
         schema=schemas.DimCampaigns,
         tags=["Dimension"],
-        relations={"campaigns_stats": il.Relation("asset", "criteo.campaigns_stats", many=True, optional=True)},
+        relations={
+            "campaigns": il.Relation("asset", "criteo.campaigns", many=True, optional=True),
+            "campaigns_stats": il.Relation("asset", "criteo.campaigns_stats", many=True, optional=True),
+        },
     )
-    def dim_campaigns(self, campaigns_stats: list[il.Upstream], fact_campaign_performance: il.Upstream) -> ibis.Table:
-        """One row per campaign with its name, from its latest report, else the facts."""
+    def dim_campaigns(
+        self,
+        campaigns: list[il.Upstream],
+        campaigns_stats: list[il.Upstream],
+        fact_campaign_performance: il.Upstream,
+    ) -> ibis.Table:
+        """One row per campaign with its name, goal and spend limit.
+
+        Each campaign comes from its entity snapshot, else its latest report, else the facts.
+        """
+
+        def from_entity(upstream: il.Upstream) -> ibis.Table:
+            table = upstream.data
+            return table.select(
+                campaign_id=table["id"],
+                account_id=ibis.literal(_account(upstream)),
+                campaign_name=table["name"],
+                objective=table["goal"],
+                budget=table["spend_limit_spend_limit_amount_value"],
+                budget_type=table["spend_limit_spend_limit_renewal"],
+                as_of_date=table["date"],
+                priority=ibis.literal(ENTITY),
+            )
 
         def from_report(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -156,6 +218,9 @@ class CriteoStarSchema(il.Source):
                 campaign_id=days["campaign_id"],
                 account_id=ibis.literal(_account(upstream)),
                 campaign_name=days["campaign_name"],
+                objective=ibis.null("string"),
+                budget=ibis.null("float64"),
+                budget_type=ibis.null("string"),
                 as_of_date=days["day"],
                 priority=ibis.literal(REPORT),
             )
@@ -166,30 +231,54 @@ class CriteoStarSchema(il.Source):
                 campaign_id=days["campaign_id"],
                 account_id=days["account_id"],
                 campaign_name=ibis.null("string"),
+                objective=ibis.null("string"),
+                budget=ibis.null("float64"),
+                budget_type=ibis.null("string"),
                 as_of_date=days["date"],
                 priority=ibis.literal(FACT),
             )
 
         rows = ibis.union(
+            *(from_entity(upstream) for upstream in campaigns),
             *(from_report(upstream) for upstream in campaigns_stats),
             from_fact(fact_campaign_performance.data),
             distinct=False,
         )
-        kept = latest(rows, "campaign_id", rows["priority"].asc(), rows["as_of_date"].desc())
-        return kept.select(
-            "campaign_id",
-            "account_id",
-            "campaign_name",
-            "as_of_date",
-        )
+        return latest(rows, "campaign_id", rows["priority"].asc(), rows["as_of_date"].desc()).drop("priority")
 
     @ibis_view(
         schema=schemas.DimAdGroups,
         tags=["Dimension"],
-        relations={"ads_stats": il.Relation("asset", "criteo.ads_stats", many=True, optional=True)},
+        relations={
+            "ad_sets": il.Relation("asset", "criteo.ad_sets", many=True, optional=True),
+            "ads_stats": il.Relation("asset", "criteo.ads_stats", many=True, optional=True),
+        },
     )
-    def dim_ad_groups(self, ads_stats: list[il.Upstream], fact_ad_performance: il.Upstream) -> ibis.Table:
-        """One row per ad set with its name and campaign, from its latest ad report, else the facts."""
+    def dim_ad_groups(
+        self,
+        ad_sets: list[il.Upstream],
+        ads_stats: list[il.Upstream],
+        fact_ad_performance: il.Upstream,
+    ) -> ibis.Table:
+        """One row per ad set with its name, campaign, status and budget.
+
+        Each ad set comes from its entity snapshot, else its latest ad report, else the facts.
+        """
+
+        def from_entity(upstream: il.Upstream) -> ibis.Table:
+            table = upstream.data
+            return table.select(
+                ad_group_id=table["id"],
+                campaign_id=table["campaign_id"],
+                account_id=ibis.literal(_account(upstream)),
+                ad_group_name=table["name"],
+                status=table["schedule_activation_status"],
+                budget=table["budget_budget_amount"],
+                budget_type=table["budget_budget_renewal"],
+                as_of_date=table["date"],
+                effective_status=table["schedule_delivery_status"],
+                priority=ibis.literal(ENTITY),
+            )
 
         def from_report(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -201,7 +290,11 @@ class CriteoStarSchema(il.Source):
                 campaign_id=days["campaign_id"],
                 account_id=ibis.literal(_account(upstream)),
                 ad_group_name=days["ad_group_name"],
+                status=ibis.null("string"),
+                budget=ibis.null("float64"),
+                budget_type=ibis.null("string"),
                 as_of_date=days["day"],
+                effective_status=ibis.null("string"),
                 priority=ibis.literal(REPORT),
             )
 
@@ -214,31 +307,56 @@ class CriteoStarSchema(il.Source):
                 campaign_id=days["campaign_id"],
                 account_id=days["account_id"],
                 ad_group_name=ibis.null("string"),
+                status=ibis.null("string"),
+                budget=ibis.null("float64"),
+                budget_type=ibis.null("string"),
                 as_of_date=days["date"],
+                effective_status=ibis.null("string"),
                 priority=ibis.literal(FACT),
             )
 
         rows = ibis.union(
+            *(from_entity(upstream) for upstream in ad_sets),
             *(from_report(upstream) for upstream in ads_stats),
             from_fact(fact_ad_performance.data),
             distinct=False,
         )
-        kept = latest(rows, "ad_group_id", rows["priority"].asc(), rows["as_of_date"].desc())
-        return kept.select(
-            "ad_group_id",
-            "campaign_id",
-            "account_id",
-            "ad_group_name",
-            "as_of_date",
-        )
+        return latest(rows, "ad_group_id", rows["priority"].asc(), rows["as_of_date"].desc()).drop("priority")
 
     @ibis_view(
         schema=schemas.DimAds,
         tags=["Dimension"],
-        relations={"ads_stats": il.Relation("asset", "criteo.ads_stats", many=True, optional=True)},
+        relations={
+            "ads": il.Relation("asset", "criteo.ads", many=True, optional=True),
+            "ads_stats": il.Relation("asset", "criteo.ads_stats", many=True, optional=True),
+        },
     )
-    def dim_ads(self, ads_stats: list[il.Upstream], fact_ad_performance: il.Upstream) -> ibis.Table:
-        """One row per ad with its name, ad set and campaign, from its latest ad report, else the facts."""
+    def dim_ads(
+        self,
+        ads: list[il.Upstream],
+        ads_stats: list[il.Upstream],
+        fact_ad_performance: il.Upstream,
+        dim_ad_groups: il.Upstream,
+    ) -> ibis.Table:
+        """One row per ad with its name, ad set and campaign.
+
+        Each ad comes from its entity snapshot, else its latest ad report, else the facts.
+        """
+        groups = dim_ad_groups.data.select("ad_group_id", "campaign_id")
+
+        def from_entity(upstream: il.Upstream) -> ibis.Table:
+            table = upstream.data
+            # the ad's snapshot names its ad set only; the campaign is the ad set's
+            joined = table.left_join(groups, table["ad_set_id"] == groups["ad_group_id"])
+            return joined.select(
+                ad_id=table["id"],
+                ad_group_id=table["ad_set_id"],
+                campaign_id=groups["campaign_id"],
+                account_id=ibis.literal(_account(upstream)),
+                ad_name=table["name"],
+                as_of_date=table["date"],
+                priority=ibis.literal(ENTITY),
+            )
 
         def from_report(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -274,16 +392,9 @@ class CriteoStarSchema(il.Source):
             )
 
         rows = ibis.union(
+            *(from_entity(upstream) for upstream in ads),
             *(from_report(upstream) for upstream in ads_stats),
             from_fact(fact_ad_performance.data),
             distinct=False,
         )
-        kept = latest(rows, "ad_id", rows["priority"].asc(), rows["as_of_date"].desc())
-        return kept.select(
-            "ad_id",
-            "ad_group_id",
-            "campaign_id",
-            "account_id",
-            "ad_name",
-            "as_of_date",
-        )
+        return latest(rows, "ad_id", rows["priority"].asc(), rows["as_of_date"].desc()).drop("priority")
