@@ -50,9 +50,8 @@ class BingAdsStarSchema(il.Source):
     The dimensions take each account, campaign, ad group and ad from its
     latest entity snapshot where one is collected, else from its latest
     report, else from the facts' keys. Only the snapshots know an account's
-    time zone, a campaign's budget, an ad group's schedule and when anything
-    last changed; Bing schedules ad groups, not campaigns, so campaigns
-    publish no schedule, and Bing gives no creation time, so nothing
+    time zone, a campaign's budget, a campaign's and an ad group's schedule
+    and when anything last changed; Bing gives no creation time, so nothing
     publishes one. An ad's campaign comes from its ad group, since the ad's
     own snapshot names only the ad group.
     Every bound upstream's table must exist, or the view fails when it is
@@ -213,7 +212,7 @@ class BingAdsStarSchema(il.Source):
         ads_stats: list[il.Upstream],
         fact_campaign_performance: il.Upstream,
     ) -> ibis.Table:
-        """One row per campaign with its name, status, type and budget.
+        """One row per campaign with its name, status, type, budget and schedule.
 
         Each campaign comes from its entity snapshot, else its latest report, else the facts.
         """
@@ -228,6 +227,8 @@ class BingAdsStarSchema(il.Source):
                 campaign_type=table["campaign_type"],
                 budget=table["budget"],
                 budget_type=table["budget_type"],
+                start_date=table["start_date"],
+                end_date=table["end_date"],
                 updated_at=table["modified_time"],
                 as_of_date=table["date"],
                 priority=ibis.literal(ENTITY),
@@ -248,6 +249,8 @@ class BingAdsStarSchema(il.Source):
                 campaign_type=days["campaign_type"],
                 budget=ibis.null("float64"),
                 budget_type=ibis.null("string"),
+                start_date=ibis.null("date"),
+                end_date=ibis.null("date"),
                 updated_at=ibis.null(INSTANT),
                 as_of_date=days["time_period"],
                 priority=ibis.literal(REPORT),
@@ -263,6 +266,8 @@ class BingAdsStarSchema(il.Source):
                 campaign_type=ibis.null("string"),
                 budget=ibis.null("float64"),
                 budget_type=ibis.null("string"),
+                start_date=ibis.null("date"),
+                end_date=ibis.null("date"),
                 updated_at=ibis.null(INSTANT),
                 as_of_date=days["date"],
                 priority=ibis.literal(FACT),
