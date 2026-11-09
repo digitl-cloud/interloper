@@ -339,6 +339,33 @@ class TestEntityReads:
         assert run("adsets") == [{"id": "s1", "date": day}]
         assert run("ad_accounts") == [{"id": "act_123", "account_id": "123", "date": day}]
 
+    def test_entity_edges_ask_for_every_status_in_pages_of_100(self, monkeypatch):
+        requested: dict[str, dict[str, Any]] = {}
+
+        class FakeAccount:
+            def get_campaigns(self, **kwargs: Any) -> list[_FakeObject]:
+                requested["campaigns"] = kwargs["params"]
+                return []
+
+            def get_ad_sets(self, **kwargs: Any) -> list[_FakeObject]:
+                requested["adsets"] = kwargs["params"]
+                return []
+
+            def get_ads(self, **kwargs: Any) -> list[_FakeObject]:
+                requested["ads"] = kwargs["params"]
+                return []
+
+        monkeypatch.setattr(connector, "_account", lambda connection, account_id: FakeAccount())
+        connection = FacebookAdsConnection(id="fb", access_token="x", app_id="1", app_secret="x")
+        for read in (connector._get_campaigns, connector._get_adsets, connector._get_ads):
+            read(connection, "123")
+
+        assert {params["limit"] for params in requested.values()} == {100}
+        for params in requested.values():
+            assert {"ACTIVE", "PAUSED", "ARCHIVED", "DELETED"} <= set(params["effective_status"])
+        assert "CAMPAIGN_PAUSED" in requested["adsets"]["effective_status"]
+        assert "ADSET_PAUSED" in requested["ads"]["effective_status"]
+
 
 def test_isinstance_of_dataframe_normalizer():
     # The custom normalizer is a DataFrameNormalizer, so it inherits its config.
