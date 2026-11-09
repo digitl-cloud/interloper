@@ -11,9 +11,9 @@ class DimAdGroups(Schema):
     ad_group_name: str | None = Field(default=None, description="Ad squad name.")
     status: str | None = Field(default=None, description="Configured status (ACTIVE, PAUSED).")
     budget: float | None = Field(
-        default=None, description="Lifetime budget, in the account currency; NULL when the ad squad sets none."
+        default=None, description="Daily budget when set, else lifetime budget, in the account currency; NULL for none."
     )
-    budget_type: str | None = Field(default=None, description="lifetime when the ad squad sets a budget, else NULL.")
+    budget_type: str | None = Field(default=None, description="daily or lifetime, by which budget is published.")
     start_date: dt.date | None = Field(
         default=None, description="Scheduled start, in the account's timezone; NULL until the timezone is known."
     )

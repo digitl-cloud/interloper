@@ -12,10 +12,11 @@ class DimCampaigns(Schema):
     objective: str | None = Field(default=None, description="Campaign objective; entity rows only.")
     campaign_type: str | None = Field(default=None, description="Buy model (AUCTION, RESERVED); entity rows only.")
     budget: float | None = Field(
-        default=None, description="Lifetime spend cap, in the account currency; NULL when uncapped; entity rows only."
+        default=None,
+        description="Daily budget when set, else lifetime spend cap, in the account currency; entity rows only.",
     )
     budget_type: str | None = Field(
-        default=None, description="lifetime when the campaign caps its spend, else NULL; entity rows only."
+        default=None, description="daily or lifetime, by which budget is published; NULL for none; entity rows only."
     )
     start_date: dt.date | None = Field(
         default=None,
