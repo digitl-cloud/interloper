@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.129.0 (2026-11-09)
+
+### Features
+
+- **assets**: The Bing Ads campaign dimension publishes its schedule
+  ([`2723012`](https://github.com/digitl-cloud/interloper/commit/2723012e6bd760db32566aedf3c8b48be13723fb))
+
+
 ## v0.128.1 (2026-11-09)
 
 ### Bug Fixes
