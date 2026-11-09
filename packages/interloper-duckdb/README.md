@@ -54,7 +54,7 @@ column the table does not have is dropped from the write with a warning.
 | `int` | `BIGINT` |
 | `float` | `DOUBLE` |
 | `Decimal` | `DECIMAL(38,9)` |
-| `datetime` | `TIMESTAMP` |
+| `datetime` | `TIMESTAMPTZ` |
 | `date` | `DATE` |
 | `bytes` | `BLOB` |
 | `str`, `Any` | `VARCHAR` |

@@ -140,7 +140,7 @@ class TestDDL:
             "count": "BIGINT",
             "ratio": "DOUBLE",
             "amount": "DECIMAL(38,9)",
-            "at": "TIMESTAMP",
+            "at": "TIMESTAMP WITH TIME ZONE",
             "day": "DATE",
             "blob": "BLOB",
             "label": "VARCHAR",
@@ -150,6 +150,16 @@ class TestDDL:
         }
         stored = _query(destination, 'SELECT "amount", "point", "tags" FROM "main"."plain"')
         assert stored == [(Decimal("1.250000000"), '{"x":1}', '["a","b"]')]
+
+    def test_an_instant_converts_to_the_day_it_falls_on_in_another_zone(self, destination):
+        class Scheduled(Schema):
+            start_time: datetime.datetime | None
+
+        late_evening = datetime.datetime(2026, 5, 4, 22, tzinfo=datetime.timezone.utc)
+        destination.write(_ctx(plain(), schema=Scheduled), [{"start_time": late_evening}])
+
+        berlin_day = 'SELECT CAST("start_time" AT TIME ZONE \'Europe/Berlin\' AS DATE) FROM "main"."plain"'
+        assert _query(destination, berlin_day) == [(datetime.date(2026, 5, 5),)]
 
     def test_without_a_schema_the_table_is_typed_from_the_data(self, destination):
         destination.write(_ctx(plain()), [{"n": 1, "day": datetime.date(2024, 1, 1)}])

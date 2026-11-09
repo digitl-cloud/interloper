@@ -138,7 +138,7 @@ class TestDDL:
         assert create == (
             f'CREATE TABLE IF NOT EXISTS {REF}."ads_stats" ('
             '"flag" BOOLEAN, "n" NUMBER(38,0), "cost" FLOAT, "amount" NUMBER(38,9), '
-            '"at" TIMESTAMP_NTZ, "day" DATE, "blob" BINARY, "name" VARCHAR, "anything" VARCHAR, '
+            '"at" TIMESTAMP_TZ, "day" DATE, "blob" BINARY, "name" VARCHAR, "anything" VARCHAR, '
             '"nested" VARIANT, "tags" VARIANT)'
         )
 

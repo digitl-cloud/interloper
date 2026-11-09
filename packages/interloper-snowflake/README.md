@@ -79,7 +79,7 @@ typed from the asset's schema (or one inferred from the data):
 | `int` | `NUMBER(38,0)` |
 | `float` | `FLOAT` |
 | `Decimal` | `NUMBER(38,9)` |
-| `datetime` | `TIMESTAMP_NTZ` |
+| `datetime` | `TIMESTAMP_TZ` |
 | `date` | `DATE` |
 | `bytes` | `BINARY` |
 | `str`, `Any` | `VARCHAR` |
