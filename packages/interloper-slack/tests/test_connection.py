@@ -2,6 +2,7 @@
 
 import httpx2
 import pytest
+from interloper.rest.client import TransientRetry
 
 from interloper_slack import SlackConnection
 
@@ -65,7 +66,8 @@ class TestChannels:
             SlackConnection(bot_token="xoxb-t").channels()
 
     def test_http_error_raises(self, slack):
-        slack.raw(httpx2.Response(500))
+        for _ in range(TransientRetry.DEFAULT.max_attempts):
+            slack.raw(httpx2.Response(500))
 
         with pytest.raises(httpx2.HTTPStatusError):
             SlackConnection(bot_token="xoxb-t").channels()

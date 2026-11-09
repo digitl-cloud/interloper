@@ -58,6 +58,22 @@ class _AwareDATETIME(DATETIME):
 for dialect_class in (SQLiteDialect, SQLiteDialect_pysqlite):
     dialect_class.colspecs = {**dialect_class.colspecs, types.DateTime: _AwareDATETIME}
 
+
+@pytest.fixture(autouse=True)
+def _immediate_rest_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make REST clients repeat transient failures without waiting, so a test scripting a 429 or 5xx stays fast.
+
+    Imported here rather than at the top so collecting the workspace imports no package early.
+
+    Args:
+        monkeypatch: Restores the default policy after the test.
+    """
+    from interloper.rest.client import TransientRetry
+    from interloper.retry import RetryPolicy
+
+    monkeypatch.setattr(TransientRetry, "DEFAULT", RetryPolicy(max_attempts=5, delay=0, jitter=0))
+
+
 _span_exporter = InMemorySpanExporter()
 _metric_reader = InMemoryMetricReader()
 _tracing_installed = False
