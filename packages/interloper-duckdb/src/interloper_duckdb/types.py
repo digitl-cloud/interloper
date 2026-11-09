@@ -16,7 +16,7 @@ _PYTHON_TO_DUCKDB: dict[type, str] = {
     int: "BIGINT",
     float: "DOUBLE",
     Decimal: "DECIMAL(38,9)",
-    datetime.datetime: "TIMESTAMP",
+    datetime.datetime: "TIMESTAMPTZ",
     datetime.date: "DATE",
     bytes: "BLOB",
     str: "VARCHAR",

@@ -14,7 +14,7 @@ _PYTHON_TO_SNOWFLAKE: dict[type, str] = {
     int: "NUMBER(38,0)",
     float: "FLOAT",
     Decimal: "NUMBER(38,9)",
-    datetime.datetime: "TIMESTAMP_NTZ",
+    datetime.datetime: "TIMESTAMP_TZ",
     datetime.date: "DATE",
     bytes: "BINARY",
     str: "VARCHAR",
