@@ -23,6 +23,15 @@ class DimCampaigns(Schema):
         default=None,
         description="Budget type (DailyBudgetStandard, DailyBudgetAccelerated); NULL on rows built from the report or the facts.",
     )
+    start_date: dt.date | None = Field(
+        default=None,
+        description="Day the campaign starts serving, as Bing schedules it; NULL when unscheduled or on rows built "
+        "from the report or the facts.",
+    )
+    end_date: dt.date | None = Field(
+        default=None,
+        description="Last day the campaign serves, NULL when it runs on or on rows built from the report or the facts.",
+    )
     updated_at: dt.datetime | None = Field(
         default=None, description="When the campaign last changed; NULL on rows built from the report or the facts."
     )

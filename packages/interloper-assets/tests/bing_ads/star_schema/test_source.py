@@ -36,7 +36,7 @@ ENTITY_COLUMNS = {
     "accounts": "date DATE, id VARCHAR, name VARCHAR, currency_code VARCHAR, time_zone VARCHAR, "
     "parent_customer_id VARCHAR",
     "campaigns": "date DATE, id VARCHAR, campaign VARCHAR, status VARCHAR, campaign_type VARCHAR, budget DOUBLE, "
-    "budget_type VARCHAR, modified_time TIMESTAMPTZ",
+    "budget_type VARCHAR, start_date DATE, end_date DATE, modified_time TIMESTAMPTZ",
     "ad_groups": "date DATE, id VARCHAR, parent_id VARCHAR, ad_group VARCHAR, status VARCHAR, start_date DATE, "
     "end_date DATE, modified_time TIMESTAMPTZ",
     "ads": "date DATE, id VARCHAR, parent_id VARCHAR, status VARCHAR, type VARCHAR, headline VARCHAR, "
@@ -92,7 +92,10 @@ def _snapshot(account_id: str, day: str = "2026-09-30", *, time_zone: str = "Ams
     return {
         "accounts": [f"(DATE '{day}', '{account_id}', 'Acct entity', 'EUR', '{time_zone}', '999')"],
         "campaigns": [
-            f"(DATE '{day}', 'c{account_id}', 'Camp entity', 'Paused', 'Search', 50.0, 'DailyBudgetStandard', {stamp})"
+            (
+                f"(DATE '{day}', 'c{account_id}', 'Camp entity', 'Paused', 'Search', 50.0, 'DailyBudgetStandard', "
+                f"DATE '2026-08-15', NULL, {stamp})"
+            )
         ],
         "ad_groups": [
             (
@@ -179,7 +182,7 @@ class TestWiring:
             "as_of_date",
             "customer_id",
         ]
-        # Bing schedules ad groups, not campaigns, and gives no creation time; campaigns have no objective
+        # Bing gives no creation time; campaigns have no objective
         assert list(schemas.DimCampaigns.model_fields) == [
             "campaign_id",
             "account_id",
@@ -188,6 +191,8 @@ class TestWiring:
             "campaign_type",
             "budget",
             "budget_type",
+            "start_date",
+            "end_date",
             "updated_at",
             "as_of_date",
         ]
@@ -372,7 +377,7 @@ class TestOnDuckDB:
         [row] = _rows(warehouse, "dim_accounts")
         assert (row["account_name"], row["timezone"]) == ("Acct entity", None)
 
-    def test_a_campaign_takes_its_budget_from_its_snapshot(self, warehouse):
+    def test_a_campaign_takes_its_budget_and_schedule_from_its_snapshot(self, warehouse):
         first = _account("111", warehouse)
         _seed(warehouse, "111", entities=_snapshot("111"))
         _materialize(warehouse, first)
@@ -385,6 +390,8 @@ class TestOnDuckDB:
                 "campaign_type": "Search",
                 "budget": 50.0,
                 "budget_type": "DailyBudgetStandard",
+                "start_date": dt.date(2026, 8, 15),
+                "end_date": None,
                 "updated_at": UPDATED,
                 "as_of_date": SNAPSHOT_DAY,
             }
@@ -449,7 +456,7 @@ class TestOnDuckDB:
         first = _account("111", warehouse)
         entities = _snapshot("111")
         entities["campaigns"].append(
-            "(DATE '2026-09-30', NULL, 'Orphan', 'Active', 'Search', 1.0, 'DailyBudgetStandard', NULL)"
+            "(DATE '2026-09-30', NULL, 'Orphan', 'Active', 'Search', 1.0, 'DailyBudgetStandard', NULL, NULL, NULL)"
         )
         entities["ads"].append("(DATE '2026-09-30', NULL, 's111', 'Active', 'Responsive Ad', 'x', NULL)")
         _seed(warehouse, "111", entities=entities)
