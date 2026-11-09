@@ -183,19 +183,48 @@ def _get_custom_audiences(
     return [audience._json for audience in account.get_custom_audiences(fields=fields, params=params)]
 
 
+def _snapshot_params(entity: Any) -> dict[str, Any]:
+    """The edge parameters an entity snapshot reads with: every status, in pages of 100.
+
+    Used by the ``campaigns``, ``adsets`` and ``ads`` assets. Graph API edges
+    leave out archived and deleted objects unless their statuses are asked
+    for, and those objects still carry spend in the reports, so every
+    effective status the SDK knows for the entity is requested. Pages of 100
+    rather than the default 25 cut the calls on large accounts; a page too
+    heavy for Facebook is halved by the request engine.
+
+    Args:
+        entity: The SDK class of the objects read, such as ``Ad``.
+
+    Returns:
+        The ``params`` of the edge call.
+    """
+    statuses = [value for name, value in vars(entity.EffectiveStatus).items() if not name.startswith("_")]
+    return {"effective_status": statuses, "limit": 100}
+
+
 def _get_campaigns(connection: FacebookAdsConnection, account_id: str) -> list[dict]:
+    from facebook_business.adobjects.campaign import Campaign
+
     account = _account(connection, account_id)
-    return [campaign._json for campaign in account.get_campaigns(fields=constants.CAMPAIGN_ENTITY_FIELDS)]
+    campaigns = account.get_campaigns(fields=constants.CAMPAIGN_ENTITY_FIELDS, params=_snapshot_params(Campaign))
+    return [campaign._json for campaign in campaigns]
 
 
 def _get_ads(connection: FacebookAdsConnection, account_id: str) -> list[dict]:
+    from facebook_business.adobjects.ad import Ad
+
     account = _account(connection, account_id)
-    return [ad.export_all_data() for ad in account.get_ads(fields=constants.AD_ENTITY_FIELDS)]
+    ads = account.get_ads(fields=constants.AD_ENTITY_FIELDS, params=_snapshot_params(Ad))
+    return [ad.export_all_data() for ad in ads]
 
 
 def _get_adsets(connection: FacebookAdsConnection, account_id: str) -> list[dict]:
+    from facebook_business.adobjects.adset import AdSet
+
     account = _account(connection, account_id)
-    return [adset.export_all_data() for adset in account.get_ad_sets(fields=constants.ADSET_ENTITY_FIELDS)]
+    adsets = account.get_ad_sets(fields=constants.ADSET_ENTITY_FIELDS, params=_snapshot_params(AdSet))
+    return [adset.export_all_data() for adset in adsets]
 
 
 def _get_ad_account(connection: FacebookAdsConnection, account_id: str) -> dict:
