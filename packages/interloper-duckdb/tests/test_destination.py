@@ -196,6 +196,13 @@ class TestWrite:
         rows = _query(destination, 'SELECT "day", "value" FROM "main"."daily" ORDER BY "day"')
         assert [value for _, value in rows] == [1, 20, 3]
 
+    def test_an_empty_write_creates_the_table_and_clears_its_partition(self, destination):
+        destination.write(_ctx(daily(), TimePartition(datetime.date(2024, 1, 5)), DayRow), [])
+        assert _column_types(destination, "main", "daily") == {"day": "DATE", "value": "BIGINT"}
+        destination.write(_ctx(daily(), TimePartition(datetime.date(2024, 1, 5)), DayRow), _days(5, 5))
+        destination.write(_ctx(daily(), TimePartition(datetime.date(2024, 1, 5)), DayRow), [])
+        assert _query(destination, 'SELECT count(*) FROM "main"."daily"') == [(0,)]
+
     def test_monthly_partition_bounds_cover_daily_rows(self, destination):
         @il.asset(partitioning=il.TimePartitionConfig(column="day", granularity=il.TimeGranularity.MONTH))
         def monthly() -> list:
