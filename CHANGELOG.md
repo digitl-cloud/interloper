@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v0.128.1 (2026-11-09)
+
+### Bug Fixes
+
+- **assets**: Bing campaign snapshots keep their scheduled days
+  ([`1a5fd21`](https://github.com/digitl-cloud/interloper/commit/1a5fd2130727cea9d0f873836c4786de53228e7d))
+
+- **assets**: Bing report days are each campaign's own, not Berlin's
+  ([`2267448`](https://github.com/digitl-cloud/interloper/commit/2267448dca1731d3942927999028e56288c17ffa))
+
+### Chores
+
+- Tracked files no longer name internal tracker tickets
+  ([`39b8915`](https://github.com/digitl-cloud/interloper/commit/39b891587d90498e94c62b911eb1e803b4646fc1))
+
+### Testing
+
+- Fixtures use a neutral organisation name
+  ([`0770179`](https://github.com/digitl-cloud/interloper/commit/07701795d811a0588ed7eb5399d0cb008c0acfca))
+
+
 ## v0.128.0 (2026-11-06)
 
 ### Bug Fixes
