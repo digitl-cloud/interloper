@@ -269,10 +269,11 @@ class TestWriteShapes:
 
         assert "DELETE" not in warehouse.verbs
 
-    def test_empty_data_writes_nothing(self, warehouse):
+    def test_empty_data_creates_the_table_and_inserts_no_rows(self, warehouse):
         _destination().write(_ctx(ads_stats(), schema=_DaySchema), [])
 
-        assert warehouse.statements == []
+        assert any(s.sql.startswith("CREATE TABLE") for s in warehouse.statements)
+        assert not any(s.sql.startswith("INSERT") for s in warehouse.statements)
 
 
 class TestInsert:

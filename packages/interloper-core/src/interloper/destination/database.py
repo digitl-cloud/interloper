@@ -296,11 +296,15 @@ class DatabaseDestination(Destination):
         every partition the window covers are deleted, then the data is inserted once (one load
         job rather than one per day). The unpartitioned whole is the same path with no filter.
 
+        Empty data with a schema is still a write: the window's rows are deleted and the
+        table is created when missing, so a rerun that now returns nothing leaves no stale
+        rows, and an account with nothing to report has a table a view can read.
+
         Args:
             context: IO context carrying the target asset, the window and the effective schema.
             data: The data to write, in its native representation.
         """
-        if is_empty(data):
+        if is_empty(data) and context.schema is None:
             return
         self._warn_missing_partition_column(data, context)
         table, dataset = self._target(context)

@@ -721,8 +721,11 @@ class Asset(Operation, metaclass=AssetMeta):
     async def _land(self, output: Output, window: PartitionWindow | None, metadata: dict[str, Any]) -> None:
         """Write the output to every destination, one observed step each.
 
-        An empty output is skipped with a warning. A kind that lands
-        elsewhere overrides it (see `View`).
+        An empty output is still handed to each destination, with a warning:
+        it is this run's answer, and a destination that keeps tables clears
+        the run's partitions and creates the table (see
+        `DatabaseDestination.write`). A kind that lands elsewhere overrides it
+        (see `View`).
 
         Args:
             output: The run's output.
@@ -739,12 +742,9 @@ class Asset(Operation, metaclass=AssetMeta):
                     metadata,
                     window,
                     level="WARNING",
-                    message=(
-                        f"Asset '{self.key}' produced no data; skipping write to {len(destinations)} destination(s)"
-                    ),
+                    message=f"Asset '{self.key}' produced no data; its destinations keep no rows for this run",
                 ),
             )
-            return
         context = IOContext(asset=self, window=window, metadata=metadata, schema=output.schema or self.schema)
         rows = len(output.data) if isinstance(output.data, Sized) else None
         for destination in destinations:

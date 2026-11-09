@@ -963,6 +963,20 @@ class TestDestinationWrite:
         # The warning is attributed to the asset so it filters/labels in the UI.
         assert warnings[0].metadata.get("component_id") == asset.id
 
+    async def test_empty_result_still_reaches_each_destination(self):
+        writes: list[Any] = []
+
+        class Recording(il.MemoryDestination):
+            def write(self, context: Any, data: Any) -> None:
+                writes.append(data)
+
+        @il.asset()
+        def empty() -> list[dict[str, Any]]:
+            return []
+
+        await empty(id="empty", destinations=[Recording()]).materialize_async()
+        assert writes == [[]]
+
     async def test_non_empty_result_is_written(self):
         mem = il.MemoryDestination()
 

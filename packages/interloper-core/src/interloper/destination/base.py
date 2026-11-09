@@ -10,6 +10,7 @@ from interloper.destination.context import IOContext
 from interloper.errors import ConfigError, RepresentationError
 from interloper.partitioning.base import Partition
 from interloper.representation import TableData
+from interloper.utils.data import is_empty
 
 if TYPE_CHECKING:
     from interloper.asset.base import Asset
@@ -77,13 +78,16 @@ class Destination(Component):
 
         A window is split into one `write_partition` call per partition,
         each receiving its slice of the data; a single partition or the
-        unpartitioned whole is one call receiving the data as is.
+        unpartitioned whole is one call receiving the data as is. Empty data
+        writes nothing.
 
         Args:
             context: IO context carrying the target asset, the window,
                 and the effective schema.
             data: The data to write, in its native representation.
         """
+        if is_empty(data):
+            return
         for partition, chunk in context.slices(data):
             self.write_partition(context, partition, chunk)
 

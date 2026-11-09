@@ -237,6 +237,17 @@ class TestInsertData:
         created = mock_client.create_table.call_args.args[0]
         assert [f.name for f in created.schema] == ["id", "cost", "day"]
 
+    def test_no_rows_create_the_table_without_a_load_job(self):
+        from google.cloud.exceptions import NotFound
+
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.get_table.side_effect = NotFound("nope")
+
+        dest.insert("tbl", "ds", [], _ctx(_plain_asset(), _RowSchema))
+
+        assert [f.name for f in mock_client.create_table.call_args.args[0].schema] == ["id", "cost", "day"]
+        assert not mock_client.load_table_from_dataframe.called
+
     def test_rows_without_schema_let_the_load_job_create_the_table(self):
         from google.cloud.exceptions import NotFound
 

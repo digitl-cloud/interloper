@@ -176,10 +176,20 @@ class TestWrite:
         where = PartitionFilter("date", bounds=(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)))
         assert destination.calls[0] == ("select", ("partitioned_asset", None, where))
 
-    def test_empty_data_is_a_noop(self):
+    def test_empty_data_without_a_schema_is_a_noop(self):
         destination = RecordingDatabase(id="db")
         destination.write(make_io_context(plain_asset()), [])
         assert destination.calls == []
+
+    def test_empty_data_with_a_schema_clears_the_window_and_creates_the_table(self):
+        destination = RecordingDatabase(id="db")
+        partition = TimePartition(datetime.date(2024, 1, 1))
+        destination.write(make_io_context(partitioned_asset(), partition, schema=DateSchema), [])
+        where = PartitionFilter("date", bounds=(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)))
+        assert destination.calls == [
+            ("delete", ("partitioned_asset", None, where)),
+            ("insert", ("partitioned_asset", None, [])),
+        ]
 
     def test_write_targets_instance_aliased_table(self):
         source = DiscriminatedSource(account_id="42")

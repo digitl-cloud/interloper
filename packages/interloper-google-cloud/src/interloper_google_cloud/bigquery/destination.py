@@ -291,7 +291,7 @@ class BigQueryDestination(DatabaseDestination):
         New tables are created with the asset's partitioning (time
         partitioning on the partition column at the asset's granularity) and
         carry field and table descriptions; on existing tables, descriptions
-        are kept in sync.
+        are kept in sync. No rows create the table and start no load job.
 
         Args:
             table: Target table name.
@@ -316,6 +316,8 @@ class BigQueryDestination(DatabaseDestination):
             self._ensure_dataset(dataset)
             time_partitioning = _time_partitioning(partitioning, None)
 
+        if frame.empty:
+            return
         self._load(
             self._table_ref(table, dataset),
             frame,
