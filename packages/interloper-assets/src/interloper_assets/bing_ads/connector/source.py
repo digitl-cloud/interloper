@@ -31,7 +31,20 @@ def _build_report_time(
     date: dt.date,
     timezone: str = "AmsterdamBerlinBernRomeStockholmVienna",
 ) -> Any:
-    """Build a ``ReportTime`` covering the single day *date*."""
+    """Build a ``ReportTime`` covering the single day *date*.
+
+    Bing dates each row in its campaign's time zone whatever the request
+    names: ``ReportTimeZone`` only decides which zone's today the end date
+    may not pass. One fixed zone therefore serves every account.
+
+    Args:
+        reporting_service: The Reporting service whose factory builds the request objects.
+        date: The day the report covers.
+        timezone: The Bing ``ReportTimeZone`` whose today bounds the end date.
+
+    Returns:
+        The SDK's ``ReportTime``.
+    """
     start_date = reporting_service.factory.create("Date")
     start_date.Day = int(date.day)
     start_date.Month = int(date.month)

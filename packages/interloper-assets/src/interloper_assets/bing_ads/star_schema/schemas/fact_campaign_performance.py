@@ -7,7 +7,10 @@ from pydantic import Field
 class FactCampaignPerformance(Schema):
     date: dt.date | None = Field(
         default=None,
-        description="The report day, in Bing's Amsterdam-Berlin time zone, the zone the connector requests.",
+        description=(
+            "The report day, in the campaign's Bing time zone: its account's (dim_accounts.timezone) "
+            "unless the campaign was created in another."
+        ),
     )
     account_id: str | None = Field(default=None, description="Account id, the key the account dimension joins on.")
     campaign_id: str | None = Field(default=None, description="Campaign id, the key the campaign dimension joins on.")

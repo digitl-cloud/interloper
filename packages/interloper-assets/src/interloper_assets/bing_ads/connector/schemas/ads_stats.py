@@ -77,7 +77,7 @@ class AdsStats(Schema):
     revenue_per_assist: float | None = Field(..., description="The revenue per assist")
     revenue_per_conversion: float | None = Field(..., description="The revenue per conversion")
     spend: float | None = Field(..., description="The total spend")
-    time_period: dt.date | None = Field(..., description="The time period")
+    time_period: dt.date | None = Field(..., description="The report day, in the campaign's Bing time zone")
     title_part_1: str | None = Field(..., description="The first part of the title")
     title_part_2: str | None = Field(..., description="The second part of the title")
     title_part_3: str | None = Field(..., description="The third part of the title")

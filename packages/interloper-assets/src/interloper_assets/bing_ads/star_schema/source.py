@@ -44,8 +44,9 @@ class BingAdsStarSchema(il.Source):
     conversions arrive on rows of their own with no delivery, so the sums
     count nothing twice. Conversions are the goals the advertiser counts in
     Bing's Conversions; Bing does not say which goals are purchases, so the
-    facts publish no purchases. Days are in the Amsterdam-Berlin zone the
-    connector requests.
+    facts publish no purchases. Days are each campaign's own, in the time
+    zone Bing reports it in: its account's, unless the campaign was created
+    in another.
     The dimensions take each account, campaign, ad group and ad from its
     latest entity snapshot where one is collected, else from its latest
     report, else from the facts' keys. Only the snapshots know an account's
