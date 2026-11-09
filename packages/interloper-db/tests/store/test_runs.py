@@ -1101,14 +1101,14 @@ class TestRunFilters:
         assert page.total == 1
 
     def test_the_search_matches_the_targets_name_or_key_case_insensitively(self, store: Store):
-        named = _component(store, kind="source", key="s1", name="Swarovski FB")
-        keyed = _component(store, kind="job", key="swarovski_daily")
+        named = _component(store, kind="source", key="s1", name="Acme FB")
+        keyed = _component(store, kind="job", key="acme_daily")
         by_name = store.runs.create(_ORG_ID, component_id=named)
         by_key = store.runs.create(_ORG_ID, component_id=keyed)
         store.runs.create(_ORG_ID, component_id=_component(store, kind="source", key="s2", name="Other"))
         store.runs.create(_ORG_ID)
 
-        page = store.runs.list(_ORG_ID, RunQuery(q="SWARO"))
+        page = store.runs.list(_ORG_ID, RunQuery(q="ACM"))
 
         assert {row.id for row in page.items} == {by_name.id, by_key.id}
         assert page.total == 2

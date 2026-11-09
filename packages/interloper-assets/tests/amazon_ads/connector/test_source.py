@@ -98,7 +98,7 @@ class TestSpecRoundtrip:
         TableData.from_data(normalized).reconcile(schemas.ProductsCampaignsStats)  # must not raise
 
 
-# Count metrics: whole numbers only across the 20 M legacy rows of the Swarovski warehouse (checked
+# Count metrics: whole numbers only across the 20 M legacy rows of a production warehouse (checked
 # 2026-09-16), so the schemas type them as ``int``. Rates and amounts keep ``float``.
 COUNT_FIELDS = frozenset(
     {

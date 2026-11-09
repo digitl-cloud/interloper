@@ -31,7 +31,7 @@ from interloper_db.store import OrganisationQuery, Store
 
 class TestKey:
     def test_create_derives_the_key_from_the_name(self, store: Store):
-        assert store.organisations.create(name="Swarovski AG").key == "swarovski-ag"
+        assert store.organisations.create(name="Acme AG").key == "acme-ag"
 
     def test_reserved_name_gets_suffix(self, store: Store):
         assert store.organisations.create(name="Settings").key == "settings-2"
@@ -46,8 +46,8 @@ class TestKey:
         assert store.organisations.create(name="Acme").key == "acme-2"
 
     def test_get_by_key(self, store: Store):
-        org = store.organisations.create(name="Swarovski AG")
-        assert store.organisations.get_by_key("swarovski-ag").id == org.id
+        org = store.organisations.create(name="Acme AG")
+        assert store.organisations.get_by_key("acme-ag").id == org.id
 
     def test_get_by_key_misses_unknown_and_deleted(self, store: Store):
         org = store.organisations.create(name="Acme")
