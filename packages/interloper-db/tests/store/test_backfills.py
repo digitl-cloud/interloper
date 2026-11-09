@@ -222,7 +222,7 @@ class TestTargetOperations:
 
 
 class TestCreate:
-    """Dispatch order: newest partition first (ITLPR-120)."""
+    """Dispatch order: newest partition first."""
 
     def test_the_newest_partitions_are_queued_first(self, store: Store):
         backfill = _backfill(store, days=4, concurrency=2)
