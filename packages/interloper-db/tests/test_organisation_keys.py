@@ -10,7 +10,7 @@ from interloper_db.organisation_keys import MAX_LENGTH, RESERVED, derive_key, un
 
 class TestDeriveKey:
     def test_derive_key_lowercases_and_hyphenates(self):
-        assert derive_key("Swarovski AG") == "swarovski-ag"
+        assert derive_key("Acme AG") == "acme-ag"
 
     def test_runs_of_punctuation_collapse_to_one_hyphen(self):
         assert derive_key("  Acme -- & Sons!  ") == "acme-sons"
@@ -43,13 +43,11 @@ class TestDeriveKey:
 
 
 class TestValidateKey:
-    @pytest.mark.parametrize("key", ["swarovski", "swarovski-ag", "a", "a1-b2", "x" * MAX_LENGTH])
+    @pytest.mark.parametrize("key", ["acme", "acme-ag", "a", "a1-b2", "x" * MAX_LENGTH])
     def test_accepts_well_formed_keys(self, key: str):
         validate_key(key)
 
-    @pytest.mark.parametrize(
-        "key", ["", "Swarovski", "-a", "a-", "a--b", "a b", "a_b", "a.b", "ä", "x" * (MAX_LENGTH + 1)]
-    )
+    @pytest.mark.parametrize("key", ["", "Acme", "-a", "a-", "a--b", "a b", "a_b", "a.b", "ä", "x" * (MAX_LENGTH + 1)])
     def test_refuses_malformed_keys(self, key: str):
         with pytest.raises(ConfigError):
             validate_key(key)
@@ -65,7 +63,7 @@ class TestValidateKey:
 
 class TestUniqueKey:
     def test_is_the_derived_key_when_free(self):
-        assert unique_key("Swarovski AG", set()) == "swarovski-ag"
+        assert unique_key("Acme AG", set()) == "acme-ag"
 
     def test_takes_the_next_free_number_when_taken(self):
         assert unique_key("Acme", {"acme", "acme-2"}) == "acme-3"

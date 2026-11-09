@@ -18,8 +18,8 @@ HTTPX_401 = (
     "For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401"
 )
 GOOGLE_403 = (
-    "Forbidden: 403 POST https://bigquery.googleapis.com/bigquery/v2/projects/dc-swarovski/jobs?prettyPrint=false: "
-    "Access Denied: Dataset dc-swarovski:raw: Permission bigquery.tables.create denied"
+    "Forbidden: 403 POST https://bigquery.googleapis.com/bigquery/v2/projects/example-project/jobs?prettyPrint=false: "
+    "Access Denied: Dataset example-project:raw: Permission bigquery.tables.create denied"
 )
 FACEBOOK = (
     "FacebookRequestError: \n\n"
@@ -63,7 +63,7 @@ class TestErrorCause:
 
         assert (cause.exception_type, cause.http_status, cause.method) == ("Forbidden", 403, "POST")
         assert cause.host == "bigquery.googleapis.com"
-        assert cause.path == "/bigquery/v2/projects/dc-swarovski/jobs"
+        assert cause.path == "/bigquery/v2/projects/example-project/jobs"
 
     def test_facebook_status_method_path_and_vendor_codes(self):
         cause = ErrorCause.from_text(FACEBOOK)

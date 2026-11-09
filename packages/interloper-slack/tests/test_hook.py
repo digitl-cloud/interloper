@@ -132,12 +132,12 @@ class TestFire:
                 event_type="run_failed",
                 component_id="c1",
                 run_id="r1",
-                metadata={"organisation_name": "Swarovski", "component_name": "Facebook Ads"},
+                metadata={"organisation_name": "Acme", "component_name": "Facebook Ads"},
             )
         )
 
-        assert slack.json_body()["text"] == "Swarovski · Facebook Ads failed"
-        assert _text(slack) == ":x: *Swarovski · Facebook Ads* failed\nRun `r1`"
+        assert slack.json_body()["text"] == "Acme · Facebook Ads failed"
+        assert _text(slack) == ":x: *Acme · Facebook Ads* failed\nRun `r1`"
 
     def test_links_to_the_app_when_the_context_knows_its_page(self, slack):
         _hook().fire(

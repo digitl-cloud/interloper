@@ -375,7 +375,7 @@ class TestHookEvaluation:
 
     def test_metadata_names_the_organisation(self, store: Store, monkeypatch: pytest.MonkeyPatch):
         payloads = _capture_posts(monkeypatch)
-        organisation = store.organisations.create("Swarovski")
+        organisation = store.organisations.create("Acme")
         source = store.components.create(organisation.id, kind="source", key="demo_source", name="Demo")
         store.components.create(
             organisation.id,
@@ -390,7 +390,7 @@ class TestHookEvaluation:
 
         _sweep(store)
 
-        assert payloads[0]["metadata"]["organisation_name"] == "Swarovski"
+        assert payloads[0]["metadata"]["organisation_name"] == "Acme"
 
     def test_metadata_falls_back_to_key_when_unnamed(self, store: Store, monkeypatch: pytest.MonkeyPatch):
         payloads = _capture_posts(monkeypatch)
@@ -835,7 +835,7 @@ class TestSubjectUrl:
 
     @pytest.fixture
     def org_id(self, store: Store) -> UUID:
-        return store.organisations.create("Swarovski").id
+        return store.organisations.create("Acme").id
 
     def _watch(self, store: Store, org_id: UUID, component_id: UUID, event: str) -> None:
         store.components.create(
@@ -856,7 +856,7 @@ class TestSubjectUrl:
 
         _sweep(store)
 
-        assert [payload["url"] for payload in payloads] == [f"https://app.test/swarovski/executions/runs/{run.id}"]
+        assert [payload["url"] for payload in payloads] == [f"https://app.test/acme/executions/runs/{run.id}"]
 
     def test_a_backfill_event_links_to_the_backfill(
         self, store: Store, monkeypatch: pytest.MonkeyPatch, public_url: None, org_id: UUID
@@ -873,9 +873,7 @@ class TestSubjectUrl:
 
         _sweep(store)
 
-        assert [payload["url"] for payload in payloads] == [
-            f"https://app.test/swarovski/executions/backfills/{backfill.id}"
-        ]
+        assert [payload["url"] for payload in payloads] == [f"https://app.test/acme/executions/backfills/{backfill.id}"]
 
     def test_without_a_public_url_the_context_carries_none(
         self, store: Store, monkeypatch: pytest.MonkeyPatch, org_id: UUID
