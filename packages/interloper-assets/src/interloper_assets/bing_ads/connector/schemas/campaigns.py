@@ -23,6 +23,12 @@ class Campaigns(Schema):
     website: str | None = Field(default=None, description="Website of a Performance Max campaign.")
     client_id: str | None = Field(default=None, description="Free-text label the advertiser gives the record.")
     modified_time: dt.datetime | None = Field(default=None, description="When the campaign was last changed, in UTC.")
+    start_date: dt.date | None = Field(
+        default=None, description="Day the campaign starts serving, as Bing schedules it; empty when unscheduled."
+    )
+    end_date: dt.date | None = Field(
+        default=None, description="Last day the campaign serves, as Bing schedules it; empty when it runs on."
+    )
     multi_media_ad_bid_adjustment: int | None = Field(
         default=None, description="Bid adjustment for multimedia ads, in percent."
     )

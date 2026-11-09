@@ -42,6 +42,13 @@ Account,,111,999,,,11/04/2026 08:00:00,,,,,,
 Ad Group,Active,9007199254740993,555,Camp,Group A,11/04/2026 09:15:02.123,10/01/2026,12/31/2026,0.45,True,,
 Ad Group,Paused,777,555,Camp,Group B,11/03/2026 10:00:00,10/01/2026,,0.3,FALSE,,
 """
+CAMPAIGNS_FILE = """\
+Type,Status,Id,Parent Id,Campaign,Modified Time,Start Date,End Date
+Format Version,,,,,,,
+Account,,111,999,,11/04/2026 08:00:00,,
+Campaign,Active,555,111,Camp A,11/04/2026 09:15:02,10/01/2026 00:00:00,12/31/2026 00:00:00
+Campaign,Paused,556,111,Camp B,11/03/2026 10:00:00,,
+"""
 ADS_FILE = """\
 Type,Status,Id,Parent Id,Headline,Title Part 1
 Format Version,,,,,
@@ -186,6 +193,17 @@ class TestEntityAssets:
             True,
             False,
         )
+
+    async def test_a_campaign_schedule_with_a_time_keeps_its_day(self, bulk):
+        bulk(CAMPAIGNS_FILE)
+        source = _connected_source()
+        first, second = _reconcile(source, "campaigns", await _run(source, "campaigns"))
+        assert (first["id"], first["start_date"], first["end_date"]) == (
+            "555",
+            dt.date(2026, 10, 1),
+            dt.date(2026, 12, 31),
+        )
+        assert (second["start_date"], second["end_date"]) == (None, None)
 
     async def test_every_ad_type_is_kept(self, bulk):
         bulk(ADS_FILE)
