@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ibis
+import ibis.expr.types as ir
 import interloper as il
 from interloper.errors import ConfigError
 from interloper_sql import ibis_view, latest, local_date, union
@@ -18,6 +19,7 @@ CAMPAIGN_ENTITY_COLUMNS = (
     "objective",
     "buy_model",
     "lifetime_spend_cap_micro",
+    "daily_budget_micro",
     "start_time",
     "end_time",
     "created_at",
@@ -30,6 +32,7 @@ AD_SQUAD_ENTITY_COLUMNS = (
     "name",
     "status",
     "lifetime_budget_micro",
+    "daily_budget_micro",
     "start_time",
     "end_time",
     "created_at",
@@ -87,6 +90,28 @@ def _performance(reports: list[il.Upstream], ad_accounts: list[il.Upstream]) -> 
     snapshots = union(ad_accounts, "date", "currency", account_id=_account)
     currencies = latest(snapshots, "account_id", snapshots["date"].desc()).select("account_id", "currency")
     return summed.left_join(currencies, "account_id")
+
+
+def _budget(table: ibis.Table, lifetime: str) -> dict[str, ir.Value]:
+    """The ``budget`` and ``budget_type`` of a campaign or an ad squad, in currency units.
+
+    Used by the campaign and ad group dimensions. Snapchat sets one of the
+    two budgets, in micro-units: the daily one when it is positive, else the
+    lifetime one (the ad squad's budget, the campaign's spend cap).
+
+    Args:
+        table: A campaigns or ad squads entity table.
+        lifetime: The name of its lifetime budget or spend cap column.
+
+    Returns:
+        The two columns, ready to splice into a select.
+    """
+    is_daily = table["daily_budget_micro"] > 0
+    lifetime_type = ibis.ifelse(table[lifetime].notnull(), "lifetime", ibis.null("string"))
+    return {
+        "budget": ibis.ifelse(is_daily, table["daily_budget_micro"] / MICRO, table[lifetime] / MICRO),
+        "budget_type": ibis.ifelse(is_daily, "daily", lifetime_type),
+    }
 
 
 def _timezones(dim_accounts: il.Upstream) -> ibis.Table:
@@ -222,7 +247,6 @@ class SnapchatAdsStarSchema(il.Source):
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = union([upstream], *CAMPAIGN_ENTITY_COLUMNS, account_id=_account)
             table = table.left_join(timezones, table["account_id"] == timezones["zone_account_id"])
-            cap = table["lifetime_spend_cap_micro"]
             return table.select(
                 campaign_id=table["id"],
                 account_id=table["account_id"],
@@ -230,8 +254,7 @@ class SnapchatAdsStarSchema(il.Source):
                 status=table["status"],
                 objective=table["objective"],
                 campaign_type=table["buy_model"],
-                budget=cap / MICRO,
-                budget_type=ibis.ifelse(cap.notnull(), "lifetime", ibis.null("string")),
+                **_budget(table, "lifetime_spend_cap_micro"),
                 start_date=local_date(table["start_time"], table["timezone"]),
                 end_date=local_date(table["end_time"], table["timezone"]),
                 created_at=table["created_at"],
@@ -280,15 +303,13 @@ class SnapchatAdsStarSchema(il.Source):
         timezones = _timezones(dim_accounts)
         rows = union(ad_squads, *AD_SQUAD_ENTITY_COLUMNS, account_id=_account)
         rows = rows.left_join(timezones, rows["account_id"] == timezones["zone_account_id"])
-        budget = rows["lifetime_budget_micro"]
         squads = rows.select(
             ad_group_id=rows["id"],
             campaign_id=rows["campaign_id"],
             account_id=rows["account_id"],
             ad_group_name=rows["name"],
             status=rows["status"],
-            budget=budget / MICRO,
-            budget_type=ibis.ifelse(budget.notnull(), "lifetime", ibis.null("string")),
+            **_budget(rows, "lifetime_budget_micro"),
             start_date=local_date(rows["start_time"], rows["timezone"]),
             end_date=local_date(rows["end_time"], rows["timezone"]),
             created_at=rows["created_at"],

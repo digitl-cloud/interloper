@@ -47,7 +47,10 @@ def _seed(
     ads_entity: bool = True,
     two_campaign_rows: bool = False,
     extra_fact_campaign: bool = False,
+    daily_budgets: bool = False,
 ) -> None:
+    campaign_daily = 3000000 if daily_budgets else "NULL"
+    squad_daily, squad_lifetime = (5000000, "NULL") if daily_budgets else ("NULL", 2500000)
     client = warehouse.connection.client
     client.execute("CREATE SCHEMA IF NOT EXISTS snapchat_ads")
     client.execute(
@@ -61,6 +64,7 @@ def _seed(
         f"DATE '2026-09-30' AS date, 'c{account_id}' AS id, 'Camp from entity' AS name, "
         f"'{account_id}' AS ad_account_id, 'ACTIVE' AS status, 'WEB_CONVERSION' AS objective, "
         "'AUCTION' AS buy_model, CAST(17500000000 AS DOUBLE) AS lifetime_spend_cap_micro, "
+        f"CAST({campaign_daily} AS BIGINT) AS daily_budget_micro, "
         "TIMESTAMPTZ '2026-09-30 22:00:00+00' AS start_time, CAST(NULL AS TIMESTAMPTZ) AS end_time, "
         "TIMESTAMPTZ '2026-09-01 08:00:00+00' AS created_at, TIMESTAMPTZ '2026-09-02 08:00:00+00' AS updated_at "
         f"WHERE {_when(campaigns_entity)}"
@@ -68,7 +72,9 @@ def _seed(
     client.execute(
         f"CREATE TABLE snapchat_ads.ad_squads__{account_id} AS SELECT "
         f"DATE '2026-09-30' AS date, 's{account_id}' AS id, 'Squad from entity' AS name, "
-        f"'c{account_id}' AS campaign_id, 'PAUSED' AS status, CAST(2500000 AS BIGINT) AS lifetime_budget_micro, "
+        f"'c{account_id}' AS campaign_id, 'PAUSED' AS status, "
+        f"CAST({squad_lifetime} AS BIGINT) AS lifetime_budget_micro, "
+        f"CAST({squad_daily} AS BIGINT) AS daily_budget_micro, "
         "TIMESTAMPTZ '2026-10-01 07:00:00+00' AS start_time, TIMESTAMPTZ '2026-10-31 22:59:59+00' AS end_time, "
         "TIMESTAMPTZ '2026-09-01 08:00:00+00' AS created_at, TIMESTAMPTZ '2026-09-02 08:00:00+00' AS updated_at "
         f"WHERE {_when(ad_squads_entity)}"
@@ -281,6 +287,15 @@ class TestOnDuckDB:
         )
         assert (row["budget"], row["budget_type"]) == (2.5, "lifetime")
         assert (row["start_date"], row["end_date"]) == (dt.date(2026, 10, 1), dt.date(2026, 10, 31))
+
+    def test_a_daily_budget_wins_over_the_lifetime_one(self, warehouse):
+        first = _account("aaa", warehouse)
+        _seed(warehouse, "aaa", daily_budgets=True)
+        _materialize(warehouse, first)
+        [campaign] = _rows(warehouse, "dim_campaigns")
+        [squad] = _rows(warehouse, "dim_ad_groups")
+        assert (campaign["budget"], campaign["budget_type"]) == (3.0, "daily")
+        assert (squad["budget"], squad["budget_type"]) == (5.0, "daily")
 
     def test_an_ad_takes_its_entity_and_its_campaign_through_its_ad_squad(self, warehouse):
         first = _account("aaa", warehouse)

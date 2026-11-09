@@ -30,6 +30,7 @@ class AdSquads(Schema):
     lifetime_budget_micro: int | None = Field(
         default=None, description="The lifetime budget of the ad squad in micro units"
     )
+    daily_budget_micro: int | None = Field(default=None, description="The daily budget of the ad squad in micro units")
     start_time: dt.datetime | None = Field(default=None, description="The start time of the ad squad")
     end_time: dt.datetime | None = Field(default=None, description="The end time of the ad squad")
     optimization_goal: str | None = Field(default=None, description="The optimization goal of the ad squad")
