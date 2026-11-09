@@ -68,6 +68,9 @@ class TiktokStatsNormalizer(DataFrameNormalizer):
 _ENTITY_NORMALIZER = DataFrameNormalizer(drop_na_columns=True)
 # the advertiser endpoint, unlike the campaign and ad ones, sends its creation time as seconds since the epoch
 _ADVERTISER_NORMALIZER = DataFrameNormalizer(drop_na_columns=True, epoch_columns=["create_time"], epoch_unit="s")
+# the campaign, ad group and ad lists leave deleted objects out unless asked for every status, and a
+# deleted object still carries spend in the reports
+_EVERY_STATUS = {"filtering": json.dumps({"primary_status": "STATUS_ALL"})}
 
 
 # -- HELPERS: HTTP / pagination ------------------------------------------------
@@ -232,7 +235,8 @@ class TiktokAds(il.Source):
     )
     async def ads(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """All ads in the advertiser account with their attributes."""
-        rows = await _paginate(self.connection, "/ad/get/", {"advertiser_id": self.advertiser_id})
+        params = {"advertiser_id": self.advertiser_id, **_EVERY_STATUS}
+        rows = await _paginate(self.connection, "/ad/get/", params)
         return _with_date(rows, context.partition_date)
 
     @il.asset(
@@ -243,7 +247,8 @@ class TiktokAds(il.Source):
     )
     async def campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """All campaigns in the advertiser account with their attributes."""
-        rows = await _paginate(self.connection, "/campaign/get/", {"advertiser_id": self.advertiser_id})
+        params = {"advertiser_id": self.advertiser_id, **_EVERY_STATUS}
+        rows = await _paginate(self.connection, "/campaign/get/", params)
         return _with_date(rows, context.partition_date)
 
     @il.asset(
@@ -254,7 +259,8 @@ class TiktokAds(il.Source):
     )
     async def adgroups(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """All ad groups in the advertiser account with their schedule, budget, targeting and status."""
-        rows = await _paginate(self.connection, "/adgroup/get/", {"advertiser_id": self.advertiser_id})
+        params = {"advertiser_id": self.advertiser_id, **_EVERY_STATUS}
+        rows = await _paginate(self.connection, "/adgroup/get/", params)
         return _with_date(rows, context.partition_date)
 
     @il.asset(
