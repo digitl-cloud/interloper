@@ -8,12 +8,18 @@ class DimCampaigns(Schema):
     campaign_id: str | None = Field(default=None, description="Campaign id, the key the facts join on.")
     account_id: str | None = Field(default=None, description="Profile the campaign belongs to.")
     campaign_name: str | None = Field(default=None, description="Campaign name.")
-    status: str | None = Field(default=None, description="Campaign status as the campaign report carries it.")
+    status: str | None = Field(
+        default=None, description="Campaign state, upper case: the entity's, else the latest campaign report's."
+    )
     campaign_type: str | None = Field(
         default=None, description="The ad product: sponsored_products, sponsored_brands or sponsored_display."
     )
     budget: float | None = Field(default=None, description="Campaign budget, in the profile's currency.")
-    budget_type: str | None = Field(default=None, description="Budget type as the campaign report carries it.")
+    budget_type: str | None = Field(
+        default=None,
+        description="Budget type, upper case: the entity's, else the latest campaign report's; "
+        "NULL on Sponsored Display report rows, which carry none.",
+    )
     start_date: dt.date | None = Field(
         default=None, description="NULL until a campaigns entity is collected; the campaign reports carry no schedule."
     )

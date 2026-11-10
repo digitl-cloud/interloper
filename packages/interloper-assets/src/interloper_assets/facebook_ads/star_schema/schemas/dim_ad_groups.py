@@ -9,10 +9,18 @@ class DimAdGroups(Schema):
     campaign_id: str | None = Field(default=None, description="Campaign the ad set belongs to.")
     account_id: str | None = Field(default=None, description="Ad account the ad set belongs to.")
     ad_group_name: str | None = Field(default=None, description="Ad set name.")
-    status: str | None = Field(default=None, description="NULL until an ad sets entity is collected.")
-    budget_type: str | None = Field(default=None, description="NULL until an ad sets entity is collected.")
-    start_date: dt.date | None = Field(default=None, description="NULL until an ad sets entity is collected.")
-    end_date: dt.date | None = Field(default=None, description="NULL until an ad sets entity is collected.")
-    created_at: dt.datetime | None = Field(default=None, description="NULL until an ad sets entity is collected.")
-    updated_at: dt.datetime | None = Field(default=None, description="NULL until an ad sets entity is collected.")
+    status: str | None = Field(default=None, description="Configured status; entity rows only.")
+    budget_type: str | None = Field(
+        default=None, description="daily or lifetime, by which budget the ad set sets; entity rows only."
+    )
+    start_date: dt.date | None = Field(
+        default=None, description="Scheduled start, in the account's timezone; entity rows only."
+    )
+    end_date: dt.date | None = Field(
+        default=None, description="Scheduled end, in the account's timezone; NULL when open-ended; entity rows only."
+    )
+    created_at: dt.datetime | None = Field(default=None, description="When the ad set was created; entity rows only.")
+    updated_at: dt.datetime | None = Field(
+        default=None, description="When the ad set was last changed; entity rows only."
+    )
     as_of_date: dt.date | None = Field(default=None, description="Day of the row this dimension was taken from.")
