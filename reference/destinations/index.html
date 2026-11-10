@@ -2968,7 +2968,8 @@ whole.</p>
         <p>Write data, one partition at a time.</p>
 <p>A window is split into one <code>write_partition</code> call per partition,
 each receiving its slice of the data; a single partition or the
-unpartitioned whole is one call receiving the data as is.</p>
+unpartitioned whole is one call receiving the data as is. Empty data
+writes nothing.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
