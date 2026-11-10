@@ -184,14 +184,17 @@ def _get_custom_audiences(
 
 
 def _snapshot_params(entity: Any) -> dict[str, Any]:
-    """The edge parameters an entity snapshot reads with: every status, in pages of 100.
+    """The edge parameters an entity snapshot reads with: every status but deleted, in pages of 100.
 
     Used by the ``campaigns``, ``adsets`` and ``ads`` assets. Graph API edges
-    leave out archived and deleted objects unless their statuses are asked
-    for, and those objects still carry spend in the reports, so every
-    effective status the SDK knows for the entity is requested. Pages of 100
-    rather than the default 25 cut the calls on large accounts; a page too
-    heavy for Facebook is halved by the request engine.
+    leave out archived objects unless their status is asked for, and those
+    objects still carry spend in the reports, so every effective status the
+    SDK knows for the entity is requested except ``DELETED``: the ad account
+    edges reject it with error 100/1815001 ("Cannot request deleted objects"),
+    so a deleted object stays out of the snapshot and its dimension row comes
+    from the reports. Pages of 100 rather than the default 25 cut the calls
+    on large accounts; a page too heavy for Facebook is halved by the request
+    engine.
 
     Args:
         entity: The SDK class of the objects read, such as ``Ad``.
@@ -199,7 +202,11 @@ def _snapshot_params(entity: Any) -> dict[str, Any]:
     Returns:
         The ``params`` of the edge call.
     """
-    statuses = [value for name, value in vars(entity.EffectiveStatus).items() if not name.startswith("_")]
+    statuses = [
+        value
+        for name, value in vars(entity.EffectiveStatus).items()
+        if not name.startswith("_") and value != entity.EffectiveStatus.deleted
+    ]
     return {"effective_status": statuses, "limit": 100}
 
 
