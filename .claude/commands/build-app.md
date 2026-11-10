@@ -9,8 +9,8 @@ make build-app
 ```
 
 This installs deps, runs `NUXT_PRESET=static pnpm build` in
-`packages/interloper-app/app`, wipes
-`packages/interloper-app/src/interloper_app/static/`, and copies the fresh
+`packages/platform/interloper-app/app`, wipes
+`packages/platform/interloper-app/src/interloper_app/static/`, and copies the fresh
 `.output/public/*` into it (keeping a `.gitkeep`).
 
 If the build succeeds, report what changed under `static/` in one line. If it

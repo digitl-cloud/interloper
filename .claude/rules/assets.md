@@ -1,6 +1,6 @@
 ---
 paths:
-  - "packages/interloper-assets/**"
+  - "packages/extensions/interloper-assets/**"
 ---
 
 # Assets

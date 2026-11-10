@@ -14,7 +14,7 @@ on:
     paths:
       - "docs/**"
       - "dev/docs_macros.py"
-      - "packages/interloper-core/src/**"
+      - "packages/platform/interloper-core/src/**"
       - "zensical.toml"
       - "uv.lock"
       - ".github/workflows/docs.yaml"

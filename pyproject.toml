@@ -74,7 +74,7 @@ interloper-databricks = { workspace = true }
 interloper-toolkit = { workspace = true }
 
 [tool.uv.workspace]
-members = ["packages/*"]
+members = ["packages/*/*"]
 
 # ###############
 # TY
@@ -106,8 +106,8 @@ replace-imports-with-any = ["bingads.**", "googleapiclient.**", "google.ads.**"]
 # overrides elsewhere.
 include = [
     "**/schemas/**",
-    "packages/interloper-core/src/interloper/schema/base.py",
-    "packages/interloper-core/src/interloper/normalizer/base.py",
+    "packages/platform/interloper-core/src/interloper/schema/base.py",
+    "packages/platform/interloper-core/src/interloper/normalizer/base.py",
     "**/tests/**",
 ]
 
@@ -186,27 +186,27 @@ assets = ["uv.lock"]
 commit_message = "chore(release): {version} [skip ci]"
 version_toml = [
     "pyproject.toml:project.version",
-    "packages/interloper-core/pyproject.toml:project.version",
-    "packages/interloper-assets/pyproject.toml:project.version",
-    "packages/interloper-pandas/pyproject.toml:project.version",
-    "packages/interloper-db/pyproject.toml:project.version",
-    "packages/interloper-google-cloud/pyproject.toml:project.version",
-    "packages/interloper-duckdb/pyproject.toml:project.version",
-    "packages/interloper-aws/pyproject.toml:project.version",
-    "packages/interloper-azure/pyproject.toml:project.version",
-    "packages/interloper-clickhouse/pyproject.toml:project.version",
-    "packages/interloper-docker/pyproject.toml:project.version",
-    "packages/interloper-k8s/pyproject.toml:project.version",
-    "packages/interloper-scheduler/pyproject.toml:project.version",
-    "packages/interloper-api/pyproject.toml:project.version",
-    "packages/interloper-agent/pyproject.toml:project.version",
-    "packages/interloper-app/pyproject.toml:project.version",
-    "packages/interloper-mcp/pyproject.toml:project.version",
-    "packages/interloper-slack/pyproject.toml:project.version",
-    "packages/interloper-sql/pyproject.toml:project.version",
-    "packages/interloper-snowflake/pyproject.toml:project.version",
-    "packages/interloper-databricks/pyproject.toml:project.version",
-    "packages/interloper-toolkit/pyproject.toml:project.version",
+    "packages/platform/interloper-core/pyproject.toml:project.version",
+    "packages/platform/interloper-db/pyproject.toml:project.version",
+    "packages/platform/interloper-scheduler/pyproject.toml:project.version",
+    "packages/platform/interloper-api/pyproject.toml:project.version",
+    "packages/platform/interloper-app/pyproject.toml:project.version",
+    "packages/platform/interloper-toolkit/pyproject.toml:project.version",
+    "packages/platform/interloper-agent/pyproject.toml:project.version",
+    "packages/platform/interloper-mcp/pyproject.toml:project.version",
+    "packages/extensions/interloper-assets/pyproject.toml:project.version",
+    "packages/extensions/interloper-pandas/pyproject.toml:project.version",
+    "packages/extensions/interloper-google-cloud/pyproject.toml:project.version",
+    "packages/extensions/interloper-aws/pyproject.toml:project.version",
+    "packages/extensions/interloper-azure/pyproject.toml:project.version",
+    "packages/extensions/interloper-duckdb/pyproject.toml:project.version",
+    "packages/extensions/interloper-clickhouse/pyproject.toml:project.version",
+    "packages/extensions/interloper-databricks/pyproject.toml:project.version",
+    "packages/extensions/interloper-snowflake/pyproject.toml:project.version",
+    "packages/extensions/interloper-sql/pyproject.toml:project.version",
+    "packages/extensions/interloper-slack/pyproject.toml:project.version",
+    "packages/extensions/interloper-docker/pyproject.toml:project.version",
+    "packages/extensions/interloper-k8s/pyproject.toml:project.version",
 ]
 # Keep the Helm chart in lockstep with the Python version. `version` (chart
 # SemVer) and `appVersion` (the image tag the chart deploys) both track the

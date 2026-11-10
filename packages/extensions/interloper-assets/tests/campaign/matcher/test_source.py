@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 from typing import Any
 
 import interloper as il
@@ -206,11 +205,13 @@ def test_a_row_with_neither_spelling_is_still_emitted_with_empty_placeholders() 
     assert rows[0]["canonical_name"] == ""
 
 
-def test_example_manifest_loads_and_wires_without_redeclaring_what_cascades(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_example_manifest_loads_and_wires_without_redeclaring_what_cascades(
+    monkeypatch: pytest.MonkeyPatch, pytestconfig: pytest.Config
+) -> None:
     """The shipped manifest is what a user writes: the job's destination reaches every asset by cascade."""
     pytest.importorskip("interloper_google_cloud")
     monkeypatch.setenv("GCP_SERVICE_ACCOUNT_KEY", "placeholder")
-    manifest = Path(__file__).parents[5] / "examples" / "campaign_matcher.yaml"
+    manifest = pytestconfig.rootpath / "examples" / "campaign_matcher.yaml"
 
     dag = il.DAG.from_spec_file(manifest)
     matches = next(operation for operation in dag.operations if operation.key == "campaign_matches")

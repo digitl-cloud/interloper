@@ -22,7 +22,7 @@ check-python:
 	PYTHONDONTWRITEBYTECODE= uv run pytest -n auto --maxprocesses 4
 
 check-typescript:
-	cd packages/interloper-app/app && pnpm run lint && pnpm exec nuxt typecheck
+	cd packages/platform/interloper-app/app && pnpm run lint && pnpm exec nuxt typecheck
 
 check:
 	make check-python
@@ -34,10 +34,10 @@ check:
 # ###############
 
 build-app:
-	cd packages/interloper-app/app && pnpm install && NUXT_PRESET=static pnpm build
-	rm -rf packages/interloper-app/src/interloper_app/static/*
-	cp -r packages/interloper-app/app/.output/public/* packages/interloper-app/src/interloper_app/static/
-	touch packages/interloper-app/src/interloper_app/static/.gitkeep
+	cd packages/platform/interloper-app/app && pnpm install && NUXT_PRESET=static pnpm build
+	rm -rf packages/platform/interloper-app/src/interloper_app/static/*
+	cp -r packages/platform/interloper-app/app/.output/public/* packages/platform/interloper-app/src/interloper_app/static/
+	touch packages/platform/interloper-app/src/interloper_app/static/.gitkeep
 
 
 # ###############
@@ -193,10 +193,10 @@ dev-reset: dev-db dev-seed
 # --dev runs the Nuxt dev server (hot reload) on :3000 and moves the API to a
 # free port it proxies to — so the app is at http://localhost:3000 with no SPA
 # build needed. It runs `pnpm dev`, so install the app deps first if missing.
-APP_DEPS := packages/interloper-app/app/node_modules
+APP_DEPS := packages/platform/interloper-app/app/node_modules
 
 $(APP_DEPS):
-	cd packages/interloper-app/app && pnpm install
+	cd packages/platform/interloper-app/app && pnpm install
 
 # Run the app only — non-destructive, so it keeps your data/session across
 # restarts. Use `make dev` (or dev-reset) when you want a fresh seeded DB.
