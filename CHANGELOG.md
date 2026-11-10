@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v0.130.1 (2026-11-10)
+
+### Bug Fixes
+
+- **assets**: Facebook entity snapshots no longer request deleted objects
+  ([`2c856b1`](https://github.com/digitl-cloud/interloper/commit/2c856b12c2c357f43a64592f9edf3501e31e75d9))
+
+### Chores
+
+- Disable otel in main interloper.yaml
+  ([`e931fd8`](https://github.com/digitl-cloud/interloper/commit/e931fd8ceb6f22ff1a8742821a0b62ab40b0ecf3))
+
+### Refactoring
+
+- Group the workspace into platform and extensions
+  ([`287f8df`](https://github.com/digitl-cloud/interloper/commit/287f8df1ec869f5792fcbe2d8b26158667f36ec1))
+
+
 ## v0.130.0 (2026-11-10)
 
 ### Bug Fixes
