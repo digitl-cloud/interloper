@@ -49,7 +49,7 @@ smtp:
   user: "no-reply@digitlcloud.com"
 
 otel:
-  enabled: true
+  enabled: false
   endpoint: http://localhost:4317
   protocol: grpc
 

@@ -171,6 +171,7 @@ class Catalog(BaseModel):
             return cls.from_paths(settings.catalog)
         return cls.discover()
 
+    # TODO: rename to from_components
     @classmethod
     def from_assets(cls, sources_or_assets: Iterable[type[Component]]) -> Catalog:
         """Build a catalog enabling the given component classes.
