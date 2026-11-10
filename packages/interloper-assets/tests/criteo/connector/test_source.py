@@ -24,6 +24,7 @@ import interloper as il
 import pandas as pd
 import pytest
 from interloper.dag import DAG, DAGSpec
+from interloper.errors import AssetError
 from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
@@ -95,6 +96,56 @@ class TestSpecRoundtrip:
         TableData.from_data(normalized).reconcile(CampaignsStats)  # must not raise
 
 
+ADVERTISER_INFO_PATH = "/2026-07/marketing-solutions/marketplace-performance-outcomes/advertisers/123"
+ADVERTISER_INFO: dict[str, Any] = {
+    "id": 123,
+    "advertiserName": "Example",
+    "currencyName": "CHF",
+    "timeZoneId": "Europe/Zurich",
+}
+
+
+def _report_query(advertiser_info: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
+    """Run the campaign report against a mock Criteo answering *advertiser_info* for the advertiser.
+
+    Returns:
+        The paths called, in order, and the report request's JSON body.
+    """
+    requests: list[httpx2.Request] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        if request.url.path == ADVERTISER_INFO_PATH:
+            return httpx2.Response(200, json=advertiser_info)
+        return httpx2.Response(200, json={"Rows": []})
+
+    connection = CriteoConnection(id="criteo", client_id="cid", client_secret="x", refresh_token="x")
+    connection.__dict__["client"] = il.AsyncRESTClient(constants.BASE_URL, transport=httpx2.MockTransport(handler))
+    source = Criteo(id="src-1", advertiser_id="123", connection=connection)
+    asset = next(a for a in source.assets if type(a).key == "campaigns_stats")
+    window = il.TimePartition(value=dt.date(2026, 10, 26)).window
+    asyncio.run(asset.data(context=il.ExecutionContext(asset, window)))
+    return [request.url.path for request in requests], json.loads(requests[-1].content)
+
+
+class TestReportCurrencyAndDays:
+    """A report is requested in the advertiser's own currency and time zone, never a fixed one."""
+
+    def test_the_report_names_the_advertisers_currency_and_time_zone(self):
+        paths, query = _report_query(ADVERTISER_INFO)
+        assert paths == [ADVERTISER_INFO_PATH, "/2026-07/statistics/report"]
+        assert (query["currency"], query["timezone"]) == ("CHF", "Europe/Zurich")
+
+    def test_an_advertiser_without_a_time_zone_is_reported_in_criteos_default(self):
+        _, query = _report_query({**ADVERTISER_INFO, "timeZoneId": None})
+        assert query["currency"] == "CHF"
+        assert "timezone" not in query
+
+    def test_an_advertiser_without_a_currency_fails_the_report(self):
+        with pytest.raises(AssetError, match="no currency for advertiser 123"):
+            _report_query({**ADVERTISER_INFO, "currencyName": None})
+
+
 class TestApiVersion:
     """Every call goes to the supported API version; 2025-04 is past Criteo's support window."""
 
@@ -105,6 +156,8 @@ class TestApiVersion:
             requests.append(request)
             if request.url.path.endswith("/advertisers/me"):
                 return httpx2.Response(200, json={"data": [{"id": "123", "attributes": {"advertiserName": "Example"}}]})
+            if request.url.path.endswith("/advertisers/123"):
+                return httpx2.Response(200, json=ADVERTISER_INFO)
             return httpx2.Response(200, json={"Rows": [{"Day": "2026-10-26", "CampaignId": "7"}]})
 
         connection = CriteoConnection(id="criteo", client_id="cid", client_secret="x", refresh_token="x")
@@ -116,8 +169,12 @@ class TestApiVersion:
         rows = asyncio.run(asset.data(context=il.ExecutionContext(asset, partition.window)))
         advertisers = asyncio.run(connection.advertisers())
 
-        assert [request.url.path for request in requests] == ["/2026-07/statistics/report", "/2026-07/advertisers/me"]
-        assert json.loads(requests[0].content)["dimensions"] == ["Day", "CampaignId"]
+        assert [request.url.path for request in requests] == [
+            ADVERTISER_INFO_PATH,
+            "/2026-07/statistics/report",
+            "/2026-07/advertisers/me",
+        ]
+        assert json.loads(requests[1].content)["dimensions"] == ["Day", "CampaignId"]
         assert rows == [{"Day": "2026-10-26", "CampaignId": "7"}]
         assert advertisers == [{"id": "123", "name": "Example"}]
 
@@ -230,8 +287,16 @@ class TestEntityAssets:
             assert asset.partitioning.column == "date", key
             assert asset.tags == ["Entity"], key
 
-    async def test_the_advertiser_is_the_sources_own_among_those_the_connection_sees(self):
+    async def test_an_advertiser_the_connection_no_longer_sees_fails(self):
+        other = {"id": "999", "type": "Advertiser", "attributes": {"advertiserName": "Other"}}
+        source = _connected(lambda request: httpx2.Response(200, json={"data": [other], "errors": [], "warnings": []}))
+        with pytest.raises(RuntimeError, match="does not list advertiser 123"):
+            await _snapshot(source, "advertisers")
+
+    async def test_the_advertiser_is_the_sources_own_with_its_currency_and_time_zone(self):
         def handler(request: httpx2.Request) -> httpx2.Response:
+            if request.url.path == ADVERTISER_INFO_PATH:
+                return httpx2.Response(200, json=ADVERTISER_INFO)
             assert request.url.path == "/2026-07/advertisers/me"
             resources = [
                 {"id": "999", "type": "Advertiser", "attributes": {"advertiserName": "Other"}},
@@ -246,6 +311,8 @@ class TestEntityAssets:
             "type": "Advertiser",
             "meta": '{"k": 1}',
             "advertiser_name": "Example",
+            "currency_name": "CHF",
+            "time_zone_id": "Europe/Zurich",
         }
 
     async def test_campaigns_are_searched_by_advertiser_and_flattened(self):
