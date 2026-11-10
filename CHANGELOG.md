@@ -2,6 +2,43 @@
 
 <!-- version list -->
 
+## v0.130.0 (2026-11-10)
+
+### Bug Fixes
+
+- **assets**: An entity snapshot fails when its own partner or profile is missing
+  ([`a527c51`](https://github.com/digitl-cloud/interloper/commit/a527c51b17da9d8bdc6203f72464406c17c0103b))
+
+- **assets**: Criteo reports in each advertiser's own currency and time zone
+  ([`9aa528a`](https://github.com/digitl-cloud/interloper/commit/9aa528a96316b884065db8b3128f2fed114e7946))
+
+- **assets**: Facebook entity snapshots include archived and deleted objects
+  ([`7464186`](https://github.com/digitl-cloud/interloper/commit/746418625d67835adca7d4c9dce125e0e207af9b))
+
+- **assets**: Snapchat campaigns and ad squads keep their daily budget
+  ([`18a3ee8`](https://github.com/digitl-cloud/interloper/commit/18a3ee88c433026b6a828ba5d5331fc0072c7519))
+
+- **assets**: Star schema descriptions say where each attribute comes from
+  ([`ba6f71d`](https://github.com/digitl-cloud/interloper/commit/ba6f71d45572162a080de62ece64c5e1dc5ae70a))
+
+- **assets**: TikTok entity snapshots include deleted objects
+  ([`da2d71f`](https://github.com/digitl-cloud/interloper/commit/da2d71fd327f4292fa700d678c77228be46dc3ac))
+
+- **core**: An empty output still creates its table and clears its partitions
+  ([`13ee88a`](https://github.com/digitl-cloud/interloper/commit/13ee88af4cbc85c366283dd4b286d866828b841c))
+
+- **core**: REST clients retry throttling and transient failures, and time out
+  ([`df24d62`](https://github.com/digitl-cloud/interloper/commit/df24d622c1c2768291ef580e078e570b5a1285c3))
+
+- **duckdb,snowflake**: Instants are stored with their zone
+  ([`138d64c`](https://github.com/digitl-cloud/interloper/commit/138d64ccb1fd52fb3de711f10bd8ee8032c0e366))
+
+### Features
+
+- **assets**: Criteo entity snapshots and the star schema's entity tiers
+  ([`a9b8776`](https://github.com/digitl-cloud/interloper/commit/a9b87760e0b001f4f5c7cfea8a27b001dbf56ed8))
+
+
 ## v0.129.0 (2026-11-09)
 
 ### Features
