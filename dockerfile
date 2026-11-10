@@ -88,27 +88,27 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 COPY docker/uv-sync.sh docker/uv-sync.sh
 COPY pyproject.toml uv.lock ./
-COPY packages/interloper-core/pyproject.toml        packages/interloper-core/pyproject.toml
-COPY packages/interloper-assets/pyproject.toml      packages/interloper-assets/pyproject.toml
-COPY packages/interloper-db/pyproject.toml          packages/interloper-db/pyproject.toml
-COPY packages/interloper-scheduler/pyproject.toml   packages/interloper-scheduler/pyproject.toml
-COPY packages/interloper-api/pyproject.toml         packages/interloper-api/pyproject.toml
-COPY packages/interloper-app/pyproject.toml         packages/interloper-app/pyproject.toml
-COPY packages/interloper-docker/pyproject.toml      packages/interloper-docker/pyproject.toml
-COPY packages/interloper-k8s/pyproject.toml         packages/interloper-k8s/pyproject.toml
-COPY packages/interloper-google-cloud/pyproject.toml packages/interloper-google-cloud/pyproject.toml
-COPY packages/interloper-duckdb/pyproject.toml      packages/interloper-duckdb/pyproject.toml
-COPY packages/interloper-agent/pyproject.toml       packages/interloper-agent/pyproject.toml
-COPY packages/interloper-pandas/pyproject.toml      packages/interloper-pandas/pyproject.toml
-COPY packages/interloper-mcp/pyproject.toml         packages/interloper-mcp/pyproject.toml
-COPY packages/interloper-toolkit/pyproject.toml     packages/interloper-toolkit/pyproject.toml
-COPY packages/interloper-slack/pyproject.toml       packages/interloper-slack/pyproject.toml
-COPY packages/interloper-sql/pyproject.toml         packages/interloper-sql/pyproject.toml
-COPY packages/interloper-snowflake/pyproject.toml   packages/interloper-snowflake/pyproject.toml
-COPY packages/interloper-aws/pyproject.toml         packages/interloper-aws/pyproject.toml
-COPY packages/interloper-clickhouse/pyproject.toml  packages/interloper-clickhouse/pyproject.toml
-COPY packages/interloper-databricks/pyproject.toml  packages/interloper-databricks/pyproject.toml
-COPY packages/interloper-azure/pyproject.toml       packages/interloper-azure/pyproject.toml
+COPY packages/platform/interloper-core/pyproject.toml           packages/platform/interloper-core/pyproject.toml
+COPY packages/platform/interloper-db/pyproject.toml             packages/platform/interloper-db/pyproject.toml
+COPY packages/platform/interloper-scheduler/pyproject.toml      packages/platform/interloper-scheduler/pyproject.toml
+COPY packages/platform/interloper-api/pyproject.toml            packages/platform/interloper-api/pyproject.toml
+COPY packages/platform/interloper-app/pyproject.toml            packages/platform/interloper-app/pyproject.toml
+COPY packages/platform/interloper-toolkit/pyproject.toml        packages/platform/interloper-toolkit/pyproject.toml
+COPY packages/platform/interloper-agent/pyproject.toml          packages/platform/interloper-agent/pyproject.toml
+COPY packages/platform/interloper-mcp/pyproject.toml            packages/platform/interloper-mcp/pyproject.toml
+COPY packages/extensions/interloper-assets/pyproject.toml       packages/extensions/interloper-assets/pyproject.toml
+COPY packages/extensions/interloper-pandas/pyproject.toml       packages/extensions/interloper-pandas/pyproject.toml
+COPY packages/extensions/interloper-google-cloud/pyproject.toml packages/extensions/interloper-google-cloud/pyproject.toml
+COPY packages/extensions/interloper-aws/pyproject.toml          packages/extensions/interloper-aws/pyproject.toml
+COPY packages/extensions/interloper-azure/pyproject.toml        packages/extensions/interloper-azure/pyproject.toml
+COPY packages/extensions/interloper-duckdb/pyproject.toml       packages/extensions/interloper-duckdb/pyproject.toml
+COPY packages/extensions/interloper-clickhouse/pyproject.toml   packages/extensions/interloper-clickhouse/pyproject.toml
+COPY packages/extensions/interloper-databricks/pyproject.toml   packages/extensions/interloper-databricks/pyproject.toml
+COPY packages/extensions/interloper-snowflake/pyproject.toml    packages/extensions/interloper-snowflake/pyproject.toml
+COPY packages/extensions/interloper-sql/pyproject.toml          packages/extensions/interloper-sql/pyproject.toml
+COPY packages/extensions/interloper-slack/pyproject.toml        packages/extensions/interloper-slack/pyproject.toml
+COPY packages/extensions/interloper-docker/pyproject.toml       packages/extensions/interloper-docker/pyproject.toml
+COPY packages/extensions/interloper-k8s/pyproject.toml          packages/extensions/interloper-k8s/pyproject.toml
 
 
 # ── Python runtime base ───────────────────────────────────────
@@ -253,12 +253,12 @@ FROM --platform=$BUILDPLATFORM node:24-alpine AS build-spa
 
 WORKDIR /app
 RUN corepack enable
-COPY packages/interloper-app/app/package.json packages/interloper-app/app/pnpm-lock.yaml packages/interloper-app/app/pnpm-workspace.yaml ./
-COPY packages/interloper-app/app/patches/ patches/
+COPY packages/platform/interloper-app/app/package.json packages/platform/interloper-app/app/pnpm-lock.yaml packages/platform/interloper-app/app/pnpm-workspace.yaml ./
+COPY packages/platform/interloper-app/app/patches/ patches/
 RUN pnpm install --frozen-lockfile --ignore-scripts
-COPY packages/interloper-app/app/ ./
+COPY packages/platform/interloper-app/app/ ./
 # One level up from the app dir: nuxt.config reads the workspace version from it.
-COPY packages/interloper-app/pyproject.toml /pyproject.toml
+COPY packages/platform/interloper-app/pyproject.toml /pyproject.toml
 RUN pnpm exec nuxt prepare && NUXT_PRESET=static pnpm build
 
 

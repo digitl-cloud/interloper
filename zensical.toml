@@ -90,7 +90,7 @@ render_by_default = false
 on_error_fail = true
 
 [project.plugins.mkdocstrings.handlers.python]
-paths = ["packages/interloper-core/src"]
+paths = ["packages/platform/interloper-core/src"]
 
 [project.plugins.mkdocstrings.handlers.python.options]
 docstring_style = "google"

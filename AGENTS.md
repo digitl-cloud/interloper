@@ -6,26 +6,40 @@ Python monorepo (uv workspace under `packages/`) plus a bundled Nuxt SPA. Provid
 
 ```
 packages/
-  interloper-core/           framework: assets, sources, DAG, runners, IO, partitioning, the `run` command
-  interloper-assets/         pre-built source definitions (bing, facebook, google, …)
-  interloper-pandas/         pandas DataFrame normalizer/adapter
-  interloper-db/             database persistence layer, platform errors, `interloper db`
-  interloper-google-cloud/   BigQuery destination
-  interloper-docker/         Docker runner + backfiller
-  interloper-k8s/            Kubernetes runner + backfiller
-  interloper-scheduler/      cron + queue worker + reaper + launchers; `interloper scheduler`
-  interloper-api/            FastAPI HTTP backend, `interloper api`; reads catalog metadata only, never executes assets
-  interloper-agent/          AI agent (Google ADK)
-  interloper-app/            Nuxt SPA + Python package serving it; `interloper app` (all roles in one process)
-examples/                    runnable usage examples
-chart/                       Helm chart
-docker/                      uv-sync.sh helper and nginx template
-dockerfile                   multi-target build (core / scheduler / worker / api / frontend)
-docs/                        documentation site (zensical), published to GitHub Pages at docs.interloper.dev
-dev/docs_macros.py           macros the reference pages render settings and CLI tables with
+  platform/                    the framework and the roles built on it
+    interloper-core/           the framework: assets, sources, DAG, runners, IO, partitioning, the `run` command
+    interloper-db/             database persistence layer, platform errors, `interloper db`
+    interloper-scheduler/      cron + queue worker + reaper + launchers; `interloper scheduler`
+    interloper-api/            FastAPI HTTP backend, `interloper api`; reads catalog metadata only, never executes assets
+    interloper-app/            Nuxt SPA + Python package serving it; `interloper app` (all roles in one process)
+    interloper-toolkit/        tool functions shared by the agent and the MCP server
+    interloper-agent/          the assistant (pydantic-ai)
+    interloper-mcp/            MCP server over the catalog, lineage and run history
+  extensions/                  reached only through entry points; each installs on its own
+    interloper-assets/         pre-built source definitions (bing, facebook, google, …)
+    interloper-pandas/         pandas DataFrame representation and normalizer
+    interloper-google-cloud/   Google Cloud connection; BigQuery, GCS and Sheets destinations
+    interloper-aws/            AWS connection and S3 destination
+    interloper-azure/          Azure connection and Fabric Warehouse destination
+    interloper-duckdb/         DuckDB / MotherDuck destination
+    interloper-clickhouse/     ClickHouse destination
+    interloper-databricks/     Databricks Delta destination
+    interloper-snowflake/      Snowflake destination
+    interloper-sql/            SQLAlchemy destination
+    interloper-slack/          Slack connection and notification hook
+    interloper-docker/         Docker runner + launcher
+    interloper-k8s/            Kubernetes runner + launcher
+examples/                      runnable usage examples
+chart/                         Helm chart
+docker/                        uv-sync.sh helper and nginx template
+dockerfile                     multi-target build (api / frontend / core / scheduler / mcp; all but frontend also as -slim)
+docs/                          documentation site (zensical), published to GitHub Pages at docs.interloper.dev
+dev/docs_macros.py             macros the reference pages render settings and CLI tables with
 ```
 
-The frontend lives at `packages/interloper-app/app/` and has its own toolchain (pnpm + Nuxt) and its own [AGENTS.md](packages/interloper-app/app/AGENTS.md). `make build-app` builds the SPA and copies it into `packages/interloper-app/src/interloper_app/static/`.
+A package lives in `platform/` when a role process imports it by name, and in `extensions/` when the platform reaches it only through an entry-point registry. The workspace glob is `packages/*/*`, so a new package goes in one of the two groups.
+
+The frontend lives at `packages/platform/interloper-app/app/` and has its own toolchain (pnpm + Nuxt) and its own [AGENTS.md](packages/platform/interloper-app/app/AGENTS.md). `make build-app` builds the SPA and copies it into `packages/platform/interloper-app/src/interloper_app/static/`.
 
 ## Commands
 
@@ -35,7 +49,7 @@ Python (uv workspace, run from repo root):
 - Type check: `uv run ty check`
 - Test: `uv run pytest` (marker: `functional`, excluded by default); the whole suite runs in parallel with `-n auto --maxprocesses 4`, as `make check-python`, the pre-push hook and CI do
 
-Frontend (run from `packages/interloper-app/app/`):
+Frontend (run from `packages/platform/interloper-app/app/`):
 
 - Lint: `pnpm run lint`
 - Type check: `pnpm exec nuxt typecheck`

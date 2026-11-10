@@ -67,7 +67,7 @@ jobs:
       contents: read
     defaults:
       run:
-        working-directory: packages/interloper-app/app
+        working-directory: packages/platform/interloper-app/app
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -77,14 +77,14 @@ jobs:
         with:
           # The action reads `packageManager` from the file below
           # (default would be the repo-root package.json, which doesn't exist).
-          package_json_file: packages/interloper-app/app/package.json
+          package_json_file: packages/platform/interloper-app/app/package.json
 
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: packages/interloper-app/app/pnpm-lock.yaml
+          cache-dependency-path: packages/platform/interloper-app/app/pnpm-lock.yaml
 
       - name: Install
         run: pnpm install --frozen-lockfile

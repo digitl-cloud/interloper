@@ -11,7 +11,7 @@ make check
 This runs both halves:
 
 - `make check-python` — `uv run ruff check packages`, `uv run ty check`, `uv run pytest`
-- `make check-typescript` — `pnpm run lint` + `pnpm exec nuxt typecheck` in `packages/interloper-app/app`
+- `make check-typescript` — `pnpm run lint` + `pnpm exec nuxt typecheck` in `packages/platform/interloper-app/app`
 
 If everything passes, report a one-line summary and stop.
 

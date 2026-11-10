@@ -1,7 +1,9 @@
 # Ecosystem
 
 `interloper-core` is the framework. The packages below build on it; each is documented in its
-own README. All are versioned and released together.
+own README. All are versioned and released together. In the repository they sit under
+`packages/platform/` (the core and the platform) and `packages/extensions/` (the framework
+extensions).
 
 ## Extras of the core
 

@@ -205,27 +205,27 @@ The [documentation](https://docs.interloper.dev) has a page per concept, an exte
 
 | Package | Provides |
 |---------|----------|
-| [`interloper-core`](packages/interloper-core) | The framework |
-| [`interloper-pandas`](packages/interloper-pandas) | pandas DataFrame representation and normalizer |
-| [`interloper-google-cloud`](packages/interloper-google-cloud) | Google Cloud connection, BigQuery and GCS destinations |
-| [`interloper-duckdb`](packages/interloper-duckdb) | DuckDB connection and DuckDB / MotherDuck destination |
-| [`interloper-aws`](packages/interloper-aws) | AWS connection and S3 destination |
-| [`interloper-azure`](packages/interloper-azure) | Microsoft Azure connection and Microsoft Fabric Warehouse destination |
-| [`interloper-slack`](packages/interloper-slack) | Slack connection and notification hook |
-| [`interloper-sql`](packages/interloper-sql) | SQL connection and a SQLAlchemy-backed destination (PostgreSQL, MySQL, SQL Server, ...) |
-| [`interloper-snowflake`](packages/interloper-snowflake) | Snowflake connection and destination |
-| [`interloper-clickhouse`](packages/interloper-clickhouse) | ClickHouse connection and destination (self-hosted and ClickHouse Cloud) |
-| [`interloper-databricks`](packages/interloper-databricks) | Databricks connection and Delta / Unity Catalog destination |
-| [`interloper-assets`](packages/interloper-assets) | Ready-made sources for advertising, analytics and commerce platforms |
-| [`interloper-docker`](packages/interloper-docker) | Docker runner and launcher |
-| [`interloper-k8s`](packages/interloper-k8s) | Kubernetes runner and launcher |
-| [`interloper-db`](packages/interloper-db) | Persistence: components, relations, runs, events, migrations |
-| [`interloper-scheduler`](packages/interloper-scheduler) | Cron, hooks, credential renewal, queue worker, reaper |
-| [`interloper-api`](packages/interloper-api) | FastAPI backend |
-| [`interloper-app`](packages/interloper-app) | Web UI (Nuxt SPA) |
-| [`interloper-mcp`](packages/interloper-mcp) | MCP server over the catalog, lineage and run history |
-| [`interloper-agent`](packages/interloper-agent) | The assistant (pydantic-ai) |
-| [`interloper-toolkit`](packages/interloper-toolkit) | Read-only tool functions shared by the agent and MCP server |
+| [`interloper-core`](packages/platform/interloper-core) | The framework |
+| [`interloper-pandas`](packages/extensions/interloper-pandas) | pandas DataFrame representation and normalizer |
+| [`interloper-google-cloud`](packages/extensions/interloper-google-cloud) | Google Cloud connection, BigQuery and GCS destinations |
+| [`interloper-duckdb`](packages/extensions/interloper-duckdb) | DuckDB connection and DuckDB / MotherDuck destination |
+| [`interloper-aws`](packages/extensions/interloper-aws) | AWS connection and S3 destination |
+| [`interloper-azure`](packages/extensions/interloper-azure) | Microsoft Azure connection and Microsoft Fabric Warehouse destination |
+| [`interloper-slack`](packages/extensions/interloper-slack) | Slack connection and notification hook |
+| [`interloper-sql`](packages/extensions/interloper-sql) | SQL connection and a SQLAlchemy-backed destination (PostgreSQL, MySQL, SQL Server, ...) |
+| [`interloper-snowflake`](packages/extensions/interloper-snowflake) | Snowflake connection and destination |
+| [`interloper-clickhouse`](packages/extensions/interloper-clickhouse) | ClickHouse connection and destination (self-hosted and ClickHouse Cloud) |
+| [`interloper-databricks`](packages/extensions/interloper-databricks) | Databricks connection and Delta / Unity Catalog destination |
+| [`interloper-assets`](packages/extensions/interloper-assets) | Ready-made sources for advertising, analytics and commerce platforms |
+| [`interloper-docker`](packages/extensions/interloper-docker) | Docker runner and launcher |
+| [`interloper-k8s`](packages/extensions/interloper-k8s) | Kubernetes runner and launcher |
+| [`interloper-db`](packages/platform/interloper-db) | Persistence: components, relations, runs, events, migrations |
+| [`interloper-scheduler`](packages/platform/interloper-scheduler) | Cron, hooks, credential renewal, queue worker, reaper |
+| [`interloper-api`](packages/platform/interloper-api) | FastAPI backend |
+| [`interloper-app`](packages/platform/interloper-app) | Web UI (Nuxt SPA) |
+| [`interloper-mcp`](packages/platform/interloper-mcp) | MCP server over the catalog, lineage and run history |
+| [`interloper-agent`](packages/platform/interloper-agent) | The assistant (pydantic-ai) |
+| [`interloper-toolkit`](packages/platform/interloper-toolkit) | Read-only tool functions shared by the agent and MCP server |
 
 One version for all packages, released together to PyPI.
 

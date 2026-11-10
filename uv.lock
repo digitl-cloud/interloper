@@ -2141,7 +2141,7 @@ wheels = [
 [[package]]
 name = "interloper-agent"
 version = "0.130.0"
-source = { editable = "packages/interloper-agent" }
+source = { editable = "packages/platform/interloper-agent" }
 dependencies = [
     { name = "interloper-assets" },
     { name = "interloper-core" },
@@ -2152,17 +2152,17 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "interloper-assets", editable = "packages/interloper-assets" },
-    { name = "interloper-core", editable = "packages/interloper-core" },
-    { name = "interloper-db", editable = "packages/interloper-db" },
-    { name = "interloper-toolkit", editable = "packages/interloper-toolkit" },
+    { name = "interloper-assets", editable = "packages/extensions/interloper-assets" },
+    { name = "interloper-core", editable = "packages/platform/interloper-core" },
+    { name = "interloper-db", editable = "packages/platform/interloper-db" },
+    { name = "interloper-toolkit", editable = "packages/platform/interloper-toolkit" },
     { name = "pydantic-ai-slim", extras = ["google", "anthropic", "openai"], specifier = ">=2.51.0" },
 ]
 
 [[package]]
 name = "interloper-api"
 version = "0.130.0"
-source = { editable = "packages/interloper-api" }
+source = { editable = "packages/platform/interloper-api" }
 dependencies = [
     { name = "authlib" },
     { name = "cryptography" },
@@ -2194,10 +2194,10 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "google-auth", specifier = ">=2.0.0" },
     { name = "httpx2", specifier = ">=2.13.1" },
-    { name = "interloper-agent", marker = "extra == 'agent'", editable = "packages/interloper-agent" },
-    { name = "interloper-core", editable = "packages/interloper-core" },
-    { name = "interloper-core", extras = ["otel"], marker = "extra == 'otel'", editable = "packages/interloper-core" },
-    { name = "interloper-db", editable = "packages/interloper-db" },
+    { name = "interloper-agent", marker = "extra == 'agent'", editable = "packages/platform/interloper-agent" },
+    { name = "interloper-core", editable = "packages/platform/interloper-core" },
+    { name = "interloper-core", extras = ["otel"], marker = "extra == 'otel'", editable = "packages/platform/interloper-core" },
+    { name = "interloper-db", editable = "packages/platform/interloper-db" },
     { name = "itsdangerous", specifier = ">=2.2" },
     { name = "joserfc", specifier = ">=1.7" },
     { name = "opentelemetry-instrumentation-fastapi", marker = "extra == 'otel'", specifier = ">=0.65b0" },
@@ -2210,7 +2210,7 @@ provides-extras = ["agent", "otel"]
 [[package]]
 name = "interloper-app"
 version = "0.130.0"
-source = { editable = "packages/interloper-app" }
+source = { editable = "packages/platform/interloper-app" }
 dependencies = [
     { name = "interloper-api" },
     { name = "interloper-db" },
@@ -2219,15 +2219,15 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "interloper-api", editable = "packages/interloper-api" },
-    { name = "interloper-db", editable = "packages/interloper-db" },
-    { name = "interloper-scheduler", editable = "packages/interloper-scheduler" },
+    { name = "interloper-api", editable = "packages/platform/interloper-api" },
+    { name = "interloper-db", editable = "packages/platform/interloper-db" },
+    { name = "interloper-scheduler", editable = "packages/platform/interloper-scheduler" },
 ]
 
 [[package]]
 name = "interloper-assets"
 version = "0.130.0"
-source = { editable = "packages/interloper-assets" }
+source = { editable = "packages/extensions/interloper-assets" }
 dependencies = [
     { name = "httpx2" },
     { name = "interloper-core" },
@@ -2255,9 +2255,9 @@ requires-dist = [
     { name = "google-ads", marker = "extra == 'google'", specifier = ">=29.2.0" },
     { name = "google-api-python-client", marker = "extra == 'google'", specifier = ">=2.167.0" },
     { name = "httpx2", specifier = ">=2.13.1" },
-    { name = "interloper-core", editable = "packages/interloper-core" },
-    { name = "interloper-pandas", editable = "packages/interloper-pandas" },
-    { name = "interloper-sql", editable = "packages/interloper-sql" },
+    { name = "interloper-core", editable = "packages/platform/interloper-core" },
+    { name = "interloper-pandas", editable = "packages/extensions/interloper-pandas" },
+    { name = "interloper-sql", editable = "packages/extensions/interloper-sql" },
     { name = "tenacity", specifier = ">=9.1.4" },
 ]
 provides-extras = ["bing", "google", "facebook"]
@@ -2265,7 +2265,7 @@ provides-extras = ["bing", "google", "facebook"]
 [[package]]
 name = "interloper-aws"
 version = "0.130.0"
-source = { editable = "packages/interloper-aws" }
+source = { editable = "packages/extensions/interloper-aws" }
 dependencies = [
     { name = "boto3" },
     { name = "interloper-core" },
@@ -2275,14 +2275,14 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "boto3", specifier = ">=1.34" },
-    { name = "interloper-core", editable = "packages/interloper-core" },
+    { name = "interloper-core", editable = "packages/platform/interloper-core" },
     { name = "pyarrow", specifier = ">=14" },
 ]
 
 [[package]]
 name = "interloper-azure"
 version = "0.130.0"
-source = { editable = "packages/interloper-azure" }
+source = { editable = "packages/extensions/interloper-azure" }
 dependencies = [
     { name = "azure-identity" },
     { name = "interloper-core" },
@@ -2292,14 +2292,14 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "azure-identity", specifier = ">=1.19" },
-    { name = "interloper-core", editable = "packages/interloper-core" },
+    { name = "interloper-core", editable = "packages/platform/interloper-core" },
     { name = "mssql-python", specifier = ">=1.15" },
 ]
 
 [[package]]
 name = "interloper-clickhouse"
 version = "0.130.0"
-source = { editable = "packages/interloper-clickhouse" }
+source = { editable = "packages/extensions/interloper-clickhouse" }
 dependencies = [
     { name = "clickhouse-connect", extra = ["pandas"] },
     { name = "interloper-core" },
@@ -2314,8 +2314,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "clickhouse-connect", extras = ["pandas"], specifier = ">=0.8" },
-    { name = "interloper-core", editable = "packages/interloper-core" },
-    { name = "interloper-pandas", editable = "packages/interloper-pandas" },
+    { name = "interloper-core", editable = "packages/platform/interloper-core" },
+    { name = "interloper-pandas", editable = "packages/extensions/interloper-pandas" },
 ]
 
 [package.metadata.requires-dev]
@@ -2324,7 +2324,7 @@ dev = [{ name = "chdb", specifier = ">=3.0" }]
 [[package]]
 name = "interloper-core"
 version = "0.130.0"
-source = { editable = "packages/interloper-core" }
+source = { editable = "packages/platform/interloper-core" }
 dependencies = [
     { name = "httpx2" },
     { name = "opentelemetry-api" },
@@ -2380,15 +2380,15 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "httpx2", specifier = ">=2.13.1" },
-    { name = "interloper-aws", marker = "extra == 'aws'", editable = "packages/interloper-aws" },
-    { name = "interloper-azure", marker = "extra == 'azure'", editable = "packages/interloper-azure" },
-    { name = "interloper-clickhouse", marker = "extra == 'clickhouse'", editable = "packages/interloper-clickhouse" },
-    { name = "interloper-databricks", marker = "extra == 'databricks'", editable = "packages/interloper-databricks" },
-    { name = "interloper-duckdb", marker = "extra == 'duckdb'", editable = "packages/interloper-duckdb" },
-    { name = "interloper-google-cloud", marker = "extra == 'google-cloud'", editable = "packages/interloper-google-cloud" },
-    { name = "interloper-slack", marker = "extra == 'slack'", editable = "packages/interloper-slack" },
-    { name = "interloper-snowflake", marker = "extra == 'snowflake'", editable = "packages/interloper-snowflake" },
-    { name = "interloper-sql", extras = ["postgres"], marker = "extra == 'sql'", editable = "packages/interloper-sql" },
+    { name = "interloper-aws", marker = "extra == 'aws'", editable = "packages/extensions/interloper-aws" },
+    { name = "interloper-azure", marker = "extra == 'azure'", editable = "packages/extensions/interloper-azure" },
+    { name = "interloper-clickhouse", marker = "extra == 'clickhouse'", editable = "packages/extensions/interloper-clickhouse" },
+    { name = "interloper-databricks", marker = "extra == 'databricks'", editable = "packages/extensions/interloper-databricks" },
+    { name = "interloper-duckdb", marker = "extra == 'duckdb'", editable = "packages/extensions/interloper-duckdb" },
+    { name = "interloper-google-cloud", marker = "extra == 'google-cloud'", editable = "packages/extensions/interloper-google-cloud" },
+    { name = "interloper-slack", marker = "extra == 'slack'", editable = "packages/extensions/interloper-slack" },
+    { name = "interloper-snowflake", marker = "extra == 'snowflake'", editable = "packages/extensions/interloper-snowflake" },
+    { name = "interloper-sql", extras = ["postgres"], marker = "extra == 'sql'", editable = "packages/extensions/interloper-sql" },
     { name = "opentelemetry-api", specifier = ">=1.42,<2" },
     { name = "opentelemetry-exporter-otlp-proto-grpc", marker = "extra == 'otel'", specifier = ">=1.42,<2" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otel'", specifier = ">=1.42,<2" },
@@ -2412,7 +2412,7 @@ dev = [
 [[package]]
 name = "interloper-databricks"
 version = "0.130.0"
-source = { editable = "packages/interloper-databricks" }
+source = { editable = "packages/extensions/interloper-databricks" }
 dependencies = [
     { name = "databricks-sql-connector", extra = ["pyarrow"] },
     { name = "interloper-core" },
@@ -2422,14 +2422,14 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "databricks-sql-connector", extras = ["pyarrow"], specifier = ">=4.1.2" },
-    { name = "interloper-core", editable = "packages/interloper-core" },
-    { name = "interloper-pandas", editable = "packages/interloper-pandas" },
+    { name = "interloper-core", editable = "packages/platform/interloper-core" },
+    { name = "interloper-pandas", editable = "packages/extensions/interloper-pandas" },
 ]
 
 [[package]]
 name = "interloper-db"
 version = "0.130.0"
-source = { editable = "packages/interloper-db" }
+source = { editable = "packages/platform/interloper-db" }
 dependencies = [
     { name = "alembic" },
     { name = "cryptography" },
@@ -2449,8 +2449,8 @@ otel = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.18.4" },
     { name = "cryptography", specifier = ">=43.0.0" },
-    { name = "interloper-core", editable = "packages/interloper-core" },
-    { name = "interloper-core", extras = ["otel"], marker = "extra == 'otel'", editable = "packages/interloper-core" },
+    { name = "interloper-core", editable = "packages/platform/interloper-core" },
+    { name = "interloper-core", extras = ["otel"], marker = "extra == 'otel'", editable = "packages/platform/interloper-core" },
     { name = "opentelemetry-instrumentation-sqlalchemy", marker = "extra == 'otel'", specifier = ">=0.65b0" },
     { name = "psycopg2-binary", specifier = ">=2.9.0" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
@@ -2461,7 +2461,7 @@ provides-extras = ["otel"]
 [[package]]
 name = "interloper-docker"
 version = "0.130.0"
-source = { editable = "packages/interloper-docker" }
+source = { editable = "packages/extensions/interloper-docker" }
 dependencies = [
     { name = "docker" },
     { name = "interloper-core" },
@@ -2471,14 +2471,14 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "docker", specifier = ">=7.1.0" },
-    { name = "interloper-core", editable = "packages/interloper-core" },
-    { name = "interloper-scheduler", editable = "packages/interloper-scheduler" },
+    { name = "interloper-core", editable = "packages/platform/interloper-core" },
+    { name = "interloper-scheduler", editable = "packages/platform/interloper-scheduler" },
 ]
 
 [[package]]
 name = "interloper-duckdb"
 version = "0.130.0"
-source = { editable = "packages/interloper-duckdb" }
+source = { editable = "packages/extensions/interloper-duckdb" }
 dependencies = [
     { name = "duckdb" },
     { name = "interloper-core" },
@@ -2488,14 +2488,14 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "duckdb", specifier = ">=1.0" },
-    { name = "interloper-core", editable = "packages/interloper-core" },
-    { name = "interloper-pandas", editable = "packages/interloper-pandas" },
+    { name = "interloper-core", editable = "packages/platform/interloper-core" },
+    { name = "interloper-pandas", editable = "packages/extensions/interloper-pandas" },
 ]
 
 [[package]]
 name = "interloper-google-cloud"
 version = "0.130.0"
-source = { editable = "packages/interloper-google-cloud" }
+source = { editable = "packages/extensions/interloper-google-cloud" }
 dependencies = [
     { name = "db-dtypes" },
     { name = "google-cloud-bigquery" },
@@ -2511,8 +2511,8 @@ requires-dist = [
     { name = "db-dtypes", specifier = ">=1.0" },
     { name = "google-cloud-bigquery", specifier = ">=3.0" },
     { name = "google-cloud-storage", specifier = ">=2.0" },
-    { name = "interloper-core", editable = "packages/interloper-core" },
-    { name = "interloper-pandas", editable = "packages/interloper-pandas" },
+    { name = "interloper-core", editable = "packages/platform/interloper-core" },
+    { name = "interloper-pandas", editable = "packages/extensions/interloper-pandas" },
     { name = "pandas-gbq", specifier = ">=0.26.1" },
     { name = "pyarrow", specifier = ">=14" },
 ]
@@ -2520,7 +2520,7 @@ requires-dist = [
 [[package]]
 name = "interloper-k8s"
 version = "0.130.0"
-source = { editable = "packages/interloper-k8s" }
+source = { editable = "packages/extensions/interloper-k8s" }
 dependencies = [
     { name = "interloper-core" },
     { name = "interloper-scheduler" },
@@ -2529,15 +2529,15 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "interloper-core", editable = "packages/interloper-core" },
-    { name = "interloper-scheduler", editable = "packages/interloper-scheduler" },
+    { name = "interloper-core", editable = "packages/platform/interloper-core" },
+    { name = "interloper-scheduler", editable = "packages/platform/interloper-scheduler" },
     { name = "kubernetes", specifier = ">=31.0.0,!=36.0.0" },
 ]
 
 [[package]]
 name = "interloper-mcp"
 version = "0.130.0"
-source = { editable = "packages/interloper-mcp" }
+source = { editable = "packages/platform/interloper-mcp" }
 dependencies = [
     { name = "interloper-core" },
     { name = "interloper-db" },
@@ -2548,9 +2548,9 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "interloper-core", editable = "packages/interloper-core" },
-    { name = "interloper-db", editable = "packages/interloper-db" },
-    { name = "interloper-toolkit", editable = "packages/interloper-toolkit" },
+    { name = "interloper-core", editable = "packages/platform/interloper-core" },
+    { name = "interloper-db", editable = "packages/platform/interloper-db" },
+    { name = "interloper-toolkit", editable = "packages/platform/interloper-toolkit" },
     { name = "mcp", specifier = ">=2.3,<3" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
 ]
@@ -2558,7 +2558,7 @@ requires-dist = [
 [[package]]
 name = "interloper-pandas"
 version = "0.130.0"
-source = { editable = "packages/interloper-pandas" }
+source = { editable = "packages/extensions/interloper-pandas" }
 dependencies = [
     { name = "interloper-core" },
     { name = "pandas" },
@@ -2566,14 +2566,14 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "interloper-core", editable = "packages/interloper-core" },
+    { name = "interloper-core", editable = "packages/platform/interloper-core" },
     { name = "pandas", specifier = ">=1.5" },
 ]
 
 [[package]]
 name = "interloper-scheduler"
 version = "0.130.0"
-source = { editable = "packages/interloper-scheduler" }
+source = { editable = "packages/platform/interloper-scheduler" }
 dependencies = [
     { name = "croniter" },
     { name = "interloper-core" },
@@ -2591,28 +2591,28 @@ k8s = [
 [package.metadata]
 requires-dist = [
     { name = "croniter", specifier = ">=5.0.0" },
-    { name = "interloper-core", editable = "packages/interloper-core" },
-    { name = "interloper-db", editable = "packages/interloper-db" },
-    { name = "interloper-docker", marker = "extra == 'docker'", editable = "packages/interloper-docker" },
-    { name = "interloper-k8s", marker = "extra == 'k8s'", editable = "packages/interloper-k8s" },
+    { name = "interloper-core", editable = "packages/platform/interloper-core" },
+    { name = "interloper-db", editable = "packages/platform/interloper-db" },
+    { name = "interloper-docker", marker = "extra == 'docker'", editable = "packages/extensions/interloper-docker" },
+    { name = "interloper-k8s", marker = "extra == 'k8s'", editable = "packages/extensions/interloper-k8s" },
 ]
 provides-extras = ["docker", "k8s"]
 
 [[package]]
 name = "interloper-slack"
 version = "0.130.0"
-source = { editable = "packages/interloper-slack" }
+source = { editable = "packages/extensions/interloper-slack" }
 dependencies = [
     { name = "interloper-core" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "interloper-core", editable = "packages/interloper-core" }]
+requires-dist = [{ name = "interloper-core", editable = "packages/platform/interloper-core" }]
 
 [[package]]
 name = "interloper-snowflake"
 version = "0.130.0"
-source = { editable = "packages/interloper-snowflake" }
+source = { editable = "packages/extensions/interloper-snowflake" }
 dependencies = [
     { name = "interloper-core" },
     { name = "interloper-pandas" },
@@ -2621,15 +2621,15 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "interloper-core", editable = "packages/interloper-core" },
-    { name = "interloper-pandas", editable = "packages/interloper-pandas" },
+    { name = "interloper-core", editable = "packages/platform/interloper-core" },
+    { name = "interloper-pandas", editable = "packages/extensions/interloper-pandas" },
     { name = "snowflake-connector-python", extras = ["pandas"], specifier = ">=3.12" },
 ]
 
 [[package]]
 name = "interloper-sql"
 version = "0.130.0"
-source = { editable = "packages/interloper-sql" }
+source = { editable = "packages/extensions/interloper-sql" }
 dependencies = [
     { name = "ibis-framework" },
     { name = "interloper-core" },
@@ -2644,7 +2644,7 @@ postgres = [
 [package.metadata]
 requires-dist = [
     { name = "ibis-framework", specifier = ">=12,<13" },
-    { name = "interloper-core", editable = "packages/interloper-core" },
+    { name = "interloper-core", editable = "packages/platform/interloper-core" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.1" },
     { name = "sqlalchemy", marker = "extra == 'postgres'", specifier = ">=2.0" },
 ]
@@ -2653,7 +2653,7 @@ provides-extras = ["postgres"]
 [[package]]
 name = "interloper-toolkit"
 version = "0.130.0"
-source = { editable = "packages/interloper-toolkit" }
+source = { editable = "packages/platform/interloper-toolkit" }
 dependencies = [
     { name = "interloper-core" },
     { name = "interloper-db" },
@@ -2661,8 +2661,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "interloper-core", editable = "packages/interloper-core" },
-    { name = "interloper-db", editable = "packages/interloper-db" },
+    { name = "interloper-core", editable = "packages/platform/interloper-core" },
+    { name = "interloper-db", editable = "packages/platform/interloper-db" },
 ]
 
 [[package]]
@@ -2711,27 +2711,27 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "interloper-agent", editable = "packages/interloper-agent" },
-    { name = "interloper-api", editable = "packages/interloper-api" },
-    { name = "interloper-app", editable = "packages/interloper-app" },
-    { name = "interloper-assets", editable = "packages/interloper-assets" },
-    { name = "interloper-aws", editable = "packages/interloper-aws" },
-    { name = "interloper-azure", editable = "packages/interloper-azure" },
-    { name = "interloper-clickhouse", editable = "packages/interloper-clickhouse" },
-    { name = "interloper-core", editable = "packages/interloper-core" },
-    { name = "interloper-databricks", editable = "packages/interloper-databricks" },
-    { name = "interloper-db", editable = "packages/interloper-db" },
-    { name = "interloper-docker", editable = "packages/interloper-docker" },
-    { name = "interloper-duckdb", editable = "packages/interloper-duckdb" },
-    { name = "interloper-google-cloud", editable = "packages/interloper-google-cloud" },
-    { name = "interloper-k8s", editable = "packages/interloper-k8s" },
-    { name = "interloper-mcp", editable = "packages/interloper-mcp" },
-    { name = "interloper-pandas", editable = "packages/interloper-pandas" },
-    { name = "interloper-scheduler", editable = "packages/interloper-scheduler" },
-    { name = "interloper-slack", editable = "packages/interloper-slack" },
-    { name = "interloper-snowflake", editable = "packages/interloper-snowflake" },
-    { name = "interloper-sql", editable = "packages/interloper-sql" },
-    { name = "interloper-toolkit", editable = "packages/interloper-toolkit" },
+    { name = "interloper-agent", editable = "packages/platform/interloper-agent" },
+    { name = "interloper-api", editable = "packages/platform/interloper-api" },
+    { name = "interloper-app", editable = "packages/platform/interloper-app" },
+    { name = "interloper-assets", editable = "packages/extensions/interloper-assets" },
+    { name = "interloper-aws", editable = "packages/extensions/interloper-aws" },
+    { name = "interloper-azure", editable = "packages/extensions/interloper-azure" },
+    { name = "interloper-clickhouse", editable = "packages/extensions/interloper-clickhouse" },
+    { name = "interloper-core", editable = "packages/platform/interloper-core" },
+    { name = "interloper-databricks", editable = "packages/extensions/interloper-databricks" },
+    { name = "interloper-db", editable = "packages/platform/interloper-db" },
+    { name = "interloper-docker", editable = "packages/extensions/interloper-docker" },
+    { name = "interloper-duckdb", editable = "packages/extensions/interloper-duckdb" },
+    { name = "interloper-google-cloud", editable = "packages/extensions/interloper-google-cloud" },
+    { name = "interloper-k8s", editable = "packages/extensions/interloper-k8s" },
+    { name = "interloper-mcp", editable = "packages/platform/interloper-mcp" },
+    { name = "interloper-pandas", editable = "packages/extensions/interloper-pandas" },
+    { name = "interloper-scheduler", editable = "packages/platform/interloper-scheduler" },
+    { name = "interloper-slack", editable = "packages/extensions/interloper-slack" },
+    { name = "interloper-snowflake", editable = "packages/extensions/interloper-snowflake" },
+    { name = "interloper-sql", editable = "packages/extensions/interloper-sql" },
+    { name = "interloper-toolkit", editable = "packages/platform/interloper-toolkit" },
 ]
 
 [package.metadata.requires-dev]
