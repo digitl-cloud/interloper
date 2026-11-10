@@ -5,7 +5,7 @@ from __future__ import annotations
 import ibis
 import interloper as il
 from interloper.errors import ConfigError
-from interloper_sql import ibis_view, latest, union
+from interloper_sql import ibis_view, latest, local_date, union
 
 from interloper_assets.criteo.star_schema import schemas
 
@@ -45,21 +45,20 @@ class CriteoStarSchema(il.Source):
 
     The campaign fact unions each advertiser's campaign report, one row per
     campaign and day; the ad fact does the same at the ad report's grain.
-    Days are Criteo's report days, in UTC. Purchases are Criteo's sales under
+    Days and amounts are the advertiser's own: the reports are requested in
+    the time zone and currency Criteo states for the advertiser (UTC when it
+    states no time zone). Rows collected before the reports did so are UTC
+    days in euros, as they were collected. Purchases are Criteo's sales under
     the advertiser's own attribution setting, its primary conversion.
     The dimensions take each advertiser, campaign, ad set and ad from its
     latest entity snapshot where one is collected, else from its latest
     report, else from the facts' keys, so every key a fact carries resolves.
-    Only the snapshots know an advertiser's name, a campaign's goal and spend
-    limit, and an ad set's status and budget. Criteo's advertiser endpoint
-    gives no currency, so an advertiser's currency is the one its latest
-    report states, and no time zone, so no view publishes one. Criteo
-    schedules ad sets, not campaigns, and sends the schedule as instants;
-    without the advertiser's time zone they give no local day, so no
-    dimension publishes a schedule; the ad set snapshot keeps it as Criteo
-    sends it. Campaigns carry no status, and nothing carries a creation or
-    change time. An ad's campaign comes from its ad set, since the ad's own
-    snapshot names only the ad set.
+    Only the snapshots know an advertiser's name and time zone, a campaign's
+    goal and spend limit, and an ad set's status, budget and schedule.
+    Criteo schedules ad sets, not campaigns, with instants, read as the
+    advertiser's days. Campaigns carry no status, and nothing carries a
+    creation or change time. An ad's campaign comes from its ad set, since
+    the ad's own snapshot names only the ad set.
     Every bound upstream's table must exist, or the view fails when it is
     created. Views are recreated on every run, so they follow the advertisers
     bound to them; an advertiser added to the organisation is absent until it
@@ -144,40 +143,39 @@ class CriteoStarSchema(il.Source):
         relations={"advertisers": il.Relation("asset", "criteo.advertisers", many=True, optional=True)},
     )
     def dim_accounts(self, advertisers: list[il.Upstream], fact_campaign_performance: il.Upstream) -> ibis.Table:
-        """One row per advertiser with its name and the currency of its latest report.
+        """One row per advertiser with its name, currency and time zone.
 
-        Each advertiser comes from its entity snapshot, else the facts; its currency always comes from the facts.
+        Each advertiser comes from its entity snapshot, else the facts.
         """
-        facts = fact_campaign_performance.data
-        days = facts.group_by(["account_id", "date"]).aggregate(currency=facts["currency"].max())
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
             return table.select(
                 account_id=ibis.literal(_account(upstream)),
                 account_name=table["advertiser_name"],
+                currency=table["currency_name"],
+                timezone=table["time_zone_id"],
                 as_of_date=table["date"],
                 priority=ibis.literal(ENTITY),
             )
 
         def from_fact(table: ibis.Table) -> ibis.Table:
-            return table.select(
-                account_id=table["account_id"],
+            days = table.group_by(["account_id", "date"]).aggregate(currency=table["currency"].max())
+            return days.select(
+                account_id=days["account_id"],
                 account_name=ibis.null("string"),
-                as_of_date=table["date"],
+                currency=days["currency"],
+                timezone=ibis.null("string"),
+                as_of_date=days["date"],
                 priority=ibis.literal(FACT),
             )
 
-        rows = ibis.union(*(from_entity(upstream) for upstream in advertisers), from_fact(days), distinct=False)
-        kept = latest(rows, "account_id", rows["priority"].asc(), rows["as_of_date"].desc())
-        currencies = latest(days, "account_id", days["date"].desc())
-        joined = kept.left_join(currencies, kept["account_id"] == currencies["account_id"])
-        return joined.select(
-            account_id=kept["account_id"],
-            account_name=kept["account_name"],
-            currency=currencies["currency"],
-            as_of_date=kept["as_of_date"],
+        rows = ibis.union(
+            *(from_entity(upstream) for upstream in advertisers),
+            from_fact(fact_campaign_performance.data),
+            distinct=False,
         )
+        return latest(rows, "account_id", rows["priority"].asc(), rows["as_of_date"].desc()).drop("priority")
 
     @ibis_view(
         schema=schemas.DimCampaigns,
@@ -259,15 +257,18 @@ class CriteoStarSchema(il.Source):
         ad_sets: list[il.Upstream],
         ads_stats: list[il.Upstream],
         fact_ad_performance: il.Upstream,
+        dim_accounts: il.Upstream,
     ) -> ibis.Table:
-        """One row per ad set with its name, campaign, status and budget.
+        """One row per ad set with its name, campaign, status, budget and schedule.
 
-        Each ad set comes from its entity snapshot, else its latest ad report, else the facts.
+        Each ad set comes from its entity snapshot, else its latest ad report,
+        else the facts. The schedule's instants are read as the advertiser's days.
         """
+        timezones = dim_accounts.data.select(zone_account_id="account_id", timezone="timezone")
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
-            return table.select(
+            rows = table.select(
                 ad_group_id=table["id"],
                 campaign_id=table["campaign_id"],
                 account_id=ibis.literal(_account(upstream)),
@@ -275,8 +276,24 @@ class CriteoStarSchema(il.Source):
                 status=table["schedule_activation_status"],
                 budget=table["budget_budget_amount"],
                 budget_type=table["budget_budget_renewal"],
+                starts_at=table["schedule_start_date_value"],
+                ends_at=table["schedule_end_date_value"],
                 as_of_date=table["date"],
                 effective_status=table["schedule_delivery_status"],
+            )
+            rows = rows.left_join(timezones, rows["account_id"] == timezones["zone_account_id"])
+            return rows.select(
+                "ad_group_id",
+                "campaign_id",
+                "account_id",
+                "ad_group_name",
+                "status",
+                "budget",
+                "budget_type",
+                start_date=local_date(rows["starts_at"], rows["timezone"]),
+                end_date=local_date(rows["ends_at"], rows["timezone"]),
+                as_of_date=rows["as_of_date"],
+                effective_status=rows["effective_status"],
                 priority=ibis.literal(ENTITY),
             )
 
@@ -293,6 +310,8 @@ class CriteoStarSchema(il.Source):
                 status=ibis.null("string"),
                 budget=ibis.null("float64"),
                 budget_type=ibis.null("string"),
+                start_date=ibis.null("date"),
+                end_date=ibis.null("date"),
                 as_of_date=days["day"],
                 effective_status=ibis.null("string"),
                 priority=ibis.literal(REPORT),
@@ -310,6 +329,8 @@ class CriteoStarSchema(il.Source):
                 status=ibis.null("string"),
                 budget=ibis.null("float64"),
                 budget_type=ibis.null("string"),
+                start_date=ibis.null("date"),
+                end_date=ibis.null("date"),
                 as_of_date=days["date"],
                 effective_status=ibis.null("string"),
                 priority=ibis.literal(FACT),

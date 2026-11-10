@@ -6,7 +6,8 @@ from pydantic import Field
 
 class FactCampaignPerformance(Schema):
     date: dt.date | None = Field(
-        default=None, description="The report day as Criteo reports it: a UTC day, Criteo's default report timezone."
+        default=None,
+        description="The report day as Criteo reports it, in the advertiser's time zone (UTC when Criteo states none).",
     )
     account_id: str | None = Field(default=None, description="Advertiser id, the key the account dimension joins on.")
     campaign_id: str | None = Field(default=None, description="Campaign id, the key the campaign dimension joins on.")
