@@ -46,26 +46,25 @@ build-app:
 
 REGISTRY      := europe-docker.pkg.dev/dc-int-connectors-prd/docker
 VERSION       := $(shell python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
-# Extras are build args of the dockerfile, which is the single source of truth
-# for what a loaded image carries. Set one here to override it for a local
-# build (e.g. `make docker-build-api CORE_EXTRAS=google-cloud`); left unset,
-# the dockerfile default is what ships.
-CORE_EXTRAS      ?=
-ASSETS_EXTRAS    ?=
-SCHEDULER_EXTRAS ?=
-API_EXTRAS       ?=
-COMMON_EXTRAS    ?=
+# What a loaded image carries is set by build args of the dockerfile, which is
+# the single source of truth for it. Set one here to override it for a local
+# build (e.g. `make docker-build-api COMPONENT_PACKAGES=interloper-google-cloud`);
+# left unset, the dockerfile default is what ships.
+COMPONENT_PACKAGES ?=
+ASSETS_EXTRAS      ?=
+API_EXTRAS         ?=
+COMMON_EXTRAS      ?=
 
-# Only what is explicitly set above reaches docker: the slim stages declare no
-# extras ARG at all, so passing one there would only warn about an unconsumed
+# Only what is explicitly set above reaches docker: the slim stages declare
+# none of these ARGs, so passing one there would only warn about an unconsumed
 # build arg.
-EXTRAS_ARGS := $(foreach e,CORE_EXTRAS ASSETS_EXTRAS SCHEDULER_EXTRAS API_EXTRAS COMMON_EXTRAS,\
-                 $(if $($(e)),--build-arg $(e)=$($(e))))
+BUILD_ARGS := $(foreach arg,COMPONENT_PACKAGES ASSETS_EXTRAS API_EXTRAS COMMON_EXTRAS,\
+                $(if $($(arg)),--build-arg $(arg)=$($(arg))))
 
 # Image catalog. Each role is its own repository "interloper-<role>", and each
 # Python role ships two variants: the loaded image on the bare tag, and the
 # extras-free one on a "-slim" tag.
-#   interloper-<role>:<version>        loaded (every extra the role can use)
+#   interloper-<role>:<version>        loaded (every package and extra the role can use)
 #   interloper-<role>:<version>-slim   slim (core + the role's own packages)
 # plus the matching "latest" / "latest-slim" tags on stable releases.
 # Each stem here is also the dockerfile target that builds it.
@@ -90,7 +89,7 @@ latest_of = latest$(if $(call is_slim,$(1)),-slim)
 # the more specific docker-build-linux-% must come first.
 docker-build-linux-%:
 	docker build --target $* -f dockerfile --platform linux/amd64 \
-		$(EXTRAS_ARGS) \
+		$(BUILD_ARGS) \
 		-t $(call image_of,$*):$(call tag_of,$*) \
 		-t $(call image_of,$*):$(call latest_of,$*) \
 		-t $(REGISTRY)/$(call image_of,$*):$(call tag_of,$*) \
@@ -98,7 +97,7 @@ docker-build-linux-%:
 
 docker-build-%:
 	docker build --target $* -f dockerfile \
-		$(EXTRAS_ARGS) \
+		$(BUILD_ARGS) \
 		-t $(call image_of,$*):$(call tag_of,$*) \
 		-t $(call image_of,$*):$(call latest_of,$*) \
 		-t $(REGISTRY)/$(call image_of,$*):$(call tag_of,$*) \

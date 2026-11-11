@@ -2,15 +2,14 @@
 # Helper for Dockerfile build stages.
 # Usage: uv-sync.sh [--frozen] <packages...>
 #
-# Reads extras from env:
-#   CORE_EXTRAS       → --package interloper-{name} flags
-#   ASSETS_EXTRAS     → --extra {name} flags (scoped to interloper-assets)
-#   SCHEDULER_EXTRAS  → --extra {name} flags (scoped to interloper-scheduler)
-#   API_EXTRAS        → --extra {name} flags (scoped to interloper-api)
-#   COMMON_EXTRAS     → --extra {name} flags, unscoped — for extras that
-#                       several workspace packages define (e.g. otel on
-#                       core, api, and db); uv applies each to whichever
-#                       selected packages carry it
+# Reads from env:
+#   COMPONENT_PACKAGES → --package {name} flags
+#   ASSETS_EXTRAS      → --extra {name} flags (scoped to interloper-assets)
+#   API_EXTRAS         → --extra {name} flags (scoped to interloper-api)
+#   COMMON_EXTRAS      → --extra {name} flags, unscoped, for extras that
+#                        several workspace packages define (e.g. otel on
+#                        core, api, and db); uv applies each to whichever
+#                        selected packages carry it
 set -e
 
 # NOTE: the install pass intentionally omits --locked. semantic-release bumps
@@ -33,9 +32,9 @@ for p in "$@"; do
     PACKAGES="$PACKAGES --package $p"
 done
 
-# Expand CORE_EXTRAS → additional --package interloper-{name}
-for e in $(echo "${CORE_EXTRAS:-}" | tr ',' ' '); do
-    [ -n "$e" ] && PACKAGES="$PACKAGES --package interloper-$e"
+# Expand COMPONENT_PACKAGES → additional --package {name}
+for p in $(echo "${COMPONENT_PACKAGES:-}" | tr ',' ' '); do
+    [ -n "$p" ] && PACKAGES="$PACKAGES --package $p"
 done
 
 # shellcheck disable=SC2086
@@ -54,17 +53,6 @@ if $INSTALL; then
     done
     if $HAS_ASSETS && [ -n "${ASSETS_EXTRAS:-}" ]; then
         for e in $(echo "$ASSETS_EXTRAS" | tr ',' ' '); do
-            EXTRA_FLAGS="$EXTRA_FLAGS --extra $e"
-        done
-    fi
-
-    # SCHEDULER_EXTRAS → --extra flags (only when interloper-scheduler is included)
-    HAS_SCHEDULER=false
-    for p in "$@"; do
-        [ "$p" = "interloper-scheduler" ] && HAS_SCHEDULER=true
-    done
-    if $HAS_SCHEDULER && [ -n "${SCHEDULER_EXTRAS:-}" ]; then
-        for e in $(echo "$SCHEDULER_EXTRAS" | tr ',' ' '); do
             EXTRA_FLAGS="$EXTRA_FLAGS --extra $e"
         done
     fi

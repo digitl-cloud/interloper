@@ -2333,38 +2333,11 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-aws = [
-    { name = "interloper-aws" },
-]
-azure = [
-    { name = "interloper-azure" },
-]
-clickhouse = [
-    { name = "interloper-clickhouse" },
-]
-databricks = [
-    { name = "interloper-databricks" },
-]
-duckdb = [
-    { name = "interloper-duckdb" },
-]
-google-cloud = [
-    { name = "interloper-google-cloud" },
-]
 otel = [
     { name = "opentelemetry-exporter-otlp-proto-grpc" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-instrumentation-httpx" },
     { name = "opentelemetry-sdk" },
-]
-slack = [
-    { name = "interloper-slack" },
-]
-snowflake = [
-    { name = "interloper-snowflake" },
-]
-sql = [
-    { name = "interloper-sql", extra = ["postgres"] },
 ]
 
 [package.dev-dependencies]
@@ -2378,15 +2351,6 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "httpx2", specifier = ">=2.13.1" },
-    { name = "interloper-aws", marker = "extra == 'aws'", editable = "packages/extensions/interloper-aws" },
-    { name = "interloper-azure", marker = "extra == 'azure'", editable = "packages/extensions/interloper-azure" },
-    { name = "interloper-clickhouse", marker = "extra == 'clickhouse'", editable = "packages/extensions/interloper-clickhouse" },
-    { name = "interloper-databricks", marker = "extra == 'databricks'", editable = "packages/extensions/interloper-databricks" },
-    { name = "interloper-duckdb", marker = "extra == 'duckdb'", editable = "packages/extensions/interloper-duckdb" },
-    { name = "interloper-google-cloud", marker = "extra == 'google-cloud'", editable = "packages/extensions/interloper-google-cloud" },
-    { name = "interloper-slack", marker = "extra == 'slack'", editable = "packages/extensions/interloper-slack" },
-    { name = "interloper-snowflake", marker = "extra == 'snowflake'", editable = "packages/extensions/interloper-snowflake" },
-    { name = "interloper-sql", extras = ["postgres"], marker = "extra == 'sql'", editable = "packages/extensions/interloper-sql" },
     { name = "opentelemetry-api", specifier = ">=1.42,<2" },
     { name = "opentelemetry-exporter-otlp-proto-grpc", marker = "extra == 'otel'", specifier = ">=1.42,<2" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otel'", specifier = ">=1.42,<2" },
@@ -2397,7 +2361,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.0" },
     { name = "typing-extensions", specifier = ">=4.0.0" },
 ]
-provides-extras = ["duckdb", "aws", "azure", "clickhouse", "google-cloud", "slack", "sql", "snowflake", "databricks", "otel"]
+provides-extras = ["otel"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2578,23 +2542,12 @@ dependencies = [
     { name = "interloper-db" },
 ]
 
-[package.optional-dependencies]
-docker = [
-    { name = "interloper-docker" },
-]
-k8s = [
-    { name = "interloper-k8s" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "croniter", specifier = ">=5.0.0" },
     { name = "interloper-core", editable = "packages/platform/interloper-core" },
     { name = "interloper-db", editable = "packages/platform/interloper-db" },
-    { name = "interloper-docker", marker = "extra == 'docker'", editable = "packages/extensions/interloper-docker" },
-    { name = "interloper-k8s", marker = "extra == 'k8s'", editable = "packages/extensions/interloper-k8s" },
 ]
-provides-extras = ["docker", "k8s"]
 
 [[package]]
 name = "interloper-slack"

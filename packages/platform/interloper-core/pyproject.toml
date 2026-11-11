@@ -18,15 +18,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-duckdb = ["interloper-duckdb"]
-aws = ["interloper-aws"]
-azure = ["interloper-azure"]
-clickhouse = ["interloper-clickhouse"]
-google-cloud = ["interloper-google-cloud"]
-slack = ["interloper-slack"]
-sql = ["interloper-sql[postgres]"]
-snowflake = ["interloper-snowflake"]
-databricks = ["interloper-databricks"]
 # Instruments only what core itself depends on (httpx2); FastAPI and
 # SQLAlchemy instrumentation ship with interloper-api[otel] / interloper-db[otel].
 otel = [
@@ -38,18 +29,6 @@ otel = [
 
 [dependency-groups]
 dev = ["pytest>=8.0.0", "pytest-cov>=7.0.0", "opentelemetry-sdk>=1.42,<2", "pyarrow>=14"]
-
-[tool.uv.sources]
-interloper-duckdb = { workspace = true }
-interloper-aws = { workspace = true }
-interloper-azure = { workspace = true }
-interloper-clickhouse = { workspace = true }
-interloper-google-cloud = { workspace = true }
-interloper-slack = { workspace = true }
-interloper-sql = { workspace = true }
-interloper-snowflake = { workspace = true }
-interloper-databricks = { workspace = true }
-
 
 [project.entry-points."interloper.kinds"]
 source = "interloper.source.base:Source"
