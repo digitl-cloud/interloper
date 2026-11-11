@@ -339,7 +339,7 @@ class TestEntityReads:
         assert run("adsets") == [{"id": "s1", "date": day}]
         assert run("ad_accounts") == [{"id": "act_123", "account_id": "123", "date": day}]
 
-    def test_entity_edges_ask_for_every_status_but_deleted_in_pages_of_100(self, monkeypatch):
+    def test_entity_edges_read_live_objects_in_pages_of_100(self, monkeypatch):
         requested: dict[str, dict[str, Any]] = {}
 
         class FakeAccount:
@@ -360,12 +360,9 @@ class TestEntityReads:
         for read in (connector._get_campaigns, connector._get_adsets, connector._get_ads):
             read(connection, "123")
 
-        assert {params["limit"] for params in requested.values()} == {100}
-        for params in requested.values():
-            assert {"ACTIVE", "PAUSED", "ARCHIVED"} <= set(params["effective_status"])
-            assert "DELETED" not in params["effective_status"]
-        assert "CAMPAIGN_PAUSED" in requested["adsets"]["effective_status"]
-        assert "ADSET_PAUSED" in requested["ads"]["effective_status"]
+        assert list(requested.values()) == [{"limit": 100}] * 3
+        # the request engine halves a page's limit in place, so no two reads may share one mapping
+        assert len({id(params) for params in requested.values()}) == 3
 
 
 def test_isinstance_of_dataframe_normalizer():
