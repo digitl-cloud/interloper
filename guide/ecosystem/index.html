@@ -1336,17 +1336,6 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#extras-of-the-core" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Extras of the core
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#framework-extensions" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2454,57 +2443,11 @@
 own README. All are versioned and released together. In the repository they sit under
 <code>packages/platform/</code> (the core and the platform) and <code>packages/extensions/</code> (the framework
 extensions).</p>
-<h2 id="extras-of-the-core">Extras of the core<a class="headerlink" href="#extras-of-the-core" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Extra</th>
-<th>Adds</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>interloper-core[otel]</code></td>
-<td>The OpenTelemetry SDK, OTLP exporters (gRPC and HTTP) and httpx2 instrumentation.</td>
-</tr>
-<tr>
-<td><code>interloper-core[aws]</code></td>
-<td>Pulls in <code>interloper-aws</code>.</td>
-</tr>
-<tr>
-<td><code>interloper-core[azure]</code></td>
-<td>Pulls in <code>interloper-azure</code>.</td>
-</tr>
-<tr>
-<td><code>interloper-core[google-cloud]</code></td>
-<td>Pulls in <code>interloper-google-cloud</code>.</td>
-</tr>
-<tr>
-<td><code>interloper-core[duckdb]</code></td>
-<td>Pulls in <code>interloper-duckdb</code>.</td>
-</tr>
-<tr>
-<td><code>interloper-core[slack]</code></td>
-<td>Pulls in <code>interloper-slack</code>.</td>
-</tr>
-<tr>
-<td><code>interloper-core[sql]</code></td>
-<td>Pulls in <code>interloper-sql[postgres]</code>: the SQL destination with its PostgreSQL driver.</td>
-</tr>
-<tr>
-<td><code>interloper-core[snowflake]</code></td>
-<td>Pulls in <code>interloper-snowflake</code>.</td>
-</tr>
-<tr>
-<td><code>interloper-core[clickhouse]</code></td>
-<td>Pulls in <code>interloper-clickhouse</code>.</td>
-</tr>
-<tr>
-<td><code>interloper-core[databricks]</code></td>
-<td>Pulls in <code>interloper-databricks</code>.</td>
-</tr>
-</tbody>
-</table>
+<p>Install each by name next to the core:</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span>interloper-core<span class="w"> </span>interloper-duckdb
+</span></code></pre></div>
+<p>The core's one extra, <code>otel</code>, adds the OpenTelemetry SDK and exporters, as described in
+<a href="../telemetry/">Telemetry</a>.</p>
 <h2 id="framework-extensions">Framework extensions<a class="headerlink" href="#framework-extensions" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
