@@ -19,7 +19,6 @@ import os
 import re
 import uuid
 from collections.abc import Callable, Collection, Iterable
-from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
@@ -28,7 +27,6 @@ from typing_extensions import Self
 
 from interloper.utils.annotations import classvar_type, is_classvar, type_adapter
 from interloper.utils.imports import get_object_path, import_from_path
-from interloper.utils.text import to_snake_case
 
 if TYPE_CHECKING:
     from types import FunctionType
@@ -526,80 +524,33 @@ class SerializationContext:
 
 # -- Serializable --------------------------------------------------------------
 class Serializable(BaseModel):
-    """A class-identified, serializable configuration object.
+    """A serializable configuration object, identified by its import path.
 
     Anything whose instances are "a class plus its configuration" extends
     ``Serializable``: it round-trips through `Spec`
     (``to_spec()`` / ``from_spec()``), resolves back from its import path,
-    exposes a JSON Schema of its user-configurable fields, and rejects
-    unknown constructor kwargs loudly. Runners, schemas and normalizers are
-    ``Serializable``; catalog citizens extend `Component`, which adds
-    kind, identity and relations on top.
+    and rejects unknown constructor kwargs loudly. Runners, schemas and
+    normalizers are ``Serializable``; catalog citizens extend `Component`,
+    which adds kind, identity and relations on top.
+
+    ``Serializable`` declares no settings of its own, so a subclass may give
+    a field any name: a schema's columns are its vendor's vocabulary.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True, ignored_types=(IgnoredDescriptor,))
 
-    key: ClassVar[str] = ""
-    name: ClassVar[str] = ""
-    internal_fields: ClassVar[frozenset[str]] = frozenset()
-
     # -- Construction ----------------------------------------------------------
-    def __init_subclass__(cls, *, rebuild: bool = False, **kwargs: Any) -> None:
-        """Auto-derive ``key`` as the snake_cased class name unless declared.
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Check the settings the class body declares against their types.
 
-        A class `build_class` builds over an existing declaration (to
-        apply a decorator's field defaults) is that same declaration, not a
-        new one: it keeps the key it inherits, so a key declared in the class
-        body survives the decorator.
-
-        The settings the class body declares are checked against their types
-        here, so a wrong one fails where it is written.
+        A wrong one fails where it is written.
 
         Args:
-            rebuild: Whether the class rebuilds an existing declaration rather
-                than declaring a new one; set only by `build_class`.
             **kwargs: Class-creation keyword arguments, forwarded untouched to
                 ``super().__init_subclass__``.
         """
         super().__init_subclass__(**kwargs)
-        if not rebuild and "key" not in cls.__dict__:
-            cls.key = to_snake_case(cls.__name__)
         cls._validate_classvars()
-
-    @classmethod
-    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
-        """Restore declaration order for fields that shadow a parent ClassVar.
-
-        Pydantic merges annotations across the MRO with dict-update
-        semantics, so a subclass field whose name is also *annotated* on a
-        parent, e.g. a schema column named ``name``, which every
-        Serializable declares as a ClassVar, is hoisted to the parent's
-        annotation slot, landing first in ``model_fields`` regardless of
-        where the subclass declares it. Rebuild the order from each class's
-        own annotations, counting only occurrences that are actual fields
-        on that class, so a ClassVar annotation no longer pins a position.
-
-        Args:
-            **kwargs: Class-creation keyword arguments, forwarded untouched to
-                ``super().__pydantic_init_subclass__``.
-        """
-        super().__pydantic_init_subclass__(**kwargs)
-        fields = cls.__pydantic_fields__
-        order: dict[str, None] = {}
-        for base in reversed(cls.__mro__):
-            base_fields = getattr(base, "__pydantic_fields__", {})
-            for field_name in inspect.get_annotations(base):
-                if field_name in fields and field_name in base_fields:
-                    order.setdefault(field_name, None)
-        reordered = {field_name: fields[field_name] for field_name in order}
-        reordered.update({field_name: info for field_name, info in fields.items() if field_name not in reordered})
-        if list(reordered) == list(fields):
-            return
-        cls.__pydantic_fields__ = reordered
-        # With unresolved forward refs the core schema is built lazily and
-        # picks up the reordered dict; rebuilding now would fail resolution.
-        if cls.__pydantic_fields_complete__:
-            cls.model_rebuild(force=True)
 
     def __init__(self, /, **data: Any) -> None:
         """Validate kwargs strictly against the model's fields.
@@ -628,7 +579,7 @@ class Serializable(BaseModel):
         one new class, so the metaclass sees field defaults as fields and
         ``__init_subclass__`` collects relations and validates settings where
         they are written. A target already extending this class is the base of
-        the new one, which keeps its key and kind (``rebuild``).
+        the new one.
 
         Args:
             body: What the decorated target contributes.
@@ -648,7 +599,7 @@ class Serializable(BaseModel):
         }
         if body.doc:
             namespace["__doc__"] = body.doc
-        return cast("type[Self]", type(base)(body.name, (base,), namespace, rebuild=body.base is not None))
+        return cast("type[Self]", type(base)(body.name, (base,), namespace))
 
     # -- Settings --------------------------------------------------------------
 
@@ -790,14 +741,6 @@ class Serializable(BaseModel):
         raise TypeError(f"{cls.__name__} decorates a class, not a function")
 
     # -- Identity --------------------------------------------------------------
-
-    def __str__(self) -> str:
-        """Human-readable representation: ``Name (key: k)``.
-
-        Returns:
-            Formatted string with class name and key.
-        """
-        return f"{type(self).__name__} (key: {self.key})"
 
     @classmethod
     def classpath(cls) -> str:
@@ -976,44 +919,3 @@ class Serializable(BaseModel):
             The reconstructed instance.
         """
         return cls.from_spec(Spec.from_file(path), catalog, resolve=resolve)
-
-    # -- Definition ------------------------------------------------------------
-    @classmethod
-    def config_schema(cls) -> dict[str, Any]:
-        """JSON Schema of the class's user-configurable fields.
-
-        Properties are listed most specific first: the class's own fields, then
-        each ancestor's, closest first, each in declaration order. Pydantic
-        lists inherited fields first, which would open every form with what a
-        whole kind shares (a source's dataset, a job's retry) rather than with
-        what defines the component; forms render in property order.
-
-        Returns:
-            The stripped schema, or ``{}`` when no configurable field remains,
-            as a copy the caller is free to adjust.
-        """
-        return copy.deepcopy(cls._config_schema())
-
-    @classmethod
-    @cache
-    def _config_schema(cls) -> dict[str, Any]:
-        """Build the schema `config_schema` hands out, once per class.
-
-        A class's fields are fixed once it is created, while every catalog
-        build defines its classes again: generating the schema per call would
-        put pydantic's schema generation on every build.
-
-        Returns:
-            The stripped schema, or ``{}`` when no configurable field remains.
-        """
-        from interloper.resource.fields import strip_internal_fields
-
-        raw = cls.model_json_schema() if hasattr(cls, "model_json_schema") else {}
-        schema = strip_internal_fields(raw, extra=cls.internal_fields)
-        properties = schema.get("properties")
-        if not properties:
-            return {}
-        declared = [name for base in cls.__mro__ for name in inspect.get_annotations(base) if name in properties]
-        order = list(dict.fromkeys([*(name for name in properties if name not in declared), *declared]))
-        schema["properties"] = {name: properties[name] for name in order}
-        return schema

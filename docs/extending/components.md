@@ -11,23 +11,22 @@ through it in the order you would do it.
 
 A pydantic model with:
 
-- **`key`**: class-level, snake_cased from the class name unless declared.
 - **Strict construction**: unknown keyword arguments raise `TypeError`.
 - **Specs**: `to_spec()`, `from_spec()`, `from_spec_file()`, `classpath()`, `resolve_path()`.
   See [Specs and serialization](../guide/specs.md). Several roots written or read as one document
   share a `SerializationContext`, which holds the one rule for inlining, referencing and dropping
   a bound target; every public entry point starts its own, so only a multi-root container such
   as the DAG ever passes one.
-- **`config_schema()`**: the JSON Schema of user-facing fields, with framework fields and the
-  class's `internal_fields` stripped.
 - **`build_class(body, **settings)`**: the one construction behind every decorator. A decorator
   reads its target into a `ClassBody` (a class as written, or a function read by the kind's
   `body_from_function`) and gets one new class back, with every setting in its namespace: public
   `ClassVar`s as values, field defaults as fields, relations in the `relations` dict. A class
-  that already extends the kind becomes the base of the new one and keeps its key and kind.
-  Decorators build classes; they never modify one.
+  that already extends the kind becomes the base of the new one; a component keeps its key and
+  kind. Decorators build classes; they never modify one.
 
-Runners, normalizers and schemas are `Serializable` without being components.
+`Serializable` declares no settings of its own, so a subclass may give a field any name: a
+schema's columns are its vendor's vocabulary, `name` and `key` included. Runners, normalizers and
+schemas are `Serializable` without being components.
 
 ## Component
 
@@ -36,6 +35,7 @@ On top of `Serializable`:
 | Attribute | Level | Meaning |
 |-----------|-------|---------|
 | `kind` | class | The component category (`source`, `asset`, `connection`, …). Set automatically for direct children of `Component`; inherited below that. |
+| `key` | class | The catalog key, snake_cased from the class name unless declared. |
 | `id` | instance | A UUID by default; the identity persisted relations point at. |
 | `name`, `icon` | class | Display metadata; `name` defaults to a label built from the class name. |
 | `relations` | class | Relation name to `Relation`, the links this class declares (below). |
@@ -44,6 +44,10 @@ On top of `Serializable`:
 | `sensitive` | class | Whether stored configuration must be encrypted. `True` for resources. |
 | `state_model` | class | A pydantic model of machine-owned state (job timestamps, renewal times). Its JSON Schema becomes `state_schema` in the definition. |
 | `internal_fields` | class | Fields hidden from the config schema. |
+
+`config_schema()` is the JSON Schema of the user-facing fields, with framework fields and the
+class's `internal_fields` stripped. A component's fields and its class-level settings never share
+a name: a field named after one (`name`, `key`, `icon`, …) is refused when the class is defined.
 
 `definition()` returns a `ComponentDefinition` (kind, key, path, name, icon, description, tags,
 `config_schema`, `state_schema`, `relations`); it is the one place a class is described, and every

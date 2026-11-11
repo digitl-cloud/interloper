@@ -265,6 +265,41 @@ class TestDefinition:
         schema = FakeSerializable.definition().config_schema
         assert set(schema["properties"]) == {"value"}
 
+    def test_config_schema_lists_the_most_specific_fields_first(self):
+        class FakeBase(Component):
+            alpha: str | None = None
+            beta: str | None = None
+
+        class FakeMiddle(FakeBase):
+            gamma: str | None = None
+
+        class FakeLeaf(FakeMiddle):
+            delta: str | None = None
+            alpha: str | None = None
+
+        assert list(FakeLeaf.config_schema()["properties"]) == ["delta", "alpha", "gamma", "beta"]
+
+    def test_config_schema_is_built_once_per_class(self, monkeypatch):
+        class FakeCached(Component):
+            gamma: str | None = None
+
+        builds = []
+        generate = FakeCached.model_json_schema
+        monkeypatch.setattr(FakeCached, "model_json_schema", lambda: builds.append(True) or generate())
+
+        FakeCached.config_schema()
+        FakeCached.config_schema()
+
+        assert len(builds) == 1
+
+    def test_config_schema_hands_out_a_copy(self):
+        class FakeCopied(Component):
+            gamma: str | None = None
+
+        FakeCopied.config_schema()["properties"].pop("gamma")
+
+        assert "gamma" in FakeCopied.config_schema()["properties"]
+
     def test_relations_exported(self):
         relations = Widget.definition().relations
         assert relations["connection"].model_dump(mode="json") == {
@@ -342,11 +377,17 @@ class TestValidateClassvars:
             class FakeWrongIcon(Component):
                 icon = 1
 
-    def test_a_setting_redeclared_as_a_field_is_not_validated(self):
-        class FakeShadowing(Component):
-            icon: int = 1
+    def test_a_field_named_after_a_setting_is_refused(self):
+        with pytest.raises(TypeError, match=r"FakeShadowing\.icon is a field named after the 'icon' setting"):
 
-        assert FakeShadowing.model_fields["icon"].default == 1
+            class FakeShadowing(Component):
+                icon: int = 1
+
+    def test_a_field_named_key_is_refused_rather_than_erasing_the_class_key(self):
+        with pytest.raises(TypeError, match=r"FakeKeyed\.key is a field named after the 'key' setting"):
+
+            class FakeKeyed(il.Connection):
+                key: str
 
     def test_inherited_values_are_not_revalidated(self):
         class FakeParent(Component):

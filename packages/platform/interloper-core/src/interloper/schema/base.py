@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import types
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Union, get_args, get_origin
@@ -15,8 +14,6 @@ from typing_extensions import Self
 
 from interloper.errors import SchemaError
 from interloper.serializable import Serializable
-
-warnings.filterwarnings("ignore", message=r'Field name ".*" in ".*" shadows an attribute in parent "Schema"')
 
 logger = logging.getLogger(__name__)
 

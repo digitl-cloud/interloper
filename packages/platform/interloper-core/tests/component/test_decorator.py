@@ -114,19 +114,6 @@ class TestSettings:
         with pytest.raises(TypeError, match=r"does not accept '_source_type'"):
             il.Asset._sort_settings({"_source_type": None})
 
-    def test_a_name_that_is_both_a_classvar_and_a_field_is_refused(self):
-        # `name` is a ClassVar on Component and a field here, so the value
-        # would read one way on the class and another on every instance.
-        with pytest.warns(UserWarning, match=r"shadows an attribute"):
-
-            class Ambiguous(il.Config):
-                """Config fixture whose own field shadows the ``name`` ClassVar."""
-
-                name: str = "field-default"
-
-        with pytest.raises(TypeError, match=r"Ambiguous declares 'name' both as a ClassVar and a field"):
-            Ambiguous._sort_settings({"name": "Given"})
-
     def test_a_subclass_widens_what_is_accepted(self):
         @il.destination(base_path="/data")
         class FakeCSV(il.CSVDestination):

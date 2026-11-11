@@ -117,10 +117,8 @@ they mean something only as constructor arguments.
 
 ## `@il.schema`
 
-| Option | Type | Kind | Meaning |
-|--------|------|------|---------|
-| `key` | `str` | class | Schema key. |
-| `name` | `str` | class | Display name. |
+Takes no options: a schema declares no settings, so every annotation of the decorated class is a
+column, `name` and `key` included.
 
 ## Instance reconfiguration
 

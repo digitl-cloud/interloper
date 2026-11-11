@@ -39,12 +39,23 @@ class OptionalRowSchema(Schema):
     b: str = "fallback"
 
 
+class NamedRowSchema(Schema):
+    """Columns named like a ``Serializable`` ClassVar, declared without a default."""
+
+    id: int | None
+    name: str | None
+
+
+class RequiredNameSchema(Schema):
+    name: str
+
+
 class RepeatedRowSchema(Schema):
     tags: list[str] | None = None
 
 
 class ShadowingSchema(Schema):
-    """Fields that shadow Component attributes must keep declaration order."""
+    """Columns named like a component's fields and settings keep declaration order."""
 
     id: int | None = Field(...)
     cost: float | None = Field(...)
@@ -262,6 +273,15 @@ class TestReconcileDefaults:
         rows = OptionalRowSchema.reconcile([{"a": 1}])
 
         assert rows == [{"a": 1, "b": "fallback"}]
+
+    def test_an_absent_nullable_field_without_a_default_is_none(self):
+        rows = NamedRowSchema.reconcile([{"id": 1}])
+
+        assert rows == [{"id": 1, "name": None}]
+
+    def test_an_absent_required_field_is_refused(self):
+        with pytest.raises(SchemaError, match="row 0"):
+            RequiredNameSchema.reconcile([{}])
 
     def test_no_rows_returns_no_rows(self):
         assert OptionalRowSchema.reconcile([]) == []

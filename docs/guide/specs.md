@@ -148,11 +148,10 @@ and stays read-only after the round-trip.
 
 `Serializable` is a pydantic model with a few additions:
 
-- a class-level `key`, snake_cased from the class name unless declared;
 - strict construction: unknown keyword arguments raise `TypeError` instead of being dropped;
-- `to_spec()`, `from_spec()`, `from_spec_file()`, `classpath()`, `resolve_path()`;
-- `config_schema()`, the JSON Schema of the user-facing fields.
+- `to_spec()`, `from_spec()`, `from_spec_file()`, `classpath()`, `resolve_path()`.
 
-`Component` extends it with identity (`kind`, `id`, `parent`) and relations. Runners, normalizers
-and schemas are serializable without being components. The full picture is in the
+`Component` extends it with identity (`kind`, `key`, `id`, `parent`), relations and
+`config_schema()`, the JSON Schema of the user-facing fields. Runners, normalizers and schemas
+are serializable without being components. The full picture is in the
 [component model](../extending/components.md).
