@@ -90,6 +90,18 @@ class DemoSource(il.Source):
         return []
 
 
+class EntitySource(il.Source):
+    """A daily report next to an entity snapshot, the shape a backfill observes once."""
+
+    @il.asset(partitioning=_DAILY)
+    def stats(self) -> list[dict]:
+        return []
+
+    @il.asset(partitioning=il.SnapshotPartitionConfig(column="date"))
+    def entities(self) -> list[dict]:
+        return []
+
+
 @pytest.fixture
 def store() -> Iterator[Store]:
     """A store wired to a fresh in-memory SQLite database.
@@ -110,7 +122,7 @@ def store() -> Iterator[Store]:
     for model in (Backfill, Component, ComponentRelation, Run, Event, Execution, Quota, Usage):
         model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
     try:
-        yield Store(catalog=il.Catalog.from_assets([DemoSource]), engine=engine)
+        yield Store(catalog=il.Catalog.from_assets([DemoSource, EntitySource]), engine=engine)
     finally:
         engine.dispose()
         engine_module._engine = None
@@ -1210,6 +1222,60 @@ class TestSpec:
         assert spec is not None
         disabled = {operation.id for operation in il.DAG.from_spec(spec.dag).operations if not operation.enabled}
         assert disabled == {str(asset_id)}
+
+    def test_a_backfill_observes_snapshots_only_in_its_newest_partition(self, store: Store) -> None:
+        source = store.components.create(_ORG_ID, kind="source", key="entity_source")
+        backfill = store.backfills.create(
+            _ORG_ID, component_id=source.id, start_key="2026-01-01", end_key="2026-01-02", concurrency=2
+        )
+
+        assert self._enabled(store, self._backfill_run(store, backfill, "2026-01-02")) == {"stats", "entities"}
+        assert self._enabled(store, self._backfill_run(store, backfill, "2026-01-01")) == {"stats"}
+
+    @pytest.mark.parametrize("scope", ["all", "failed"])
+    def test_a_manual_retry_executes_what_its_stack_did(self, store: Store, scope: str) -> None:
+        source = store.components.create(_ORG_ID, kind="source", key="entity_source")
+        backfill = store.backfills.create(
+            _ORG_ID, component_id=source.id, start_key="2026-01-01", end_key="2026-01-02", concurrency=2
+        )
+        first = self._backfill_run(store, backfill, "2026-01-01")
+        store.runs.fail(first, "boom")
+
+        retry = store.runs.retry(first, scope=scope)
+
+        assert retry.backfill_id is None
+        assert self._enabled(store, retry.id) == {"stats"}
+
+    @staticmethod
+    def _backfill_run(store: Store, backfill: Backfill, partition_key: str) -> UUID:
+        """The id of a backfill's run of one partition.
+
+        Args:
+            store: The store under test.
+            backfill: The backfill the run belongs to.
+            partition_key: The partition the run covers.
+
+        Returns:
+            The run's id.
+        """
+        statement = select(Run.id).where(Run.backfill_id == backfill.id, Run.partition_key == partition_key)
+        with Session(store.engine) as session:
+            return session.exec(statement).one()
+
+    @staticmethod
+    def _enabled(store: Store, run_id: UUID) -> set[str]:
+        """The keys of the operations a run's spec executes.
+
+        Args:
+            store: The store under test.
+            run_id: The run whose spec is built.
+
+        Returns:
+            The keys of the enabled operations.
+        """
+        spec = store.runs.spec(run_id)
+        assert spec is not None
+        return {operation.key for operation in il.DAG.from_spec(spec.dag).operations if operation.enabled}
 
     def test_a_run_whose_target_was_deleted_cannot_be_built(self, store: Store) -> None:
         run = store.runs.create(_ORG_ID)
