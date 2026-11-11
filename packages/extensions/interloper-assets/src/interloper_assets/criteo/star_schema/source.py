@@ -7,6 +7,7 @@ import interloper as il
 from interloper.errors import ConfigError
 from interloper_sql import ibis_view, latest, local_date, union
 
+from interloper_assets.criteo.connector.source import Criteo
 from interloper_assets.criteo.star_schema import schemas
 
 MEASURE_COLUMNS = (
@@ -39,24 +40,42 @@ def _account(upstream: il.Upstream) -> str:
     return account
 
 
+def _timezone(upstream: il.Upstream) -> str:
+    """The time zone an upstream's reports have their days in, as its advertiser's source sets it.
+
+    Args:
+        upstream: A bound upstream of an advertiser's source.
+
+    Returns:
+        The IANA time zone.
+
+    Raises:
+        ConfigError: If the upstream's asset belongs to no Criteo source.
+    """
+    source = upstream.asset.source
+    if not isinstance(source, Criteo):
+        raise ConfigError(f"Upstream '{upstream.asset.key}' belongs to no Criteo source")
+    return source.timezone
+
+
 @il.source(tags=["Analytics"], icon="icon:criteo", maturity="alpha", group="criteo", dataset="criteo")
 class CriteoStarSchema(il.Source):
     """Star schema over every Criteo advertiser, as views beside the raw tables.
 
     The campaign fact unions each advertiser's campaign report, one row per
     campaign and day; the ad fact does the same at the ad report's grain.
-    Days and amounts are the advertiser's own: the reports are requested in
-    the time zone and currency Criteo states for the advertiser (UTC when it
-    states no time zone). Rows collected before the reports did so are UTC
-    days in euros, as they were collected. Purchases are Criteo's sales under
-    the advertiser's own attribution setting, its primary conversion.
+    Amounts are in euros: Criteo converts them to the currency a report
+    names, and states no advertiser's own currency to its credentials, so an
+    advertiser's currency is unknown. Days are in the time zone the
+    advertiser's source sets, UTC unless set. Purchases are Criteo's sales
+    under the advertiser's own attribution setting, its primary conversion.
     The dimensions take each advertiser, campaign, ad set and ad from its
     latest entity snapshot where one is collected, else from its latest
     report, else from the facts' keys, so every key a fact carries resolves.
-    Only the snapshots know an advertiser's name and time zone, a campaign's
-    goal and spend limit, and an ad set's status, budget and schedule.
-    Criteo schedules ad sets, not campaigns, with instants, read as the
-    advertiser's days. Campaigns carry no status, and nothing carries a
+    Only the snapshots know an advertiser's name, a campaign's goal and
+    spend limit, and an ad set's status, budget and schedule. Criteo
+    schedules ad sets, not campaigns, with instants, read as the advertiser's
+    days. Campaigns carry no status, and nothing carries a
     creation or change time. An ad's campaign comes from its ad set, since
     the ad's own snapshot names only the ad set.
     Every bound upstream's table must exist, or the view fails when it is
@@ -140,12 +159,22 @@ class CriteoStarSchema(il.Source):
     @ibis_view(
         schema=schemas.DimAccounts,
         tags=["Dimension"],
-        relations={"advertisers": il.Relation("asset", "criteo.advertisers", many=True, optional=True)},
+        relations={
+            "advertisers": il.Relation("asset", "criteo.advertisers", many=True, optional=True),
+            "campaigns_stats": il.Relation("asset", "criteo.campaigns_stats", many=True, optional=True),
+        },
     )
-    def dim_accounts(self, advertisers: list[il.Upstream], fact_campaign_performance: il.Upstream) -> ibis.Table:
-        """One row per advertiser with its name, currency and time zone.
+    def dim_accounts(
+        self,
+        advertisers: list[il.Upstream],
+        campaigns_stats: list[il.Upstream],
+        fact_campaign_performance: il.Upstream,
+    ) -> ibis.Table:
+        """One row per advertiser with its name and the time zone of its report days.
 
-        Each advertiser comes from its entity snapshot, else the facts.
+        Each advertiser comes from its entity snapshot, else its latest report,
+        else the facts. Its currency is NULL: Criteo does not state it, and the
+        facts' euros are a conversion, not the advertiser's currency.
         """
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
@@ -153,18 +182,29 @@ class CriteoStarSchema(il.Source):
             return table.select(
                 account_id=ibis.literal(_account(upstream)),
                 account_name=table["advertiser_name"],
-                currency=table["currency_name"],
-                timezone=table["time_zone_id"],
+                currency=ibis.null("string"),
+                timezone=ibis.literal(_timezone(upstream), type="string"),
                 as_of_date=table["date"],
                 priority=ibis.literal(ENTITY),
             )
 
+        def from_report(upstream: il.Upstream) -> ibis.Table:
+            days = upstream.data.select("day").distinct()
+            return days.select(
+                account_id=ibis.literal(_account(upstream)),
+                account_name=ibis.null("string"),
+                currency=ibis.null("string"),
+                timezone=ibis.literal(_timezone(upstream), type="string"),
+                as_of_date=days["day"],
+                priority=ibis.literal(REPORT),
+            )
+
         def from_fact(table: ibis.Table) -> ibis.Table:
-            days = table.group_by(["account_id", "date"]).aggregate(currency=table["currency"].max())
+            days = table.select("account_id", "date").distinct()
             return days.select(
                 account_id=days["account_id"],
                 account_name=ibis.null("string"),
-                currency=days["currency"],
+                currency=ibis.null("string"),
                 timezone=ibis.null("string"),
                 as_of_date=days["date"],
                 priority=ibis.literal(FACT),
@@ -172,6 +212,7 @@ class CriteoStarSchema(il.Source):
 
         rows = ibis.union(
             *(from_entity(upstream) for upstream in advertisers),
+            *(from_report(upstream) for upstream in campaigns_stats),
             from_fact(fact_campaign_performance.data),
             distinct=False,
         )

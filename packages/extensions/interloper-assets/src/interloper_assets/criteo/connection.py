@@ -1,5 +1,4 @@
 from functools import cached_property
-from typing import Any
 
 import interloper as il
 from pydantic_settings import SettingsConfigDict
@@ -48,26 +47,6 @@ class CriteoConnection(il.RefreshTokenOAuthConnection):
             {"id": a["id"], "name": a.get("attributes", {}).get("advertiserName") or a["id"]} for a in advertisers
         ]
         return sorted(results, key=lambda a: a["name"].lower())
-
-    async def advertiser(self, advertiser_id: str) -> dict[str, Any]:
-        """Fetch an advertiser's name, currency and time zone.
-
-        Of Criteo's advertiser endpoints, only the Marketplace Performance
-        Outcomes one carries the currency and the time zone; ``/advertisers/me``
-        names the advertiser only.
-
-        Args:
-            advertiser_id: The advertiser to look up.
-
-        Returns:
-            The advertiser as Criteo sends it: ``id``, ``advertiserName``,
-            ``currencyName`` (ISO 4217) and ``timeZoneId`` (IANA, or ``None``).
-        """
-        response = await self.client.get(
-            f"/{constants.API_VERSION}/marketing-solutions/marketplace-performance-outcomes/advertisers/{advertiser_id}"
-        )
-        response.raise_for_status()
-        return response.json()
 
     async def check(self) -> bool:
         """Prove the credentials work by running the ``advertisers`` lookup.

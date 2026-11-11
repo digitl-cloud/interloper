@@ -3,7 +3,6 @@ import logging
 from typing import Any
 
 import interloper as il
-from interloper.errors import AssetError
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.criteo import constants
@@ -17,21 +16,23 @@ logger = logging.getLogger(__name__)
 async def _statistics_report(
     connection: CriteoConnection,
     advertiser_id: str,
+    timezone: str,
     start_date: dt.date,
     end_date: dt.date,
     dimensions: list[str],
     metrics: list[str] = constants.STATISTICS_METRICS,
 ) -> list[dict]:
-    """POST a Criteo statistics report in the advertiser's own currency and days, and return its rows.
+    """POST a Criteo statistics report in euros and the source's days, and return its rows.
 
     Used by both reports. Criteo converts every amount to the currency a
-    report names and buckets days in the time zone it names (UTC when it
-    names none), so the report names the advertiser's own, as Criteo states
-    them for the advertiser.
+    report names, and states no advertiser's own currency to an advertiser's
+    credentials, so every report names euros; the rows' ``Currency`` says so.
+    Days are bucketed in the time zone the report names.
 
     Args:
         connection: The Criteo connection.
         advertiser_id: The advertiser reported on.
+        timezone: IANA time zone the report's days are bucketed in.
         start_date: First report day, inclusive.
         end_date: Last report day, inclusive.
         dimensions: The report's dimensions, such as ``Day`` and ``CampaignId``.
@@ -39,25 +40,17 @@ async def _statistics_report(
 
     Returns:
         The report's rows.
-
-    Raises:
-        AssetError: If Criteo states no currency for the advertiser.
     """
-    advertiser = await connection.advertiser(advertiser_id)
-    currency = advertiser.get("currencyName")
-    if not currency:
-        raise AssetError(f"Criteo states no currency for advertiser {advertiser_id}")
     query = {
         "advertiserIds": advertiser_id,
         "dimensions": dimensions,
         "startDate": start_date.isoformat(),
         "endDate": end_date.isoformat(),
-        "currency": currency,
+        "currency": constants.REPORT_CURRENCY,
+        "timezone": timezone,
         "metrics": metrics,
         "format": "json",
     }
-    if advertiser.get("timeZoneId"):
-        query["timezone"] = advertiser["timeZoneId"]
     response = await connection.client.post(f"/{constants.API_VERSION}/statistics/report", json=query)
     response.raise_for_status()
     return response.json()["Rows"]
@@ -135,6 +128,11 @@ class Criteo(il.Source):
         description="Criteo advertiser account",
         discriminator=True,
     )
+    timezone: str = il.TimezoneField(
+        default="UTC",
+        description="Time zone the reports' days are in. Criteo does not state an advertiser's own, so set the one "
+        "its account reports in.",
+    )
 
     @il.asset(
         schema=AdsStats,
@@ -142,10 +140,11 @@ class Criteo(il.Source):
         tags=["Report"],
     )
     async def ads_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-        """Ad-level performance statistics with daily breakdowns, in the advertiser's currency and time zone."""
+        """Ad-level performance statistics with daily breakdowns, in euros and the source's time zone."""
         return await _statistics_report(
             self.connection,
             advertiser_id=self.advertiser_id,
+            timezone=self.timezone,
             start_date=context.partition_date,
             end_date=context.partition_date,
             dimensions=["Day", "AdId", "AdsetId", "CampaignId"],
@@ -157,10 +156,11 @@ class Criteo(il.Source):
         tags=["Report"],
     )
     async def campaigns_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-        """Campaign-level performance statistics with daily breakdowns, in the advertiser's currency and time zone."""
+        """Campaign-level performance statistics with daily breakdowns, in euros and the source's time zone."""
         return await _statistics_report(
             self.connection,
             advertiser_id=self.advertiser_id,
+            timezone=self.timezone,
             start_date=context.partition_date,
             end_date=context.partition_date,
             dimensions=["Day", "CampaignId"],
@@ -168,7 +168,7 @@ class Criteo(il.Source):
 
     @il.asset(schema=Advertisers, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
     async def advertisers(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-        """The source's advertiser with its name, currency and time zone."""
+        """The source's advertiser with its name."""
         response = await self.connection.client.get(f"/{constants.API_VERSION}/advertisers/me")
         response.raise_for_status()
         resources = [item for item in response.json().get("data") or [] if str(item["id"]) == self.advertiser_id]
@@ -176,10 +176,7 @@ class Criteo(il.Source):
             raise RuntimeError(
                 f"Criteo does not list advertiser {self.advertiser_id}: the connection no longer sees it"
             )
-        advertiser = await self.connection.advertiser(self.advertiser_id)
-        # the marketplace advertiser repeats the id and name; /advertisers/me's are kept
-        details = {key: value for key, value in advertiser.items() if key not in ("id", "advertiserName")}
-        return [{**details, **row} for row in _snapshot_rows(resources, context.partition_date)]
+        return _snapshot_rows(resources, context.partition_date)
 
     @il.asset(
         schema=Campaigns,

@@ -24,7 +24,6 @@ import interloper as il
 import pandas as pd
 import pytest
 from interloper.dag import DAG, DAGSpec
-from interloper.errors import AssetError
 from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
@@ -96,54 +95,38 @@ class TestSpecRoundtrip:
         TableData.from_data(normalized).reconcile(CampaignsStats)  # must not raise
 
 
-ADVERTISER_INFO_PATH = "/2026-07/marketing-solutions/marketplace-performance-outcomes/advertisers/123"
-ADVERTISER_INFO: dict[str, Any] = {
-    "id": 123,
-    "advertiserName": "Example",
-    "currencyName": "CHF",
-    "timeZoneId": "Europe/Zurich",
-}
-
-
-def _report_query(advertiser_info: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
-    """Run the campaign report against a mock Criteo answering *advertiser_info* for the advertiser.
+def _report_query(**fields: Any) -> dict[str, Any]:
+    """Run the campaign report of a source configured with *fields* against a mock Criteo.
 
     Returns:
-        The paths called, in order, and the report request's JSON body.
+        The report request's JSON body.
     """
     requests: list[httpx2.Request] = []
 
     def handler(request: httpx2.Request) -> httpx2.Response:
         requests.append(request)
-        if request.url.path == ADVERTISER_INFO_PATH:
-            return httpx2.Response(200, json=advertiser_info)
         return httpx2.Response(200, json={"Rows": []})
 
     connection = CriteoConnection(id="criteo", client_id="cid", client_secret="x", refresh_token="x")
     connection.__dict__["client"] = il.AsyncRESTClient(constants.BASE_URL, transport=httpx2.MockTransport(handler))
-    source = Criteo(id="src-1", advertiser_id="123", connection=connection)
+    source = Criteo(id="src-1", advertiser_id="123", connection=connection, **fields)
     asset = next(a for a in source.assets if type(a).key == "campaigns_stats")
     window = il.TimePartition(value=dt.date(2026, 10, 26)).window
     asyncio.run(asset.data(context=il.ExecutionContext(asset, window)))
-    return [request.url.path for request in requests], json.loads(requests[-1].content)
+    assert [request.url.path for request in requests] == ["/2026-07/statistics/report"]
+    return json.loads(requests[0].content)
 
 
 class TestReportCurrencyAndDays:
-    """A report is requested in the advertiser's own currency and time zone, never a fixed one."""
+    """A report is requested in euros, since Criteo states no advertiser's currency, and in the source's days."""
 
-    def test_the_report_names_the_advertisers_currency_and_time_zone(self):
-        paths, query = _report_query(ADVERTISER_INFO)
-        assert paths == [ADVERTISER_INFO_PATH, "/2026-07/statistics/report"]
-        assert (query["currency"], query["timezone"]) == ("CHF", "Europe/Zurich")
+    def test_the_report_is_in_euros_and_utc_days_by_default(self):
+        query = _report_query()
+        assert (query["currency"], query["timezone"]) == ("EUR", "UTC")
 
-    def test_an_advertiser_without_a_time_zone_is_reported_in_criteos_default(self):
-        _, query = _report_query({**ADVERTISER_INFO, "timeZoneId": None})
-        assert query["currency"] == "CHF"
-        assert "timezone" not in query
-
-    def test_an_advertiser_without_a_currency_fails_the_report(self):
-        with pytest.raises(AssetError, match="no currency for advertiser 123"):
-            _report_query({**ADVERTISER_INFO, "currencyName": None})
+    def test_the_report_days_are_in_the_time_zone_the_source_sets(self):
+        query = _report_query(timezone="Europe/Zurich")
+        assert (query["currency"], query["timezone"]) == ("EUR", "Europe/Zurich")
 
 
 class TestApiVersion:
@@ -156,8 +139,6 @@ class TestApiVersion:
             requests.append(request)
             if request.url.path.endswith("/advertisers/me"):
                 return httpx2.Response(200, json={"data": [{"id": "123", "attributes": {"advertiserName": "Example"}}]})
-            if request.url.path.endswith("/advertisers/123"):
-                return httpx2.Response(200, json=ADVERTISER_INFO)
             return httpx2.Response(200, json={"Rows": [{"Day": "2026-10-26", "CampaignId": "7"}]})
 
         connection = CriteoConnection(id="criteo", client_id="cid", client_secret="x", refresh_token="x")
@@ -169,12 +150,8 @@ class TestApiVersion:
         rows = asyncio.run(asset.data(context=il.ExecutionContext(asset, partition.window)))
         advertisers = asyncio.run(connection.advertisers())
 
-        assert [request.url.path for request in requests] == [
-            ADVERTISER_INFO_PATH,
-            "/2026-07/statistics/report",
-            "/2026-07/advertisers/me",
-        ]
-        assert json.loads(requests[1].content)["dimensions"] == ["Day", "CampaignId"]
+        assert [request.url.path for request in requests] == ["/2026-07/statistics/report", "/2026-07/advertisers/me"]
+        assert json.loads(requests[0].content)["dimensions"] == ["Day", "CampaignId"]
         assert rows == [{"Day": "2026-10-26", "CampaignId": "7"}]
         assert advertisers == [{"id": "123", "name": "Example"}]
 
@@ -293,10 +270,8 @@ class TestEntityAssets:
         with pytest.raises(RuntimeError, match="does not list advertiser 123"):
             await _snapshot(source, "advertisers")
 
-    async def test_the_advertiser_is_the_sources_own_with_its_currency_and_time_zone(self):
+    async def test_the_advertiser_is_the_sources_own(self):
         def handler(request: httpx2.Request) -> httpx2.Response:
-            if request.url.path == ADVERTISER_INFO_PATH:
-                return httpx2.Response(200, json=ADVERTISER_INFO)
             assert request.url.path == "/2026-07/advertisers/me"
             resources = [
                 {"id": "999", "type": "Advertiser", "attributes": {"advertiserName": "Other"}},
@@ -311,8 +286,6 @@ class TestEntityAssets:
             "type": "Advertiser",
             "meta": '{"k": 1}',
             "advertiser_name": "Example",
-            "currency_name": "CHF",
-            "time_zone_id": "Europe/Zurich",
         }
 
     async def test_campaigns_are_searched_by_advertiser_and_flattened(self):
