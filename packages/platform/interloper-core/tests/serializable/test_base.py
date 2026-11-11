@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import warnings
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -33,15 +32,12 @@ class FakeRoundTripDestination(il.MemoryDestination):
     """A destination a decorator rebuilds."""
 
 
-with warnings.catch_warnings():
-    warnings.filterwarnings("ignore", message=r'Field name "name" in "ShadowingSerializable" shadows an attribute')
+class FakeNamedSerializable(Serializable):
+    """Declares fields named after settings a component carries."""
 
-    class ShadowingSerializable(Serializable):
-        """Declares a ``name`` data field that shadows the parent ClassVar."""
-
-        alpha: str | None = None
-        name: str | None = None
-        beta: str | None = None
+    alpha: str | None = None
+    name: str | None
+    key: str | None
 
 
 class RefConn(il.Connection):
@@ -145,61 +141,19 @@ class TestSubclassScopedConstruction:
         assert instance.text == "abc"
 
 
-class TestFieldOrdering:
-    """A field shadowing a parent ClassVar keeps its declaration position."""
+class TestFieldNames:
+    """``Serializable`` declares no settings, so a field may take any name."""
 
-    def test_model_fields_keep_declaration_order(self):
-        assert list(ShadowingSerializable.model_fields) == ["alpha", "name", "beta"]
+    def test_fields_named_like_component_settings_are_declared_as_written(self):
+        required = {name for name, field in FakeNamedSerializable.model_fields.items() if field.is_required()}
 
-    def test_dump_order_matches_declaration(self):
-        assert list(ShadowingSerializable(name="x").model_dump()) == ["alpha", "name", "beta"]
+        assert list(FakeNamedSerializable.model_fields) == ["alpha", "name", "key"]
+        assert required == {"name", "key"}
 
-    def test_subclass_appends_new_fields_after_inherited(self):
-        class Extended(ShadowingSerializable):
-            gamma: str | None = None
+    def test_they_roundtrip_through_a_spec(self):
+        rebuilt = FakeNamedSerializable.from_spec(FakeNamedSerializable(name="x", key="k").to_spec())
 
-        assert list(Extended.model_fields) == ["alpha", "name", "beta", "gamma"]
-
-    def test_classvars_untouched_by_shadowing_field(self):
-        assert ShadowingSerializable.key == "shadowing_serializable"
-        assert ShadowingSerializable(name="x").name == "x"
-
-    def test_config_schema_lists_the_most_specific_fields_first(self):
-        class Middle(ShadowingSerializable):
-            gamma: str | None = None
-
-        class Leaf(Middle):
-            delta: str | None = None
-            alpha: str | None = None
-
-        assert list(Leaf.config_schema()["properties"]) == ["delta", "alpha", "gamma", "name", "beta"]
-
-    def test_config_schema_is_built_once_per_class(self, monkeypatch):
-        class Cached(ShadowingSerializable):
-            gamma: str | None = None
-
-        builds = []
-        generate = Cached.model_json_schema
-        monkeypatch.setattr(Cached, "model_json_schema", lambda: builds.append(True) or generate())
-
-        Cached.config_schema()
-        Cached.config_schema()
-
-        assert len(builds) == 1
-
-    def test_config_schema_hands_out_a_copy(self):
-        class Copied(ShadowingSerializable):
-            gamma: str | None = None
-
-        Copied.config_schema()["properties"].pop("gamma")
-
-        assert "gamma" in Copied.config_schema()["properties"]
-
-    def test_spec_roundtrip_with_shadowing_field(self):
-        rebuilt = ShadowingSerializable.from_spec(ShadowingSerializable(name="x").to_spec())
-        assert type(rebuilt) is ShadowingSerializable
-        assert rebuilt.name == "x"
-        assert type(rebuilt).key == "shadowing_serializable"
+        assert (rebuilt.name, rebuilt.key) == ("x", "k")
 
 
 class TestStrictInit:
@@ -484,10 +438,21 @@ class TestSortSettings:
         ):
             il.Connection._sort_settings({"oauth": None})
 
-    def test_a_schema_routes_its_key(self):
-        entries, _ = il.Schema._sort_settings({"key": "custom"})
+    def test_a_name_both_a_classvar_and_a_field_is_refused(self):
+        class FakeSetting(Serializable):
+            """Declares a setting."""
 
-        assert entries == {"key": "custom"}
+            label: ClassVar[str] = ""
+
+        with pytest.warns(UserWarning, match=r"shadows an attribute"):
+
+            class FakeAmbiguous(FakeSetting):
+                """Redeclares the setting as a field."""
+
+                label: str = "field-default"
+
+        with pytest.raises(TypeError, match=r"FakeAmbiguous declares 'label' both as a ClassVar and a field"):
+            FakeAmbiguous._sort_settings({"label": "Given"})
 
 
 class TestFromInit:

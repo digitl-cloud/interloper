@@ -9,10 +9,12 @@ single per-kind authority every kind-level question reads from.
 
 from __future__ import annotations
 
+import inspect
 import sys
 import uuid
 from collections.abc import Mapping
 from copy import deepcopy
+from functools import cache
 from typing import TYPE_CHECKING, Any, ClassVar, ForwardRef
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
@@ -24,11 +26,13 @@ from interloper.component.relation import ComponentIdentity, Relation, unwrap_op
 from interloper.errors import ConfigError
 from interloper.registry import Registry
 from interloper.serializable.base import IgnoredDescriptor, Serializable, SerializationContext, Spec
+from interloper.utils.annotations import is_classvar
 from interloper.utils.text import to_label, to_snake_case
 
 if TYPE_CHECKING:
     from interloper.catalog.base import Catalog
     from interloper.partitioning.base import PartitionWindow
+    from interloper.serializable.body import ClassBody
 
 
 # -- Registry ------------------------------------------------------------------
@@ -92,8 +96,9 @@ class Component(Serializable):
     Every catalog citizen extends ``Component``. On top of
     `Serializable` it provides:
 
-    - **Identity**: ``kind`` (class-level category), ``id`` (instance-level,
-      overridable) and ``identity``, the pair relation matching reads.
+    - **Identity**: ``kind`` (class-level category), ``key`` (class-level,
+      its catalog key), ``id`` (instance-level, overridable) and
+      ``identity``, the pair relation matching reads.
     - **Relations**: one ``relations`` map, name to
       `Relation`, collected from the
       class body and bound per instance.
@@ -107,6 +112,9 @@ class Component(Serializable):
     model_config = ConfigDict(arbitrary_types_allowed=True, ignored_types=(IgnoredDescriptor, Relation))
 
     kind: ClassVar[str] = ""
+    key: ClassVar[str] = ""
+    name: ClassVar[str] = ""
+    internal_fields: ClassVar[frozenset[str]] = frozenset()
     icon: ClassVar[str] = ""
     maturity: ClassVar[Maturity] = Maturity.STABLE
     group: ClassVar[str | None] = None
@@ -122,18 +130,33 @@ class Component(Serializable):
     # -- Construction ----------------------------------------------------------
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Auto-derive ``kind``, collect the class's relations and validate its settings.
+        """Refuse a field named after a setting, derive ``key`` and ``kind``, collect the class's relations.
 
-        ``kind`` is set only for direct children of ``Component``
-        (``Source``, ``Asset``, ``Config``, ...).  Further subclasses
-        inherit their parent's ``kind`` unless they explicitly declare one.
-        (``key`` derivation and the check of the settings the class body
-        declares come from `Serializable`.)
+        A component's fields and settings never share a name: the setting
+        describes the class, the field configures an instance, and a
+        decorator could not tell which one it sets.
+
+        ``key`` is the snake_cased class name unless declared. ``kind`` is
+        set only for direct children of ``Component`` (``Source``,
+        ``Asset``, ``Config``, ...). Further subclasses inherit their
+        parent's ``kind`` unless they explicitly declare one. (The check of
+        the settings the class body declares comes from `Serializable`.)
 
         Args:
             **kwargs: Class-creation keyword arguments, passed through to ``super()``.
+
+        Raises:
+            TypeError: If the class body declares a field named after a setting it inherits.
         """
         super().__init_subclass__(**kwargs)
+        for name, hint in inspect.get_annotations(cls).items():
+            if name in cls.__class_vars__ and not is_classvar(hint):
+                raise TypeError(
+                    f"{cls.__name__}.{name} is a field named after the '{name}' setting; "
+                    f"a component's fields and settings never share a name"
+                )
+        if "key" not in cls.__dict__:
+            cls.key = to_snake_case(cls.__name__)
         if "kind" not in cls.__dict__ and any(base is Component for base in cls.__bases__):
             cls.kind = to_snake_case(cls.__name__)
         cls._collect()
@@ -244,6 +267,25 @@ class Component(Serializable):
             object.__setattr__(self, name, value)
             return
         super().__setattr__(name, value)
+
+    @classmethod
+    def build_class(cls, body: ClassBody, **settings: Any) -> type[Self]:
+        """Build a new class from a decorated target's body and a decorator's settings.
+
+        A target already extending this class is the same declaration, not a
+        new one: the class built over it keeps its key, so a key declared in
+        the target's body survives a decorator that sets none.
+
+        Args:
+            body: What the decorated target contributes.
+            **settings: The decorator's settings (see `_sort_settings`).
+
+        Returns:
+            The new class.
+        """
+        if body.base is not None:
+            settings = {"key": cls.key, **settings}
+        return super().build_class(body, **settings)
 
     # -- Identity --------------------------------------------------------------
 
@@ -743,6 +785,46 @@ class Component(Serializable):
             state_schema=cls.state_model.model_json_schema() if cls.state_model else {},
             relations=dict(cls.relations),
         )
+
+    @classmethod
+    def config_schema(cls) -> dict[str, Any]:
+        """JSON Schema of the class's user-configurable fields.
+
+        Properties are listed most specific first: the class's own fields, then
+        each ancestor's, closest first, each in declaration order. Pydantic
+        lists inherited fields first, which would open every form with what a
+        whole kind shares (a source's dataset, a job's retry) rather than with
+        what defines the component; forms render in property order.
+
+        Returns:
+            The stripped schema, or ``{}`` when no configurable field remains,
+            as a copy the caller is free to adjust.
+        """
+        return deepcopy(cls._config_schema())
+
+    @classmethod
+    @cache
+    def _config_schema(cls) -> dict[str, Any]:
+        """Build the schema `config_schema` hands out, once per class.
+
+        A class's fields are fixed once it is created, while every catalog
+        build defines its classes again: generating the schema per call would
+        put pydantic's schema generation on every build.
+
+        Returns:
+            The stripped schema, or ``{}`` when no configurable field remains.
+        """
+        from interloper.resource.fields import strip_internal_fields
+
+        raw = cls.model_json_schema() if hasattr(cls, "model_json_schema") else {}
+        schema = strip_internal_fields(raw, extra=cls.internal_fields)
+        properties = schema.get("properties")
+        if not properties:
+            return {}
+        declared = [name for base in cls.__mro__ for name in inspect.get_annotations(base) if name in properties]
+        order = list(dict.fromkeys([*(name for name in properties if name not in declared), *declared]))
+        schema["properties"] = {name: properties[name] for name in order}
+        return schema
 
     # -- Settings --------------------------------------------------------------
 

@@ -24,6 +24,7 @@ from interloper.runner.subscription import RunSubscription
 from interloper.telemetry import attributes
 from interloper.telemetry.propagation import context_from_env, extract_metadata, inject_metadata
 from interloper.telemetry.tracer import tracer
+from interloper.utils.text import to_snake_case
 
 if TYPE_CHECKING:
     from interloper.dag.base import DAG
@@ -453,13 +454,13 @@ class Run(ABC):
         )
 
     def _span_attributes(self) -> dict[str, str]:
-        """The run span's attributes: the metadata's, the runner's key and the window.
+        """The run span's attributes: the metadata's, the runner's snake_cased class name and the window.
 
         Returns:
             The attributes.
         """
         span_attributes = attributes.from_metadata(self.metadata)
-        span_attributes[attributes.RUNNER_TYPE] = self.runner.key
+        span_attributes[attributes.RUNNER_TYPE] = to_snake_case(type(self.runner).__name__)
         if self.window is not None:
             span_attributes[attributes.PARTITION] = str(self.window)
         return span_attributes
