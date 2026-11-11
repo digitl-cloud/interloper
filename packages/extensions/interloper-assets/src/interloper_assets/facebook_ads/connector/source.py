@@ -183,54 +183,43 @@ def _get_custom_audiences(
     return [audience._json for audience in account.get_custom_audiences(fields=fields, params=params)]
 
 
-def _snapshot_params(entity: Any) -> dict[str, Any]:
-    """The edge parameters an entity snapshot reads with: every status but deleted, in pages of 100.
+def _snapshot_params() -> dict[str, Any]:
+    """The edge parameters an entity snapshot reads with: live objects, in pages of 100.
 
-    Used by the ``campaigns``, ``adsets`` and ``ads`` assets. Graph API edges
-    leave out archived objects unless their status is asked for, and those
-    objects still carry spend in the reports, so every effective status the
-    SDK knows for the entity is requested except ``DELETED``: the ad account
-    edges reject it with error 100/1815001 ("Cannot request deleted objects"),
-    so a deleted object stays out of the snapshot and its dimension row comes
-    from the reports. Pages of 100 rather than the default 25 cut the calls
-    on large accounts; a page too heavy for Facebook is halved by the request
-    engine.
-
-    Args:
-        entity: The SDK class of the objects read, such as ``Ad``.
+    Used by the ``campaigns``, ``adsets`` and ``ads`` assets. No status is
+    asked for, so the edges return what Graph returns by default: every
+    object but the archived and deleted ones. Deleted objects cannot be asked
+    for at all (error 100/1815001), and archived ones are not worth it: they
+    carry almost no spend, yet on a large account they outnumber the live
+    objects several times over and multiply a snapshot that Facebook's
+    per-account rate limit already makes slow. An archived object keeps the
+    last row a snapshot read while it was live; one archived before the
+    first snapshot gets its dimension row from the reports. Pages of 100
+    rather than the default 25 cut the calls; a page too heavy for Facebook
+    is halved by the request engine, in this very mapping, hence a new one
+    per read.
 
     Returns:
         The ``params`` of the edge call.
     """
-    statuses = [
-        value
-        for name, value in vars(entity.EffectiveStatus).items()
-        if not name.startswith("_") and value != entity.EffectiveStatus.deleted
-    ]
-    return {"effective_status": statuses, "limit": 100}
+    return {"limit": 100}
 
 
 def _get_campaigns(connection: FacebookAdsConnection, account_id: str) -> list[dict]:
-    from facebook_business.adobjects.campaign import Campaign
-
     account = _account(connection, account_id)
-    campaigns = account.get_campaigns(fields=constants.CAMPAIGN_ENTITY_FIELDS, params=_snapshot_params(Campaign))
+    campaigns = account.get_campaigns(fields=constants.CAMPAIGN_ENTITY_FIELDS, params=_snapshot_params())
     return [campaign._json for campaign in campaigns]
 
 
 def _get_ads(connection: FacebookAdsConnection, account_id: str) -> list[dict]:
-    from facebook_business.adobjects.ad import Ad
-
     account = _account(connection, account_id)
-    ads = account.get_ads(fields=constants.AD_ENTITY_FIELDS, params=_snapshot_params(Ad))
+    ads = account.get_ads(fields=constants.AD_ENTITY_FIELDS, params=_snapshot_params())
     return [ad.export_all_data() for ad in ads]
 
 
 def _get_adsets(connection: FacebookAdsConnection, account_id: str) -> list[dict]:
-    from facebook_business.adobjects.adset import AdSet
-
     account = _account(connection, account_id)
-    adsets = account.get_ad_sets(fields=constants.ADSET_ENTITY_FIELDS, params=_snapshot_params(AdSet))
+    adsets = account.get_ad_sets(fields=constants.ADSET_ENTITY_FIELDS, params=_snapshot_params())
     return [adset.export_all_data() for adset in adsets]
 
 
