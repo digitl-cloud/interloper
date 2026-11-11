@@ -34,7 +34,7 @@ x-interloper-env: &interloper-env
   # the scheduler), so they report their events to the API at
   # host.docker.internal:3001 (the published port) — they're not on this
   # compose network, and hold no database credentials. Both use the scheduler
-  # image (built with the `docker` extra). Only the scheduler acts on these (it
+  # image. Only the scheduler acts on these (it
   # runs the worker/reaper); api/seed ignore them — and only the scheduler image
   # carries interloper-docker.
   INTERLOPER_LAUNCHER_CONFIG: '{"image":"interloper-scheduler:dev"}'
@@ -135,10 +135,6 @@ services:
       context: ..
       dockerfile: dockerfile
       target: scheduler
-      args:
-        # Install interloper-docker so the Docker launcher + runner are available
-        # (build_launcher does `from interloper_docker import DockerLauncher`).
-        SCHEDULER_EXTRAS: docker
     image: interloper-scheduler:dev
     depends_on:
       seed:

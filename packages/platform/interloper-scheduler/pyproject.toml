@@ -14,10 +14,6 @@ dependencies = [
     "croniter>=5.0.0",
 ]
 
-[project.optional-dependencies]
-docker = ["interloper-docker"]
-k8s = ["interloper-k8s"]
-
 [project.entry-points."interloper.cli"]
 scheduler = "interloper_scheduler.cli:register_scheduler"
 
@@ -31,8 +27,6 @@ build-backend = "uv_build"
 [tool.uv.sources]
 interloper-core = { workspace = true }
 interloper-db = { workspace = true }
-interloper-docker = { workspace = true }
-interloper-k8s = { workspace = true }
 
 # ###############
 # RUFF

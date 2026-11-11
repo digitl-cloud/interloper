@@ -41,37 +41,37 @@
 #
 # Build args carry what "loaded" means and are the single source of truth for
 # it: the Makefile and the publish workflow pass none, so these defaults are
-# what ships. The slim stages declare no extras ARG at all, so none of this
-# can reach them (an ARG is only in scope where it is redeclared).
+# what ships. The slim stages declare none of them, so none of this can reach
+# them (an ARG is only in scope where it is redeclared).
 #
-#   CORE_EXTRAS       comma-separated interloper-core extras
-#                     (default: aws,azure,clickhouse,databricks,duckdb,google-cloud,slack,snowflake,sql).
-#                     Each extra maps to --package interloper-{name}.
-#   ASSETS_EXTRAS     comma-separated interloper-assets extras (default: bing,facebook,google)
-#                     Each extra maps to --extra {name} on interloper-assets.
-#                     Pass "" to disable.
-#   SCHEDULER_EXTRAS  comma-separated interloper-scheduler extras (default: docker,k8s).
-#                     Each extra pulls in the corresponding launcher/runner
-#                     package; the loaded image carries both, and
-#                     launcher.type picks between them at runtime.
-#   API_EXTRAS        comma-separated interloper-api extras (default: agent).
-#                     agent bundles interloper-agent so the /agent routes
-#                     mount; agent.enabled still gates them at runtime.
-#   COMMON_EXTRAS     comma-separated extras applied unscoped (default:
-#                     otel,postgres). Each maps to --extra {name}, applied to
-#                     whichever selected packages carry it: otel lands the
-#                     SDK/exporters via core plus the FastAPI/SQLAlchemy
-#                     instrumentors via api/db where those packages are in
-#                     the image; postgres lands the SQL destination's driver
-#                     via interloper-sql. uv refuses an extra no selected
-#                     package defines, so postgres needs sql in CORE_EXTRAS.
-#                     Pass "" to disable.
+#   COMPONENT_PACKAGES  comma-separated packages of destinations and hooks,
+#                       with their connections, that every loaded image
+#                       carries so its catalog can name them (default: all
+#                       nine in packages/extensions). Each maps to
+#                       --package {name}. The ready-made sources come from
+#                       interloper-assets, which each stage names itself
+#                       since its extras differ by role, and the scheduler
+#                       names its two launcher packages.
+#   ASSETS_EXTRAS       comma-separated interloper-assets extras (default: bing,facebook,google)
+#                       Each extra maps to --extra {name} on interloper-assets.
+#                       Pass "" to disable.
+#   API_EXTRAS          comma-separated interloper-api extras (default: agent).
+#                       agent bundles interloper-agent so the /agent routes
+#                       mount; agent.enabled still gates them at runtime.
+#   COMMON_EXTRAS       comma-separated extras applied unscoped (default:
+#                       otel,postgres). Each maps to --extra {name}, applied to
+#                       whichever selected packages carry it: otel lands the
+#                       SDK/exporters via core plus the FastAPI/SQLAlchemy
+#                       instrumentors via api/db where those packages are in
+#                       the image; postgres lands the SQL destination's driver
+#                       via interloper-sql. uv refuses an extra no selected
+#                       package defines, so postgres needs interloper-sql in
+#                       COMPONENT_PACKAGES. Pass "" to disable.
 #
 # ================================================================
 
-ARG CORE_EXTRAS=aws,azure,clickhouse,databricks,duckdb,google-cloud,slack,snowflake,sql
+ARG COMPONENT_PACKAGES=interloper-aws,interloper-azure,interloper-clickhouse,interloper-databricks,interloper-duckdb,interloper-google-cloud,interloper-slack,interloper-snowflake,interloper-sql
 ARG ASSETS_EXTRAS=bing,facebook,google
-ARG SCHEDULER_EXTRAS=docker,k8s
 ARG API_EXTRAS=agent
 ARG COMMON_EXTRAS=otel,postgres
 
@@ -136,20 +136,21 @@ RUN apt-get update \
 # One image runs cron + queue worker + reaper in the same process. It carries
 # both launchers; launcher.type picks between them at runtime.
 FROM base AS build-scheduler
-ARG CORE_EXTRAS
+ARG COMPONENT_PACKAGES
 ARG ASSETS_EXTRAS
-ARG SCHEDULER_EXTRAS
 ARG COMMON_EXTRAS
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    docker/uv-sync.sh --frozen interloper-core interloper-assets interloper-db interloper-scheduler
+    docker/uv-sync.sh --frozen interloper-core interloper-assets interloper-db interloper-scheduler \
+        interloper-docker interloper-k8s
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/uv \
-    docker/uv-sync.sh interloper-core interloper-assets interloper-db interloper-scheduler
+    docker/uv-sync.sh interloper-core interloper-assets interloper-db interloper-scheduler \
+        interloper-docker interloper-k8s
 
 
 # ── scheduler-slim ────────────────────────────────────────────
-# No extras ARG is declared here, so none is in scope and the venv gets the
+# No build ARG is declared here, so none is in scope and the venv gets the
 # named packages alone: the in-process launcher, and no sources to run.
 FROM base AS build-scheduler-slim
 
@@ -165,7 +166,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # mini-DAG via `interloper run --format inline`. No DB, no scheduler,
 # no launcher: core + assets + destinations + pandas.
 FROM base AS build-core
-ARG CORE_EXTRAS
+ARG COMPONENT_PACKAGES
 ARG ASSETS_EXTRAS
 ARG COMMON_EXTRAS
 
@@ -194,7 +195,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # remain importable from the catalog, but the heavy SDK extras
 # (bing/google/facebook) are skipped.
 FROM base AS build-api
-ARG CORE_EXTRAS
+ARG COMPONENT_PACKAGES
 ARG API_EXTRAS
 ARG COMMON_EXTRAS
 ENV ASSETS_EXTRAS=""
@@ -221,7 +222,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # importable but the heavy SDK extras are skipped. pydantic-ai is never
 # pulled: the shared tool logic lives in interloper-toolkit.
 FROM base AS build-mcp
-ARG CORE_EXTRAS
+ARG COMPONENT_PACKAGES
 ARG COMMON_EXTRAS
 ENV ASSETS_EXTRAS=""
 

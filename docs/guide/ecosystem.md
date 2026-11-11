@@ -5,20 +5,14 @@ own README. All are versioned and released together. In the repository they sit 
 `packages/platform/` (the core and the platform) and `packages/extensions/` (the framework
 extensions).
 
-## Extras of the core
+Install each by name next to the core:
 
-| Extra | Adds |
-|-------|------|
-| `interloper-core[otel]` | The OpenTelemetry SDK, OTLP exporters (gRPC and HTTP) and httpx2 instrumentation. |
-| `interloper-core[aws]` | Pulls in `interloper-aws`. |
-| `interloper-core[azure]` | Pulls in `interloper-azure`. |
-| `interloper-core[google-cloud]` | Pulls in `interloper-google-cloud`. |
-| `interloper-core[duckdb]` | Pulls in `interloper-duckdb`. |
-| `interloper-core[slack]` | Pulls in `interloper-slack`. |
-| `interloper-core[sql]` | Pulls in `interloper-sql[postgres]`: the SQL destination with its PostgreSQL driver. |
-| `interloper-core[snowflake]` | Pulls in `interloper-snowflake`. |
-| `interloper-core[clickhouse]` | Pulls in `interloper-clickhouse`. |
-| `interloper-core[databricks]` | Pulls in `interloper-databricks`. |
+```sh
+pip install interloper-core interloper-duckdb
+```
+
+The core's one extra, `otel`, adds the OpenTelemetry SDK and exporters, as described in
+[Telemetry](telemetry.md).
 
 ## Framework extensions
 
