@@ -24,15 +24,13 @@ from interloper_scheduler.launcher import LAUNCHERS, InProcessLauncher, Launcher
 class TestRegistry:
     """Entry-point discovery of launchers."""
 
-    def test_all_workspace_launchers_are_discovered(self):
-        # Every launcher — including the built-in — registers through the
-        # entry-point group; this asserts discovery end to end.
-        assert {"in_process", "docker", "kubernetes"} <= set(LAUNCHERS.keys())
+    def test_the_built_in_launcher_is_discovered(self):
+        # The built-in registers through the entry-point group like every
+        # other launcher: this asserts discovery end to end.
+        assert "in_process" in LAUNCHERS
 
     def test_registry_maps_keys_to_classes(self):
         assert LAUNCHERS["in_process"] is InProcessLauncher
-        assert LAUNCHERS["docker"].__name__ == "DockerLauncher"
-        assert LAUNCHERS["kubernetes"].__name__ == "KubernetesLauncher"
 
 
 class TestFromSettings:
@@ -50,7 +48,7 @@ class TestFromSettings:
         assert launcher._runner_type == "serial"
 
     def test_unknown_type_raises_actionable_error(self):
-        with pytest.raises(ConfigError, match=r"Unknown launcher: 'nomad'.*available.*docker.*in_process.*kubernetes"):
+        with pytest.raises(ConfigError, match=r"Unknown launcher: 'nomad'.*available.*in_process"):
             Launcher.from_settings(
                 LauncherSettings(type="nomad"),
                 server=ServerSettings(),

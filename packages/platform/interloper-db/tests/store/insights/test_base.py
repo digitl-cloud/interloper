@@ -14,9 +14,6 @@ from uuid import UUID, uuid4
 import interloper as il
 import pytest
 from interloper.errors import ConfigError
-from interloper_assets.demo.assets import demo_asset
-from interloper_assets.demo.basic.source import DemoSource
-from interloper_assets.demo.monthly.source import DemoMonthlySource
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, col
@@ -47,6 +44,18 @@ _ORG = uuid4()
 _T0 = dt.datetime(2026, 6, 4, 12, tzinfo=dt.timezone.utc)
 
 
+class DemoSource(il.Source):
+    """A daily source of two assets, ``b`` reading ``a``."""
+
+    @il.asset(partitioning=il.TimePartitionConfig(column="date"))
+    def a(self) -> list[dict[str, Any]]:
+        return []
+
+    @il.asset(partitioning=il.TimePartitionConfig(column="date"))
+    def b(self, a: il.Upstream) -> list[dict[str, Any]]:
+        return []
+
+
 @il.source(key="snapshot_source")
 class SnapshotSource(il.Source):
     """A source whose one asset observes the vendor's current state."""
@@ -73,7 +82,7 @@ def store() -> Iterator[Store]:
     for model in (*tenant, Component, ComponentRelation, Backfill, Run, Event, Execution, Quota, Usage):
         model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
     try:
-        yield Store(catalog=il.Catalog.from_assets([DemoSource, DemoMonthlySource, SnapshotSource, demo_asset]))
+        yield Store(catalog=il.Catalog.from_assets([DemoSource, SnapshotSource]))
     finally:
         engine.dispose()
         engine_module._engine = None

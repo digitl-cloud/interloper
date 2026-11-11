@@ -11,7 +11,7 @@ import pytest
 from interloper.events import Event, EventType
 from interloper.operation import OperationResult
 from interloper.partitioning import TimeGranularity, TimePartition, TimePartitionConfig, TimePartitionWindow
-from interloper.runner import ExecutionStatus
+from interloper.runner import RUNNERS, ExecutionStatus
 from kubernetes import client, config
 from kubernetes.client import (
     V1ContainerState,
@@ -288,3 +288,9 @@ def test_the_run_kind_is_named_after_its_runner():
     from interloper_k8s.runner import KubernetesRun, KubernetesRunner
 
     assert KubernetesRunner.Run is KubernetesRun
+
+
+def test_the_runner_registers_under_kubernetes_and_its_k8s_alias():
+    """Pre-existing configs use ``runner.type=k8s``, so both keys resolve to the runner."""
+    assert RUNNERS["kubernetes"] is KubernetesRunner
+    assert RUNNERS["k8s"] is KubernetesRunner

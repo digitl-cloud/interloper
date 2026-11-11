@@ -1154,39 +1154,26 @@ class TestConform:
         with pytest.raises(SchemaError):
             await users().run_async()
 
-    async def test_dataframe_reconciled_without_normalizer(self):
-        pd = pytest.importorskip("pandas")
-
+    async def test_another_table_type_is_reconciled_in_its_own_type_without_normalizer(self, columnar):
         @il.asset(schema=StrictConformSchema)
         def users() -> Any:
-            return pd.DataFrame([{"userId": 1, "Name": "a"}])  # wrong casing -> extras dropped, nullables filled
+            return columnar({"userId": [1], "Name": ["a"]})  # wrong casing -> extras dropped, nullables filled
 
         result = await users().run_async()
-        assert list(result.columns) == ["user_id", "name"]
-        assert result["user_id"].isna().all()
+        assert isinstance(result, columnar)
+        assert list(result.data) == ["user_id", "name"]
+        assert result.data["user_id"] == [None]
 
-    async def test_strict_rejects_mismatched_dataframe(self):
-        pd = pytest.importorskip("pandas")
+    async def test_strict_rejects_a_mismatched_table_of_another_type(self, columnar):
         from interloper.errors import SchemaError
         from interloper.normalizer import MaterializationStrategy
 
         @il.asset(schema=StrictConformSchema, materialization_strategy=MaterializationStrategy.STRICT)
         def users() -> Any:
-            return pd.DataFrame([{"userId": 1, "Name": "a"}])  # wrong casing -> required fields missing
+            return columnar({"userId": [1], "Name": ["a"]})  # wrong casing -> required fields missing
 
         with pytest.raises(SchemaError):
             await users().run_async()
-
-    async def test_dataframe_with_nan_validates_against_nullable_fields(self):
-        pd = pytest.importorskip("pandas")
-        import numpy as np
-
-        @il.asset(schema=ConformSchema)
-        def users() -> Any:
-            return pd.DataFrame([{"user_id": np.nan, "name": "a"}])
-
-        result = await users().run_async()
-        assert isinstance(result, pd.DataFrame)
 
     async def test_strict_requires_schema(self):
         from interloper.normalizer import MaterializationStrategy

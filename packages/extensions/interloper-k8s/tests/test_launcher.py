@@ -11,6 +11,7 @@ from interloper.catalog import Catalog
 from interloper.settings import LauncherSettings, ReaperSettings, RunnerSettings, ServerSettings
 from interloper_db import RunStatus
 from interloper_db.models import Run
+from interloper_scheduler.launcher import LAUNCHERS
 from kubernetes import client, config
 
 from interloper_k8s.launcher import KubernetesLauncher
@@ -201,3 +202,7 @@ def test_diagnose_reads_the_pods_termination_state(
     launcher._core_v1 = cast(client.CoreV1Api, _PodsCoreV1(pods))
 
     assert launcher.diagnose(uuid4()) == diagnosis
+
+
+def test_the_launcher_registers_under_kubernetes() -> None:
+    assert LAUNCHERS["kubernetes"] is KubernetesLauncher

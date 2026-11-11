@@ -13,8 +13,6 @@ from uuid import UUID, uuid4
 import interloper as il
 import pydantic
 import pytest
-from interloper_assets.demo.assets import demo_asset
-from interloper_assets.demo.basic.source import DemoSource
 from sqlalchemy import Engine
 from sqlmodel import Session
 
@@ -24,6 +22,38 @@ from interloper_db.store import ComponentQuery, RelationQuery, Store
 from interloper_db.store.components import Hydrator
 
 _ORG = uuid4()
+_DAILY = il.TimePartitionConfig(column="date", allow_window=False)
+
+
+class DemoSource(il.Source):
+    """A daily source whose assets form the ``a -> b,c,d -> e`` DAG."""
+
+    hello: str = il.InputField(default="world")
+
+    @il.asset(partitioning=_DAILY)
+    def a(self) -> list[dict]:
+        return []
+
+    @il.asset(partitioning=_DAILY)
+    def b(self, a: il.Upstream) -> list[dict]:
+        return []
+
+    @il.asset(partitioning=_DAILY)
+    def c(self, a: il.Upstream) -> list[dict]:
+        return []
+
+    @il.asset(partitioning=_DAILY)
+    def d(self, a: il.Upstream) -> list[dict]:
+        return []
+
+    @il.asset(partitioning=_DAILY)
+    def e(self, b: il.Upstream, c: il.Upstream, d: il.Upstream) -> list[dict]:
+        return []
+
+
+@il.asset(partitioning=_DAILY)
+def demo_asset() -> list[dict]:
+    return []
 
 
 class ShopConnection(il.Connection):

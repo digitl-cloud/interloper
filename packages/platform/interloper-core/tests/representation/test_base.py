@@ -17,13 +17,9 @@ class TestRegistry:
     """Registry loading: built-ins plus installed entry points."""
 
     def test_rows_is_builtin(self):
+        # Core declares rows as an entry point the way any package declares a
+        # representation, so this is the discovery end to end.
         assert "rows" in REPRESENTATIONS
-
-    def test_entry_points_are_discovered(self):
-        # interloper-pandas is installed in the workspace and declares the
-        # "dataframe" representation as an entry point — this asserts the
-        # discovery mechanism end to end, without any explicit import.
-        assert "dataframe" in REPRESENTATIONS
 
     def test_lookup_by_key(self):
         assert isinstance(REPRESENTATIONS["rows"], RowsRepresentation)
@@ -42,17 +38,16 @@ class TestResolution:
         assert isinstance(table.representation, RowsRepresentation)
         assert table.key == "rows"
 
-    def test_unmatched_data_is_an_explicit_error(self):
-        with pytest.raises(RepresentationError, match=r"No representation matches int.*dataframe.*rows"):
+    def test_unmatched_data_is_an_explicit_error(self, columnar):
+        with pytest.raises(RepresentationError, match=r"No representation matches int; registered: .*columnar.*rows"):
             TableData.from_data(42)
 
     def test_a_dict_is_not_a_table(self):
         with pytest.raises(RepresentationError, match="dict"):
             TableData.from_data({"a": 1})
 
-    def test_dataframes_resolve_to_the_pandas_representation(self):
-        pd = pytest.importorskip("pandas")
-        assert TableData.from_data(pd.DataFrame()).key == "dataframe"
+    def test_a_registered_table_type_resolves_to_its_representation(self, columnar):
+        assert TableData.from_data(columnar()).key == "columnar"
 
     def test_from_data_binds_the_matching_representation(self):
         table = TableData.from_data([{"a": 1}])
@@ -88,20 +83,15 @@ class TestTableData:
         rows = [{"a": 1}]
         assert TableData.from_data(rows).to("rows") is rows
 
-    def test_to_dataframe_builds_from_rows(self):
-        pd = pytest.importorskip("pandas")
-        frame = TableData.from_data([{"a": 1}, {"a": 2}]).to("dataframe")
-        pd.testing.assert_frame_equal(frame, pd.DataFrame({"a": [1, 2]}))
+    def test_to_another_representation_builds_from_rows(self, columnar):
+        assert TableData.from_data([{"a": 1}, {"a": 2}]).to("columnar") == columnar({"a": [1, 2]})
 
-    def test_a_dataframe_to_dataframe_is_the_same_object(self):
-        pd = pytest.importorskip("pandas")
-        frame = pd.DataFrame({"a": [1]})
-        assert TableData.from_data(frame).to("dataframe") is frame
+    def test_a_table_already_in_the_target_representation_is_the_same_object(self, columnar):
+        table = columnar({"a": [1]})
+        assert TableData.from_data(table).to("columnar") is table
 
-    def test_a_dataframe_to_rows_goes_through_rows(self):
-        pd = pytest.importorskip("pandas")
-        frame = pd.DataFrame({"a": [1.0, float("nan")]})
-        assert TableData.from_data(frame).to("rows") == [{"a": 1.0}, {"a": None}]
+    def test_another_representation_to_rows_goes_through_rows(self, columnar):
+        assert TableData.from_data(columnar({"a": [1.0, None]})).to("rows") == [{"a": 1.0}, {"a": None}]
 
     def test_unknown_target_names_the_registry(self):
         with pytest.raises(KeyError, match="'polars' is not registered"):

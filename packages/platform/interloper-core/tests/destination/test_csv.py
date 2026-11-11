@@ -44,12 +44,10 @@ class TestRoundtrip:
         rows = dest.read(context)
         assert rows == [{"date": datetime.date(2024, 1, 1), "clicks": 3, "cost": 1.5, "name": None}]
 
-    def test_dataframe_write_accepted(self, tmp_path):
-        import pandas as pd
-
+    def test_another_table_type_is_written(self, tmp_path, columnar):
         dest = CSVDestination(id="csv", base_path=str(tmp_path))
         context = IOContext(asset=plain_asset())
-        dest.write(context, pd.DataFrame([{"a": 1}]))
+        dest.write(context, columnar({"a": [1]}))
         assert dest.read(context) == [{"a": "1"}]
 
     def test_missing_partition_raises_data_not_found_error(self, tmp_path):

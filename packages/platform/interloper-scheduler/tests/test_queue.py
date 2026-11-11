@@ -8,7 +8,6 @@ from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
-from interloper_assets.demo.basic.source import DemoSource
 from interloper_db import Store
 from interloper_db import engine as engine_module
 from interloper_db.crypto import make_cipher
@@ -21,6 +20,31 @@ from interloper_scheduler.launcher import Launcher
 from interloper_scheduler.queue import QueueController
 
 _ORG = uuid4()
+_DAILY = il.TimePartitionConfig(column="date", allow_window=False)
+
+
+class DemoSource(il.Source):
+    """A daily source whose assets form the ``a -> b,c,d -> e`` DAG."""
+
+    @il.asset(partitioning=_DAILY)
+    def a(self) -> list[dict]:
+        return []
+
+    @il.asset(partitioning=_DAILY)
+    def b(self, a: il.Upstream) -> list[dict]:
+        return []
+
+    @il.asset(partitioning=_DAILY)
+    def c(self, a: il.Upstream) -> list[dict]:
+        return []
+
+    @il.asset(partitioning=_DAILY)
+    def d(self, a: il.Upstream) -> list[dict]:
+        return []
+
+    @il.asset(partitioning=_DAILY)
+    def e(self, b: il.Upstream, c: il.Upstream, d: il.Upstream) -> list[dict]:
+        return []
 
 
 class EmptySource(il.Source):
