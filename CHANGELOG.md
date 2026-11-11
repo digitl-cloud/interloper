@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.130.2 (2026-11-11)
+
+### Bug Fixes
+
+- **assets**: Facebook entity snapshots read live objects only
+  ([`b5d3576`](https://github.com/digitl-cloud/interloper/commit/b5d3576854def7ddd9d593f7993e024ff36eccd3))
+
+
 ## v0.130.1 (2026-11-10)
 
 ### Bug Fixes
