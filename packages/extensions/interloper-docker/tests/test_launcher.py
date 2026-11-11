@@ -10,6 +10,7 @@ import pytest
 from interloper.catalog import Catalog
 from interloper_db import RunStatus
 from interloper_db.models import Run
+from interloper_scheduler.launcher import LAUNCHERS
 
 import interloper_docker.launcher as launcher_module
 from interloper_docker.launcher import DockerLauncher
@@ -144,3 +145,7 @@ def test_a_container_that_cannot_start_is_removed_with_its_token(monkeypatch: py
         launcher.launch(Run(id=uuid4(), org_id=uuid4(), status=RunStatus.DISPATCHED), "ilr_x")
 
     assert container.removed
+
+
+def test_the_launcher_registers_under_docker() -> None:
+    assert LAUNCHERS["docker"] is DockerLauncher

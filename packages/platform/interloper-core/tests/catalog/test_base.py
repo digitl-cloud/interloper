@@ -2,29 +2,86 @@
 
 from __future__ import annotations
 
+from types import ModuleType, SimpleNamespace
+
 import pytest
 
 import interloper as il
 from interloper.asset.base import AssetDefinition
 from interloper.catalog import Catalog
+from interloper.catalog import base as catalog_base
 from interloper.component import Relation
 from interloper.settings import AppSettings
+
+_FRAMEWORK = {"cron_job", "trigger_hook", "webhook_hook"}
+_DAILY = il.TimePartitionConfig(column="date", allow_window=False)
+
+
+class DemoSource(il.Source):
+    """A daily source whose assets form the ``a -> b,c,d -> e`` DAG."""
+
+    @il.asset(partitioning=_DAILY)
+    def a(self) -> list[dict]:
+        return []
+
+    @il.asset(partitioning=_DAILY)
+    def b(self, a: il.Upstream) -> list[dict]:
+        return []
+
+    @il.asset(partitioning=_DAILY)
+    def c(self, a: il.Upstream) -> list[dict]:
+        return []
+
+    @il.asset(partitioning=_DAILY)
+    def d(self, a: il.Upstream) -> list[dict]:
+        return []
+
+    @il.asset(partitioning=_DAILY)
+    def e(self, b: il.Upstream, c: il.Upstream, d: il.Upstream) -> list[dict]:
+        return []
+
+
+class DemoConnection(il.Connection):
+    """Connection the demo destination writes through."""
+
+
+class DemoDestination(il.MemoryDestination):
+    """Destination that needs a connection."""
+
+    connection: DemoConnection
+
+
+class LookupConnection(il.Connection):
+    """Connection the reading source's asset looks values up through."""
+
+
+class ReadingSource(il.Source):
+    """Source whose asset, not the source itself, needs a connection."""
+
+    class Enriched(il.Asset):
+        """Asset reading through the lookup connection."""
+
+        lookup: LookupConnection
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
 
 
 class TestDiscovery:
     """Entry-point discovery of the component universe."""
 
-    def test_discovers_components_from_installed_packages(self):
-        # interloper-assets and interloper-google-cloud declare themselves
-        # under the interloper.components group; this asserts the discovery
-        # end to end, with no package names hardcoded anywhere in core.
-        catalog = Catalog.discover()
-        assert "amazon_ads" in catalog.components
-        assert "bigquery_destination" in catalog.components
+    def test_discovers_the_components_installed_packages_declare(self):
+        # Core declares its jobs and hooks under interloper.components the
+        # way any package declares its own, so it is the discovery end to end.
+        assert _FRAMEWORK <= set(Catalog.discover().components)
 
-    def test_discovers_nested_resources(self):
-        catalog = Catalog.discover()
-        assert "google_cloud_connection" in catalog.components
+    def test_an_entry_naming_a_module_declares_the_component_classes_in_it(self, monkeypatch):
+        module = ModuleType("demo_components")
+        module.__dict__.update(DemoSource=DemoSource, DemoConnection=DemoConnection, helper=len)
+        entry = SimpleNamespace(load=lambda: module)
+        monkeypatch.setattr(catalog_base, "entry_points", lambda group: [entry])
+
+        assert set(Catalog._declared_classes()) == {DemoSource, DemoConnection}
 
 
 class TestFromSettings:
@@ -33,49 +90,37 @@ class TestFromSettings:
     def test_empty_settings_fall_back_to_discovery(self, monkeypatch):
         stub = AppSettings.model_construct(catalog=[])
         monkeypatch.setattr(AppSettings, "get", classmethod(lambda cls: stub))
-        catalog = Catalog.from_settings()
-        assert "amazon_ads" in catalog.components
+        assert Catalog.from_settings().components.keys() == Catalog.discover().components.keys()
 
     def test_configured_paths_narrow(self, monkeypatch):
-        stub = AppSettings.model_construct(catalog=["interloper_assets.demo.basic.source.DemoSource"])
+        stub = AppSettings.model_construct(catalog=[DemoSource.definition().path])
         monkeypatch.setattr(AppSettings, "get", classmethod(lambda cls: stub))
-        catalog = Catalog.from_settings()
-        assert "demo_source" in catalog.components
-        assert "amazon_ads" not in catalog.components
+        assert set(Catalog.from_settings().components) == {"demo_source", *_FRAMEWORK}
 
 
 class TestEnablement:
     """An enabled catalog is the listed classes, their dependencies and the framework."""
 
-    def test_universe_in_discovery(self):
-        components = Catalog.discover().components
-        assert {"cron_job", "trigger_hook", "webhook_hook", "demo_source"} <= set(components)
-
     def test_framework_in_every_catalog(self):
-        components = Catalog.from_paths([]).components
-        assert {"cron_job", "trigger_hook", "webhook_hook"} <= set(components)
-        assert "job" not in components  # the anchor is framework, not content
-        assert "demo_source" not in components  # content is opt-in
+        # Content is opt-in, and the kind anchors are framework, not content.
+        assert set(Catalog.from_paths([]).components) == _FRAMEWORK
 
     def test_dependencies_come_along(self):
-        # BigQueryDestination declares `connection: GoogleCloudConnection`, so
-        # the closure imports that class from the relation's target.
-        catalog = Catalog.from_paths(["interloper_google_cloud.BigQueryDestination"])
-        assert "bigquery_destination" in catalog.components
-        assert "google_cloud_connection" in catalog.components
-        assert "gcs_destination" not in catalog.components
+        # DemoDestination declares `connection: DemoConnection`, so the
+        # closure imports that class from the relation's target.
+        catalog = Catalog.from_paths([DemoDestination.definition().path])
+        assert set(catalog.components) == {"demo_destination", "demo_connection", *_FRAMEWORK}
 
     def test_asset_dependencies_of_a_source_come_along(self):
-        catalog = Catalog.from_paths(["interloper_assets.facebook_ads.connector.source.FacebookAds"])
-        assert "facebook_ads" in catalog.components
-        assert "facebook_ads_connection" in catalog.components
+        catalog = Catalog.from_paths([ReadingSource.definition().path])
+        assert set(catalog.components) == {"reading_source", "lookup_connection", *_FRAMEWORK}
 
     def test_unimportable_paths_are_skipped(self):
-        catalog = Catalog.from_paths(["not_a_module.Nope", "interloper_assets.demo.basic.source.DemoSource"])
+        catalog = Catalog.from_paths(["not_a_module.Nope", DemoSource.definition().path])
         assert "demo_source" in catalog.components
 
     def test_paths_round_trip(self):
-        enabled = Catalog.from_paths(["interloper_google_cloud.BigQueryDestination"])
+        enabled = Catalog.from_paths([DemoDestination.definition().path])
         assert Catalog.from_paths(enabled.to_paths()).components.keys() == enabled.components.keys()
 
 
@@ -122,18 +167,18 @@ class TestSourceOwnedAssets:
     """A source's assets are declared inside it, and resolve by their qualified key."""
 
     def test_asset_key_is_not_a_flat_entry(self):
-        assert Catalog.discover().get("a") is None
+        assert Catalog.from_assets([DemoSource]).get("a") is None
 
     def test_a_qualified_key_resolves_the_owning_declaration(self):
-        definition = Catalog.discover().get("demo_source.a")
+        definition = Catalog.from_assets([DemoSource]).get("demo_source.a")
         assert isinstance(definition, AssetDefinition)
         # The composite path is the point: the flat key cannot name it.
-        assert definition.path == "interloper_assets.demo.basic.source:DemoSource.a"
+        assert definition.path == f"{DemoSource.__module__}:DemoSource.a"
         assert definition.partitioning is not None
 
     @pytest.mark.parametrize("key", ["gone_source.a", "demo_source.not_an_asset", "cron_job.a", "gone_source.cron_job"])
     def test_a_qualified_key_resolves_only_through_a_source_that_declares_it(self, key: str):
-        assert Catalog.discover().get(key) is None
+        assert Catalog.from_assets([DemoSource]).get(key) is None
 
 
 class TestVocabulary:
@@ -160,7 +205,7 @@ class TestVocabulary:
         assert set(catalog.vocabulary("hook", "cron_job")) == {"watches"}
 
     def test_source_owned_asset_resolves_through_its_parent(self):
-        catalog = Catalog.discover()
+        catalog = Catalog.from_assets([DemoSource])
         # The anchor knows only what every asset declares; which upstreams an
         # asset has comes from the source's own declaration. Their keys are
         # bare, which is what scopes them to the parent source.
@@ -175,8 +220,6 @@ class TestVocabulary:
         assert all(not relation.optional for relation in upstreams.values())
 
     def test_a_source_owned_bare_key_binds_the_sibling(self):
-        from interloper_assets.demo.basic.source import DemoSource
-
         # The other half of the parent scoping: the bare keys the catalog
         # reports are the sibling assets the source binds at construction.
         assert DemoSource.sibling_bindings()["e"] == {"b": "b", "c": "c", "d": "d"}

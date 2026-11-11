@@ -43,13 +43,11 @@ class TestRecords:
 
         assert Upstream(asset=Leg(), data=[{"id": 1}]).rows == [{"id": 1}]
 
-    def test_a_dataframe_comes_back_as_rows(self):
-        pd = pytest.importorskip("pandas")
-
+    def test_another_table_type_comes_back_as_rows(self, columnar):
         class Leg(il.Asset):
             """Fixture asset."""
 
-        assert Upstream(asset=Leg(), data=pd.DataFrame([{"id": 1}, {"id": 2}])).rows == [{"id": 1}, {"id": 2}]
+        assert Upstream(asset=Leg(), data=columnar({"id": [1, 2]})).rows == [{"id": 1}, {"id": 2}]
 
     def test_nothing_materialized_is_no_rows(self):
         class Leg(il.Asset):

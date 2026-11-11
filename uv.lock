@@ -2143,7 +2143,6 @@ name = "interloper-agent"
 version = "0.130.2"
 source = { editable = "packages/platform/interloper-agent" }
 dependencies = [
-    { name = "interloper-assets" },
     { name = "interloper-core" },
     { name = "interloper-db" },
     { name = "interloper-toolkit" },
@@ -2152,7 +2151,6 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "interloper-assets", editable = "packages/extensions/interloper-assets" },
     { name = "interloper-core", editable = "packages/platform/interloper-core" },
     { name = "interloper-db", editable = "packages/platform/interloper-db" },
     { name = "interloper-toolkit", editable = "packages/platform/interloper-toolkit" },

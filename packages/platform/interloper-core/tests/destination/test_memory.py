@@ -42,18 +42,15 @@ class TestWindowWrites:
         assert day1 == [{"date": "2024-01-01", "v": 1}]
         assert day2 == [{"date": "2024-01-02", "v": 2}, {"date": "2024-01-02", "v": 3}]
 
-    def test_window_splits_dataframe(self):
-        pd = pytest.importorskip("pandas")
-
+    def test_window_splits_another_table_type(self, columnar):
         dest = MemoryDestination(id="mem")
         window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2))
-        df = pd.DataFrame([{"date": "2024-01-01", "v": 1}, {"date": "2024-01-02", "v": 2}])
-        dest.write(IOContext(asset=partitioned_asset(), window=window), df)
+        table = columnar({"date": ["2024-01-01", "2024-01-02"], "v": [1, 2]})
+        dest.write(IOContext(asset=partitioned_asset(), window=window), table)
 
         part1 = TimePartition(datetime.date(2024, 1, 1))
         day1 = dest.read(IOContext(asset=partitioned_asset(), window=part1.window))
-        assert len(day1) == 1
-        assert day1.iloc[0]["v"] == 1
+        assert day1 == columnar({"date": ["2024-01-01"], "v": [1]})
 
 
 class TestViews:

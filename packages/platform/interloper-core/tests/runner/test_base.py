@@ -26,24 +26,16 @@ class Creds(il.Resource):
 class TestRegistry:
     """Entry-point discovery of runners."""
 
-    def test_all_workspace_runners_are_discovered(self):
-        # Built-ins register through core's own pyproject; docker/k8s through
-        # theirs — asserting the discovery end to end.
-        assert {"async", "serial", "docker", "kubernetes"} <= set(RUNNERS.keys())
+    def test_the_built_in_runners_are_discovered(self):
+        # Core declares its runners through its own pyproject, the way any
+        # package declares its own: this is the discovery end to end.
+        assert {"async", "serial"} <= set(RUNNERS.keys())
         assert "multi_process" not in set(RUNNERS.keys())
 
     def test_registry_maps_keys_to_classes(self):
         registry = dict(RUNNERS.items())
         assert registry["async"] is AsyncRunner
         assert registry["serial"] is SerialRunner
-        assert registry["docker"].__name__ == "DockerRunner"
-        assert registry["kubernetes"].__name__ == "KubernetesRunner"
-
-    def test_k8s_is_a_compat_alias_for_kubernetes(self):
-        # Pre-existing configs use runner.type=k8s; both keys resolve to the
-        # same class so deployed values keep working.
-        registry = dict(RUNNERS.items())
-        assert registry["k8s"] is registry["kubernetes"]
 
     def test_serial_is_the_async_engine_with_one_slot(self):
         # In-process execution is the single async-native engine; ``serial``

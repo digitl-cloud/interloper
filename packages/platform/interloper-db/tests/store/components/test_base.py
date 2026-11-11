@@ -11,10 +11,6 @@ import pytest
 from cryptography.fernet import InvalidToken
 from interloper.errors import CatalogKeyError, ConfigError
 from interloper.partitioning import TimeGranularity
-from interloper_assets.demo.assets import demo_asset
-from interloper_assets.demo.basic.source import DemoSource
-from interloper_assets.demo.monthly.source import DemoMonthlySource
-from interloper_assets.facebook_ads.connection import FacebookAdsConnection
 from sqlalchemy import Engine, event
 from sqlmodel import Session, select
 
@@ -27,6 +23,47 @@ _ORG = uuid4()
 
 
 # -- Test components -----------------------------------------------------------
+
+_DAILY = il.TimePartitionConfig(column="date", allow_window=False)
+
+
+class DemoSource(il.Source):
+    """A daily source whose assets form the ``a -> b,c,d -> e`` DAG."""
+
+    ratio: float = il.InputField(default=0.0)
+
+    @il.asset(partitioning=_DAILY)
+    def a(self) -> list[dict]:
+        return []
+
+    @il.asset(partitioning=_DAILY)
+    def b(self, a: il.Upstream) -> list[dict]:
+        return []
+
+    @il.asset(partitioning=_DAILY)
+    def c(self, a: il.Upstream) -> list[dict]:
+        return []
+
+    @il.asset(partitioning=_DAILY)
+    def d(self, a: il.Upstream) -> list[dict]:
+        return []
+
+    @il.asset(partitioning=_DAILY)
+    def e(self, b: il.Upstream, c: il.Upstream, d: il.Upstream) -> list[dict]:
+        return []
+
+
+class DemoMonthlySource(il.Source):
+    """A source whose one asset is partitioned by month."""
+
+    @il.asset(partitioning=il.TimePartitionConfig(column="date", granularity=TimeGranularity.MONTH))
+    def monthly(self) -> list[dict]:
+        return []
+
+
+@il.asset(partitioning=_DAILY)
+def demo_asset() -> list[dict]:
+    return []
 
 
 class WireConnection(il.Connection):
@@ -778,7 +815,7 @@ class TestDerivedNames:
         store = Store(catalog=il.Catalog.from_assets([DemoSource]))
         row = store.components.create(_ORG, kind="source", key="demo_source")
 
-        assert store.components._derived_name(row, {"random_failure_probability": "not-a-float"}) is None
+        assert store.components._derived_name(row, {"ratio": "not-a-float"}) is None
 
 
 class TestDiscriminator:
@@ -922,12 +959,15 @@ class TestStatus:
     def test_a_key_resolves_here_in_the_installed_code_or_nowhere(
         self,
         component_db: Engine,
+        monkeypatch: pytest.MonkeyPatch,
         enabled: list[type[il.Source]],
         source_key: str | None,
         key: str,
         status: ComponentStatus,
     ):
-        # An owned asset reads by its qualified key, so its source's drift cascades to it.
+        # The installed code is the demo source alone; an owned asset reads by
+        # its qualified key, so its source's drift cascades to it.
+        monkeypatch.setattr(il.Catalog, "discover", classmethod(lambda cls: il.Catalog.from_assets([DemoSource])))
         store = Store(catalog=il.Catalog.from_assets(enabled))
         parent = Component(org_id=_ORG, kind="source", key=source_key) if source_key else None
         row = Component(org_id=_ORG, kind="asset" if parent else "source", key=key, parent=parent)
@@ -1235,13 +1275,10 @@ class TestLoadDrift:
 
     def test_an_unreadable_payload_raises_hydration_error(self, component_db: Engine):
         # A different remedy from drift: the config needs re-entering or re-keying.
-        catalog = il.Catalog(components={FacebookAdsConnection.key: FacebookAdsConnection.definition()})
+        catalog = il.Catalog(components={PublicToggleConnection.key: PublicToggleConnection.definition()})
         writer = Store(catalog=catalog, encrypt=lambda b: b, decrypt=lambda b: b)
         row = writer.components.create(
-            _ORG,
-            kind="connection",
-            key=FacebookAdsConnection.key,
-            config={"access_token": "TOK", "app_id": "A", "app_secret": "S"},
+            _ORG, kind="connection", key=PublicToggleConnection.key, config={"api_key": "s3cret"}
         )
 
         def broken_decrypt(payload: bytes) -> bytes:

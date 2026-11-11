@@ -14,7 +14,7 @@ import interloper as il
 import pytest
 from interloper.events import Event, EventType
 from interloper.partitioning import TimeGranularity, TimePartition, TimePartitionConfig, TimePartitionWindow
-from interloper.runner import ExecutionStatus
+from interloper.runner import RUNNERS, ExecutionStatus
 
 from interloper_docker.runner import DockerRun, DockerRunner
 
@@ -301,3 +301,8 @@ def test_the_run_kind_is_named_after_its_runner():
     from interloper_docker.runner import DockerRun, DockerRunner
 
     assert DockerRunner.Run is DockerRun
+
+
+def test_the_runner_registers_under_docker():
+    """The runner is found by the key a deployment names it with."""
+    assert RUNNERS["docker"] is DockerRunner

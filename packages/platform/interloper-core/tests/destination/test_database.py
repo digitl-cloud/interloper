@@ -202,13 +202,9 @@ class TestWrite:
             ("insert", ("discriminated_rows__42", "discriminated_source", rows)),
         ]
 
-    def test_dataframe_converts_via_null_safe_fallback(self):
-        pd = pytest.importorskip("pandas")
-        import numpy as np
-
+    def test_another_table_type_is_inserted_as_rows(self, columnar):
         destination = RecordingDatabase(id="db")
-        df = pd.DataFrame([{"a": 1, "b": np.nan}])
-        destination.write(make_io_context(plain_asset()), df)
+        destination.write(make_io_context(plain_asset()), columnar({"a": [1], "b": [None]}))
         inserted = next(c for c in destination.calls if c[0] == "insert")[1][2]
         assert inserted == [{"a": 1, "b": None}]
 

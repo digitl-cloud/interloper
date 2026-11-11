@@ -14,8 +14,6 @@ from uuid import UUID, uuid4
 import interloper as il
 import pytest
 from interloper.settings import AppSettings, ServerSettings
-from interloper_assets.demo.assets import demo_asset
-from interloper_assets.demo.basic.source import DemoSource
 from interloper_db import RunStatus, Store
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, ComponentRelation, Execution, Organisation, Quota, Run, Usage
@@ -28,6 +26,31 @@ from interloper_scheduler.hooks import HookController
 
 _ORG = uuid4()
 _PAST = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+_DAILY = il.TimePartitionConfig(column="date", allow_window=False)
+
+
+class DemoSource(il.Source):
+    """A daily source whose assets form the ``a -> b,c,d -> e`` DAG."""
+
+    @il.asset(partitioning=_DAILY)
+    def a(self) -> list[dict]:
+        return []
+
+    @il.asset(partitioning=_DAILY)
+    def b(self, a: il.Upstream) -> list[dict]:
+        return []
+
+    @il.asset(partitioning=_DAILY)
+    def c(self, a: il.Upstream) -> list[dict]:
+        return []
+
+    @il.asset(partitioning=_DAILY)
+    def d(self, a: il.Upstream) -> list[dict]:
+        return []
+
+    @il.asset(partitioning=_DAILY)
+    def e(self, b: il.Upstream, c: il.Upstream, d: il.Upstream) -> list[dict]:
+        return []
 
 
 @pytest.fixture
@@ -50,7 +73,7 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
     for model in (Organisation, Component, ComponentRelation, Backfill, Run, EventRow, Execution, Quota, Usage):
         model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
 
-    store = Store(catalog=il.Catalog.from_assets([DemoSource, demo_asset]))
+    store = Store(catalog=il.Catalog.from_assets([DemoSource]))
 
     try:
         yield store

@@ -287,7 +287,7 @@ def test_super_admin_reads_config(store: FakeStore, fake_settings: SimpleNamespa
     client = TestClient(app)
     resp = client.get("/admin/config")
     assert resp.status_code == 200
-    assert resp.json()["deployment"]["launcher"]["type"] == "kubernetes"
+    assert resp.json()["deployment"]["launcher"]["type"] == "in_process"
     assert resp.json()["auth"]["allowed_domains"] == ["digitlcloud.com"]
 
 

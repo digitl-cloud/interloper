@@ -181,16 +181,15 @@ class TestWriteDispatch:
         assert by_partition["2024-01"] == [{"date": "2024-01-15", "v": 1}]
         assert by_partition["2024-02"] == [{"date": "2024-02-10", "v": 2}, {"date": "2024-02-20", "v": 3}]
 
-    def test_window_write_splits_dataframes_natively(self):
-        pd = pytest.importorskip("pandas")
-
+    def test_window_write_splits_another_table_type_in_its_own_type(self, columnar):
         destination = RecordingPartitions(id="d")
-        df = pd.DataFrame([{"date": "2024-01-01", "v": 1}, {"date": "2024-01-02", "v": 2}])
+        table = columnar({"date": ["2024-01-01", "2024-01-02"], "v": [1, 2]})
         window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2))
-        destination.write(io_context(partitioned_asset(), window), df)
-        for _, _, data in destination.calls:
-            assert isinstance(data, pd.DataFrame)
-            assert len(data) == 1
+        destination.write(io_context(partitioned_asset(), window), table)
+        assert [data for _, _, data in destination.calls] == [
+            columnar({"date": ["2024-01-01"], "v": [1]}),
+            columnar({"date": ["2024-01-02"], "v": [2]}),
+        ]
 
     def test_window_write_refuses_unsplittable_data(self):
         from interloper.errors import RepresentationError
