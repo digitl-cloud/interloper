@@ -550,8 +550,9 @@ class RunStore:
         The run observes at the instant it became due, on its job's clock (see
         `Run.observed_at`), so a snapshot asset writes the same period however
         late the run starts. A backfill observes once: its snapshot
-        assets are enabled only in the run of its newest partition, the one it
-        executes first.
+        assets are enabled only in the stack of its newest partition, the one
+        it executes first. The stack's first attempt names the backfill, since
+        a manual retry leaves it, so every attempt executes what the first did.
 
         Args:
             run_id: The run UUID.
@@ -577,7 +578,8 @@ class RunStore:
             for operation in operations:
                 if UUID(operation.id) in successes:
                     operation.enabled = False
-        if run.backfill_id is not None and run.partition_key != self._backfills.get(run.backfill_id).end_key:
+        backfill_id = self.get(run.root_run_id).backfill_id
+        if backfill_id is not None and run.partition_key != self._backfills.get(backfill_id).end_key:
             for operation in operations:
                 if operation.partitioning is not None and not operation.partitioning.windowed:
                     operation.enabled = False
