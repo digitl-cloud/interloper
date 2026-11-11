@@ -181,6 +181,8 @@ class TestJobRun:
 
     async def test_the_child_reports_its_operation_with_the_runs_token(self, connect, asset, monkeypatch):
         monkeypatch.setenv("INTERLOPER_RUN_TOKEN", "ilr_x")
+        monkeypatch.setenv("INTERLOPER_RUN_HEARTBEAT_INTERVAL", "5")
+        monkeypatch.setenv("INTERLOPER_RUN_HEARTBEAT_TIMEOUT", "45")
         monkeypatch.setenv("INTERLOPER_SERVER_INTERNAL_URL", "http://api")
         cluster = connect()
 
@@ -192,6 +194,10 @@ class TestJobRun:
         assert (environment["INTERLOPER_RUN_TOKEN"], environment["INTERLOPER_SERVER_INTERNAL_URL"]) == (
             "ilr_x",
             "http://api",
+        )
+        assert (environment["INTERLOPER_RUN_HEARTBEAT_INTERVAL"], environment["INTERLOPER_RUN_HEARTBEAT_TIMEOUT"]) == (
+            "5",
+            "45",
         )
 
     async def test_without_a_platform_the_child_reports_nothing(self, connect, asset, monkeypatch):

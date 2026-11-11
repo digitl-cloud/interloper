@@ -65,7 +65,10 @@ def scheduler_services(
         )
         if worker:
             services["worker"] = QueueController(
-                launcher=launcher, store=store, poll_interval=settings.worker.poll_interval
+                launcher=launcher,
+                store=store,
+                poll_interval=settings.worker.poll_interval,
+                heartbeat_timeout=settings.reaper.heartbeat_timeout,
             )
         if reaper:
             services["reaper"] = Reaper(

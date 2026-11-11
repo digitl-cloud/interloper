@@ -11,14 +11,13 @@ run's pod authenticates as its run, with the run token, and nothing else.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timedelta
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import Cookie, Depends, Header, HTTPException
 from interloper_db import Audience, NotFoundError, Organisation, Profile, Role, Run, Store, Token
 
-from interloper_api.dependencies.state import SettingsDep, StoreDep
+from interloper_api.dependencies.state import StoreDep
 
 
 def bearer(authorization: str | None) -> str | None:
@@ -221,7 +220,6 @@ OrgDep = Annotated[OrgScope, Depends(get_org_scope)]
 def require_run(
     run_id: UUID,
     store: StoreDep,
-    settings: SettingsDep,
     authorization: str | None = Header(default=None),
 ) -> Run:
     """Resolve the run a bearer run token stands for, and check it is the run the path names.
@@ -232,12 +230,10 @@ def require_run(
     Args:
         run_id: The run the path names.
         store: The Store instance.
-        settings: The settings, whose run liveness a token outlives its run by:
-            the heartbeat timeout, for a pod still delivering after its reaping.
         authorization: The ``Authorization`` header.
 
     Returns:
-        The run, dispatched, running, or ended within the grace.
+        The run, dispatched, running, or ended within the grace its token carries.
 
     Raises:
         HTTPException: 401 without a live run token; 404 when the token's run
@@ -246,7 +242,7 @@ def require_run(
     token = bearer(authorization)
     if not token:
         raise HTTPException(status_code=401, detail="Run token required")
-    run = store.runs.resolve_token(token, grace=timedelta(seconds=settings.reaper.heartbeat_timeout))
+    run = store.runs.resolve_token(token)
     if run is None:
         raise HTTPException(status_code=401, detail="Unknown or expired run token")
     if run.id != run_id:

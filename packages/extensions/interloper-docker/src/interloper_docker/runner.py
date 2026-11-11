@@ -240,14 +240,16 @@ class DockerRunner(Runner):
 
         Returns:
             ``env_vars``, the trace context the child continues and, on the
-            platform, the host run's token and the API's URL, with which the
-            child loads the run and reports to it.
+            platform, the host run's token, heartbeat cadence and the API's
+            URL, with which the child loads the run and reports to it.
         """
         environment = dict(self.env_vars)
         environment.update(child_process_env())
         settings = AppSettings.get()
         if settings.run.token:
             environment["INTERLOPER_RUN_TOKEN"] = settings.run.token
+            environment["INTERLOPER_RUN_HEARTBEAT_INTERVAL"] = str(settings.run.heartbeat_interval)
+            environment["INTERLOPER_RUN_HEARTBEAT_TIMEOUT"] = str(settings.run.heartbeat_timeout)
             environment["INTERLOPER_SERVER_INTERNAL_URL"] = settings.server.internal_url
         return environment
 

@@ -262,8 +262,8 @@ class WorkerSettings(BaseSettings):
 class ReaperSettings(BaseSettings):
     """Run liveness: the heartbeat an executing run records, and the reaper that fails silent or overdue runs.
 
-    The reaper is a singleton. A run's executor reads the heartbeat fields
-    too, so the container launchers forward them into every run's environment.
+    The reaper is a singleton. The launcher hands the heartbeat fields to every
+    run it starts, as that run's `RunSettings`.
     """
 
     model_config = SettingsConfigDict(env_prefix=f"{PREFIX}REAPER_")
@@ -287,7 +287,12 @@ class ReaperSettings(BaseSettings):
 
 
 class RunSettings(BaseSettings):
-    """The platform run this process executes, as the launcher that started it sets it; never set by hand."""
+    """The platform run this process executes: its token and heartbeat cadence.
+
+    Only the platform writes these. The launcher sets them for the run it
+    starts, and a container runner forwards them to the operations it starts
+    in their own processes; operators never set them.
+    """
 
     model_config = SettingsConfigDict(env_prefix=f"{PREFIX}RUN_")
 
@@ -295,6 +300,14 @@ class RunSettings(BaseSettings):
         default="",
         description="The run's token, with which `interloper launch` loads the run from the API and reports "
         "its events back.",
+    )
+    heartbeat_interval: int = Field(
+        default=10, description="Seconds between the run's heartbeats: the scheduler's `reaper.heartbeat_interval`."
+    )
+    heartbeat_timeout: int = Field(
+        default=90,
+        description="Seconds the run may go without a heartbeat before the reaper fails it, the scheduler's "
+        "`reaper.heartbeat_timeout`; a run that cannot record one for half of it stops itself first.",
     )
 
 

@@ -191,8 +191,8 @@ class DockerLauncher(Launcher):
             "INTERLOPER_CATALOG": json.dumps(self._catalog.to_paths()),
             "INTERLOPER_RUNNER_TYPE": self._runner_type,
             "INTERLOPER_RUNNER_CONFIG": json.dumps(self._runner_config),
-            "INTERLOPER_REAPER_HEARTBEAT_INTERVAL": str(self._heartbeat_interval),
-            "INTERLOPER_REAPER_HEARTBEAT_TIMEOUT": str(self._heartbeat_timeout),
+            "INTERLOPER_RUN_HEARTBEAT_INTERVAL": str(self._heartbeat_interval),
+            "INTERLOPER_RUN_HEARTBEAT_TIMEOUT": str(self._heartbeat_timeout),
             "INTERLOPER_SERVER_INTERNAL_URL": self._internal_url,
             "INTERLOPER_RUN_TOKEN": token,
         }

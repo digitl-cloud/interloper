@@ -14,7 +14,7 @@ from interloper.errors import ConfigError, RunLostError, format_exception
 from interloper.events import Event, EventRecorder, EventType
 from interloper.registry import Registry
 from interloper.runner import Runner
-from interloper.settings import AppSettings, RunnerSettings
+from interloper.settings import RunnerSettings
 from interloper_db import Store
 from opentelemetry import context as otel_context
 
@@ -165,7 +165,8 @@ class InProcessLauncher(Launcher):
         runner_type: str = "async",
         runner_config: dict[str, Any] | None = None,
         store: Store | None = None,
-        reaper: ReaperSettings | None = None,
+        heartbeat_interval: int = 10,
+        heartbeat_timeout: int = 90,
     ) -> None:
         """Initialize the launcher.
 
@@ -173,12 +174,14 @@ class InProcessLauncher(Launcher):
             runner_type: Runner type name (``async``, ``serial``, or a registered key).
             runner_config: Runner-specific kwargs forwarded to the runner constructor.
             store: The Store runs report through. Defaults to the settings-configured one.
-            reaper: Run liveness settings the runs' recorders follow;
-                ``None`` reads them from the app settings.
+            heartbeat_interval: Seconds between a run's heartbeats.
+            heartbeat_timeout: The reaper's heartbeat timeout in seconds, half
+                of which a run that cannot report waits before it is lost.
         """
         super().__init__(runner_type=runner_type, runner_config=runner_config)
         self._store = store or Store.from_settings()
-        self._reaper = reaper or AppSettings.get().reaper
+        self._heartbeat_interval = heartbeat_interval
+        self._heartbeat_timeout = heartbeat_timeout
 
     @classmethod
     def from_settings(
@@ -205,7 +208,13 @@ class InProcessLauncher(Launcher):
         Returns:
             The configured in-process launcher.
         """
-        return cls(runner_type=runner.type, runner_config=runner.config, store=store, reaper=reaper)
+        return cls(
+            runner_type=runner.type,
+            runner_config=runner.config,
+            store=store,
+            heartbeat_interval=reaper.heartbeat_interval,
+            heartbeat_timeout=reaper.heartbeat_timeout,
+        )
 
     def launch(self, run: Run, token: str) -> None:
         """Launch a run in a background thread.
@@ -237,8 +246,8 @@ class InProcessLauncher(Launcher):
         recorder = EventRecorder(
             partial(self._store.runs.ingest, run_id),
             run_id=str(run_id),
-            heartbeat_interval=self._reaper.heartbeat_interval,
-            heartbeat_timeout=self._reaper.heartbeat_timeout,
+            heartbeat_interval=self._heartbeat_interval,
+            heartbeat_timeout=self._heartbeat_timeout,
         )
         try:
             with recorder:

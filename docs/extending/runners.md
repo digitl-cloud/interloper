@@ -109,8 +109,10 @@ A runner decides where a run's operations execute; a launcher decides where the 
 executes. The scheduler's queue claims a run, checks that its spec can be built, mints its token,
 and calls `launch(run, token)` on the configured `Launcher`. A launcher that starts another
 process (a container, a pod) runs `Launcher.command(run)` there, `interloper launch <run-id>`,
-with the run's token in `INTERLOPER_RUN_TOKEN` and the API's `server.internal_url` in
-`INTERLOPER_SERVER_INTERNAL_URL`. That process holds no database credentials: it loads what the
+with the run's token in `INTERLOPER_RUN_TOKEN`, the reaper's heartbeat interval and timeout in
+`INTERLOPER_RUN_HEARTBEAT_INTERVAL` and `INTERLOPER_RUN_HEARTBEAT_TIMEOUT`, and the API's
+`server.internal_url` in `INTERLOPER_SERVER_INTERNAL_URL`. That process holds no database
+credentials: it loads what the
 run executes from the API (`RunSpec`: the DAG, connections resolved, its partition and its event
 metadata) and reports its events back there. Register a launcher in the `interloper.launchers`
 entry-point group and give it a `from_settings` classmethod, as the Docker and Kubernetes
@@ -121,8 +123,9 @@ launchers do.
 A run that executes each operation in a child process (the Docker and Kubernetes runners) still
 owns its operations' lifecycle: the host reports every start, retry and verdict, and the child
 only what happens inside the operation. On the platform, have the child run
-`interloper launch <run-id> --operation-id <id>` with the host's `INTERLOPER_RUN_TOKEN`
-and `INTERLOPER_SERVER_INTERNAL_URL`: the child loads the run and executes that one operation once,
+`interloper launch <run-id> --operation-id <id>` with the host's `INTERLOPER_RUN_TOKEN`,
+`INTERLOPER_RUN_HEARTBEAT_*` and `INTERLOPER_SERVER_INTERNAL_URL`: the child loads the run and
+executes that one operation once,
 in its own process, walking nothing, so it reports only its asset and destination events to the
 API and no lifecycle event. Outside the platform, hand the child the operation's DAG instead,
 `interloper run --format inline <dag> --operation-id <id>`. A failed execution leaves its

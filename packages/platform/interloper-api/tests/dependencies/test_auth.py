@@ -7,7 +7,6 @@ the real ones, not hand-passed arguments.
 
 from __future__ import annotations
 
-from datetime import timedelta
 from types import SimpleNamespace
 from typing import Annotated, Any
 from uuid import UUID, uuid4
@@ -23,7 +22,6 @@ from interloper_api.dependencies import (
     get_caller,
     get_org_scope,
     get_session_caller,
-    get_settings,
     get_store,
     require_run,
 )
@@ -68,7 +66,7 @@ class FakeStore:
         self.tokens = SimpleNamespace(resolve=self._resolve)
         self.members = SimpleNamespace(role_of=self._role_of)
         self.organisations = SimpleNamespace(get=self._get_organisation)
-        self.resolved_run_tokens: list[tuple[str, timedelta]] = []
+        self.resolved_run_tokens: list[str] = []
         self._run = run
         self.runs = SimpleNamespace(resolve_token=self._resolve_run_token)
 
@@ -82,8 +80,8 @@ class FakeStore:
             return None
         return self.profile, SimpleNamespace(kind=kind)
 
-    def _resolve_run_token(self, raw: str, *, grace: timedelta) -> Any:
-        self.resolved_run_tokens.append((raw, grace))
+    def _resolve_run_token(self, raw: str) -> Any:
+        self.resolved_run_tokens.append(raw)
         return self._run
 
     def _get_organisation(self, org_id: UUID) -> Any:
@@ -319,21 +317,20 @@ def _run_client(store: FakeStore) -> TestClient:
     app = FastAPI()
     app.include_router(router)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_settings] = lambda: SimpleNamespace(reaper=SimpleNamespace(heartbeat_timeout=90))
     return TestClient(app)
 
 
 class TestRequireRun:
     """A run's pod authenticates with its run's token, and only for that run."""
 
-    def test_a_live_token_resolves_its_run_with_the_heartbeat_grace(self) -> None:
+    def test_a_live_token_resolves_its_run(self) -> None:
         run = SimpleNamespace(id=uuid4())
         store = FakeStore(run=run)
 
         response = _run_client(store).get(f"/runs/{run.id}/whoami", headers={"Authorization": "Bearer ilr_x"})
 
         assert response.status_code == 200 and response.json() == {"run": str(run.id)}
-        assert store.resolved_run_tokens == [("ilr_x", timedelta(seconds=90))]
+        assert store.resolved_run_tokens == ["ilr_x"]
 
     def test_a_missing_or_dead_token_is_a_401(self) -> None:
         client = _run_client(FakeStore(run=None))

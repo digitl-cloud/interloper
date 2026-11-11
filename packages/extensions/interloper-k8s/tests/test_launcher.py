@@ -134,12 +134,13 @@ def test_env_from_defaults_to_none(launcher_factory: Callable[..., KubernetesLau
     assert container.env_from is None
 
 
-def test_the_heartbeat_settings_reach_the_run_container(
+def test_the_heartbeat_settings_reach_the_run_container_as_its_run_settings(
     launcher_factory: Callable[..., KubernetesLauncher],
 ) -> None:
     container = _launched_container(launcher_factory(heartbeat_interval=5, heartbeat_timeout=45))
     env = {variable.name: variable.value for variable in container.env}
-    assert (env["INTERLOPER_REAPER_HEARTBEAT_INTERVAL"], env["INTERLOPER_REAPER_HEARTBEAT_TIMEOUT"]) == ("5", "45")
+    assert (env["INTERLOPER_RUN_HEARTBEAT_INTERVAL"], env["INTERLOPER_RUN_HEARTBEAT_TIMEOUT"]) == ("5", "45")
+    assert not [name for name in env if name.startswith("INTERLOPER_REAPER_")]
 
 
 def test_from_settings_forwards_the_heartbeat_settings(launcher_factory: Callable[..., KubernetesLauncher]) -> None:

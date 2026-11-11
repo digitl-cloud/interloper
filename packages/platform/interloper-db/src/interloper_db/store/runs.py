@@ -71,6 +71,9 @@ RUN_TOKEN_PREFIX = "ilr_"
 
 _RUN_TOKEN_SUBJECT = "run-token:"
 
+# The grace of a token minted before tokens carried theirs: the reaper's default heartbeat timeout.
+_UNSTATED_GRACE = timedelta(seconds=90)
+
 RunSort = Literal[
     "id",
     "-id",
@@ -588,14 +591,19 @@ class RunStore:
         dag.check_window(spec.window)
         return spec
 
-    def token(self, run_id: UUID) -> str:
-        """The token a run's pod reports with: the run's id, encrypted with the platform's key.
+    def token(self, run_id: UUID, *, grace: timedelta) -> str:
+        """The token a run's pod reports with: the run's id and its grace, encrypted with the platform's key.
 
         Nothing is stored. The cipher is authenticated, so only a holder of
-        the key can make one, and the run's status says how long it lives.
+        the key can make one, and the run's status says how long it lives:
+        while the run is dispatched or running, and for *grace* after it ended.
 
         Args:
             run_id: The run UUID.
+            grace: How long after the run ended its token is still accepted,
+                in whole seconds, so a pod whose run was ended elsewhere can
+                still deliver what it holds and learn of the end, and a replay
+                of the run's own ending is answered as the first time.
 
         Returns:
             The token.
@@ -605,18 +613,17 @@ class RunStore:
         """
         if self._encrypt is None:
             raise ConfigError("Run tokens need INTERLOPER_ENCRYPTION_KEY")
-        return RUN_TOKEN_PREFIX + self._encrypt(f"{_RUN_TOKEN_SUBJECT}{run_id}".encode()).decode()
+        subject = f"{_RUN_TOKEN_SUBJECT}{run_id}:{int(grace.total_seconds())}"
+        return RUN_TOKEN_PREFIX + self._encrypt(subject.encode()).decode()
 
-    def resolve_token(self, raw: str, *, grace: timedelta) -> Run | None:
+    def resolve_token(self, raw: str) -> Run | None:
         """Resolve a run token, while its run can still report.
 
         A token lives as long as its run is dispatched or running, and for
-        *grace* after the run ended, so a pod that outlived its reaping can
-        still deliver the events it holds. Absence is an ordinary answer.
+        the grace it carries after the run ended. Absence is an ordinary answer.
 
         Args:
             raw: The bearer token the pod presents.
-            grace: How long after ``completed_at`` the token is still accepted.
 
         Returns:
             The run, its target loaded, or ``None`` when the token is not one
@@ -630,7 +637,9 @@ class RunStore:
             return None
         if not subject.startswith(_RUN_TOKEN_SUBJECT):
             return None
-        statement = select(Run).where(Run.id == UUID(subject.removeprefix(_RUN_TOKEN_SUBJECT)))
+        run_id, _, seconds = subject.removeprefix(_RUN_TOKEN_SUBJECT).partition(":")
+        grace = timedelta(seconds=int(seconds)) if seconds else _UNSTATED_GRACE
+        statement = select(Run).where(Run.id == UUID(run_id))
         with session_scope(self._engine) as session:
             db_run = session.exec(statement.options(*RUN_LOAD_OPTIONS)).first()
             if db_run is None:
