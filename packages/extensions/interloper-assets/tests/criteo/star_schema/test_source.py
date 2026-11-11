@@ -35,8 +35,7 @@ FACT_COLUMNS = [
 MEASURES = "displays, clicks, advertiser_cost, currency, sales_client_attribution, revenue_generated_client_attribution"
 SNAPSHOT_DAY = dt.date(2026, 9, 30)
 ENTITY_COLUMNS = {
-    "advertisers": "date DATE, id VARCHAR, type VARCHAR, meta VARCHAR, advertiser_name VARCHAR, "
-    "currency_name VARCHAR, time_zone_id VARCHAR",
+    "advertisers": "date DATE, id VARCHAR, type VARCHAR, meta VARCHAR, advertiser_name VARCHAR",
     "campaigns": "date DATE, id VARCHAR, type VARCHAR, advertiser_id VARCHAR, name VARCHAR, goal VARCHAR, "
     "spend_limit_spend_limit_type VARCHAR, spend_limit_spend_limit_renewal VARCHAR, "
     "spend_limit_spend_limit_amount_value DOUBLE",
@@ -53,9 +52,9 @@ def warehouse(tmp_path: Path):
     return duckdb.DuckDBDestination(id="warehouse", connection=connection)
 
 
-def _advertiser(advertiser_id: str, warehouse) -> il.Source:
+def _advertiser(advertiser_id: str, warehouse, **fields) -> il.Source:
     connection = CriteoConnection(id="criteo", client_id="x", client_secret="x", refresh_token="x")
-    return Criteo(advertiser_id=advertiser_id, connection=connection, destinations=[warehouse], enabled=False)
+    return Criteo(advertiser_id=advertiser_id, connection=connection, destinations=[warehouse], enabled=False, **fields)
 
 
 def _seed(
@@ -103,7 +102,7 @@ def _seed_one(warehouse, advertiser_id: str, **kwargs) -> None:
     )
 
 
-def _snapshot(advertiser_id: str, day: str = "2026-09-30", *, timezone: str = "'Europe/Berlin'"):
+def _snapshot(advertiser_id: str, day: str = "2026-09-30"):
     """One snapshot of the advertiser and the campaign, ad set and ads its reports name, plus an ad they do not.
 
     The ad set starts at 22:00 UTC on 30 September, which is 1 October in Berlin.
@@ -112,9 +111,7 @@ def _snapshot(advertiser_id: str, day: str = "2026-09-30", *, timezone: str = "'
         The rows of each entity table, as SQL value tuples.
     """
     return {
-        "advertisers": [
-            f"(DATE '{day}', '{advertiser_id}', 'Advertiser', NULL, 'Advertiser {advertiser_id}', 'CHF', {timezone})"
-        ],
+        "advertisers": [f"(DATE '{day}', '{advertiser_id}', 'Advertiser', NULL, 'Advertiser {advertiser_id}')"],
         "campaigns": [
             (
                 f"(DATE '{day}', 'c1', 'Campaign', '{advertiser_id}', 'Camp entity', 'acquisition', 'capped', "
@@ -152,6 +149,7 @@ class TestWiring:
         [
             ("fact_campaign_performance", "campaigns_stats", "criteo.campaigns_stats"),
             ("fact_ad_performance", "ads_stats", "criteo.ads_stats"),
+            ("dim_accounts", "campaigns_stats", "criteo.campaigns_stats"),
             ("dim_campaigns", "campaigns_stats", "criteo.campaigns_stats"),
             ("dim_ad_groups", "ads_stats", "criteo.ads_stats"),
             ("dim_ads", "ads_stats", "criteo.ads_stats"),
@@ -237,6 +235,11 @@ class TestStamping:
         with pytest.raises(ConfigError, match="belongs to no account"):
             star_schema._account(upstream)
 
+    def test_an_upstream_of_a_source_other_than_criteo_has_no_time_zone(self):
+        upstream = il.Upstream(asset=CriteoStarSchema().fact_campaign_performance, data=None)
+        with pytest.raises(ConfigError, match="belongs to no Criteo source"):
+            star_schema._timezone(upstream)
+
 
 class TestOnDuckDB:
     def test_the_campaign_fact_sums_to_one_row_per_campaign_and_day(self, warehouse):
@@ -262,12 +265,12 @@ class TestOnDuckDB:
         assert (row["account_id"], row["campaign_id"], row["ad_group_id"], row["ad_id"]) == ("111", "c1", "s1", "a1")
         assert (row["impressions"], row["cost"], row["purchases"]) == (100, 12.5, 2)
 
-    def test_an_advertiser_takes_the_currency_of_its_reports(self, warehouse):
+    def test_an_advertisers_currency_is_unknown_and_its_days_are_its_sources(self, warehouse):
         first = _advertiser("111", warehouse)
         _seed_one(warehouse, "111")
         _materialize(warehouse, first)
         assert _rows(warehouse, "dim_accounts") == [
-            {"account_id": "111", "account_name": None, "currency": "EUR", "timezone": None, "as_of_date": DAY}
+            {"account_id": "111", "account_name": None, "currency": None, "timezone": "UTC", "as_of_date": DAY}
         ]
 
     def test_a_campaign_takes_the_name_of_its_latest_report(self, warehouse):
@@ -360,7 +363,7 @@ class TestOnDuckDB:
         assert error is not None and "campaigns_stats__111" in error
 
     def test_an_advertiser_takes_its_snapshot_over_its_reports(self, warehouse):
-        first, second = _advertiser("111", warehouse), _advertiser("222", warehouse)
+        first, second = _advertiser("111", warehouse, timezone="Europe/Berlin"), _advertiser("222", warehouse)
         _seed_one(warehouse, "111", entities=_snapshot("111"))
         _seed_one(warehouse, "222")
         _materialize(warehouse, first, second)
@@ -368,26 +371,26 @@ class TestOnDuckDB:
             {
                 "account_id": "111",
                 "account_name": "Advertiser 111",
-                "currency": "CHF",
+                "currency": None,
                 "timezone": "Europe/Berlin",
                 "as_of_date": SNAPSHOT_DAY,
             },
-            {"account_id": "222", "account_name": None, "currency": "EUR", "timezone": None, "as_of_date": DAY},
+            {"account_id": "222", "account_name": None, "currency": None, "timezone": "UTC", "as_of_date": DAY},
         ]
 
     def test_an_ad_sets_schedule_is_read_as_the_advertisers_days(self, warehouse):
-        first = _advertiser("111", warehouse)
+        first = _advertiser("111", warehouse, timezone="Europe/Berlin")
         _seed_one(warehouse, "111", entities=_snapshot("111"))
         _materialize(warehouse, first)
         [group] = _rows(warehouse, "dim_ad_groups")
         assert (group["start_date"], group["end_date"]) == (dt.date(2026, 10, 1), None)
 
-    def test_an_ad_sets_schedule_has_no_day_without_the_advertisers_time_zone(self, warehouse):
+    def test_an_ad_sets_schedule_is_read_in_utc_unless_the_source_sets_a_time_zone(self, warehouse):
         first = _advertiser("111", warehouse)
-        _seed_one(warehouse, "111", entities=_snapshot("111", timezone="NULL"))
+        _seed_one(warehouse, "111", entities=_snapshot("111"))
         _materialize(warehouse, first)
         [group] = _rows(warehouse, "dim_ad_groups")
-        assert (group["ad_group_name"], group["start_date"]) == ("Set entity", None)
+        assert (group["ad_group_name"], group["start_date"]) == ("Set entity", dt.date(2026, 9, 30))
 
     def test_a_campaign_takes_its_snapshot_over_a_later_report(self, warehouse):
         first = _advertiser("111", warehouse)
@@ -415,7 +418,7 @@ class TestOnDuckDB:
         }
 
     def test_an_ad_set_takes_its_status_and_budget_from_its_snapshot(self, warehouse):
-        first = _advertiser("111", warehouse)
+        first = _advertiser("111", warehouse, timezone="Europe/Berlin")
         ads = [_ad_row("a1", "Ad"), _ad_row("a2", "Other", adset_id="s2")]
         _seed(warehouse, "111", campaign_rows=[_campaign_row("c1", "Camp")], ad_rows=ads, entities=_snapshot("111"))
         _materialize(warehouse, first)

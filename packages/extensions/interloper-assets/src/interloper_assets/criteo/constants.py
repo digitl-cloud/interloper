@@ -2,6 +2,10 @@ BASE_URL = "https://api.criteo.com"
 
 API_VERSION = "2026-07"
 
+# Criteo converts every amount to the currency a report names, and no endpoint an advertiser's credentials
+# read states the advertiser's own (only the marketplace product's does).
+REPORT_CURRENCY = "EUR"
+
 STATISTICS_METRICS = [
     "Clicks",
     "Displays",
