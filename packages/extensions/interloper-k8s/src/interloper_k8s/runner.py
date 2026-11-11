@@ -283,19 +283,20 @@ class KubernetesRunner(Runner):
 
         Returns:
             ``env_vars``, the trace context the child continues and, on the
-            platform, the host run's token and the API's URL, with which the
-            child loads the run and reports to it.
+            platform, the host run's token, heartbeat cadence and the API's
+            URL, with which the child loads the run and reports to it.
         """
         environment = [client.V1EnvVar(name=name, value=value) for name, value in self.env_vars.items()]
         environment.extend(client.V1EnvVar(name=name, value=value) for name, value in child_process_env().items())
         settings = AppSettings.get()
         if settings.run.token:
-            environment.extend(
-                [
-                    client.V1EnvVar(name="INTERLOPER_RUN_TOKEN", value=settings.run.token),
-                    client.V1EnvVar(name="INTERLOPER_SERVER_INTERNAL_URL", value=settings.server.internal_url),
-                ]
-            )
+            platform = {
+                "INTERLOPER_RUN_TOKEN": settings.run.token,
+                "INTERLOPER_RUN_HEARTBEAT_INTERVAL": str(settings.run.heartbeat_interval),
+                "INTERLOPER_RUN_HEARTBEAT_TIMEOUT": str(settings.run.heartbeat_timeout),
+                "INTERLOPER_SERVER_INTERNAL_URL": settings.server.internal_url,
+            }
+            environment.extend(client.V1EnvVar(name=name, value=value) for name, value in platform.items())
         return environment
 
     def requirements(self) -> client.V1ResourceRequirements | None:

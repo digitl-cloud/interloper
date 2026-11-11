@@ -1250,36 +1250,57 @@ class TestRunToken:
         encrypt, decrypt = make_cipher("platform-key")
         return Store(catalog=il.Catalog(components={}), engine=store.engine, encrypt=encrypt, decrypt=decrypt)
 
+    _GRACE = dt.timedelta(seconds=90)
+
+    @staticmethod
+    def _ended(store: Store, seconds_ago: int) -> UUID:
+        """A run that ended *seconds_ago*.
+
+        Args:
+            store: The store whose database the run is written to.
+            seconds_ago: How long ago the run ended.
+
+        Returns:
+            The run's id.
+        """
+        ended = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=seconds_ago)
+        return _timed_run(store, started_at=ended - _H(1), completed_at=ended, status="failed")
+
     def test_a_dispatched_runs_token_resolves_to_it(self, keyed: Store) -> None:
         keyed.runs.create(_ORG_ID)
         run = keyed.runs.claim_next()
         assert run is not None
 
-        token = keyed.runs.token(run.id)
+        token = keyed.runs.token(run.id, grace=self._GRACE)
 
         assert token.startswith("ilr_")
-        resolved = keyed.runs.resolve_token(token, grace=dt.timedelta(seconds=90))
+        resolved = keyed.runs.resolve_token(token)
         assert resolved is not None and resolved.id == run.id
 
-    def test_a_token_dies_a_grace_after_its_run_ended(self, keyed: Store) -> None:
-        keyed.runs.create(_ORG_ID)
-        run = keyed.runs.claim_next()
-        assert run is not None
-        token = keyed.runs.token(run.id)
+    def test_an_ended_runs_token_lives_for_the_grace_it_carries(self, keyed: Store) -> None:
+        run_id = self._ended(keyed, seconds_ago=60)
 
-        keyed.runs.fail(run.id, "boom")
+        assert keyed.runs.resolve_token(keyed.runs.token(run_id, grace=dt.timedelta(seconds=90))) is not None
+        assert keyed.runs.resolve_token(keyed.runs.token(run_id, grace=dt.timedelta(seconds=30))) is None
 
-        assert keyed.runs.resolve_token(token, grace=dt.timedelta(seconds=90)) is not None
-        assert keyed.runs.resolve_token(token, grace=dt.timedelta(seconds=0)) is None
+    @pytest.mark.parametrize(("seconds_ago", "accepted"), [(60, True), (120, False)])
+    def test_a_token_minted_without_a_grace_lives_for_the_default_heartbeat_timeout(
+        self, keyed: Store, seconds_ago: int, accepted: bool
+    ) -> None:
+        run_id = self._ended(keyed, seconds_ago=seconds_ago)
+        encrypt, _ = make_cipher("platform-key")
+        unstated = "ilr_" + encrypt(f"run-token:{run_id}".encode()).decode()
+
+        assert (keyed.runs.resolve_token(unstated) is not None) is accepted
 
     def test_a_queued_runs_token_resolves_to_nothing(self, keyed: Store) -> None:
         run = keyed.runs.create(_ORG_ID)
 
-        assert keyed.runs.resolve_token(keyed.runs.token(run.id), grace=dt.timedelta(seconds=90)) is None
+        assert keyed.runs.resolve_token(keyed.runs.token(run.id, grace=self._GRACE)) is None
 
     @pytest.mark.parametrize("token", ["ilr_unknown", "ilp_personal", ""])
     def test_a_token_this_platform_did_not_make_resolves_to_nothing(self, keyed: Store, token: str) -> None:
-        assert keyed.runs.resolve_token(token, grace=dt.timedelta(seconds=90)) is None
+        assert keyed.runs.resolve_token(token) is None
 
     def test_a_token_made_with_another_key_resolves_to_nothing(self, keyed: Store) -> None:
         keyed.runs.create(_ORG_ID)
@@ -1288,13 +1309,13 @@ class TestRunToken:
         encrypt, decrypt = make_cipher("another-key")
         elsewhere = Store(catalog=il.Catalog(components={}), engine=keyed.engine, encrypt=encrypt, decrypt=decrypt)
 
-        assert keyed.runs.resolve_token(elsewhere.runs.token(run.id), grace=dt.timedelta(seconds=90)) is None
+        assert keyed.runs.resolve_token(elsewhere.runs.token(run.id, grace=self._GRACE)) is None
 
     def test_a_store_without_a_key_mints_no_token(self, store: Store) -> None:
         run = store.runs.create(_ORG_ID)
 
         with pytest.raises(ConfigError, match="INTERLOPER_ENCRYPTION_KEY"):
-            store.runs.token(run.id)
+            store.runs.token(run.id, grace=self._GRACE)
 
     def test_the_claimed_run_carries_its_target(self, store: Store) -> None:
         store.runs.create(_ORG_ID, component_id=_component(store, "job", name="Nightly"))

@@ -44,6 +44,7 @@ environment, not in `${VAR}` placeholders.
 | Variable | Read by | Meaning |
 |----------|---------|---------|
 | `INTERLOPER_RUN_TOKEN` | `interloper launch` | `run.token`, set by a launcher on a run's pod and forwarded by a container runner to its children: the bearer the run is loaded from the API and its events are reported with. |
+| `INTERLOPER_RUN_HEARTBEAT_INTERVAL`, `_TIMEOUT` | `interloper launch` | `run.heartbeat_interval` and `run.heartbeat_timeout`, set and forwarded the same way from the scheduler's `reaper` settings: how often the run heartbeats, and the silence after which the reaper fails it. |
 | `INTERLOPER_<PROVIDER>_CLIENT_ID`, `_CLIENT_SECRET` | OAuth connections and providers | In-house OAuth app credentials per provider. |
 | `INTERLOPER_<PROVIDER>_REDIRECT_URI` | the API's connect flow | Overrides a provider's redirect URI, `<server.external_url>/auth/<provider>` by default. |
 | `TRACEPARENT`, `TRACESTATE` | telemetry propagation | Parent trace context for a spawned process. |

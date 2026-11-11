@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -139,6 +140,26 @@ def test_tick_launches_each_run_with_its_token(store: Store) -> None:
     spec = store.runs.spec(run_id)
     assert spec is not None
     assert len(il.DAG.from_spec(spec.dag, catalog=_CATALOG).operations) == 5
+
+
+@pytest.mark.parametrize(("heartbeat_timeout", "accepted"), [(90, True), (30, False)])
+def test_a_runs_token_outlives_its_run_by_the_heartbeat_timeout(
+    store: Store, heartbeat_timeout: int, accepted: bool
+) -> None:
+    store.runs.create(_ORG, component_id=_source(store), partition_key="2026-10-25")
+    launcher = _FakeLauncher()
+
+    QueueController(launcher=launcher, store=store, heartbeat_timeout=heartbeat_timeout)._tick()
+
+    ((run_id, token),) = launcher.launched
+    store.runs.fail(run_id, "boom")
+    with Session(store.engine) as session:
+        run = session.get(Run, run_id)
+        assert run is not None
+        run.completed_at = datetime.now(timezone.utc) - timedelta(seconds=60)
+        session.add(run)
+        session.commit()
+    assert (store.runs.resolve_token(token) is not None) is accepted
 
 
 def test_empty_queue_is_a_noop(store: Store) -> None:

@@ -193,6 +193,8 @@ class TestContainerRun:
 
     async def test_the_child_reports_its_operation_with_the_runs_token(self, monkeypatch, asset):
         monkeypatch.setenv("INTERLOPER_RUN_TOKEN", "ilr_x")
+        monkeypatch.setenv("INTERLOPER_RUN_HEARTBEAT_INTERVAL", "5")
+        monkeypatch.setenv("INTERLOPER_RUN_HEARTBEAT_TIMEOUT", "45")
         monkeypatch.setenv("INTERLOPER_SERVER_INTERNAL_URL", "http://api")
         container = FakeContainer()
 
@@ -203,6 +205,10 @@ class TestContainerRun:
         assert (environment["INTERLOPER_RUN_TOKEN"], environment["INTERLOPER_SERVER_INTERNAL_URL"]) == (
             "ilr_x",
             "http://api",
+        )
+        assert (environment["INTERLOPER_RUN_HEARTBEAT_INTERVAL"], environment["INTERLOPER_RUN_HEARTBEAT_TIMEOUT"]) == (
+            "5",
+            "45",
         )
         assert result.status is ExecutionStatus.COMPLETED and container.removed
 

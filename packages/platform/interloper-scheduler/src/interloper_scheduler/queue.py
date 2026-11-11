@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
 from interloper.errors import format_exception
 from interloper.telemetry import attributes
@@ -32,6 +33,7 @@ class QueueController(Controller):
         launcher: Launcher | None = None,
         store: Store | None = None,
         poll_interval: int = 5,
+        heartbeat_timeout: int = 90,
     ) -> None:
         """Initialize the queue controller.
 
@@ -40,10 +42,14 @@ class QueueController(Controller):
             store: The Store runs are claimed, checked and failed through.
                 Defaults to the settings-configured one.
             poll_interval: Seconds between poll cycles when the queue is empty.
+            heartbeat_timeout: The reaper's heartbeat timeout in seconds, which
+                each run's token outlives its run by, so a pod whose run was
+                ended elsewhere can still deliver what it holds.
         """
         super().__init__(poll_interval=poll_interval)
         self._store = store or Store.from_settings()
         self._launcher = launcher or InProcessLauncher(store=self._store)
+        self._token_grace = timedelta(seconds=heartbeat_timeout)
         # The launch outcome emits no bus event, so this counter is inline.
         self._launched_counter = meter().create_counter(
             "interloper.runs.launched", unit="{run}", description="Runs dispatched by the queue"
@@ -69,7 +75,7 @@ class QueueController(Controller):
                         attributes.LAUNCHER_TYPE: type(self._launcher).__name__,
                     },
                 ):
-                    self._launcher.launch(run, self._store.runs.token(run.id))
+                    self._launcher.launch(run, self._store.runs.token(run.id, grace=self._token_grace))
                 self._launched_counter.add(1, {"outcome": "launched"})
             except Exception as error:
                 logger.exception("Failed to launch run %s", run.id)

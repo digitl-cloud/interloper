@@ -4,8 +4,9 @@ The process holds no database. With the run's token (`RunSettings`,
 ``INTERLOPER_RUN_TOKEN``) it loads what the run executes from the API at
 ``server.internal_url`` (`RunSpec`: the DAG, its connections resolved, the
 run's partition and the metadata every event carries) and reports the run's
-events back there (`EventRecorder` over `EventBatch.post`). A run ended
-elsewhere, or one that can no longer report, exits the process.
+events back there (`EventRecorder` over `EventBatch.post`), heartbeating at the
+cadence its launcher set in the same settings. A run ended elsewhere, or one
+that can no longer report, exits the process.
 
 ``--operation-id <id>`` executes one operation of the run for its host, the
 process that executes the run and started this one in its own container (the
@@ -78,14 +79,14 @@ def _cmd_launch(args: argparse.Namespace) -> None:
     recorder = EventRecorder(
         partial(EventBatch.post, client=client, run_id=args.run_id),
         run_id=args.run_id,
-        heartbeat_interval=settings.reaper.heartbeat_interval,
-        heartbeat_timeout=settings.reaper.heartbeat_timeout,
+        heartbeat_interval=settings.run.heartbeat_interval,
+        heartbeat_timeout=settings.run.heartbeat_timeout,
         on_lost=_exit_lost,
     )
 
     try:
         try:
-            spec = RunSpec.from_api(client, args.run_id, timeout=settings.reaper.heartbeat_timeout / 2)
+            spec = RunSpec.from_api(client, args.run_id, timeout=settings.run.heartbeat_timeout / 2)
         except RunnerError as error:
             raise SystemExit(f"Error: {error}") from error
         dag, window = DAG.from_spec(spec.dag), spec.window

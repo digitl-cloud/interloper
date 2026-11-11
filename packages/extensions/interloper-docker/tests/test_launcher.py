@@ -88,11 +88,12 @@ def test_a_stopped_container_reports_why(monkeypatch: pytest.MonkeyPatch) -> Non
     assert diagnosis == "container status=dead exit_code=137 OOMKilled error=killed"
 
 
-def test_the_heartbeat_settings_reach_the_run_container(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_heartbeat_settings_reach_the_run_container_as_its_run_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     environment = _launcher(monkeypatch, heartbeat_interval=5, heartbeat_timeout=45)._build_environment("ilr_x")
 
-    assert environment["INTERLOPER_REAPER_HEARTBEAT_INTERVAL"] == "5"
-    assert environment["INTERLOPER_REAPER_HEARTBEAT_TIMEOUT"] == "45"
+    assert environment["INTERLOPER_RUN_HEARTBEAT_INTERVAL"] == "5"
+    assert environment["INTERLOPER_RUN_HEARTBEAT_TIMEOUT"] == "45"
+    assert not [name for name in environment if name.startswith("INTERLOPER_REAPER_")]
 
 
 class _CreatedContainer:

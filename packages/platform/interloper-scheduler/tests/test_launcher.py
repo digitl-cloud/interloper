@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 import interloper as il
 import pytest
 from interloper.errors import ConfigError
+from interloper.events import EventRecorder
 from interloper.runner.spec import RunSpec
 from interloper.settings import LauncherSettings, ReaperSettings, RunnerSettings, ServerSettings
 from interloper_db import NotFoundError, RunStatus
@@ -145,6 +146,31 @@ class TestInProcessLauncher:
         (failed,) = store.events
         assert failed.type is il.EventType.RUN_FAILED
         assert ("deleted" if served else "selects no operations") in failed.metadata["error"]
+
+    def test_a_launched_run_heartbeats_at_the_reapers_cadence(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        cadences: list[tuple[float, float]] = []
+
+        class Recorder(EventRecorder):
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                cadences.append((kwargs["heartbeat_interval"], kwargs["heartbeat_timeout"]))
+                super().__init__(*args, **kwargs)
+
+        monkeypatch.setattr("interloper_scheduler.launcher.EventRecorder", Recorder)
+        run = _dispatched_run()
+        store = _Store(_spec(run.id))
+        launcher = Launcher.from_settings(
+            LauncherSettings(type="in_process"),
+            server=ServerSettings(),
+            runner=RunnerSettings(type="serial"),
+            reaper=ReaperSettings(heartbeat_interval=5, heartbeat_timeout=45),
+            catalog=None,
+            store=store,
+        )
+
+        launcher.launch(run, "ilr_unused")
+
+        assert store.done.wait(5)
+        assert cadences == [(5, 45)]
 
     def test_a_run_ended_elsewhere_ends_its_thread_quietly(self, caplog: pytest.LogCaptureFixture) -> None:
         run = _dispatched_run()

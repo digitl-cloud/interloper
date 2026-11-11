@@ -10,7 +10,7 @@ import pytest
 
 import interloper as il
 from interloper.cli.commands.launch import _cmd_launch
-from interloper.events import Event, EventBatch, EventType
+from interloper.events import Event, EventBatch, EventRecorder, EventType
 from interloper.operation import OperationResult
 from interloper.runner.spec import RunSpec
 
@@ -137,6 +137,27 @@ class TestLaunch:
         assert loaded.headers["authorization"] == "Bearer ilr_x"
         assert api.events[0].type is EventType.RUN_STARTED and api.events[-1].type is EventType.RUN_COMPLETED
         assert (api.events[0].metadata["org_id"], api.events[0].metadata["attempt"]) == ("org-1", 2)
+
+    def test_the_run_heartbeats_at_the_cadence_its_launcher_set(
+        self, api: FakeApi, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("INTERLOPER_RUN_HEARTBEAT_INTERVAL", "3")
+        monkeypatch.setenv("INTERLOPER_RUN_HEARTBEAT_TIMEOUT", "30")
+        monkeypatch.setenv("INTERLOPER_REAPER_HEARTBEAT_INTERVAL", "99")
+        monkeypatch.setenv("INTERLOPER_REAPER_HEARTBEAT_TIMEOUT", "999")
+        cadences: list[tuple[float, float]] = []
+
+        class Recorder(EventRecorder):
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                cadences.append((kwargs["heartbeat_interval"], kwargs["heartbeat_timeout"]))
+                super().__init__(*args, **kwargs)
+
+        monkeypatch.setattr("interloper.events.EventRecorder", Recorder)
+        api.serve(il.DAG(LaunchedSource(destinations=[il.MemoryDestination()])))
+
+        _cmd_launch(_args())
+
+        assert cadences == [(3, 30)]
 
     def test_the_window_is_the_runs_partition(self, api: FakeApi) -> None:
         # An unpartitioned DAG given a key: `interloper run` refuses it, a launched run reads it as the platform does.
