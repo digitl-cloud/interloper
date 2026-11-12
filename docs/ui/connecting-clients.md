@@ -114,8 +114,8 @@ interloper oauth create --name "Acme connector" \
 ```
 
 The command, like the page, shows the `client_id` and the `client_secret`. The secret is shown
-once and cannot be recovered: only its hash is stored, so a lost secret means deleting the client and creating
-another. Repeat `--redirect-uri` to register several. A redirect URI must be `https`, `http` on
+once and cannot be recovered: only its hash is stored, so a lost or leaked secret is replaced with
+`rotate` (below). Repeat `--redirect-uri` to register several. A redirect URI must be `https`, `http` on
 `localhost`, `127.0.0.1` or `[::1]`, or the private-use scheme of a known client (`cursor`,
 `vscode`, `vscode-insiders`, `windsurf`); the same rule applies to clients that register
 themselves. A request must name a registered redirect URI exactly, except that a loopback `http`
@@ -124,12 +124,17 @@ one matches on any port, since a native app picks a free port for each sign-in.
 ```sh
 interloper oauth list
 interloper oauth delete <client_id>
+interloper oauth rotate <client_id>
 ```
 
 `list` shows the clients an operator registered, not the ones that registered themselves; the
 page leaves them out too, since each belongs to the users who approved it, who revoke it under
 Authorised apps. `delete` removes a client together with its codes and refresh tokens, revokes its
 access tokens for every user and deletes the conversations it started, so nothing it was given
-keeps working: every user of the client is signed out of it. The commands read and write the
+keeps working: every user of the client is signed out of it. `rotate`, which the page does not offer,
+replaces the client's secret and prints the new one once, without signing anyone out: its codes,
+refresh tokens and access tokens are untouched. The old secret stops working at once, so update
+the app right after: until it has the new secret, its token requests fail with `invalid_client`
+(its users' access tokens keep working until they expire). The commands read and write the
 database the settings point at, so run them where the database is configured, like
 `interloper db`. Every flag is in [CLI](../reference/cli.md#interloper-oauth).

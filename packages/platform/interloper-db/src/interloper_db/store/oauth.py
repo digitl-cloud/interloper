@@ -107,6 +107,35 @@ class OAuthStore:
             save(session, client)
         return client, raw_secret
 
+    def rotate_secret(
+        self, client_id: str, *, registered_by: Literal["dynamic", "operator"] | None = None
+    ) -> tuple[OAuthClient, str] | None:
+        """Replace a confidential client's secret; the old one stops working at once.
+
+        Codes, refresh tokens and access tokens the client holds are untouched,
+        so no user has to authorise it again.
+
+        Args:
+            client_id: The client whose secret to replace.
+            registered_by: Rotate only a client registered that way; ``None``
+                rotates it however it was registered.
+
+        Returns:
+            ``(client, raw_secret)`` with the new secret, shown once and never
+            stored; ``None`` when no confidential client has that id (or none
+            registered that way), in which case nothing changes.
+        """
+        raw_secret = CLIENT_SECRET_PREFIX + secrets.token_urlsafe(36)
+        with session_scope(self._engine) as session:
+            client = session.get(OAuthClient, client_id, with_for_update=True)
+            if client is None or client.secret_hash is None:
+                return None
+            if registered_by is not None and client.registered_by != registered_by:
+                return None
+            client.secret_hash = hash_token(raw_secret)
+            save(session, client)
+        return client, raw_secret
+
     def get_client(self, client_id: str) -> OAuthClient | None:
         """Look a client up by the id a request presents.
 

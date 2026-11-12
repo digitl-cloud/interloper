@@ -164,6 +164,19 @@ class TestClient:
         assert client.check_client_secret(secret)
         assert not client.check_client_secret(secret + "x")
 
+    def test_a_rotated_client_accepts_only_its_new_secret(self, oauth_store: Store):
+        row, old = oauth_store.oauth.register_client(
+            "Slack", ["https://slack.example.com/cb"], registered_by="operator", confidential=True
+        )
+        assert old is not None
+
+        rotated = oauth_store.oauth.rotate_secret(row.client_id)
+
+        assert rotated is not None
+        rotated_row, new = rotated
+        assert Client(rotated_row).check_client_secret(new)
+        assert not Client(rotated_row).check_client_secret(old)
+
     def test_a_client_redirects_only_to_its_registered_uris(self, oauth_store: Store):
         row, _ = oauth_store.oauth.register_client("Public", ["http://127.0.0.1/cb"], registered_by="dynamic")
         client = Client(row)
