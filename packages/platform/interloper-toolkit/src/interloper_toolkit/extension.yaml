@@ -1,0 +1,4 @@
+manifest_version: 1
+key: toolkit
+name: Toolkit
+description: "Tool functions shared by the agent and the MCP server."

@@ -1,10 +1,11 @@
 """Registry: the one primitive behind the framework's name → object registries.
 
-Every registry in the framework — kinds, runners, OAuth providers,
-representations — is an instance of `Registry`: a lazily-populated
-``name → object`` mapping, optionally fed by an entry-point group. One
-notion, many instances; each instance's docstring says what it holds and
-who consumes it.
+Every registry in the framework (kinds, runners, OAuth providers,
+representations, the catalog's component declarations, the CLI's commands,
+the scheduler's launchers) is an instance of `Registry`: a lazily-populated
+``name → object`` mapping, optionally fed by one section of the installed
+packages' extension manifests (`interloper.extension`). One notion, many
+instances; each instance's docstring says what it holds and who consumes it.
 """
 
 from __future__ import annotations
@@ -12,8 +13,9 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable, Iterator
-from importlib.metadata import EntryPoint, entry_points
 from typing import Any, Generic, TypeVar
+
+from interloper.extension import MANIFESTS, ExtensionEntry, ExtensionFailure
 
 T = TypeVar("T")
 
@@ -21,39 +23,44 @@ logger = logging.getLogger(__name__)
 
 
 class Registry(Generic[T]):
-    """Name → object registry, optionally fed by an entry-point group.
+    """Name → object registry, optionally fed by a manifest section.
 
-    Entries register explicitly via `register`, or are loaded lazily
-    from *group* on first lookup. Registration is first-wins and idempotent.
-    *adopt* transforms a loaded entry into its ``(name, object)`` pair —
-    the default keeps the entry name and object as declared.
+    Entries register explicitly via `register`, or are loaded lazily from
+    *section* on first lookup. Registration is first-wins and idempotent; an
+    entry a manifest declares under a name already taken is skipped with a
+    warning naming both. *adopt* transforms a loaded entry into its
+    ``(name, object)`` pair; the default keeps the entry's name and object
+    as declared.
 
-    One installed package never takes the others down: an entry point that
-    fails to load or adopt is skipped with a warning naming it. Without
-    *adopt*, an entry's name is its key, so a lookup by name loads only the
-    entry points declared under that name; a listing loads them all.
+    One installed package never takes the others down: an entry that fails
+    to load or adopt is skipped with a warning and recorded in
+    `Manifests.failures`. Without *adopt*, an entry's name is its key, so a
+    lookup by name loads only the entries declared under that name; a listing
+    loads them all.
     """
 
     def __init__(
         self,
-        group: str | None = None,
+        section: str | None = None,
         adopt: Callable[[str, Any], tuple[str, T]] | None = None,
     ) -> None:
-        """Initialize the registry.
+        """Initialize the registry and claim its section.
 
         Args:
-            group: Entry-point group to load lazily; ``None`` for a purely
-                code-registered registry.
+            section: The manifest section to load lazily; ``None`` for a
+                purely code-registered registry.
             adopt: Optional transform from a loaded entry to its
                 ``(name, object)`` pair.
         """
-        self._group = group
+        self._section = section
         self._adopt = adopt
         self._entries: dict[str, T] = {}
-        self._loaded = group is None
+        self._loaded = section is None
         self._loaded_names: set[str] = set()
         self._failures: dict[str, str] = {}
         self._load_lock = threading.RLock()
+        if section is not None:
+            MANIFESTS.claim(section)
 
     def register(self, name: str, entry: T) -> None:
         """Register *entry* under *name* (first-wins, idempotent).
@@ -91,14 +98,14 @@ class Registry(Generic[T]):
         """
         entry = self.get(name)
         if entry is None and name in self._failures:
-            raise KeyError(f"'{name}' is declared in entry-point group '{self._group}' but {self._failures[name]}")
+            raise KeyError(f"'{name}' is declared in manifest section '{self._section}' but {self._failures[name]}")
         if entry is None:
             available = ", ".join(self.keys())
-            where = f" in entry-point group '{self._group}'" if self._group else ""
+            where = f" in manifest section '{self._section}'" if self._section else ""
             hint = (
                 f" (available: {available})"
                 if available
-                else " (no entries discovered — is the package declaring it installed?)"
+                else " (no entries discovered: is the package declaring it installed?)"
             )
             raise KeyError(f"'{name}' is not registered{where}{hint}")
         return entry
@@ -136,7 +143,7 @@ class Registry(Generic[T]):
         Defined so iteration reads as a mapping's does. Without it, the
         presence of `__getitem__` makes Python fall back to the legacy
         sequence protocol and call ``__getitem__(0)``, which raises
-        ``KeyError`` — and linters then suggest ``for name in registry``
+        ``KeyError``, and linters then suggest ``for name in registry``
         over the correct ``registry.keys()``.
 
         Returns:
@@ -165,52 +172,56 @@ class Registry(Generic[T]):
         return self.get(name) is not None
 
     def _load(self, name: str | None = None) -> None:
-        """Populate from the entry-point group, each entry point once, thread-safely.
+        """Populate from the manifest section, each entry once, thread-safely.
 
         First lookups can race from worker threads (e.g. several assets
         conforming concurrently), so loading is serialized and ``_loaded``
-        flips only after every entry registered — a concurrent reader either
+        flips only after every entry registered: a concurrent reader either
         loads itself or waits, never observing a partially-populated registry.
-        Reading the group's metadata failing leaves the registry unloaded, so
-        the next lookup retries instead of latching it empty.
+        Reading the manifests failing leaves the registry unloaded, so the
+        next lookup retries instead of latching it empty.
 
         Args:
-            name: Load only the entry points declared under this name, or
-                every one when ``None``.
+            name: Load only the entries declared under this name, or every one
+                when ``None``.
         """
-        if self._loaded or self._group is None or name in self._loaded_names:
+        if self._loaded or self._section is None or name in self._loaded_names:
             return
         with self._load_lock:
             if self._loaded or name in self._loaded_names:
                 return
-            for entry_point in entry_points(group=self._group):
-                if entry_point.name in self._loaded_names or name not in (None, entry_point.name):
+            for entry in MANIFESTS.entries(self._section):
+                if entry.name in self._loaded_names or name not in (None, entry.name):
                     continue
-                self._load_entry(entry_point)
+                self._load_entry(entry)
             if name is None:
                 self._loaded = True
             else:
                 self._loaded_names.add(name)
 
-    def _load_entry(self, entry_point: EntryPoint) -> None:
-        """Load and register one entry point, skipping it with a warning when it fails.
+    def _load_entry(self, entry: ExtensionEntry) -> None:
+        """Load and register one entry, skipping it when it fails or its name is taken.
 
         Args:
-            entry_point: The entry point to load.
+            entry: The manifest entry to load.
         """
         try:
-            loaded = entry_point.load()
-            name, entry = self._adopt(entry_point.name, loaded) if self._adopt else (entry_point.name, loaded)
+            loaded = entry.load()
+            name, adopted = self._adopt(entry.name, loaded) if self._adopt else (entry.name, loaded)
         except Exception as error:
-            self._failures[entry_point.name] = f"failed to load: {type(error).__name__}: {error}"
+            message = f"failed to load: {type(error).__name__}: {error}"
+            self._failures[entry.name] = message
+            MANIFESTS.record(ExtensionFailure(entry.package, entry.section, entry.name, message))
+            logger.debug("Loading entry '%s' (%s) failed", entry.name, entry.path, exc_info=True)
+            return
+        if name in self._entries and self._entries[name] is not adopted:
             logger.warning(
-                "Skipping entry point '%s' (%s) of group '%s', which failed to load: %s: %s",
-                entry_point.name,
-                entry_point.value,
-                self._group,
-                type(error).__name__,
-                error,
+                "Entry '%s' (%s) of package '%s' is shadowed in section '%s' by an earlier entry under the same "
+                "name; the first one wins",
+                name,
+                entry.path,
+                entry.package,
+                entry.section,
             )
-            logger.debug("Loading entry point '%s' failed", entry_point.name, exc_info=True)
-        else:
-            self.register(name, entry)
+            return
+        self.register(name, adopted)

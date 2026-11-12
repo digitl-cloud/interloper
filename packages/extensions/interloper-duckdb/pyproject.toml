@@ -14,7 +14,7 @@ dependencies = [
     "interloper-pandas",
 ]
 
-[project.entry-points."interloper.components"]
+[project.entry-points."interloper.extensions"]
 duckdb = "interloper_duckdb"
 
 [build-system]

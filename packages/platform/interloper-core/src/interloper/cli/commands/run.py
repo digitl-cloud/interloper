@@ -44,6 +44,8 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from interloper.cli.command import Command
+
 if TYPE_CHECKING:
     from interloper.dag.base import DAG
     from interloper.partitioning.base import PartitionWindow
@@ -51,123 +53,120 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def register(
-    subparsers: argparse._SubParsersAction,
-) -> None:
-    """Register the ``run`` command.
+class RunCommand(Command):
+    """Execute a DAG directly with the configured runner, without persistence.
 
-    Args:
-        subparsers: The root subparsers action to attach to.
+    The exit status is non-zero on invalid input, an import failure, or a run that did not complete.
     """
-    run_parser = subparsers.add_parser(
-        "run",
-        help="Execute a DAG directly with the configured runner (no persistence)",
-        description="Execute a DAG directly with the configured runner, without persistence. "
-        "The exit status is non-zero on invalid input, an import failure, or a run that did not complete.",
-    )
-    source = run_parser.add_mutually_exclusive_group()
-    source.add_argument(
-        "--format",
-        choices=["inline", "paths"],
-        default="paths",
-        help="Input format: 'inline' for a DAGSpec JSON string, 'paths' for dotted import paths",
-    )
-    source.add_argument(
-        "-f",
-        "--file",
-        default=None,
-        help="Path to a runnable component spec (YAML). Mutually exclusive with positional targets.",
-    )
-    run_parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Validate and print the resolved run plan without executing",
-    )
-    run_parser.add_argument(
-        "--events",
-        choices=["pretty", "json"],
-        default="pretty",
-        help="Event output: 'pretty' renders events through the logger (default); "
-        "'json' streams raw event JSON lines to stdout",
-    )
-    run_parser.add_argument(
-        "-q",
-        "--quiet",
-        action="store_true",
-        help="Only show warnings and errors (takes precedence over --verbose; does not affect --events json output)",
-    )
-    run_parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Debug verbosity: include execution and destination I/O events",
-    )
-    run_parser.add_argument(
-        "--operation-id",
-        default=None,
-        help="Execute only this operation of the DAG, once, its upstreams read rather than executed, leaving what "
-        "it came to for the host run that started this process",
-    )
-    run_parser.add_argument(
-        "--date",
-        default=None,
-        help="Partition key (e.g. 2026-04-09; also 2026-04, 2026, or 2026-04-09T13)",
-    )
-    run_parser.add_argument(
-        "--start-date",
-        default=None,
-        help="Partition window start key. Must be used with --end-date and share its granularity.",
-    )
-    run_parser.add_argument(
-        "--end-date",
-        default=None,
-        help="Partition window end key. Must be used with --start-date and share its granularity.",
-    )
-    run_parser.add_argument(
-        "target",
-        nargs="*",
-        help="Inline DAGSpec JSON or @<path> to a file holding it (when --format inline), or dotted import paths",
-    )
-    run_parser.set_defaults(handler=_cmd_run)
 
+    def add_arguments(self, parser: argparse.ArgumentParser) -> None:
+        """Declare what to execute, the partition to execute it for, and the output controls.
 
-def _cmd_run(args: argparse.Namespace) -> None:
-    """Execute a DAG from import paths, a spec file or an inline spec.
+        Args:
+            parser: The command's own parser.
+        """
+        source = parser.add_mutually_exclusive_group()
+        source.add_argument(
+            "--format",
+            choices=["inline", "paths"],
+            default="paths",
+            help="Input format: 'inline' for a DAGSpec JSON string, 'paths' for dotted import paths",
+        )
+        source.add_argument(
+            "-f",
+            "--file",
+            default=None,
+            help="Path to a runnable component spec (YAML). Mutually exclusive with positional targets.",
+        )
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Validate and print the resolved run plan without executing",
+        )
+        parser.add_argument(
+            "--events",
+            choices=["pretty", "json"],
+            default="pretty",
+            help="Event output: 'pretty' renders events through the logger (default); "
+            "'json' streams raw event JSON lines to stdout",
+        )
+        parser.add_argument(
+            "-q",
+            "--quiet",
+            action="store_true",
+            help="Only show warnings and errors (takes precedence over --verbose; does not affect --events json "
+            "output)",
+        )
+        parser.add_argument(
+            "-v",
+            "--verbose",
+            action="store_true",
+            help="Debug verbosity: include execution and destination I/O events",
+        )
+        parser.add_argument(
+            "--operation-id",
+            default=None,
+            help="Execute only this operation of the DAG, once, its upstreams read rather than executed, leaving what "
+            "it came to for the host run that started this process",
+        )
+        parser.add_argument(
+            "--date",
+            default=None,
+            help="Partition key (e.g. 2026-04-09; also 2026-04, 2026, or 2026-04-09T13)",
+        )
+        parser.add_argument(
+            "--start-date",
+            default=None,
+            help="Partition window start key. Must be used with --end-date and share its granularity.",
+        )
+        parser.add_argument(
+            "--end-date",
+            default=None,
+            help="Partition window end key. Must be used with --start-date and share its granularity.",
+        )
+        parser.add_argument(
+            "target",
+            nargs="*",
+            help="Inline DAGSpec JSON or @<path> to a file holding it (when --format inline), or dotted import paths",
+        )
 
-    Args:
-        args: Parsed CLI arguments, carrying what to execute (``target``,
-            ``file``, ``format``, ``operation_id``), the partition flags, and
-            the output controls (``dry_run``, ``events``, ``quiet``, ``verbose``).
+    def run(self, args: argparse.Namespace) -> None:
+        """Execute a DAG from import paths, a spec file or an inline spec.
 
-    Raises:
-        SystemExit: On invalid input, import failures, or non-zero execution status.
-    """
-    from interloper.cli.commands.execution import configure_logging, execute, for_operation, leave_failure
-    from interloper.errors import format_exception
-    from interloper.events import ConsoleEventHandler
-    from interloper.runner import Runner
-    from interloper.settings import AppSettings
+        Args:
+            args: The parsed command line, carrying what to execute (``target``,
+                ``file``, ``format``, ``operation_id``), the partition flags, and
+                the output controls (``dry_run``, ``events``, ``quiet``, ``verbose``).
 
-    configure_logging(quiet=args.quiet, verbose=args.verbose)
-    metadata = {"observed_at": dt.datetime.now(dt.timezone.utc).isoformat()}
-    try:
-        dag = _build_dag(args)
-        window = _resolve_window(args, dag)
-        if args.operation_id is not None:
-            dag, window = for_operation(dag, window, args.operation_id, metadata)
-        runner = Runner.from_settings(AppSettings.get().runner)
-    except (Exception, SystemExit) as error:
-        leave_failure(args.operation_id, str(error) if isinstance(error, SystemExit) else format_exception(error))
-        raise
+        Raises:
+            SystemExit: On invalid input, import failures, or non-zero execution status.
+        """
+        from interloper.cli.commands.execution import configure_logging, execute, for_operation, leave_failure
+        from interloper.errors import format_exception
+        from interloper.events import ConsoleEventHandler
+        from interloper.runner import Runner
+        from interloper.settings import AppSettings
 
-    if args.dry_run:
-        _print_plan(dag, window, type(runner).__name__)
-        return
+        configure_logging(quiet=args.quiet, verbose=args.verbose)
+        metadata = {"observed_at": dt.datetime.now(dt.timezone.utc).isoformat()}
+        try:
+            dag = _build_dag(args)
+            window = _resolve_window(args, dag)
+            if args.operation_id is not None:
+                dag, window = for_operation(dag, window, args.operation_id, metadata)
+            runner = Runner.from_settings(AppSettings.get().runner)
+        except (Exception, SystemExit) as error:
+            leave_failure(args.operation_id, str(error) if isinstance(error, SystemExit) else format_exception(error))
+            raise
 
-    # Events become records on the ``interloper.run`` logger, so the console logging set up above
-    # governs their visibility and format.
-    runner.on_event = ConsoleEventHandler(json_lines=args.events == "json")
-    execute(runner, dag, window, metadata, operation_id=args.operation_id)
+        if args.dry_run:
+            _print_plan(dag, window, type(runner).__name__)
+            return
+
+        # Events become records on the ``interloper.run`` logger, so the console logging set up above
+        # governs their visibility and format.
+        runner.on_event = ConsoleEventHandler(json_lines=args.events == "json")
+        execute(runner, dag, window, metadata, operation_id=args.operation_id)
 
 
 # -- Internals -----------------------------------------------------------------

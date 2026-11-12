@@ -10,8 +10,8 @@ authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 requires-python = ">=3.10"
 dependencies = ["interloper-core", "pandas>=1.5"]
 
-[project.entry-points."interloper.representations"]
-dataframe = "interloper_pandas.representation:DATAFRAME_REPRESENTATION"
+[project.entry-points."interloper.extensions"]
+pandas = "interloper_pandas"
 
 [build-system]
 requires = ["uv_build>=0.12.9,<0.13"]

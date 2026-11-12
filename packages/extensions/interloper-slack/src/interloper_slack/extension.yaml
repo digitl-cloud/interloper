@@ -1,0 +1,5 @@
+manifest_version: 1
+key: slack
+name: Slack
+description: "Slack connection and notification hook."
+components: interloper_slack

@@ -22,88 +22,88 @@ import os
 import sys
 from functools import partial
 
+from interloper.cli.command import Command
+
 logger = logging.getLogger(__name__)
 
 
-def register(subparsers: argparse._SubParsersAction) -> None:
-    """Register the ``launch`` command.
+class LaunchCommand(Command):
+    """Execute a platform run by its id, as a launcher starts it.
 
-    Args:
-        subparsers: The root subparsers action to attach to.
+    Its DAG, partition and metadata are loaded from the API and its events reported back, with the run's token
+    (INTERLOPER_RUN_TOKEN), as the launcher or container runner that started the process sets it. The exit status
+    is non-zero when the run cannot be loaded, is lost, or did not complete.
     """
-    parser = subparsers.add_parser(
-        "launch",
-        help="Execute a platform run by its id, as a launcher starts it",
-        description="Execute a platform run by its id: its DAG, partition and metadata are loaded from the API and "
-        "its events reported back, with the run's token (INTERLOPER_RUN_TOKEN), as the launcher or container runner "
-        "that started the process sets it. The exit status is non-zero when the run cannot be loaded, is lost, or "
-        "did not complete.",
-    )
-    parser.add_argument("run_id", help="The platform run to execute")
-    parser.add_argument(
-        "--operation-id",
-        default=None,
-        help="Execute only this operation of the run, once, its upstreams read rather than executed, for the host "
-        "that executes the run",
-    )
-    parser.set_defaults(handler=_cmd_launch)
 
+    def add_arguments(self, parser: argparse.ArgumentParser) -> None:
+        """Declare the run to execute and, for a host run, the one operation.
 
-def _cmd_launch(args: argparse.Namespace) -> None:
-    """Load a platform run from the API, execute it, and report its events back.
-
-    Args:
-        args: Parsed CLI arguments, carrying ``run_id`` and ``operation_id``.
-
-    Raises:
-        SystemExit: Without the run's token, when the run cannot be loaded,
-            is lost, or did not complete.
-    """
-    from interloper.cli.commands.execution import configure_logging, execute, for_operation, leave_failure
-    from interloper.dag import DAG
-    from interloper.errors import RunnerError, format_exception
-    from interloper.events import Event, EventBatch, EventRecorder, EventType
-    from interloper.rest import HTTPBearerAuth, RESTClient
-    from interloper.runner import Runner
-    from interloper.runner.spec import RunSpec
-    from interloper.settings import AppSettings
-
-    configure_logging()
-    settings = AppSettings.get()
-    if not settings.run.token:
-        raise SystemExit(
-            "Error: launch executes a platform run, which needs the run's token (INTERLOPER_RUN_TOKEN) "
-            "and the API it belongs to (server.internal_url)."
+        Args:
+            parser: The command's own parser.
+        """
+        parser.add_argument("run_id", help="The platform run to execute")
+        parser.add_argument(
+            "--operation-id",
+            default=None,
+            help="Execute only this operation of the run, once, its upstreams read rather than executed, for the "
+            "host that executes the run",
         )
-    client = RESTClient(settings.server.internal_url, auth=HTTPBearerAuth(settings.run.token), timeout=30)
-    recorder = EventRecorder(
-        partial(EventBatch.post, client=client, run_id=args.run_id),
-        run_id=args.run_id,
-        heartbeat_interval=settings.run.heartbeat_interval,
-        heartbeat_timeout=settings.run.heartbeat_timeout,
-        on_lost=_exit_lost,
-    )
 
-    try:
+    def run(self, args: argparse.Namespace) -> None:
+        """Load a platform run from the API, execute it, and report its events back.
+
+        Args:
+            args: The parsed command line, carrying ``run_id`` and ``operation_id``.
+
+        Raises:
+            SystemExit: Without the run's token, when the run cannot be loaded,
+                is lost, or did not complete.
+        """
+        from interloper.cli.commands.execution import configure_logging, execute, for_operation, leave_failure
+        from interloper.dag import DAG
+        from interloper.errors import RunnerError, format_exception
+        from interloper.events import Event, EventBatch, EventRecorder, EventType
+        from interloper.rest import HTTPBearerAuth, RESTClient
+        from interloper.runner import Runner
+        from interloper.runner.spec import RunSpec
+        from interloper.settings import AppSettings
+
+        configure_logging()
+        settings = AppSettings.get()
+        if not settings.run.token:
+            raise SystemExit(
+                "Error: launch executes a platform run, which needs the run's token (INTERLOPER_RUN_TOKEN) "
+                "and the API it belongs to (server.internal_url)."
+            )
+        client = RESTClient(settings.server.internal_url, auth=HTTPBearerAuth(settings.run.token), timeout=30)
+        recorder = EventRecorder(
+            partial(EventBatch.post, client=client, run_id=args.run_id),
+            run_id=args.run_id,
+            heartbeat_interval=settings.run.heartbeat_interval,
+            heartbeat_timeout=settings.run.heartbeat_timeout,
+            on_lost=_exit_lost,
+        )
+
         try:
-            spec = RunSpec.from_api(client, args.run_id, timeout=settings.run.heartbeat_timeout / 2)
-        except RunnerError as error:
-            raise SystemExit(f"Error: {error}") from error
-        dag, window = DAG.from_spec(spec.dag), spec.window
-        if args.operation_id is not None:
-            dag, window = for_operation(dag, window, args.operation_id, spec.metadata)
-        runner = Runner.from_settings(settings.runner)
-    except (Exception, SystemExit) as error:
-        reason = str(error) if isinstance(error, SystemExit) else format_exception(error)
-        if args.operation_id is not None:
-            leave_failure(args.operation_id, reason)
-        else:
-            ending = {"run_id": args.run_id, "error": reason, "message": f"Run failed: {reason}"}
-            with recorder:
-                recorder(Event(type=EventType.RUN_FAILED, metadata=ending))
-        raise
+            try:
+                spec = RunSpec.from_api(client, args.run_id, timeout=settings.run.heartbeat_timeout / 2)
+            except RunnerError as error:
+                raise SystemExit(f"Error: {error}") from error
+            dag, window = DAG.from_spec(spec.dag), spec.window
+            if args.operation_id is not None:
+                dag, window = for_operation(dag, window, args.operation_id, spec.metadata)
+            runner = Runner.from_settings(settings.runner)
+        except (Exception, SystemExit) as error:
+            reason = str(error) if isinstance(error, SystemExit) else format_exception(error)
+            if args.operation_id is not None:
+                leave_failure(args.operation_id, reason)
+            else:
+                ending = {"run_id": args.run_id, "error": reason, "message": f"Run failed: {reason}"}
+                with recorder:
+                    recorder(Event(type=EventType.RUN_FAILED, metadata=ending))
+            raise
 
-    execute(runner, dag, window, spec.metadata, operation_id=args.operation_id, recorder=recorder)
+        execute(runner, dag, window, spec.metadata, operation_id=args.operation_id, recorder=recorder)
 
 
 def _exit_lost() -> None:

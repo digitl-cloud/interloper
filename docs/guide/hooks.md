@@ -83,8 +83,8 @@ class EmailHook(il.Hook):
 
 A hook that acts on other components extends the relation vocabulary the way `TriggerHook`
 does, declaring its own `targets` relation on the subclass; the base hook only observes. Custom
-hook classes join the [catalog](catalog.md) through the `interloper.components` entry point like
-any component.
+hook classes join the [catalog](catalog.md) through their package manifest's `components`
+section like any component.
 
 `HookState` (`last_fired_at`, `last_run_id`, `last_error`) is the hook's machine-owned state,
 stamped by the operator on every firing; `last_error` holds the latest firing's error and a

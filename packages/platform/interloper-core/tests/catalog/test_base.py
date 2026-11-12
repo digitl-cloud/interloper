@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from types import ModuleType, SimpleNamespace
+from types import ModuleType
+from unittest import mock
 
 import pytest
 
@@ -11,6 +12,9 @@ from interloper.asset.base import AssetDefinition
 from interloper.catalog import Catalog
 from interloper.catalog import base as catalog_base
 from interloper.component import Relation
+from interloper.extension import Manifests
+from interloper.registry import Registry
+from interloper.registry import base as registry_base
 from interloper.settings import AppSettings, CatalogSettings
 
 _FRAMEWORK = {"cron_job", "trigger_hook", "webhook_hook"}
@@ -68,20 +72,37 @@ class ReadingSource(il.Source):
 
 
 class TestDiscovery:
-    """Entry-point discovery of the component universe."""
+    """Manifest discovery of the component universe."""
 
     def test_discovers_the_components_installed_packages_declare(self):
-        # Core declares its jobs and hooks under interloper.components the
-        # way any package declares its own, so it is the discovery end to end.
+        # Core declares its jobs and hooks in its manifest's components section
+        # the way any package declares its own, so it is the discovery end to end.
         assert _FRAMEWORK <= set(Catalog.discover().components)
 
     def test_an_entry_naming_a_module_declares_the_component_classes_in_it(self, monkeypatch):
         module = ModuleType("demo_components")
         module.__dict__.update(DemoSource=DemoSource, DemoConnection=DemoConnection, helper=len)
-        entry = SimpleNamespace(load=lambda: module)
-        monkeypatch.setattr(catalog_base, "entry_points", lambda group: [entry])
+        declarations: Registry[object] = Registry()
+        declarations.register("demo", module)
+        monkeypatch.setattr(catalog_base, "DECLARATIONS", declarations)
 
         assert set(Catalog._declared_classes()) == {DemoSource, DemoConnection}
+
+    def test_a_declaration_failing_to_import_is_skipped_and_the_rest_declared(self, monkeypatch):
+        good = mock.Mock(package="demo", section="components", path="demo:DemoSource")
+        good.name = "demo"
+        good.load.return_value = DemoSource
+        broken = mock.Mock(package="broken", section="components", path="broken_components")
+        broken.name = "broken"
+        broken.load.side_effect = ModuleNotFoundError("No module named 'broken_components'")
+        manifests = mock.Mock(spec=Manifests)
+        manifests.entries.return_value = [broken, good]
+        monkeypatch.setattr(registry_base, "MANIFESTS", manifests)
+        monkeypatch.setattr(catalog_base, "DECLARATIONS", Registry("components"))
+
+        assert Catalog._declared_classes() == (DemoSource,)
+        (failure,) = [call.args[0] for call in manifests.record.call_args_list]
+        assert (failure.package, failure.section, failure.entry) == ("broken", "components", "broken")
 
 
 class TestFromSettings:

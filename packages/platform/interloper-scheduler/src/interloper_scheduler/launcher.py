@@ -29,10 +29,10 @@ logger = logging.getLogger(__name__)
 
 
 #: Launcher classes by type key (``LauncherSettings.type``), fed by the
-#: ``interloper.launchers`` entry-point group — every launcher, the
+#: ``launchers`` section of the package manifests: every launcher, the
 #: built-in in-process one included, registers through it. Installed means
-#: discovered: a new launcher is one new package with one entry point.
-LAUNCHERS: Registry[type[Launcher]] = Registry("interloper.launchers")
+#: discovered: a new launcher is one new package with one manifest entry.
+LAUNCHERS: Registry[type[Launcher]] = Registry("launchers")
 
 
 class Launcher(ABC):

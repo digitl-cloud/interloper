@@ -12,7 +12,7 @@ dependencies = [
     "interloper-core",
 ]
 
-[project.entry-points."interloper.components"]
+[project.entry-points."interloper.extensions"]
 slack = "interloper_slack"
 
 [build-system]

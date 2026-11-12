@@ -6,23 +6,42 @@ from unittest import mock
 
 import pytest
 
+from interloper.extension import ExtensionFailure, Manifests
 from interloper.registry import Registry
 
 
-def _entry_point(name: str, loaded: object) -> mock.Mock:
-    """Build a stub entry point that loads to *loaded*.
+def _entry(name: str, loaded: object, package: str = "acme") -> mock.Mock:
+    """Build a stub manifest entry that loads to *loaded*.
 
     Args:
-        name: The entry-point name.
-        loaded: The object the entry point loads to.
+        name: The entry's name.
+        loaded: The object the entry loads to.
+        package: The package declaring the entry.
 
     Returns:
-        The stubbed entry point.
+        The stubbed entry.
     """
-    entry_point = mock.Mock()
-    entry_point.name = name
-    entry_point.load.return_value = loaded
-    return entry_point
+    entry = mock.Mock()
+    entry.name = name
+    entry.package = package
+    entry.section = "things"
+    entry.path = f"{package}.things:{name}"
+    entry.load.return_value = loaded
+    return entry
+
+
+def _declaring(*entries: mock.Mock) -> mock.Mock:
+    """Build manifests declaring *entries* under every section.
+
+    Args:
+        *entries: The entries every section holds.
+
+    Returns:
+        The stubbed manifests, to patch in for the registry module's.
+    """
+    manifests = mock.Mock(spec=Manifests)
+    manifests.entries.return_value = list(entries)
+    return manifests
 
 
 class TestRegister:
@@ -80,106 +99,116 @@ class TestIteration:
         registry.register("beta", 2)
         assert len(registry) == 2
 
-    def test_iteration_loads_the_entry_point_group(self):
-        registry: Registry[str] = Registry("test.group")
-        with mock.patch("interloper.registry.base.entry_points", return_value=[_entry_point("alpha", "A")]):
+    def test_iteration_loads_the_section(self):
+        registry: Registry[str] = Registry("things")
+        with mock.patch("interloper.registry.base.MANIFESTS", _declaring(_entry("alpha", "A"))):
             assert list(registry) == ["alpha"]
 
-    def test_len_loads_the_entry_point_group(self):
-        registry: Registry[str] = Registry("test.group")
-        with mock.patch("interloper.registry.base.entry_points", return_value=[_entry_point("alpha", "A")]):
+    def test_len_loads_the_section(self):
+        registry: Registry[str] = Registry("things")
+        with mock.patch("interloper.registry.base.MANIFESTS", _declaring(_entry("alpha", "A"))):
             assert len(registry) == 1
 
 
-class TestEntryPoints:
-    def _entry_point(self, name: str, loaded: object) -> mock.Mock:
-        entry_point = mock.Mock()
-        entry_point.name = name
-        entry_point.load.return_value = loaded
-        return entry_point
+class TestManifestSection:
+    def test_constructing_a_registry_claims_its_section(self):
+        manifests = _declaring()
+        with mock.patch("interloper.registry.base.MANIFESTS", manifests):
+            Registry("things")
+            Registry()
+        manifests.claim.assert_called_once_with("things")
 
     def test_lazy_load_on_first_lookup(self):
-        registry: Registry[str] = Registry("test.group")
-        with mock.patch("interloper.registry.base.entry_points", return_value=[self._entry_point("alpha", "A")]) as eps:
+        registry: Registry[str] = Registry("things")
+        manifests = _declaring(_entry("alpha", "A"))
+        with mock.patch("interloper.registry.base.MANIFESTS", manifests):
             assert registry.get("alpha") == "A"
             assert registry.keys() == ("alpha",)
-        eps.assert_called_with(group="test.group")
+        manifests.entries.assert_called_with("things")
 
-    def test_no_group_never_loads(self):
+    def test_no_section_never_loads(self):
         registry: Registry[str] = Registry()
-        with mock.patch("interloper.registry.base.entry_points") as eps:
+        manifests = _declaring()
+        with mock.patch("interloper.registry.base.MANIFESTS", manifests):
             assert registry.get("anything") is None
-        eps.assert_not_called()
+        manifests.entries.assert_not_called()
 
     def test_explicit_registration_wins_over_loaded(self):
-        registry: Registry[str] = Registry("test.group")
+        registry: Registry[str] = Registry("things")
         registry.register("alpha", "explicit")
-        with mock.patch("interloper.registry.base.entry_points", return_value=[self._entry_point("alpha", "loaded")]):
+        with mock.patch("interloper.registry.base.MANIFESTS", _declaring(_entry("alpha", "loaded"))):
             assert registry.get("alpha") == "explicit"
 
+    def test_an_entry_shadowed_by_an_earlier_one_is_skipped_with_a_warning(self, caplog):
+        registry: Registry[str] = Registry("things")
+        declared = _declaring(_entry("alpha", "first", package="acme"), _entry("alpha", "second", package="other"))
+        with mock.patch("interloper.registry.base.MANIFESTS", declared):
+            assert registry.items() == (("alpha", "first"),)
+        assert "Entry 'alpha' (other.things:alpha) of package 'other' is shadowed in section 'things'" in caplog.text
+
     def test_adopt_transforms_loaded_entries(self):
-        registry: Registry[str] = Registry("test.group", adopt=lambda name, entry: (f"{name}!", entry.upper()))
-        with mock.patch("interloper.registry.base.entry_points", return_value=[self._entry_point("alpha", "a")]):
+        registry: Registry[str] = Registry("things", adopt=lambda name, entry: (f"{name}!", entry.upper()))
+        with mock.patch("interloper.registry.base.MANIFESTS", _declaring(_entry("alpha", "a"))):
             assert registry.get("alpha!") == "A"
 
-    def test_an_entry_failing_to_adopt_is_skipped_with_a_warning(self, caplog):
+    def test_an_entry_failing_to_adopt_is_skipped_and_recorded(self):
         def adopt(name: str, entry: object) -> tuple[str, str]:
             if name == "broken":
                 raise TypeError(f"bad entry: {name}")
             return name, str(entry)
 
-        registry: Registry[str] = Registry("test.group", adopt=adopt)
-        declared = [self._entry_point("broken", "b"), self._entry_point("alpha", "a")]
-        with mock.patch("interloper.registry.base.entry_points", return_value=declared):
+        registry: Registry[str] = Registry("things", adopt=adopt)
+        manifests = _declaring(_entry("broken", "b"), _entry("alpha", "a"))
+        with mock.patch("interloper.registry.base.MANIFESTS", manifests):
             assert registry.keys() == ("alpha",)
-        assert "'broken'" in caplog.text
-        assert "TypeError: bad entry: broken" in caplog.text
+        manifests.record.assert_called_once_with(
+            ExtensionFailure("acme", "things", "broken", "failed to load: TypeError: bad entry: broken")
+        )
 
-    def test_an_entry_failing_to_import_is_skipped_with_a_warning(self, caplog):
-        broken = self._entry_point("broken", None)
+    def test_an_entry_failing_to_import_is_skipped_and_recorded(self):
+        broken = _entry("broken", None)
         broken.load.side_effect = ImportError("cannot import name 'Old' from 'interloper'")
-        registry: Registry[str] = Registry("test.group")
-        declared = [broken, self._entry_point("alpha", "A")]
-        with mock.patch("interloper.registry.base.entry_points", return_value=declared):
+        registry: Registry[str] = Registry("things")
+        manifests = _declaring(broken, _entry("alpha", "A"))
+        with mock.patch("interloper.registry.base.MANIFESTS", manifests):
             assert registry.get("alpha") == "A"
             assert registry.keys() == ("alpha",)
-        assert "cannot import name 'Old'" in caplog.text
+        (failure,) = [call.args[0] for call in manifests.record.call_args_list]
+        assert (failure.package, failure.section, failure.entry) == ("acme", "things", "broken")
+        assert "cannot import name 'Old'" in failure.error
 
     def test_a_lookup_of_an_entry_that_failed_names_its_error(self):
-        broken = self._entry_point("kubernetes", None)
+        broken = _entry("kubernetes", None)
         broken.load.side_effect = ImportError("No module named 'kubernetes'")
-        registry: Registry[str] = Registry("test.group")
+        registry: Registry[str] = Registry("things")
         with (
-            mock.patch("interloper.registry.base.entry_points", return_value=[broken]),
+            mock.patch("interloper.registry.base.MANIFESTS", _declaring(broken)),
             pytest.raises(KeyError, match="failed to load: ImportError: No module named 'kubernetes'"),
         ):
             registry["kubernetes"]
 
     def test_a_lookup_by_name_loads_only_that_names_entries(self):
-        unrelated = self._entry_point("beta", "B")
-        registry: Registry[str] = Registry("test.group")
-        declared = [self._entry_point("alpha", "A"), unrelated]
-        with mock.patch("interloper.registry.base.entry_points", return_value=declared):
+        unrelated = _entry("beta", "B")
+        registry: Registry[str] = Registry("things")
+        with mock.patch("interloper.registry.base.MANIFESTS", _declaring(_entry("alpha", "A"), unrelated)):
             assert registry.get("alpha") == "A"
             unrelated.load.assert_not_called()
             assert registry.keys() == ("alpha", "beta")
         unrelated.load.assert_called_once()
 
     def test_a_lookup_by_name_through_adopt_loads_everything(self):
-        renamed = self._entry_point("alpha", "a")
-        registry: Registry[str] = Registry("test.group", adopt=lambda name, entry: (f"{name}!", entry))
-        with mock.patch("interloper.registry.base.entry_points", return_value=[renamed]):
+        registry: Registry[str] = Registry("things", adopt=lambda name, entry: (f"{name}!", entry))
+        with mock.patch("interloper.registry.base.MANIFESTS", _declaring(_entry("alpha", "a"))):
             assert registry.get("alpha!") == "a"
 
-    def test_failed_load_retries_on_next_lookup(self):
-        # A transient load failure must not latch the registry empty forever.
-        registry: Registry[str] = Registry("test.group")
-        with (
-            mock.patch("interloper.registry.base.entry_points", side_effect=RuntimeError("boom")),
-            pytest.raises(RuntimeError, match="boom"),
-        ):
+    def test_failed_read_retries_on_next_lookup(self):
+        # A transient failure to read the manifests must not latch the registry empty forever.
+        registry: Registry[str] = Registry("things")
+        unreadable = _declaring()
+        unreadable.entries.side_effect = RuntimeError("boom")
+        with mock.patch("interloper.registry.base.MANIFESTS", unreadable), pytest.raises(RuntimeError, match="boom"):
             registry.get("alpha")
-        with mock.patch("interloper.registry.base.entry_points", return_value=[self._entry_point("alpha", "A")]):
+        with mock.patch("interloper.registry.base.MANIFESTS", _declaring(_entry("alpha", "A"))):
             assert registry.get("alpha") == "A"
 
 
@@ -188,10 +217,9 @@ class TestThreadSafety:
         # Regression: a reader arriving while another thread was mid-load used
         # to observe an empty registry (KeyError "'rows' is not registered
         # (available: )") because _loaded flipped before the entries landed.
-        registry: Registry[str] = Registry("test.group")
+        registry: Registry[str] = Registry("things")
 
-        entry = mock.Mock()
-        entry.name = "alpha"
+        entry = _entry("alpha", None)
         entry.load.side_effect = lambda: time.sleep(0.05) or "A"
 
         results: dict[str, object] = {}
@@ -202,7 +230,7 @@ class TestThreadSafety:
             except KeyError as e:
                 results[tid] = e
 
-        with mock.patch("interloper.registry.base.entry_points", return_value=[entry]):
+        with mock.patch("interloper.registry.base.MANIFESTS", _declaring(entry)):
             first = threading.Thread(target=lookup, args=("first",))
             second = threading.Thread(target=lookup, args=("second",))
             first.start()
@@ -221,21 +249,18 @@ class TestErrorMessage:
         with pytest.raises(KeyError, match=r"'missing' is not registered \(available: alpha\)"):
             registry["missing"]
 
-    def test_unknown_name_names_the_entry_point_group(self):
-        registry: Registry[str] = Registry("test.group")
-        entry = mock.Mock()
-        entry.name = "alpha"
-        entry.load.return_value = "A"
+    def test_unknown_name_names_the_section(self):
+        registry: Registry[str] = Registry("things")
         with (
-            mock.patch("interloper.registry.base.entry_points", return_value=[entry]),
-            pytest.raises(KeyError, match=r"'missing' is not registered in entry-point group 'test.group'"),
+            mock.patch("interloper.registry.base.MANIFESTS", _declaring(_entry("alpha", "A"))),
+            pytest.raises(KeyError, match=r"'missing' is not registered in manifest section 'things'"),
         ):
             registry["missing"]
 
-    def test_empty_group_hints_at_missing_package(self):
-        registry: Registry[str] = Registry("test.group")
+    def test_empty_section_hints_at_missing_package(self):
+        registry: Registry[str] = Registry("things")
         with (
-            mock.patch("interloper.registry.base.entry_points", return_value=[]),
-            pytest.raises(KeyError, match=r"no entries discovered — is the package declaring it installed\?"),
+            mock.patch("interloper.registry.base.MANIFESTS", _declaring()),
+            pytest.raises(KeyError, match=r"no entries discovered: is the package declaring it installed\?"),
         ):
             registry["rows"]

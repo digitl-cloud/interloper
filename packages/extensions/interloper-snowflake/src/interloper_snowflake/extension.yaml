@@ -1,0 +1,5 @@
+manifest_version: 1
+key: snowflake
+name: Snowflake
+description: "Snowflake connection and destination."
+components: interloper_snowflake

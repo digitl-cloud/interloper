@@ -4,94 +4,117 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Mapping
+from typing import ClassVar
 
+from interloper.cli import Command
 from interloper.settings import AppSettings
 
 from interloper_db.engine import init_engine
 from interloper_db.provision import bootstrap, downgrade, drop_database, upgrade
 
 
-def register(subparsers: argparse._SubParsersAction) -> None:
-    """Register the ``db`` command group.
+class DatabaseInitCommand(Command):
+    """Ensure the database exists, create its tables and migrate it to head (idempotent)."""
 
-    Args:
-        subparsers: The root subparsers action to attach to.
-    """
-    db_parser = subparsers.add_parser("db", help="Database operations", description="Database operations.")
-    db_subparsers = db_parser.add_subparsers(dest="db_command")
+    def run(self, args: argparse.Namespace) -> None:
+        """Bootstrap the database: create it if missing, create its tables and migrate it to head.
 
-    init_parser = db_subparsers.add_parser("init", help="Ensure database, create tables, migrate to head (idempotent)")
-    init_parser.set_defaults(handler=_cmd_init)
+        Idempotent and concurrent-safe.
 
-    reset_parser = db_subparsers.add_parser("reset", help="Drop and recreate all tables")
-    reset_parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt")
-    reset_parser.set_defaults(handler=_cmd_reset)
-
-    upgrade_parser = db_subparsers.add_parser("upgrade", help="Run Alembic migrations to head (or a specific revision)")
-    upgrade_parser.add_argument("revision", nargs="?", default="head", help="Target revision (default: head)")
-    upgrade_parser.set_defaults(handler=_cmd_upgrade)
-
-    downgrade_parser = db_subparsers.add_parser("downgrade", help="Downgrade Alembic migrations")
-    downgrade_parser.add_argument("revision", nargs="?", default="-1", help="Target revision (default: -1)")
-    downgrade_parser.set_defaults(handler=_cmd_downgrade)
-
-    db_parser.set_defaults(handler=lambda args: db_parser.print_help())
+        Args:
+            args: The parsed command line; this command takes no arguments.
+        """
+        postgres = AppSettings.get().postgres
+        print(f"Bootstrapping the database at {postgres.location}...")
+        bootstrap(postgres.dsn)
+        print("Done.")
 
 
-def _cmd_init(args: argparse.Namespace) -> None:
-    """Bootstrap the database: create it if missing, create its tables and migrate it to head.
+class DatabaseResetCommand(Command):
+    """Drop and recreate all tables."""
 
-    Idempotent and concurrent-safe.
+    def add_arguments(self, parser: argparse.ArgumentParser) -> None:
+        """Declare the flag that skips the confirmation prompt.
 
-    Args:
-        args: Parsed CLI arguments; this subcommand takes none of its own.
-    """
-    postgres = AppSettings.get().postgres
-    print(f"Bootstrapping the database at {postgres.location}...")
-    bootstrap(postgres.dsn)
-    print("Done.")
+        Args:
+            parser: The command's own parser.
+        """
+        parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt")
 
+    def run(self, args: argparse.Namespace) -> None:
+        """Drop the database entirely and bootstrap it from scratch.
 
-def _cmd_reset(args: argparse.Namespace) -> None:
-    """Drop the database entirely and bootstrap it from scratch.
+        Args:
+            args: The parsed command line, carrying ``yes`` to skip the confirmation prompt.
+        """
+        postgres = AppSettings.get().postgres
 
-    Args:
-        args: Parsed CLI arguments, carrying ``yes`` to skip the confirmation prompt.
-    """
-    postgres = AppSettings.get().postgres
+        if not args.yes:
+            answer = input(f"This will DROP and recreate the database at {postgres.location}. Continue? [y/N] ")
+            if answer.lower() not in ("y", "yes"):
+                print("Aborted.")
+                sys.exit(0)
 
-    if not args.yes:
-        answer = input(f"This will DROP and recreate the database at {postgres.location}. Continue? [y/N] ")
-        if answer.lower() not in ("y", "yes"):
-            print("Aborted.")
-            sys.exit(0)
-
-    print("Dropping database...")
-    drop_database(postgres.dsn)
-    print(f"Bootstrapping the database at {postgres.location}...")
-    bootstrap(postgres.dsn)
-    print("Done.")
+        print("Dropping database...")
+        drop_database(postgres.dsn)
+        print(f"Bootstrapping the database at {postgres.location}...")
+        bootstrap(postgres.dsn)
+        print("Done.")
 
 
-def _cmd_upgrade(args: argparse.Namespace) -> None:
-    """Run Alembic migrations.
+class DatabaseUpgradeCommand(Command):
+    """Run Alembic migrations to head (or a specific revision)."""
 
-    Args:
-        args: Parsed CLI arguments, carrying ``revision`` (the target, default ``head``).
-    """
-    init_engine(AppSettings.get().postgres.dsn)
-    print(f"Running migrations to {args.revision}...")
-    upgrade(revision=args.revision)
-    print("Done.")
+    def add_arguments(self, parser: argparse.ArgumentParser) -> None:
+        """Declare the revision to migrate to.
+
+        Args:
+            parser: The command's own parser.
+        """
+        parser.add_argument("revision", nargs="?", default="head", help="Target revision (default: head)")
+
+    def run(self, args: argparse.Namespace) -> None:
+        """Run Alembic migrations.
+
+        Args:
+            args: The parsed command line, carrying ``revision`` (the target, default ``head``).
+        """
+        init_engine(AppSettings.get().postgres.dsn)
+        print(f"Running migrations to {args.revision}...")
+        upgrade(revision=args.revision)
+        print("Done.")
 
 
-def _cmd_downgrade(args: argparse.Namespace) -> None:
-    """Downgrade Alembic migrations.
+class DatabaseDowngradeCommand(Command):
+    """Downgrade Alembic migrations."""
 
-    Args:
-        args: Parsed CLI arguments, carrying ``revision`` (the target, default ``-1``).
-    """
-    init_engine(AppSettings.get().postgres.dsn)
-    print(f"Downgrading to {args.revision}...")
-    downgrade(revision=args.revision)
-    print("Done.")
+    def add_arguments(self, parser: argparse.ArgumentParser) -> None:
+        """Declare the revision to downgrade to.
+
+        Args:
+            parser: The command's own parser.
+        """
+        parser.add_argument("revision", nargs="?", default="-1", help="Target revision (default: -1)")
+
+    def run(self, args: argparse.Namespace) -> None:
+        """Downgrade Alembic migrations.
+
+        Args:
+            args: The parsed command line, carrying ``revision`` (the target, default ``-1``).
+        """
+        init_engine(AppSettings.get().postgres.dsn)
+        print(f"Downgrading to {args.revision}...")
+        downgrade(revision=args.revision)
+        print("Done.")
+
+
+class DatabaseCommand(Command):
+    """Database operations."""
+
+    commands: ClassVar[Mapping[str, type[Command]]] = {
+        "init": DatabaseInitCommand,
+        "reset": DatabaseResetCommand,
+        "upgrade": DatabaseUpgradeCommand,
+        "downgrade": DatabaseDowngradeCommand,
+    }

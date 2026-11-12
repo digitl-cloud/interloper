@@ -1,0 +1,10 @@
+manifest_version: 1
+key: k8s
+name: Kubernetes
+description: "Runs and operations as Kubernetes Jobs."
+runners:
+  kubernetes: interloper_k8s.runner:KubernetesRunner
+  # Older configs set runner.type to k8s; the canonical name matches the launcher's.
+  k8s: interloper_k8s.runner:KubernetesRunner
+launchers:
+  kubernetes: interloper_k8s.launcher:KubernetesLauncher

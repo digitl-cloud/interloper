@@ -94,8 +94,8 @@ https://docs.interloper.dev/guide/jobs/
   value or to name a differently-named variable (`api_key: ${SHOP_PROD_KEY}`). An unbound
   relation is built from the environment at the moment it is read, so a missing credential
   surfaces as a validation error from the asset that needed it.
-- **`key:` instead of `path:`** needs the package installed with an `interloper.components`
-  entry point; a bare module is always `path: module.Class`.
+- **`key:` instead of `path:`** needs the package installed, declaring the class in the `components`
+  section of its `extension.yaml`; a bare module is always `path: module.Class`.
 - **Dump a spec to learn the shape**: `yaml.safe_dump(job.to_spec().model_dump(mode="json"))`
   from a Python-built `Job(...)`. The dump is exhaustive (generated ids, defaults); keep only
   what differs from defaults and from what cascades.

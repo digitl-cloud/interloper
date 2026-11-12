@@ -18,7 +18,7 @@ dependencies = [
     "pandas-gbq>=0.26.1",
 ]
 
-[project.entry-points."interloper.components"]
+[project.entry-points."interloper.extensions"]
 google_cloud = "interloper_google_cloud"
 
 [build-system]

@@ -1,0 +1,4 @@
+manifest_version: 1
+key: agent
+name: Agent
+description: "The assistant."

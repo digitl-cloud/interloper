@@ -14,7 +14,7 @@ dependencies = [
     "pyarrow>=14",
 ]
 
-[project.entry-points."interloper.components"]
+[project.entry-points."interloper.extensions"]
 aws = "interloper_aws"
 
 [build-system]

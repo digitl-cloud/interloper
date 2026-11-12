@@ -99,7 +99,7 @@ class OAuthConfig:
         if not self.auth_url:
             raise ConfigError(
                 f"Unknown OAuth provider: {provider!r} (available: {list(PROVIDERS.keys())}). "
-                f"Declare it under the 'interloper.oauth_providers' entry-point group "
+                f"Declare it in a package manifest's 'oauth_providers' section "
                 f"or pass auth_url explicitly."
             )
         self.scope = scope

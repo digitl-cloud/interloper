@@ -1,9 +1,8 @@
 """Core-shipped OAuth providers.
 
-Each constant is registered through interloper-core's own
-``interloper.oauth_providers`` entry points (see ``pyproject.toml``) —
-the same mechanism third-party packages use, so the registry loader has
-no special cases.
+Each constant is registered in the ``oauth_providers`` section of
+interloper-core's own ``extension.yaml``, the same mechanism third-party
+packages use, so the registry loader has no special cases.
 
 Providers whose dialect deviates from plain RFC 6749 are subclasses right
 next to their instance: the class carries the deviation, the instance the

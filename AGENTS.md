@@ -15,7 +15,7 @@ packages/
     interloper-toolkit/        tool functions shared by the agent and the MCP server
     interloper-agent/          the assistant (pydantic-ai)
     interloper-mcp/            MCP server over the catalog, lineage and run history
-  extensions/                  reached only through entry points; each installs on its own
+  extensions/                  reached only through their manifests; each installs on its own
     interloper-assets/         pre-built source definitions (bing, facebook, google, …)
     interloper-pandas/         pandas DataFrame representation and normalizer
     interloper-google-cloud/   Google Cloud connection; BigQuery, GCS and Sheets destinations
@@ -37,7 +37,7 @@ docs/                          documentation site (zensical), published to GitHu
 dev/docs_macros.py             macros the reference pages render settings and CLI tables with
 ```
 
-A package lives in `platform/` when a role process imports it by name, and in `extensions/` when the platform reaches it only through an entry-point registry. The workspace glob is `packages/*/*`, so a new package goes in one of the two groups.
+A package lives in `platform/` when a role process imports it by name, and in `extensions/` when the platform reaches it only through a registry reading its `extension.yaml` (see [docs/extending/extensions.md](docs/extending/extensions.md)). The workspace glob is `packages/*/*`, so a new package goes in one of the two groups.
 
 The frontend lives at `packages/platform/interloper-app/app/` and has its own toolchain (pnpm + Nuxt) and its own [AGENTS.md](packages/platform/interloper-app/app/AGENTS.md). `make build-app` builds the SPA and copies it into `packages/platform/interloper-app/src/interloper_app/static/`.
 

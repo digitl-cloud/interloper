@@ -1,15 +1,15 @@
-"""Interloper CLI entry point: every command is contributed through the ``interloper.cli`` group."""
+"""Interloper CLI entry point: every command is a `Command` a package manifest's ``cli`` section names."""
 
 from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Callable
 
+from interloper.cli.command import Command
 from interloper.registry import Registry
 from interloper.settings import AppSettings
 
-COMMANDS: Registry[Callable[[argparse._SubParsersAction], None]] = Registry("interloper.cli")
+COMMANDS: Registry[type[Command]] = Registry("cli")
 
 
 def _load_dotenv() -> None:
@@ -46,9 +46,9 @@ def build_parser(command: str | None = None) -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(prog="interloper", description="Interloper CLI")
     subparsers = parser.add_subparsers(dest="command")
-    register = COMMANDS.get(command) if command else None
-    for _name, register_command in [(command, register)] if register else COMMANDS.items():
-        register_command(subparsers)
+    named = COMMANDS.get(command) if command else None
+    for name, command_class in [(command, named)] if command and named else COMMANDS.items():
+        command_class().attach(subparsers, name)
     return parser
 
 

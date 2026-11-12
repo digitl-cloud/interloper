@@ -65,9 +65,11 @@ and has a single load path.
 
 ## Registering
 
-```toml
-[project.entry-points."interloper.representations"]
-arrow = "my_package.arrow:ARROW_REPRESENTATION"
+In your package's [extension manifest](extensions.md):
+
+```yaml
+representations:
+  - my_package.arrow:ARROW_REPRESENTATION
 ```
 
 The entry may point at an instance or a class. The registry keys it by the representation's own

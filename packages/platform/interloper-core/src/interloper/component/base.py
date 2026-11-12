@@ -36,15 +36,14 @@ if TYPE_CHECKING:
 
 
 # -- Registry ------------------------------------------------------------------
-_KINDS_ENTRY_POINT = "interloper.kinds"
 
 
 def _adopt_kind(name: str, loaded: Any) -> tuple[str, type[Component]]:
-    """Resolve a loaded kinds entry to its ``(kind, anchor)`` pair.
+    """Resolve a loaded ``kinds`` entry to its ``(kind, anchor)`` pair.
 
     Args:
-        name: The entry-point name, used only to name the offending entry in the error.
-        loaded: The loaded entry-point object, expected to be a ``Component`` class.
+        name: The entry's name, used only to name the offending entry in the error.
+        loaded: The loaded object, expected to be a ``Component`` class.
 
     Returns:
         The pair the registry stores.
@@ -53,12 +52,12 @@ def _adopt_kind(name: str, loaded: Any) -> tuple[str, type[Component]]:
         TypeError: If the entry does not point at a ``Component`` class.
     """
     if not (isinstance(loaded, type) and issubclass(loaded, Component)):
-        raise TypeError(f"Entry '{name}' in the '{_KINDS_ENTRY_POINT}' group is not a Component class: {loaded!r}")
+        raise TypeError(f"Entry '{name}' in the 'kinds' section is not a Component class: {loaded!r}")
     anchor = loaded.anchor()
     return anchor.kind, anchor
 
 
-KINDS: Registry[type[Component]] = Registry(_KINDS_ENTRY_POINT, adopt=_adopt_kind)
+KINDS: Registry[type[Component]] = Registry("kinds", adopt=_adopt_kind)
 
 
 # -- Definitions ---------------------------------------------------------------

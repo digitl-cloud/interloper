@@ -30,38 +30,8 @@ otel = [
 [dependency-groups]
 dev = ["pytest>=8.0.0", "pytest-cov>=7.0.0", "opentelemetry-sdk>=1.42,<2", "pyarrow>=14"]
 
-[project.entry-points."interloper.kinds"]
-source = "interloper.source.base:Source"
-asset = "interloper.asset.base:Asset"
-destination = "interloper.destination.base:Destination"
-resource = "interloper.resource.base:Resource"
-connection = "interloper.connection.base:Connection"
-config = "interloper.config.base:Config"
-job = "interloper.job.base:Job"
-hook = "interloper.hook.base:Hook"
-
-[project.entry-points."interloper.components"]
-cron_job = "interloper.job.cron:CronJob"
-trigger_hook = "interloper.hook.trigger:TriggerHook"
-webhook_hook = "interloper.hook.webhook:WebhookHook"
-
-[project.entry-points."interloper.representations"]
-rows = "interloper.representation.base:RowsRepresentation"
-
-[project.entry-points."interloper.runners"]
-async = "interloper.runner.async_runner:AsyncRunner"
-serial = "interloper.runner.serial:SerialRunner"
-
-[project.entry-points."interloper.oauth_providers"]
-amazon = "interloper.oauth.providers:AMAZON"
-criteo = "interloper.oauth.providers:CRITEO"
-facebook = "interloper.oauth.providers:FACEBOOK"
-google = "interloper.oauth.providers:GOOGLE"
-linkedin = "interloper.oauth.providers:LINKEDIN"
-microsoft = "interloper.oauth.providers:MICROSOFT"
-pinterest = "interloper.oauth.providers:PINTEREST"
-snapchat = "interloper.oauth.providers:SNAPCHAT"
-tiktok = "interloper.oauth.providers:TIKTOK"
+[project.entry-points."interloper.extensions"]
+core = "interloper"
 
 [build-system]
 requires = ["uv_build>=0.12.9,<0.13"]
@@ -69,10 +39,6 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-name = "interloper"
-
-[project.entry-points."interloper.cli"]
-launch = "interloper.cli.commands.launch:register"
-run = "interloper.cli.commands.run:register"
 
 [project.scripts]
 interloper = "interloper.cli.main:main"

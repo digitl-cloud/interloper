@@ -9,7 +9,7 @@ import httpx2
 import pytest
 
 import interloper as il
-from interloper.cli.commands.launch import _cmd_launch
+from interloper.cli.commands.launch import LaunchCommand
 from interloper.events import Event, EventBatch, EventRecorder, EventType
 from interloper.operation import OperationResult
 from interloper.runner.spec import RunSpec
@@ -130,7 +130,7 @@ class TestLaunch:
     def test_the_run_is_loaded_and_every_event_reported_with_its_metadata(self, api: FakeApi) -> None:
         api.serve(il.DAG(LaunchedSource(destinations=[il.MemoryDestination()])))
 
-        _cmd_launch(_args())
+        LaunchCommand().run(_args())
 
         loaded = api.requests[0]
         assert (loaded.method, str(loaded.url)) == ("GET", "http://localhost:3000/api/runs/run-1/spec")
@@ -155,7 +155,7 @@ class TestLaunch:
         monkeypatch.setattr("interloper.events.EventRecorder", Recorder)
         api.serve(il.DAG(LaunchedSource(destinations=[il.MemoryDestination()])))
 
-        _cmd_launch(_args())
+        LaunchCommand().run(_args())
 
         assert cadences == [(3, 30)]
 
@@ -163,7 +163,7 @@ class TestLaunch:
         # An unpartitioned DAG given a key: `interloper run` refuses it, a launched run reads it as the platform does.
         api.serve(il.DAG(LaunchedSource(destinations=[il.MemoryDestination()])), partition_key="2026-10-26")
 
-        _cmd_launch(_args())
+        LaunchCommand().run(_args())
 
         assert api.events[0].metadata["window"] == "2026-10-26"
         assert api.events[-1].type is EventType.RUN_COMPLETED
@@ -172,7 +172,7 @@ class TestLaunch:
         api.spec_status = 409
 
         with pytest.raises(SystemExit):
-            _cmd_launch(_args())
+            LaunchCommand().run(_args())
 
         (failed,) = api.events
         assert failed.type is EventType.RUN_FAILED
@@ -183,11 +183,11 @@ class TestLaunch:
         api.live = False
 
         with pytest.raises(SystemExit, match="ended elsewhere"):
-            _cmd_launch(_args())
+            LaunchCommand().run(_args())
 
     def test_without_the_runs_token_it_says_what_is_missing(self) -> None:
         with pytest.raises(SystemExit, match="needs the run's token"):
-            _cmd_launch(_args())
+            LaunchCommand().run(_args())
 
 
 class TestOperation:
@@ -198,7 +198,7 @@ class TestOperation:
         (operation,) = dag.operations
         api.serve(dag)
 
-        _cmd_launch(_args(operation_id=operation.id))
+        LaunchCommand().run(_args(operation_id=operation.id))
 
         assert api.events and all(event.metadata.get("component_id") in (None, operation.id) for event in api.events)
         assert not [event for event in api.events if event.type.value.startswith(("run_", "operation_"))]
@@ -211,7 +211,7 @@ class TestOperation:
         api.serve(dag)
 
         with pytest.raises(SystemExit):
-            _cmd_launch(_args(operation_id=operation.id))
+            LaunchCommand().run(_args(operation_id=operation.id))
 
         assert OperationResult.from_termination_message(message.read_text(), "exited") == OperationResult(
             error="RuntimeError: asset blew up"
@@ -222,7 +222,7 @@ class TestOperation:
         api.spec_status = 409
 
         with pytest.raises(SystemExit):
-            _cmd_launch(_args(operation_id="op-1"))
+            LaunchCommand().run(_args(operation_id="op-1"))
 
         left = OperationResult.from_termination_message(message.read_text(), "exited")
         assert "HTTP 409" in (left.error or "")

@@ -2,8 +2,9 @@
 
 The web UI contains no per-connector code. Every tile, wizard step, form field and status column
 is derived from the same component definitions the framework builds for the
-[catalog](../guide/catalog.md). Add a source or a connection to a package, register it with an
-entry point, and the UI knows how to list, create, configure, check and run it.
+[catalog](../guide/catalog.md). Add a source or a connection to a package, declare it in the
+package's [extension manifest](../extending/extensions.md), and the UI knows how to list, create,
+configure, check and run it.
 
 This page follows the data from a component class to the screen.
 

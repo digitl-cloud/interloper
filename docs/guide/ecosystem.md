@@ -16,21 +16,24 @@ The core's one extra, `otel`, adds the OpenTelemetry SDK and exporters, as descr
 
 ## Framework extensions
 
-| Package | Provides | Registers |
+Each package says what it brings in its `extension.yaml`, under the sections listed here; see
+[Extensions & registries](../extending/extensions.md).
+
+| Package | Provides | Manifest sections |
 |---------|----------|-----------|
-| `interloper-pandas` | `DataFrameRepresentation`, `DataFrameNormalizer`: assets may return pandas DataFrames, normalized and conformed natively. | `interloper.representations`: `dataframe` |
-| `interloper-google-cloud` | `GoogleCloudConnection`, `BigQueryDestination` (a `DatabaseDestination` with typed Parquet loads and time partitioning), `GCSDestination` (an `ObjectStoreDestination` over Cloud Storage: hive-partitioned Parquet, JSONL or CSV), `GoogleSheetsDestination` (a `DatabaseDestination` writing one tab per asset). | `interloper.components` |
-| `interloper-duckdb` | `DuckDBConnection`, `DuckDBDestination` (a `DatabaseDestination` writing typed tables to a local DuckDB file or a MotherDuck database, one schema per dataset). | `interloper.components` |
-| `interloper-aws` | `AWSConnection` (an access key pair, or boto3's default credential chain), `S3Destination` (an `ObjectStoreDestination` over Amazon S3: hive-partitioned Parquet, JSONL or CSV). | `interloper.components` |
-| `interloper-azure` | `AzureConnection` (a Microsoft Entra service principal), `FabricWarehouseDestination` (a `DatabaseDestination` over a Microsoft Fabric Warehouse's SQL endpoint: typed T-SQL DDL, one schema per dataset, atomic partition replaces in an explicit transaction, batched parameterised inserts). | `interloper.components` |
-| `interloper-slack` | `SlackConnection`, `SlackHook`: a notification hook posting run and backfill outcomes to a channel, with a link back to the app when `server.external_url` is set. | `interloper.components` |
-| `interloper-sql` | `IbisView`, `ibis_view`, `union`: portable views authored as Ibis expressions, compiled for the destination's dialect. With the `postgres` extra, `SQLConnection` and `SQLDestination`: a `DatabaseDestination` over SQLAlchemy Core, one table per asset with datasets as SQL schemas; PostgreSQL through psycopg, any other SQLAlchemy dialect whose driver is installed. | `interloper.components` |
-| `interloper-snowflake` | `SnowflakeConnection`, `SnowflakeDestination` (a `DatabaseDestination` with typed DDL, quoted case-preserving identifiers and atomic partition replaces through a staged Parquet `COPY INTO`). | `interloper.components` |
-| `interloper-clickhouse` | `ClickHouseConnection`, `ClickHouseDestination` (a `DatabaseDestination` writing `MergeTree` tables, one database per dataset, partitioned to match the asset and replaced atomically per partition through a staging table and `REPLACE PARTITION`; self-hosted servers and ClickHouse Cloud). | `interloper.components` |
-| `interloper-databricks` | `DatabricksConnection` (an OAuth service principal or a personal access token), `DatabricksDestination` (a `DatabaseDestination` writing Delta tables in Unity Catalog through a SQL warehouse: Parquet staged in a volume, each partition replaced by one atomic `INSERT ... REPLACE WHERE`). | `interloper.components` |
-| `interloper-assets` | Ready-made sources and connections for advertising, analytics and commerce platforms (Facebook Ads, Google Ads, Bing Ads, Amazon Ads, LinkedIn, TikTok, Pinterest, Snapchat, Criteo, Search Console, and more), plus the `demo` source. | `interloper.components` |
-| `interloper-docker` | `DockerRunner`: each operation runs in a container, events stream back to the host. | `interloper.runners`: `docker`; `interloper.launchers`: `docker` |
-| `interloper-k8s` | `KubernetesRunner`: each operation runs as a Kubernetes Job. | `interloper.runners`: `kubernetes`; `interloper.launchers`: `kubernetes` |
+| `interloper-pandas` | `DataFrameRepresentation`, `DataFrameNormalizer`: assets may return pandas DataFrames, normalized and conformed natively. | `representations`: `dataframe` |
+| `interloper-google-cloud` | `GoogleCloudConnection`, `BigQueryDestination` (a `DatabaseDestination` with typed Parquet loads and time partitioning), `GCSDestination` (an `ObjectStoreDestination` over Cloud Storage: hive-partitioned Parquet, JSONL or CSV), `GoogleSheetsDestination` (a `DatabaseDestination` writing one tab per asset). | `components` |
+| `interloper-duckdb` | `DuckDBConnection`, `DuckDBDestination` (a `DatabaseDestination` writing typed tables to a local DuckDB file or a MotherDuck database, one schema per dataset). | `components` |
+| `interloper-aws` | `AWSConnection` (an access key pair, or boto3's default credential chain), `S3Destination` (an `ObjectStoreDestination` over Amazon S3: hive-partitioned Parquet, JSONL or CSV). | `components` |
+| `interloper-azure` | `AzureConnection` (a Microsoft Entra service principal), `FabricWarehouseDestination` (a `DatabaseDestination` over a Microsoft Fabric Warehouse's SQL endpoint: typed T-SQL DDL, one schema per dataset, atomic partition replaces in an explicit transaction, batched parameterised inserts). | `components` |
+| `interloper-slack` | `SlackConnection`, `SlackHook`: a notification hook posting run and backfill outcomes to a channel, with a link back to the app when `server.external_url` is set. | `components` |
+| `interloper-sql` | `IbisView`, `ibis_view`, `union`: portable views authored as Ibis expressions, compiled for the destination's dialect. With the `postgres` extra, `SQLConnection` and `SQLDestination`: a `DatabaseDestination` over SQLAlchemy Core, one table per asset with datasets as SQL schemas; PostgreSQL through psycopg, any other SQLAlchemy dialect whose driver is installed. | `components` |
+| `interloper-snowflake` | `SnowflakeConnection`, `SnowflakeDestination` (a `DatabaseDestination` with typed DDL, quoted case-preserving identifiers and atomic partition replaces through a staged Parquet `COPY INTO`). | `components` |
+| `interloper-clickhouse` | `ClickHouseConnection`, `ClickHouseDestination` (a `DatabaseDestination` writing `MergeTree` tables, one database per dataset, partitioned to match the asset and replaced atomically per partition through a staging table and `REPLACE PARTITION`; self-hosted servers and ClickHouse Cloud). | `components` |
+| `interloper-databricks` | `DatabricksConnection` (an OAuth service principal or a personal access token), `DatabricksDestination` (a `DatabaseDestination` writing Delta tables in Unity Catalog through a SQL warehouse: Parquet staged in a volume, each partition replaced by one atomic `INSERT ... REPLACE WHERE`). | `components` |
+| `interloper-assets` | Ready-made sources and connections for advertising, analytics and commerce platforms (Facebook Ads, Google Ads, Bing Ads, Amazon Ads, LinkedIn, TikTok, Pinterest, Snapchat, Criteo, Search Console, and more), plus the `demo` source. | `components` |
+| `interloper-docker` | `DockerRunner`: each operation runs in a container, events stream back to the host. | `runners`: `docker`; `launchers`: `docker` |
+| `interloper-k8s` | `KubernetesRunner`: each operation runs as a Kubernetes Job. | `runners`: `kubernetes`; `launchers`: `kubernetes` |
 
 ## The platform
 

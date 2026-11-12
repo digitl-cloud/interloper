@@ -14,7 +14,7 @@ dependencies = [
     "interloper-pandas",
 ]
 
-[project.entry-points."interloper.components"]
+[project.entry-points."interloper.extensions"]
 clickhouse = "interloper_clickhouse"
 
 [dependency-groups]

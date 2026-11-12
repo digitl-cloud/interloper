@@ -92,7 +92,7 @@ Reference: https://docs.interloper.dev/guide/destinations/
    asset's first destination (or `default_destination_key`).
 
 4. **Register** like any component: `@il.destination(name=...)` for the catalog, an
-   `interloper.components` entry point for packages, `path: mypkg.destinations.JSONLDestination`
+   `components` entry in a package's `extension.yaml`, `path: mypkg.destinations.JSONLDestination`
    in specs.
 
 ## Quick reference

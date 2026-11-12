@@ -1,13 +1,16 @@
 """Catalog: flat registry of all component definitions keyed by component key.
 
-Registration is two entry-point groups, and nothing else:
+Registration is two sections of the installed packages' extension
+manifests, and nothing else:
 
-- ``interloper.kinds``: what kinds exist, one entry per kind, naming its
-  anchor class (consumed by `interloper.KINDS`).
-- ``interloper.components``: what component classes exist, every concrete
-  component an installed package provides, framework classes included
-  (core declares ``cron_job``/``trigger_hook``/``webhook_hook`` here, the
-  same way ``interloper-assets`` declares its connectors).
+- ``kinds``: what kinds exist, one entry per kind, naming its anchor class
+  (read by `interloper.KINDS`).
+- ``components``: what component classes exist, every concrete component an
+  installed package provides, framework classes included (core declares its
+  cron job and hooks here, the same way ``interloper-assets`` declares its
+  connectors). An entry names a component class, or a module whose public
+  component classes are all declared. One entry that fails to import is
+  skipped and recorded, never failing the catalog.
 
 Installation defines the *declared universe*; ``AppSettings.catalog.include``
 narrows it to what a deployment *enables*. An enabled catalog holds the
@@ -33,7 +36,6 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable
 from functools import cache
-from importlib.metadata import entry_points
 from types import ModuleType
 from typing import Any
 
@@ -41,12 +43,13 @@ from pydantic import BaseModel, Field
 
 from interloper.component import KINDS, Component, ComponentDefinition, Relation
 from interloper.errors import ConfigError
+from interloper.registry import Registry
 from interloper.settings import AppSettings
 from interloper.source.base import Source, SourceDefinition
 
 logger = logging.getLogger(__name__)
 
-_ENTRY_POINT = "interloper.components"
+DECLARATIONS: Registry[Any] = Registry("components")
 
 
 class Catalog(BaseModel):
@@ -191,11 +194,11 @@ class Catalog(BaseModel):
 
     @classmethod
     def discover(cls) -> Catalog:
-        """Load the declared universe from ``interloper.components`` entry points.
+        """Load the declared universe from the manifests' ``components`` sections.
 
-        Cheap to call repeatedly: entry points cannot change at runtime, so
-        the scan and the class imports behind it are cached for the process
-        and only the mapping is rebuilt.
+        Cheap to call repeatedly: installed manifests cannot change at
+        runtime, so the scan and the class imports behind it are cached for
+        the process and only the mapping is rebuilt.
 
         Returns:
             Catalog of every component declared by every installed package.
@@ -206,7 +209,7 @@ class Catalog(BaseModel):
 
     @classmethod
     def _declared_classes(cls) -> tuple[type[Component], ...]:
-        """Component classes declared under ``interloper.components``.
+        """Component classes declared under the manifests' ``components`` sections.
 
         Each entry names a component class directly, or a module whose public
         attributes are scanned for component classes.
@@ -215,8 +218,7 @@ class Catalog(BaseModel):
             Every declared component class.
         """
         classes: list[type[Component]] = []
-        for entry_point in entry_points(group=_ENTRY_POINT):
-            loaded = entry_point.load()
+        for loaded in DECLARATIONS.values():
             if isinstance(loaded, ModuleType):
                 for attribute_name in dir(loaded):
                     member = getattr(loaded, attribute_name)
@@ -290,7 +292,7 @@ class Catalog(BaseModel):
 
         Raises:
             ConfigError: If a declared component's kind has no registered
-                anchor: declare it under the ``interloper.kinds`` group.
+                anchor: declare it in a manifest's ``kinds`` section.
         """
         definitions: dict[str, ComponentDefinition] = {}
         for component in components:
@@ -299,7 +301,7 @@ class Catalog(BaseModel):
             if component.kind not in KINDS:
                 raise ConfigError(
                     f"Component '{component.key}' declares kind '{component.kind}', which is not registered, "
-                    "declare its anchor under the 'interloper.kinds' entry-point group"
+                    "declare its anchor in a manifest's 'kinds' section"
                 )
             definitions.setdefault(component.key, component.definition())
         return definitions

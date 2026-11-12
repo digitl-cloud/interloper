@@ -14,7 +14,7 @@ dependencies = [
     "databricks-sql-connector[pyarrow]>=4.1.2",
 ]
 
-[project.entry-points."interloper.components"]
+[project.entry-points."interloper.extensions"]
 databricks = "interloper_databricks"
 
 [build-system]
