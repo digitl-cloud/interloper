@@ -278,9 +278,7 @@ class DisplayVideo360(il.Source):
     def custom_audiences(self, context: il.ExecutionContext) -> list[_Record]:
         """Detail of the configured audience, including per-surface audience sizes.
 
-        Raises:
-            ValueError: If the source carries no audience id.
-
+        Needs the source's Audience ID, and fails without one.
         """
         if not self.audience_id:
             raise ValueError("The custom_audiences asset requires the source's audience_id to be set")

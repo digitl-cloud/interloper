@@ -1,4 +1,9 @@
-"""Conventions every asset in the catalog follows, checked over the whole catalog at once.
+"""Conventions every component in the catalog follows, checked over the whole catalog at once.
+
+A component's docstring is product copy (rule 7 of
+``.claude/rules/python-style.md``): it becomes the component's description in
+the app and its table's description in BigQuery, so it reads as prose and
+carries no ``Args:``, ``Returns:``, ``Yields:`` or ``Raises:`` section.
 
 Entity assets are dimension snapshots, so they are snapshot-partitioned: the
 partition is the day the run observed the vendor, never the run's window
@@ -45,6 +50,8 @@ EXCEPTIONS: dict[str, str] = {
     "GoogleAnalytics4Export.events.event_timestamp": _GA4_EXPORT,
     "Adservice.conversions_stats_by_time_of_day.day": "the day of the week, not a date",
 }
+
+_SECTION = re.compile(r"^\s*(Args|Returns|Yields|Raises):\s*$", re.MULTILINE)
 
 _IDENTIFIER = re.compile(r"(^|_)id$")
 _INSTANT = re.compile(r"(_at|timestamp)$")
@@ -123,6 +130,18 @@ def _catalog_sources() -> list[type[Source]]:
     return sources
 
 
+def _descriptions() -> Iterator[tuple[str, str]]:
+    for name in dir(interloper_assets):
+        component = getattr(interloper_assets, name)
+        if not (inspect.isclass(component) and issubclass(component, il.Component)):
+            continue
+        definition = component.definition()
+        yield definition.key, definition.description
+        if isinstance(definition, il.SourceDefinition):
+            for asset in definition.assets:
+                yield f"{definition.key}.{asset.key}", asset.description
+
+
 def _fields() -> Iterator[tuple[str, FieldSpec]]:
     for source in _catalog_sources():
         for asset_type in source.asset_types:
@@ -159,6 +178,14 @@ def _excepted(path: str) -> bool:
 def _describe(path: str, spec: FieldSpec) -> str:
     kind = spec.type.__name__ if isinstance(spec.type, type) else str(spec.type)
     return f"{path}: {kind}"
+
+
+def test_no_description_carries_a_docstring_section():
+    misses = [key for key, description in _descriptions() if _SECTION.search(description)]
+    assert not misses, (
+        "component docstrings ship as descriptions; write a caveat as prose, never as an "
+        "Args/Returns/Yields/Raises section:\n" + "\n".join(misses)
+    )
 
 
 def test_every_entity_asset_is_snapshot_partitioned_on_date():

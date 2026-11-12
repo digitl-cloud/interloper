@@ -270,12 +270,7 @@ class TiktokAds(il.Source):
         normalizer=_ADVERTISER_NORMALIZER,
     )
     async def advertisers(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-        """The advertiser account with its attributes.
-
-        Raises:
-            RuntimeError: If TikTok answers with a non-zero API code.
-
-        """
+        """The advertiser account with its attributes."""
         response = await self.connection.client.get(
             "/advertiser/info/",
             params={

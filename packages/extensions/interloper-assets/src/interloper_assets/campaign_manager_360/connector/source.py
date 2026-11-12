@@ -269,9 +269,7 @@ class CampaignManager360(il.Source):
     def custom_audiences(self, context: il.ExecutionContext) -> list[_Record]:
         """Remarketing lists (custom audiences) of the configured advertiser.
 
-        Raises:
-            ValueError: If the source carries no ``advertiser_id``.
-
+        Needs the source's Advertiser ID, and fails without one.
         """
         if not self.advertiser_id:
             raise ValueError("The custom_audiences asset requires the source's advertiser_id to be set")
