@@ -112,8 +112,33 @@ class OAuthStore:
             save(session, client)
         return client, raw_secret
 
+    def save_metadata_client(self, client_id: str, name: str, redirect_uris: list[str]) -> OAuthClient:
+        """Keep a client its metadata document describes, as the document was just read.
+
+        The row is the document's cache: every read rewrites the name and
+        redirect URIs, and restarts the ``created_at`` clock
+        :meth:`prune_clients` counts from. The client's grants are untouched.
+
+        Args:
+            client_id: The https URL the document was read from, the client's id.
+            name: The name the document declares.
+            redirect_uris: The redirect URIs the document lists.
+
+        Returns:
+            The client, public (no secret), ``registered_by`` ``metadata``.
+        """
+        with session_scope(self._engine) as session:
+            client = session.get(OAuthClient, client_id, with_for_update=True) or OAuthClient(
+                client_id=client_id, name=name, registered_by="metadata"
+            )
+            client.name = name
+            client.redirect_uris = redirect_uris
+            client.created_at = datetime.now(UTC)
+            save(session, client)
+        return client
+
     def rotate_secret(
-        self, client_id: str, *, registered_by: Literal["dynamic", "operator"] | None = None
+        self, client_id: str, *, registered_by: Literal["dynamic", "operator", "metadata"] | None = None
     ) -> tuple[OAuthClient, str] | None:
         """Replace a confidential client's secret; the old one stops working at once.
 
@@ -153,7 +178,9 @@ class OAuthStore:
         with session_scope(self._engine) as session:
             return session.get(OAuthClient, client_id)
 
-    def list_clients(self, *, registered_by: Literal["dynamic", "operator"] | None = None) -> list[OAuthClient]:
+    def list_clients(
+        self, *, registered_by: Literal["dynamic", "operator", "metadata"] | None = None
+    ) -> list[OAuthClient]:
         """List registered clients.
 
         Args:
@@ -170,7 +197,7 @@ class OAuthStore:
             return list(session.exec(statement).all())
 
     def delete_client(
-        self, client_id: str, *, registered_by: Literal["dynamic", "operator"] | None = None
+        self, client_id: str, *, registered_by: Literal["dynamic", "operator", "metadata"] | None = None
     ) -> OAuthClient | None:
         """Delete a client together with every grant it holds.
 
@@ -210,15 +237,16 @@ class OAuthStore:
         return client
 
     def prune_clients(self, *, unused_for: timedelta, ended_for: timedelta) -> list[OAuthClient]:
-        """Delete the dynamically registered clients nobody uses any more.
+        """Delete the clients nobody uses any more that registered themselves or came from a metadata document.
 
         A client goes when it holds no live refresh token and no code still
-        to exchange, registered more than ``unused_for`` ago, and its newest
-        refresh token, if it ever had one, expired more than ``ended_for``
-        ago. That catches the clients abandoned after one registration and
-        those whose grants all ended long ago. Each goes as
-        :meth:`delete_client` deletes one, with its grants and conversations.
-        Operator clients are never touched.
+        to exchange, registered (or had its document read) more than
+        ``unused_for`` ago, and its newest refresh token, if it ever had one,
+        expired more than ``ended_for`` ago. That catches the clients
+        abandoned after one registration and those whose grants all ended
+        long ago; a metadata client comes back the next time its document is
+        read. Each goes as :meth:`delete_client` deletes one, with its grants
+        and conversations. Operator clients are never touched.
 
         Args:
             unused_for: How long a client may go without obtaining a grant.
@@ -239,16 +267,16 @@ class OAuthStore:
             .where(col(RefreshToken.client_id) == col(OAuthClient.client_id))
             .scalar_subquery()
         )
-        statement = select(OAuthClient.client_id).where(
-            col(OAuthClient.registered_by) == "dynamic",
+        statement = select(OAuthClient).where(
+            col(OAuthClient.registered_by).in_(("dynamic", "metadata")),
             col(OAuthClient.created_at) < now - unused_for,
             ~live_refresh,
             ~pending_code,
             (last_expiry.is_(None)) | (last_expiry < now - ended_for),
         )
         with session_scope(self._engine) as session:
-            client_ids = list(session.exec(statement).all())
-        deleted = [self.delete_client(client_id, registered_by="dynamic") for client_id in client_ids]
+            candidates = list(session.exec(statement).all())
+        deleted = [self.delete_client(client.client_id, registered_by=client.registered_by) for client in candidates]
         return [client for client in deleted if client is not None]
 
     def authorised_clients(self, user_id: UUID) -> list[OAuthClient]:

@@ -183,7 +183,12 @@ const appColumns: TableColumn<AuthorisedApp>[] = [
     {
         accessorKey: 'name',
         header: 'Name',
-        cell: ({ row }) => h('span', { class: 'font-medium text-highlighted' }, row.original.name),
+        cell: ({ row }) => h('div', { class: 'flex flex-col' }, [
+            h('span', { class: 'font-medium text-highlighted' }, row.original.name),
+            row.original.client_host
+                ? h('span', { class: 'text-xs text-muted' }, `from ${row.original.client_host}`)
+                : null,
+        ]),
     },
     {
         id: 'returns_to',

@@ -104,8 +104,9 @@ class Reaper(Controller):
             run_timeout: Seconds a run may take when its job declares no
                 ``timeout``; ``None`` sets no deadline for those runs.
             poll_interval: Seconds between reaper scans.
-            oauth_client_unused_for: How long a dynamically registered OAuth
-                client may go without obtaining a grant before it is deleted.
+            oauth_client_unused_for: How long an OAuth client that registered
+                itself, or whose metadata document was read, may go without
+                obtaining a grant before it is deleted.
             oauth_client_ended_for: How long such a client is kept after its
                 last refresh token expired.
             credential_retention: How long a token, authorization code or
@@ -168,10 +169,10 @@ class Reaper(Controller):
             )
 
     def _prune_oauth_clients(self) -> None:
-        """Delete the dynamically registered OAuth clients nobody uses any more.
+        """Delete the OAuth clients that registered themselves, or came from a metadata document, and nobody uses.
 
-        Registration is open to anyone, so without this every abandoned
-        registration would stay forever.
+        Registration is open to anyone, and so is naming a metadata document,
+        so without this every abandoned client would stay forever.
         """
         try:
             deleted = self._store.oauth.prune_clients(

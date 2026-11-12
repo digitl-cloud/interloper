@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from authlib.oauth2.rfc7636 import create_s256_code_challenge
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from interloper_db import Audience, Profile, Store
 
@@ -24,6 +25,7 @@ MCP_RESOURCE = f"{ISSUER}/mcp"
 REDIRECT_URI = "http://127.0.0.1:8765/callback"
 VERIFIER = "a-code-verifier-long-enough-to-satisfy-rfc-7636"
 PREFIX = "/api/auth/oauth"
+METADATA_CLIENT_ID = "https://claude.ai/oauth/claude-code-client-metadata"
 
 
 @pytest.fixture
@@ -43,6 +45,26 @@ def user(oauth_store: Store, client: TestClient) -> Profile:
     profile = oauth_store.profiles.upsert(google_id="g-user", email="user@example.com", name="User")
     client.cookies.set("session_token", oauth_store.tokens.create_session(profile.id))
     return profile
+
+
+@pytest.fixture
+def documents(client: TestClient, document_host: Any) -> Any:
+    """Claude Code's client metadata document, served on a faked network the server reads it over.
+
+    Returns:
+        The document host.
+    """
+    document_host.documents[METADATA_CLIENT_ID] = {
+        "client_id": METADATA_CLIENT_ID,
+        "client_name": "Claude Code",
+        "redirect_uris": ["http://localhost/callback", "http://127.0.0.1/callback"],
+        "grant_types": ["authorization_code", "refresh_token"],
+        "response_types": ["code"],
+        "token_endpoint_auth_method": "none",
+    }
+    assert isinstance(client.app, FastAPI)
+    client.app.state.interloper.authorization_server.client_metadata = document_host.fetcher()
+    return document_host
 
 
 def _register(client: TestClient, **metadata: Any) -> dict[str, Any]:
@@ -138,6 +160,7 @@ def test_metadata(client: TestClient):
         "token_endpoint_auth_methods_supported": ["none", "client_secret_post", "client_secret_basic"],
         "revocation_endpoint_auth_methods_supported": ["none", "client_secret_post", "client_secret_basic"],
         "authorization_response_iss_parameter_supported": True,
+        "client_id_metadata_document_supported": True,
     }
 
 
@@ -341,7 +364,12 @@ def test_consent_describes_the_request(client: TestClient, user: Profile):
     response = client.get(f"{PREFIX}/consent", params={"request": _sealed(client, client_id)})
 
     assert response.status_code == 200
-    assert response.json() == {"client_name": "Claude Code", "redirect_host": "127.0.0.1:8765", "resource": "mcp"}
+    assert response.json() == {
+        "client_name": "Claude Code",
+        "client_host": None,
+        "redirect_host": "127.0.0.1:8765",
+        "resource": "mcp",
+    }
 
 
 def test_consent_answers_the_session_cookie_only(client: TestClient, oauth_store: Store, user: Profile):
@@ -527,6 +555,80 @@ def test_refresh_reuse_invalid_grant(client: TestClient, oauth_store: Store, use
     assert _refresh(client, client_id, second["refresh_token"]).json()["error"] == "invalid_grant"
     assert oauth_store.tokens.resolve(second["access_token"], Audience.MCP) is None
     assert oauth_store.oauth.authorised_clients(user.id) == []
+
+
+# -- Client metadata documents -------------------------------------------------
+
+
+def test_a_metadata_client_signs_in_without_registering(
+    client: TestClient, oauth_store: Store, user: Profile, documents: Any
+):
+    tokens = _tokens(client, METADATA_CLIENT_ID)
+
+    refreshed = _refresh(client, METADATA_CLIENT_ID, tokens["refresh_token"])
+    assert refreshed.status_code == 200, refreshed.text
+    stored = oauth_store.oauth.get_client(METADATA_CLIENT_ID)
+    assert stored is not None
+    assert stored.registered_by == "metadata"
+    assert stored.secret_hash is None
+    assert len(documents.requests) == 1
+
+
+def test_the_consent_page_names_the_domain_the_document_came_from(client: TestClient, user: Profile, documents: Any):
+    response = client.get(f"{PREFIX}/consent", params={"request": _sealed(client, METADATA_CLIENT_ID)})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "client_name": "Claude Code",
+        "client_host": "claude.ai",
+        "redirect_host": "127.0.0.1:8765",
+        "resource": "mcp",
+    }
+
+
+def test_every_authorization_reads_the_document_again(
+    client: TestClient, oauth_store: Store, user: Profile, documents: Any
+):
+    _sealed(client, METADATA_CLIENT_ID)
+    documents.documents[METADATA_CLIENT_ID]["client_name"] = "Claude"
+
+    _sealed(client, METADATA_CLIENT_ID)
+
+    stored = oauth_store.oauth.get_client(METADATA_CLIENT_ID)
+    assert stored is not None
+    assert stored.name == "Claude"
+    assert len(documents.requests) == 2
+
+
+def test_a_document_that_cannot_be_read_is_answered_here_never_at_the_client(
+    client: TestClient, oauth_store: Store, user: Profile, documents: Any
+):
+    del documents.documents[METADATA_CLIENT_ID]
+
+    response = client.get(f"{PREFIX}/authorize", params=_authorize_params(METADATA_CLIENT_ID))
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_client"
+    assert "location" not in response.headers
+    assert oauth_store.oauth.get_client(METADATA_CLIENT_ID) is None
+
+
+def test_a_redirect_uri_the_document_does_not_list_never_redirects(client: TestClient, user: Profile, documents: Any):
+    params = _authorize_params(METADATA_CLIENT_ID, redirect_uri="https://evil.example.com/callback")
+
+    response = client.get(f"{PREFIX}/authorize", params=params)
+
+    assert response.status_code == 400
+    assert "location" not in response.headers
+
+
+def test_a_metadata_client_never_authenticates_with_a_secret(client: TestClient, user: Profile, documents: Any):
+    code = _code(client, METADATA_CLIENT_ID)
+
+    response = _exchange(client, METADATA_CLIENT_ID, code, client_secret="anything")
+
+    assert response.status_code in {400, 401}
+    assert response.json()["error"] == "invalid_client"
 
 
 # -- Revocation ----------------------------------------------------------------

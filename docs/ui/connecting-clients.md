@@ -12,14 +12,47 @@ with nothing to copy between the two sides.
 
 1. In the client, add a custom connector and enter the MCP endpoint as its URL, for example
    `https://app.example.com/mcp`.
-2. The client discovers the authorization server on its own, registers itself with it, and opens
-   the app's consent page in a browser.
+2. The client discovers the authorization server on its own, registers itself with it or names
+   itself by the URL of its metadata document (below), and opens the app's consent page in a
+   browser.
 3. Sign in to the app if you are not already, check that the application named on the page is the
    one you just started, and approve.
 4. The client returns with an access token and a refresh token and keeps itself signed in.
 
 The consent page names the application, where it returns you to and the account it will act as.
-Approve only a connection you started.
+The name is whatever the application declared; for an application identified by a metadata
+document, the page also shows the domain the document came from (`Claude Code (from claude.ai)`),
+which the server proved by reading it. Approve only a connection you started.
+
+### Clients identified by a metadata document
+
+Instead of registering, a client may use as its `client_id` the `https` URL of a JSON document
+describing it (an OAuth Client ID Metadata Document, which the MCP specification recommends):
+Claude Code uses `https://claude.ai/oauth/claude-code-client-metadata`. The server advertises the
+support in its metadata (`client_id_metadata_document_supported`), and nothing is set up on
+either side.
+
+Each authorization request with such a `client_id` reads the document again. It must answer `200`
+directly (a redirect is not followed) with at most 5 KB of JSON, within five seconds, and is
+refused unless:
+
+- its `client_id` is exactly the URL it was read from;
+- it carries no secret and the client authenticates with `none` (a document that declares no
+  method is taken as `none`);
+- it lists redirect URIs, every one under the same rule as registration (below), and the request
+  names one of them;
+- it shares the `authorization_code` or `refresh_token` grant and the `code` response type with
+  the server.
+
+The URL must be `https`, with a path, and no credentials, fragment or `.`/`..` segment, and must
+not be on the app's own address. The server reads it only from a host whose every address is on
+the public internet, connecting to the address it checked, so a URL cannot reach the cluster, the
+cloud metadata service or a private network. A refused document is reported on the authorization
+page itself, never sent to the client.
+
+The client is then kept like one that registered itself, under its URL, as a public client: the
+consent, token and revocation steps use it as its document last read, so a refresh never reaches
+the client's host. It appears under Authorised apps with the domain it came from.
 
 A connection acts as you, in every organisation you belong to, with the role you hold in each:
 an editor can use the write tools in the organisations where they are editor and only read in the
@@ -46,10 +79,12 @@ stays in use never asks you again. Both lifetimes are settings:
 A client idle for longer than the refresh lifetime has to ask for consent again. Presenting a
 refresh token that was already used is treated as theft: the whole chain it belongs to is revoked.
 
-A client that registered itself is deleted once nobody uses it: when it never obtained a grant
-within 24 hours of registering, or when its last refresh token expired more than 30 days ago,
-and it holds no live refresh token and no code still to exchange. Its conversations go with it.
-The scheduler's reaper checks hourly. Clients an operator registered are never deleted this way.
+A client that registered itself, or was identified by a metadata document, is deleted once nobody
+uses it: when it never obtained a grant within 24 hours of registering (or of its document last
+being read), or when its last refresh token expired more than 30 days ago, and it holds no live
+refresh token and no code still to exchange. Its conversations go with it. A client identified by
+a metadata document comes back the next time a user authorises it. The scheduler's reaper checks
+hourly. Clients an operator registered are never deleted this way.
 
 Credentials that can no longer be used are kept for a while, so an incident can still be traced,
 and then deleted by the same hourly pass:
@@ -118,7 +153,8 @@ refresh token.
 
 ## Registering a client yourself
 
-A client that registers itself needs no setup, and it is shown to the user by the name it gave.
+A client that registers itself, or is identified by a metadata document, needs no setup, and it
+is shown to the user by the name it gave.
 An application that cannot, because it is configured with a fixed client id and secret (a Slack
 app, a connector a vendor hosts), is registered by an operator. A super-admin does it from the
 admin portal's **OAuth clients** page, which lists these clients, registers one (its name and one
@@ -144,7 +180,8 @@ interloper oauth delete <client_id>
 interloper oauth rotate <client_id>
 ```
 
-`list` shows the clients an operator registered, not the ones that registered themselves; the
+`list` shows the clients an operator registered, not the ones that registered themselves or came
+from a metadata document; the
 page leaves them out too, since each belongs to the users who approved it, who revoke it under
 Authorised apps. `delete` removes a client together with its codes and refresh tokens, revokes its
 access tokens for every user and deletes the conversations it started, so nothing it was given

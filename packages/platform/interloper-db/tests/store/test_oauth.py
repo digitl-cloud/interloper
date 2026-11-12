@@ -235,6 +235,33 @@ class TestClients:
         assert store.oauth.rotate_secret(dynamic.client_id, registered_by="operator") is None
         assert store.oauth.get_client(dynamic.client_id) == dynamic
 
+    def test_a_metadata_client_is_kept_under_its_url_as_a_public_client(self, store: Store):
+        saved = store.oauth.save_metadata_client(METADATA_CLIENT_ID, "Claude Code", ["http://localhost/callback"])
+
+        assert saved.client_id == METADATA_CLIENT_ID
+        assert saved.secret_hash is None
+        assert saved.registered_by == "metadata"
+        assert saved.created_at is not None
+        assert store.oauth.get_client(METADATA_CLIENT_ID) == saved
+
+    def test_saving_a_metadata_client_again_rewrites_it_and_keeps_its_grants(
+        self, store: Store, profile: Profile, auth_db: Engine
+    ):
+        first = store.oauth.save_metadata_client(METADATA_CLIENT_ID, "Claude Code", ["http://localhost/callback"])
+        refresh = store.oauth.issue_refresh(profile.id, METADATA_CLIENT_ID, Audience.MCP, family_id=uuid4())
+        _age(auth_db, first, timedelta(days=3))
+
+        saved = store.oauth.save_metadata_client(METADATA_CLIENT_ID, "Claude", ["http://127.0.0.1/callback"])
+
+        assert saved.name == "Claude"
+        assert saved.redirect_uris == ["http://127.0.0.1/callback"]
+        assert saved.created_at is not None
+        assert saved.created_at > datetime.now(UTC) - timedelta(minutes=1)
+        assert store.oauth.find_refresh(refresh) is not None
+        assert [client.client_id for client in store.oauth.list_clients()] == [METADATA_CLIENT_ID]
+
+
+METADATA_CLIENT_ID = "https://claude.ai/oauth/claude-code-client-metadata"
 
 UNUSED_FOR = timedelta(hours=24)
 ENDED_FOR = timedelta(days=30)
@@ -300,6 +327,20 @@ class TestPruneClients:
 
         assert self._prune(store) == set()
         assert store.oauth.get_client(operator.client_id) is not None
+
+    def test_a_metadata_client_unused_past_the_window_is_deleted(self, store: Store, auth_db: Engine):
+        metadata = store.oauth.save_metadata_client(METADATA_CLIENT_ID, "Claude Code", ["http://localhost/callback"])
+        _age(auth_db, metadata, UNUSED_FOR + timedelta(minutes=1))
+
+        assert self._prune(store) == {METADATA_CLIENT_ID}
+        assert store.oauth.get_client(METADATA_CLIENT_ID) is None
+
+    def test_a_metadata_client_read_again_is_kept(self, store: Store, auth_db: Engine):
+        metadata = store.oauth.save_metadata_client(METADATA_CLIENT_ID, "Claude Code", ["http://localhost/callback"])
+        _age(auth_db, metadata, UNUSED_FOR + timedelta(minutes=1))
+        store.oauth.save_metadata_client(METADATA_CLIENT_ID, "Claude Code", ["http://localhost/callback"])
+
+        assert self._prune(store) == set()
 
     def test_a_client_holding_a_live_refresh_token_is_kept(
         self, store: Store, profile: Profile, client: OAuthClient, auth_db: Engine

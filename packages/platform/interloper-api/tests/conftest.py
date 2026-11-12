@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+import socket
+from collections.abc import Callable, Iterator
 from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
+import httpx2
 import interloper as il
 import pytest
 from interloper.settings import AuthSettings, ServerSettings
@@ -24,6 +26,86 @@ from interloper_db.models import (
 )
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
+
+from interloper_api.authorization import ClientMetadataFetcher
+
+PUBLIC_ADDRESS = "160.79.104.10"
+
+
+class FakeDocumentHost:
+    """The network client metadata documents are read over, faked: name resolution and the documents served.
+
+    Attributes:
+        addresses: What each host name resolves to; ``claude.ai`` to a public address.
+        documents: The JSON served under 200 at each client id URL; any other URL is a 404.
+        requests: Every request the fetcher sent.
+        respond: Answers a request; :meth:`serve` unless a test replaces it.
+    """
+
+    def __init__(self) -> None:
+        """Start with ``claude.ai`` resolvable and nothing served."""
+        self.addresses: dict[str, list[str]] = {"claude.ai": [PUBLIC_ADDRESS]}
+        self.documents: dict[str, Any] = {}
+        self.requests: list[httpx2.Request] = []
+        self.respond: Callable[[httpx2.Request], httpx2.Response] = self.serve
+
+    def getaddrinfo(self, host: str, port: int, *args: Any, **kwargs: Any) -> list[Any]:
+        """Resolve a host name from :attr:`addresses`, as ``socket.getaddrinfo`` does.
+
+        Args:
+            host: The host name.
+            port: The port.
+            *args: The lookup's other arguments, ignored.
+            **kwargs: Its keyword arguments, ignored.
+
+        Returns:
+            One stream entry per address.
+
+        Raises:
+            socket.gaierror: When the name is unknown.
+        """
+        if host not in self.addresses:
+            raise socket.gaierror("unknown host")
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (address, port)) for address in self.addresses[host]]
+
+    def serve(self, request: httpx2.Request) -> httpx2.Response:
+        """Serve the document at the URL the request names through its ``Host`` header.
+
+        Args:
+            request: The request, sent to an address.
+
+        Returns:
+            200 with the document, or 404.
+        """
+        url = f"https://{request.headers['host']}{request.url.raw_path.decode()}"
+        if url not in self.documents:
+            return httpx2.Response(404)
+        return httpx2.Response(200, json=self.documents[url])
+
+    def fetcher(self) -> ClientMetadataFetcher:
+        """Build a fetcher whose requests reach this host.
+
+        Returns:
+            The fetcher.
+        """
+
+        def handle(request: httpx2.Request) -> httpx2.Response:
+            self.requests.append(request)
+            return self.respond(request)
+
+        return ClientMetadataFetcher(transport=httpx2.MockTransport(handle))
+
+
+@pytest.fixture
+def document_host(monkeypatch: pytest.MonkeyPatch) -> FakeDocumentHost:
+    """The faked network client metadata documents are read over; name resolution goes through it.
+
+    Returns:
+        The host.
+    """
+    host = FakeDocumentHost()
+    monkeypatch.setattr(socket, "getaddrinfo", host.getaddrinfo)
+    return host
 
 
 @pytest.fixture

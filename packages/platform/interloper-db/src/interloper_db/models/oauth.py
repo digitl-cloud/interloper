@@ -1,7 +1,8 @@
 """OAuth: the clients that act for a user, and the grants that let them.
 
 interloper is its own authorization server. A client is registered once
-(dynamically, or by an operator for a confidential backend); a user's
+(dynamically, or by an operator for a confidential backend), or names itself
+by the https URL of its own metadata document, kept here as last read; a user's
 approval gives it a single-use authorization code, exchanged for an access
 token (a ``tokens`` row of kind ``access``) and a refresh token, which
 rotates on every use. Every secret is stored as its SHA-256 hash only.
@@ -15,6 +16,7 @@ revokes the whole chain. ``resource`` names the surface the grant is for, an
 
 from datetime import datetime
 from typing import ClassVar, Literal
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from sqlmodel import AutoString, Column, SQLModel
@@ -27,8 +29,8 @@ class OAuthClient(SQLModel, table=True):
     """An application allowed to act for the users who approve it.
 
     A confidential client authenticates with a secret, kept as its hash; a
-    public client (a native or command-line app registered dynamically) has
-    none and relies on PKCE alone.
+    public client (a native or command-line app registered dynamically, or
+    one described by a metadata document) has none and relies on PKCE alone.
     """
 
     __tablename__: ClassVar[str] = "oauth_clients"
@@ -37,8 +39,19 @@ class OAuthClient(SQLModel, table=True):
     secret_hash: str | None = None
     name: str
     redirect_uris: list[str] = SQLField(default_factory=list, sa_column=Column(PortableJSON, nullable=False))
-    registered_by: Literal["dynamic", "operator"] = SQLField(sa_type=AutoString)
+    registered_by: Literal["dynamic", "operator", "metadata"] = SQLField(sa_type=AutoString)
     created_at: datetime | None = timestamp_column()
+
+    @property
+    def metadata_host(self) -> str | None:
+        """The host serving the client's metadata document, which reading the document proved.
+
+        Returns:
+            The host of the client id URL for a client described by a
+            metadata document; ``None`` for a registered client, whose name
+            is all it declared.
+        """
+        return urlsplit(self.client_id).hostname if self.registered_by == "metadata" else None
 
 
 class AuthorizationCode(SQLModel, table=True):

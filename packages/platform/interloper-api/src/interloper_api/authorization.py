@@ -36,27 +36,38 @@ What Authlib leaves to the server, and this one decides:
   instance's encryption key (Fernet: encrypted and authenticated), for ten
   minutes, with the user who started it, so the consent page can neither
   read nor alter it, and no other user's session can decide on it.
+- A client may name itself by the https URL of its metadata document
+  (draft-ietf-oauth-client-id-metadata-document) instead of registering.
+  The authorization request reads the document, at most 5 KB within five
+  seconds, without following a redirect, and only from a host whose every
+  address is public, connecting to the address it vetted; the client it
+  describes is kept as a public client, rewritten at every authorization
+  request, and is what the consent, token and revocation steps read.
 """
 
 from __future__ import annotations
 
 import hmac
+import ipaddress
 import json
+import socket
 import time
 from collections import defaultdict
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import SplitResult, urlencode, urlsplit
 from uuid import UUID
 
+import httpx2
 from authlib.common.urls import add_params_to_uri
 from authlib.consts import default_json_headers
 from authlib.oauth2 import OAuth2Error, rfc6749
 from authlib.oauth2.rfc6749 import (
     AuthorizationCodeMixin,
     ClientMixin,
+    InvalidClientError,
     InvalidGrantError,
     InvalidRequestError,
     JsonPayload,
@@ -115,6 +126,14 @@ PRIVATE_USE_SCHEMES = frozenset({"cursor", "vscode", "vscode-insiders", "windsur
 CLIENT_NAME_MAX_LENGTH = 100
 
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+CLIENT_METADATA_MAX_BYTES = 5 * 1024
+
+CLIENT_METADATA_TIMEOUT_SECONDS = 5.0
+
+INVALID_CLIENT_ID_URL = (
+    "A client id URL must be https, with a host and a path, and no credentials, fragment or dot segments."
+)
 
 
 # -- Requests ------------------------------------------------------------------
@@ -859,6 +878,238 @@ class Registration(ClientRegistrationEndpoint):
         return 201, body, default_json_headers
 
 
+# -- Client metadata documents -------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ClientMetadataDocument:
+    """A client as its metadata document describes it, validated.
+
+    Attributes:
+        client_id: The https URL the document was read from.
+        name: The name it declares, cut to :data:`CLIENT_NAME_MAX_LENGTH`;
+            the URL's host when it declares none.
+        redirect_uris: The redirect URIs it lists, every one safe.
+    """
+
+    client_id: str
+    name: str
+    redirect_uris: list[str]
+
+    @staticmethod
+    def check_client_id(client_id: str) -> SplitResult:
+        """Refuse a client id URL the draft does not allow.
+
+        Args:
+            client_id: The client id a request presents.
+
+        Returns:
+            The URL's parts.
+
+        Raises:
+            InvalidClientError: Unless it is ``https``, with a host, a valid
+                port, a path other than ``/``, and no credentials, fragment,
+                dot segment, whitespace or control character.
+        """
+        try:
+            parts = urlsplit(client_id)
+            port = parts.port
+        except ValueError as error:
+            raise InvalidClientError(INVALID_CLIENT_ID_URL) from error
+        segments = parts.path.split("/")
+        if (
+            "#" in client_id
+            or any(ord(character) <= 0x20 or ord(character) == 0x7F for character in client_id)
+            or parts.scheme != "https"
+            or not parts.hostname
+            or "@" in parts.netloc
+            or port == 0
+            or parts.path in ("", "/")
+            or "." in segments
+            or ".." in segments
+        ):
+            raise InvalidClientError(INVALID_CLIENT_ID_URL)
+        return parts
+
+    @classmethod
+    def from_json(cls, client_id: str, data: Any) -> ClientMetadataDocument:
+        """Validate a document read from a client id URL.
+
+        A document declaring no authentication method is a public client
+        (the draft forbids RFC 7591's ``client_secret_basic`` default); one
+        listing several is accepted when ``none`` is among them.
+
+        Args:
+            client_id: The URL the document was read from.
+            data: The decoded JSON.
+
+        Returns:
+            The client it describes.
+
+        Raises:
+            InvalidClientError: When it is not a JSON object, names another
+                ``client_id``, carries a secret, cannot authenticate as a
+                public client, shares no grant or response type with the
+                server, or lists no redirect URI or an unsafe one.
+        """
+        if not isinstance(data, dict):
+            raise InvalidClientError("The client metadata document is not a JSON object.")
+        if data.get("client_id") != client_id:
+            raise InvalidClientError("The client metadata document names another client id than its URL.")
+        if "client_secret" in data or "client_secret_expires_at" in data:
+            raise InvalidClientError("A client metadata document must not carry a secret.")
+        method = data.get("token_endpoint_auth_method")
+        declared = [method] if method is not None else data.get("token_endpoint_auth_methods_supported", ["none"])
+        if not isinstance(declared, list) or "none" not in declared:
+            raise InvalidClientError("A client described by a metadata document must authenticate with 'none'.")
+        grant_types = data.get("grant_types", ["authorization_code"])
+        response_types = data.get("response_types", ["code"])
+        if not isinstance(grant_types, list) or not set(grant_types) & set(GRANT_TYPES):
+            raise InvalidClientError("The client metadata document shares no grant type with the server.")
+        if not isinstance(response_types, list) or "code" not in response_types:
+            raise InvalidClientError("The client metadata document shares no response type with the server.")
+        redirect_uris = data.get("redirect_uris")
+        if not isinstance(redirect_uris, list) or not all(isinstance(uri, str) for uri in redirect_uris):
+            raise InvalidClientError("The client metadata document lists no redirect URIs.")
+        try:
+            Client.check_redirect_uris(redirect_uris)
+        except InvalidRedirectURIError as error:
+            raise InvalidClientError(error.description) from error
+        name = data.get("client_name")
+        if not isinstance(name, str) or not name.strip():
+            name = urlsplit(client_id).hostname or client_id
+        return cls(client_id=client_id, name=name[:CLIENT_NAME_MAX_LENGTH], redirect_uris=redirect_uris)
+
+
+class ClientMetadataFetcher:
+    """Reads a client's metadata document from the URL that is its id.
+
+    The URL comes from whoever sends an authorization request, so the fetch
+    reaches only the public internet: the host is resolved once, refused
+    unless every address it resolves to is public, and the connection goes
+    to the address vetted, with the host name kept for TLS and the ``Host``
+    header so a second resolution cannot point it elsewhere. It follows no
+    redirect, sends no cookie and ignores proxy settings.
+    """
+
+    def __init__(self, transport: httpx2.BaseTransport | None = None) -> None:
+        """Set the fetcher up.
+
+        Args:
+            transport: The HTTP transport the documents are read through;
+                ``None`` for the network.
+        """
+        self._transport = transport
+
+    def fetch(self, client_id: str) -> ClientMetadataDocument:
+        """Read and validate the document a client id URL serves.
+
+        Args:
+            client_id: The client id, an https URL.
+
+        Returns:
+            The client the document describes.
+
+        Raises:
+            InvalidClientError: When the URL is not a valid client id, its
+                host is not public, the read fails, answers anything but 200,
+                exceeds :data:`CLIENT_METADATA_MAX_BYTES` or
+                :data:`CLIENT_METADATA_TIMEOUT_SECONDS`, or the document is
+                not valid JSON or not a valid description of that client.
+        """
+        parts = ClientMetadataDocument.check_client_id(client_id)
+        hostname = parts.hostname or ""
+        port = parts.port or 443
+        address = self._public_address(hostname, port)
+        netloc = f"[{address}]:{port}" if ":" in address else f"{address}:{port}"
+        deadline = time.monotonic() + CLIENT_METADATA_TIMEOUT_SECONDS
+        try:
+            with (
+                httpx2.Client(
+                    transport=self._transport,
+                    follow_redirects=False,
+                    timeout=CLIENT_METADATA_TIMEOUT_SECONDS,
+                    trust_env=False,
+                ) as client,
+                client.stream(
+                    "GET",
+                    parts._replace(netloc=netloc).geturl(),
+                    headers={"Host": parts.netloc, "Accept": "application/json"},
+                    extensions={"sni_hostname": hostname},
+                ) as response,
+            ):
+                if response.status_code != 200:
+                    raise InvalidClientError(
+                        f"The client metadata document could not be read (HTTP {response.status_code})."
+                    )
+                body = self._read(response, deadline)
+        except httpx2.HTTPError as error:
+            raise InvalidClientError("The client metadata document could not be read.") from error
+        try:
+            data = json.loads(body)
+        except ValueError as error:
+            raise InvalidClientError("The client metadata document is not valid JSON.") from error
+        return ClientMetadataDocument.from_json(client_id, data)
+
+    @staticmethod
+    def _read(response: httpx2.Response, deadline: float) -> bytes:
+        """Read a response body within the size and time limits.
+
+        Args:
+            response: The streamed response.
+            deadline: The ``time.monotonic()`` instant the read must end by.
+
+        Returns:
+            The decoded body.
+
+        Raises:
+            InvalidClientError: When it exceeds :data:`CLIENT_METADATA_MAX_BYTES`,
+                or is still arriving at the deadline.
+        """
+        body = bytearray()
+        for chunk in response.iter_bytes():
+            body += chunk
+            if len(body) > CLIENT_METADATA_MAX_BYTES:
+                raise InvalidClientError(
+                    f"The client metadata document is larger than {CLIENT_METADATA_MAX_BYTES} bytes."
+                )
+            if time.monotonic() > deadline:
+                raise InvalidClientError("The client metadata document took too long to read.")
+        return bytes(body)
+
+    @staticmethod
+    def _public_address(hostname: str, port: int) -> str:
+        """Resolve a host once, and vouch for it only if every address is public.
+
+        Args:
+            hostname: The client id URL's host.
+            port: Its port.
+
+        Returns:
+            The first address the host resolves to.
+
+        Raises:
+            InvalidClientError: When the host does not resolve, or any
+                address is private, loopback, link-local, shared, reserved
+                or multicast (an IPv4-mapped IPv6 address is judged by its
+                IPv4 address).
+        """
+        try:
+            entries = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
+        except OSError as error:
+            raise InvalidClientError("The client id URL's host does not resolve.") from error
+        addresses = [str(entry[4][0]).split("%")[0] for entry in entries]
+        for address in addresses:
+            ip = ipaddress.ip_address(address)
+            if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+                ip = ip.ipv4_mapped
+            if not ip.is_global or ip.is_multicast:
+                raise InvalidClientError("The client id URL's host is not on the public internet.")
+        if not addresses:
+            raise InvalidClientError("The client id URL's host does not resolve.")
+        return addresses[0]
+
+
 # -- Server --------------------------------------------------------------------
 
 
@@ -871,6 +1122,7 @@ class AuthorizationServer(rfc6749.AuthorizationServer):
         resources: The RFC 8707 resource URLs and the surface each names.
         access_token_expires_in: An access token's lifetime, in seconds.
         metadata: The RFC 8414 metadata document.
+        client_metadata: What reads the metadata document a client id URL names.
     """
 
     def __init__(
@@ -898,6 +1150,7 @@ class AuthorizationServer(rfc6749.AuthorizationServer):
         self.access_token_expires_in = int(access_token_expiry.total_seconds())
         self._fernet = Fernet(derive_fernet_key(encryption_key))
         self.metadata = self._build_metadata()
+        self.client_metadata = ClientMetadataFetcher()
         self.register_grant(AuthorizationCodeGrant, [S256CodeChallenge(required=True)])
         self.register_grant(RefreshTokenGrant)
         self.register_endpoint(Revocation)
@@ -991,6 +1244,29 @@ class AuthorizationServer(rfc6749.AuthorizationServer):
         """
         row = self.store.oauth.get_client(client_id)
         return Client(row) if row is not None else None
+
+    def discover_client(self, client_id: str | None) -> None:
+        """Read the metadata document a client id URL names, and keep the client it describes.
+
+        Called by the authorization endpoint only, before the request is
+        validated, so the consent, token and revocation steps read the client
+        as this request last saw it.
+
+        Args:
+            client_id: The client id the authorization request presents;
+            anything but an ``https`` URL is left to the registered clients.
+
+        Raises:
+            InvalidClientError: When the URL is on the server's own origin,
+                or its document cannot be read or is invalid; never sent to
+                the client, whose redirect URI is not known yet.
+        """
+        if client_id is None or not client_id.startswith("https://"):
+            return
+        if client_id == self.issuer or client_id.startswith(f"{self.issuer}/"):
+            raise InvalidClientError("A client id URL cannot be on this server.")
+        document = self.client_metadata.fetch(client_id)
+        self.store.oauth.save_metadata_client(document.client_id, document.name, document.redirect_uris)
 
     def save_token(self, token: dict[str, Any], request: OAuth2Request) -> None:
         """Keep nothing: the store saved the tokens when it issued them.
@@ -1112,6 +1388,7 @@ class AuthorizationServer(rfc6749.AuthorizationServer):
             token_endpoint_auth_methods_supported=CLIENT_AUTH_METHODS,
             revocation_endpoint_auth_methods_supported=CLIENT_AUTH_METHODS,
             authorization_response_iss_parameter_supported=True,
+            client_id_metadata_document_supported=True,
         )
         metadata.validate()
         return dict(metadata)
