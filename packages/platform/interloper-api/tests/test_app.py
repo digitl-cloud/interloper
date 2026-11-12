@@ -225,7 +225,7 @@ class TestCreateApp:
     def test_without_an_encryption_key_google_login_is_unavailable(
         self, fake_settings: SimpleNamespace, caplog: pytest.LogCaptureFixture
     ) -> None:
-        fake_settings.secrets.encryption_key = ""
+        fake_settings.encryption.key = ""
 
         with caplog.at_level("WARNING", logger="interloper_api.app"):
             app = create_app(settings=fake_settings)

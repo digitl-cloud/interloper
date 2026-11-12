@@ -22,7 +22,7 @@ class TestFromSettings:
 
     @pytest.mark.parametrize(
         ("section", "field"),
-        [("auth", "google_client_id"), ("auth", "google_client_secret"), ("secrets", "encryption_key")],
+        [("auth", "google_client_id"), ("auth", "google_client_secret"), ("encryption", "key")],
     )
     def test_anything_missing_builds_none(self, fake_settings: SimpleNamespace, section: str, field: str) -> None:
         setattr(getattr(fake_settings, section), field, "")

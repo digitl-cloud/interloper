@@ -6,9 +6,10 @@ Loads settings from three sources with this priority (highest first):
 2. ``interloper.yaml`` in the current directory
 3. Field defaults
 
-Each section has its own env prefix so field names with underscores
-are unambiguous. Every field's ``description`` is the settings reference
-the documentation site renders, so it is user-facing copy.
+Every top-level key is a section, a block of fields whose env var is
+``INTERLOPER_<SECTION>_<FIELD>``, so field names with underscores are
+unambiguous. Every field's ``description`` is the settings reference the
+documentation site renders, so it is user-facing copy.
 """
 
 from __future__ import annotations
@@ -86,8 +87,40 @@ class LogSettings(BaseSettings):
     )
 
 
-class SecretsSettings(BaseSettings):
-    """Secrets used to protect sensitive data at rest.
+class CatalogSettings(BaseSettings):
+    """Which installed components the deployment enables.
+
+    ``include`` takes a comma-separated string from the environment
+    (``INTERLOPER_CATALOG_INCLUDE=pkg.sources.Shop,pkg.sources.Finance``) or a
+    list from YAML.
+    """
+
+    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}CATALOG_")
+
+    include: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description="Import paths of the enabled components; empty enables everything installed.",
+    )
+
+    @field_validator("include", mode="before")
+    @classmethod
+    def _parse_comma_list(cls, value: Any) -> list[str]:
+        """Accept a comma-separated string (env) or a list (YAML).
+
+        Args:
+            value: The raw value: a comma-separated string from env, or an
+                iterable of import paths from YAML.
+
+        Returns:
+            Trimmed import paths with empties dropped, case kept.
+        """
+        if isinstance(value, str):
+            value = value.split(",")
+        return [entry.strip() for entry in value if entry and entry.strip()]
+
+
+class EncryptionSettings(BaseSettings):
+    """The key the platform encrypts and signs with.
 
     Encryption is the default, so a key is required to persist resources:
     with none set, writes fail closed rather than storing plaintext. Only
@@ -96,9 +129,9 @@ class SecretsSettings(BaseSettings):
     loads arrives decrypted and its token is opaque to it.
     """
 
-    model_config = SettingsConfigDict(env_prefix=PREFIX)
+    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}ENCRYPTION_")
 
-    encryption_key: str = Field(
+    key: str = Field(
         default="",
         description=(
             "Fernet key encrypting stored resource payloads and run tokens, and signing the Google login's state; "
@@ -419,10 +452,11 @@ class QuotaSettings(BaseSettings):
 class AppSettings(BaseSettings):
     """Top-level runtime settings for the CLI.
 
-    The framework reads ``runner``, ``otel``, ``log``, ``catalog`` and ``secrets``;
-    the other sections live here because ``AppSettings`` does, and configure
-    the platform packages (``interloper-db``, ``interloper-api``,
-    ``interloper-scheduler``, ``interloper-agent``, ``interloper-mcp``).
+    The framework reads ``runner``, ``otel``, ``log``, ``catalog``, ``run``
+    and ``server``; the other sections live here because ``AppSettings``
+    does, and configure the platform packages (``interloper-db``,
+    ``interloper-api``, ``interloper-scheduler``, ``interloper-agent``,
+    ``interloper-mcp``).
     """
 
     model_config = SettingsConfigDict(
@@ -434,11 +468,8 @@ class AppSettings(BaseSettings):
     runner: RunnerSettings = Field(default_factory=RunnerSettings)
     otel: TelemetrySettings = Field(default_factory=TelemetrySettings)
     log: LogSettings = Field(default_factory=LogSettings)
-    catalog: list[str] = Field(
-        default_factory=list,
-        description="Import paths of the enabled components; empty enables everything installed.",
-    )
-    secrets: SecretsSettings = Field(default_factory=SecretsSettings)
+    catalog: CatalogSettings = Field(default_factory=CatalogSettings)
+    encryption: EncryptionSettings = Field(default_factory=EncryptionSettings)
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
     server: ServerSettings = Field(default_factory=ServerSettings)

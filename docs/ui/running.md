@@ -64,7 +64,7 @@ somewhere the app never looks, with no error to show for it.
 
 Anything installed this way registers itself: a package declaring components under the
 `interloper.components` entry point joins the catalog on the next start, with no change to the
-image's command. List what you want enabled under `catalog` and the deployment sees exactly
+image's command. List what you want enabled under `catalog.include` and the deployment sees exactly
 that, as described in [Catalog](../guide/catalog.md) and
 [Entry points & registries](../extending/entry-points.md).
 
@@ -113,8 +113,9 @@ auth:
   allowed_domains: [example.com]
 
 catalog:
-  - my_package.sources.Shop
-  - interloper_assets.facebook_ads.connector.source.FacebookAds
+  include:
+    - my_package.sources.Shop
+    - interloper_assets.facebook_ads.connector.source.FacebookAds
 ```
 
 The file is not interpolated: a field left out of a block is read from its `INTERLOPER_<SECTION>_<FIELD>`

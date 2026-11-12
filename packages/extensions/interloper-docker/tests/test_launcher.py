@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pytest
 from interloper.catalog import Catalog
+from interloper.settings import CatalogSettings
 from interloper_db import RunStatus
 from interloper_db.models import Run
 from interloper_scheduler.launcher import LAUNCHERS
@@ -16,9 +17,9 @@ import interloper_docker.launcher as launcher_module
 from interloper_docker.launcher import DockerLauncher
 
 
-def _launcher(monkeypatch: pytest.MonkeyPatch, **kwargs: Any) -> DockerLauncher:
+def _launcher(monkeypatch: pytest.MonkeyPatch, catalog: Catalog | None = None, **kwargs: Any) -> DockerLauncher:
     monkeypatch.setattr(launcher_module.docker, "from_env", lambda: object())
-    return DockerLauncher(catalog=Catalog(), internal_url="http://api", **kwargs)
+    return DockerLauncher(catalog=catalog if catalog is not None else Catalog(), internal_url="http://api", **kwargs)
 
 
 def test_forward_env_copies_set_variables(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -94,6 +95,15 @@ def test_the_heartbeat_settings_reach_the_run_container_as_its_run_settings(monk
     assert environment["INTERLOPER_RUN_HEARTBEAT_INTERVAL"] == "5"
     assert environment["INTERLOPER_RUN_HEARTBEAT_TIMEOUT"] == "45"
     assert not [name for name in environment if name.startswith("INTERLOPER_REAPER_")]
+
+
+def test_the_catalog_reaches_the_run_container_as_its_catalog_include(monkeypatch: pytest.MonkeyPatch) -> None:
+    catalog = Catalog.from_assets([])
+    environment = _launcher(monkeypatch, catalog=catalog)._build_environment("ilr_x")
+    monkeypatch.setenv("INTERLOPER_CATALOG_INCLUDE", environment["INTERLOPER_CATALOG_INCLUDE"])
+
+    assert CatalogSettings().include == catalog.to_paths()
+    assert "INTERLOPER_CATALOG" not in environment
 
 
 class _CreatedContainer:

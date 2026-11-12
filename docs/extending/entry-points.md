@@ -72,5 +72,5 @@ component class whose kind has no anchor makes catalog construction fail with `C
 ## Narrowing
 
 Declared universe and enabled catalog are different things. Installation declares; the
-`catalog` setting enables a subset, closed over dependencies. See
+`catalog.include` setting enables a subset, closed over dependencies. See
 [Catalog](../guide/catalog.md#building-a-catalog).

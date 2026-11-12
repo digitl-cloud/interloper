@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import pytest
 from interloper.catalog import Catalog
-from interloper.settings import LauncherSettings, ReaperSettings, RunnerSettings, ServerSettings
+from interloper.settings import CatalogSettings, LauncherSettings, ReaperSettings, RunnerSettings, ServerSettings
 from interloper_db import RunStatus
 from interloper_db.models import Run
 from interloper_scheduler.launcher import LAUNCHERS
@@ -21,8 +21,9 @@ from interloper_k8s.launcher import KubernetesLauncher
 def launcher_factory(monkeypatch: pytest.MonkeyPatch) -> Callable[..., KubernetesLauncher]:
     monkeypatch.setattr(config, "load_incluster_config", lambda: None)
 
-    def factory(**kwargs: Any) -> KubernetesLauncher:
-        return KubernetesLauncher(catalog=Catalog(), image="img", internal_url="http://api", **kwargs)
+    def factory(catalog: Catalog | None = None, **kwargs: Any) -> KubernetesLauncher:
+        catalog = catalog if catalog is not None else Catalog()
+        return KubernetesLauncher(catalog=catalog, image="img", internal_url="http://api", **kwargs)
 
     return factory
 
@@ -141,6 +142,18 @@ def test_the_heartbeat_settings_reach_the_run_container_as_its_run_settings(
     env = {variable.name: variable.value for variable in container.env}
     assert (env["INTERLOPER_RUN_HEARTBEAT_INTERVAL"], env["INTERLOPER_RUN_HEARTBEAT_TIMEOUT"]) == ("5", "45")
     assert not [name for name in env if name.startswith("INTERLOPER_REAPER_")]
+
+
+def test_the_catalog_reaches_the_run_container_as_its_catalog_include(
+    launcher_factory: Callable[..., KubernetesLauncher], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    catalog = Catalog.from_assets([])
+    container = _launched_container(launcher_factory(catalog=catalog))
+    env = {variable.name: variable.value for variable in container.env}
+    monkeypatch.setenv("INTERLOPER_CATALOG_INCLUDE", env["INTERLOPER_CATALOG_INCLUDE"])
+
+    assert CatalogSettings().include == catalog.to_paths()
+    assert "INTERLOPER_CATALOG" not in env
 
 
 def test_from_settings_forwards_the_heartbeat_settings(launcher_factory: Callable[..., KubernetesLauncher]) -> None:

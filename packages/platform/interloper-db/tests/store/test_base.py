@@ -119,9 +119,7 @@ class TestFromSettings:
             quota = SimpleNamespace(max_sources=7)
             monkeypatch.setattr(
                 "interloper.settings.AppSettings.get",
-                classmethod(
-                    lambda cls: SimpleNamespace(secrets=SimpleNamespace(encryption_key=encryption_key), quota=quota)
-                ),
+                classmethod(lambda cls: SimpleNamespace(encryption=SimpleNamespace(key=encryption_key), quota=quota)),
             )
             monkeypatch.setattr(base_module, "engine_from_settings", lambda: component_db)
             monkeypatch.setattr(il.Catalog, "from_settings", classmethod(lambda cls: il.Catalog(components={})))

@@ -9,7 +9,7 @@ Registration is two entry-point groups, and nothing else:
   (core declares ``cron_job``/``trigger_hook``/``webhook_hook`` here, the
   same way ``interloper-assets`` declares its connectors).
 
-Installation defines the *declared universe*; ``AppSettings.catalog``
+Installation defines the *declared universe*; ``AppSettings.catalog.include``
 narrows it to what a deployment *enables*. An enabled catalog holds the
 configured components, everything they depend on (the target class of every
 relation they declare and, for sources, of every relation their assets
@@ -134,7 +134,7 @@ class Catalog(BaseModel):
 
         Args:
             paths: Fully qualified import paths to the enabled component
-                classes: a deployment's ``catalog`` setting, or a
+                classes: a deployment's ``catalog.include`` setting, or a
                 ``to_paths()`` list crossing a process boundary. Paths that
                 fail to import are skipped with a warning.
 
@@ -160,15 +160,15 @@ class Catalog(BaseModel):
     def from_settings(cls) -> Catalog:
         """Load the catalog a deployment enables.
 
-        ``AppSettings.catalog`` lists the enabled import paths; when it is
-        empty, the catalog is the whole declared universe.
+        ``AppSettings.catalog.include`` lists the enabled import paths; when
+        it is empty, the catalog is the whole declared universe.
 
         Returns:
             Catalog of all enabled component definitions.
         """
-        settings = AppSettings.get()
-        if settings.catalog:
-            return cls.from_paths(settings.catalog)
+        include = AppSettings.get().catalog.include
+        if include:
+            return cls.from_paths(include)
         return cls.discover()
 
     # TODO: rename to from_components

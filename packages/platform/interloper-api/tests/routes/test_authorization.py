@@ -565,7 +565,7 @@ def test_revoke_leaves_personal_tokens_alone(client: TestClient, oauth_store: St
 
 def test_an_unconfigured_server_answers_503(fake_settings: SimpleNamespace, oauth_store: Store):
     fake_settings.agent.enabled = False
-    fake_settings.secrets.encryption_key = ""
+    fake_settings.encryption.key = ""
     client = TestClient(create_app(store=oauth_store, settings=fake_settings))
 
     assert client.get("/.well-known/oauth-authorization-server").status_code == 503

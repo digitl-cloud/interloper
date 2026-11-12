@@ -921,7 +921,7 @@ class AuthorizationServer(rfc6749.AuthorizationServer):
         return cls(
             store,
             issuer=settings.server.public_url,
-            encryption_key=settings.secrets.encryption_key,
+            encryption_key=settings.encryption.key,
             access_token_expiry=settings.auth.access_token_expiry,
         )
 
