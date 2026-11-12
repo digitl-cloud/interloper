@@ -9,6 +9,7 @@ import interloper as il
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from interloper.errors import ConnectionCheckError
 
 from interloper_api.app import ORG_PREFIX, install_error_handlers
 from interloper_api.dependencies import get_catalog, get_store, require_editor, require_viewer
@@ -304,6 +305,15 @@ class TestHandleError:
             catalog_module.handle_error(original, "resolving x")
 
         assert excinfo.value is original
+
+    def test_a_curated_provider_message_is_the_detail(self) -> None:
+        message = "Ads API error 40001: the token was issued to another app"
+
+        with pytest.raises(HTTPException) as excinfo:
+            catalog_module.handle_error(ConnectionCheckError(message), "resolving x")
+
+        assert excinfo.value.status_code == 500
+        assert excinfo.value.detail == message
 
     def test_anything_else_becomes_a_500(self) -> None:
         with pytest.raises(HTTPException) as excinfo:

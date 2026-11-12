@@ -16,7 +16,7 @@ import httpx2
 import interloper as il
 from fastapi import APIRouter, Depends, HTTPException
 from interloper.connection import CheckResult, Connection
-from interloper.errors import format_exception
+from interloper.errors import ConnectionCheckError, format_exception
 from interloper.resource import is_fetch_field_provider
 from interloper.utils import import_from_path, invoke
 from pydantic import BaseModel, Field, ValidationError
@@ -77,7 +77,9 @@ def handle_error(error: Exception, context: str) -> NoReturn:
 
     Raises:
         HTTPException: Always — *error* re-raised as-is when it already is
-            one, otherwise the status mapped from it, or 500 by default.
+            one, otherwise the status mapped from it, or 500 by default. A
+            `ConnectionCheckError` keeps its curated message as the detail;
+            any other error's own message never reaches the response.
     """
     logger.error("Error %s: %s", context, error)
 
@@ -90,6 +92,9 @@ def handle_error(error: Exception, context: str) -> NoReturn:
 
     if isinstance(error, HTTPException):
         raise error
+
+    if isinstance(error, ConnectionCheckError):
+        raise HTTPException(status_code=500, detail=str(error))
 
     raise HTTPException(status_code=500, detail=f"Failed {context}.")
 

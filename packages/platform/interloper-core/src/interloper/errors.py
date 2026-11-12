@@ -78,8 +78,11 @@ class AssetError(InterloperError, ValueError):
 class ConnectionCheckError(InterloperError):
     """A connection check failed with a curated, user-facing message.
 
-    Raised from ``Connection.check()`` implementations when the failure
-    deserves a better message than the generic HTTP-error categorisation.
+    Raised from ``Connection.check()`` implementations, or from the
+    fetch-field provider a check delegates to, when the failure deserves a
+    better message than the generic HTTP-error categorisation. The check
+    result and the source form's option lookup both show the message as is,
+    so it must never carry a credential.
     """
 
 
