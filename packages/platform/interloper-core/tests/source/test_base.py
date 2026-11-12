@@ -311,6 +311,24 @@ class TestSourceRelations:
         with pytest.raises(ValidationError):
             shop.orders.resolve("connection")
 
+    def test_a_method_asset_reads_an_unbound_connection_from_the_environment(self, monkeypatch):
+        monkeypatch.setenv("TOKEN", "from-env")
+        seen: list[FakeConnection] = []
+
+        @il.source
+        class FakeEnvSource(il.Source):
+            connection: FakeConnection
+
+            @il.asset
+            def rows(self) -> list[dict[str, Any]]:
+                seen.append(self.connection)
+                return [{"a": 1}]
+
+        result = il.DAG(FakeEnvSource()).materialize()  # ty: ignore[missing-argument]
+
+        assert result.status == "completed"
+        assert [connection.token for connection in seen] == ["from-env"]
+
     def test_asset_relation_nothing_can_fill_raises_naming_asset_and_relation(self):
         from interloper.errors import ConfigError
 
@@ -326,7 +344,7 @@ class TestSourceRelations:
         destination = FakeConnectedDestination()
         source = Shop(connection=FakeConnection(token="secret"))
         source.bind("destinations", destination)
-        assert destination.connection is None
+        assert destination.bound("connection") is None
 
     def test_a_destination_assigned_after_construction_reaches_the_assets(self):
         destination = FakeDestination()
@@ -846,8 +864,8 @@ class TestInheritedSettings:
         source = FakeConnectedSource(connection=FakeConnection(token="secret"), destinations=[destination])
         [held] = source.destinations
         assert isinstance(held, FakeConnectedDestination)
-        assert destination.connection is None
-        assert held.connection is None
+        assert destination.bound("connection") is None
+        assert held.bound("connection") is None
 
 
 # -- __call__ reconfiguration --------------------------------------------------

@@ -5,7 +5,7 @@ from typing import Any
 import httpx2
 import interloper as il
 import pytest
-from interloper.errors import ConfigError
+from pydantic import ValidationError
 
 from interloper_slack import SlackConnection, SlackHook
 
@@ -167,8 +167,20 @@ class TestFire:
         # Per-request override of the connection client's default.
         assert slack.timeout() == {"connect": 2.5, "read": 2.5, "write": 2.5, "pool": 2.5}
 
-    def test_without_connection_raises(self, slack):
-        with pytest.raises(ConfigError, match="without a Slack connection"):
+    def test_an_unbound_connection_reads_its_token_from_the_environment(self, slack, monkeypatch):
+        monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-env")
+
+        SlackHook(id="h1", channel="C123").fire(  # ty: ignore[missing-argument]
+            il.HookContext(event_type="run_failed", component_id="c1")
+        )
+
+        assert slack.auth() == "Bearer xoxb-env"
+
+    def test_an_unbound_connection_without_a_token_fails_the_read(self, slack, monkeypatch):
+        monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+        monkeypatch.delenv("slack_bot_token", raising=False)
+
+        with pytest.raises(ValidationError, match="bot_token"):
             SlackHook(id="h1", channel="C123").fire(  # ty: ignore[missing-argument]
                 il.HookContext(event_type="run_failed", component_id="c1")
             )

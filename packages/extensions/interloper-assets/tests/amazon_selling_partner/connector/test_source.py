@@ -20,6 +20,7 @@ from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
+from interloper_assets.amazon_selling_partner.connection import AmazonSellingPartnerConnection
 from interloper_assets.amazon_selling_partner.connector import schemas
 from interloper_assets.amazon_selling_partner.connector.source import AmazonSellingPartner
 
@@ -124,7 +125,11 @@ class TestForecastingSnapshots:
             return {"forecastByAsin": rows}
 
         monkeypatch.setattr(source_module, "_get_report", fake_report)
-        asset = next(a for a in _source().assets if type(a).key == "vendor_forecasting_retail_stats")
+        source = _source()
+        source.connection = AmazonSellingPartnerConnection(
+            location="EU", client_id="x", client_secret="x", refresh_token="x"
+        )
+        asset = next(a for a in source.assets if type(a).key == "vendor_forecasting_retail_stats")
 
         def run(day: dt.date) -> list[dict[str, Any]]:
             context = ExecutionContext(asset, il.TimePartition(value=day).window)
