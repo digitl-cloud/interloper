@@ -629,11 +629,11 @@ class Serializable(BaseModel):
 
     @classmethod
     def _validate_classvars(cls) -> None:
-        """Check every setting this class defines itself against its declared type.
+        """Validate every setting this class defines itself and store it as its declared type.
 
-        Values are checked, never rewritten: the class keeps what was
-        declared, and readers that need a coerced form (a definition, say)
-        convert it themselves.
+        The class keeps the validated value, so a setting always reads as
+        what its ``ClassVar`` says: ``maturity = "alpha"`` is stored as
+        ``Maturity.ALPHA``.
 
         Raises:
             TypeError: If a setting's value does not match its declared type.
@@ -642,9 +642,10 @@ class Serializable(BaseModel):
             if declared is None or name not in cls.__dict__:
                 continue
             try:
-                type_adapter(declared).validate_python(cls.__dict__[name])
+                value = type_adapter(declared).validate_python(cls.__dict__[name])
             except ValidationError as error:
                 raise TypeError(f"{cls.__name__}.{name}: {error.errors()[0]['msg']}") from None
+            setattr(cls, name, value)
 
     @classmethod
     def _sort_settings(cls, settings: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:

@@ -98,7 +98,8 @@ class WarehouseDestination(il.Destination): ...
 | `deprecated` | Still works but is being phased out; avoid it for new setups. It will be removed in a future release. |
 
 The value is `il.Maturity` or its string, set through the decorator or as a class attribute
-(`maturity = "alpha"`); anything else is a `TypeError` where it is written. It is
+(`maturity = "alpha"`), and the class stores it as `il.Maturity` either way; anything else is a
+`TypeError` where it is written. It is
 informational: a component behaves the same at every level, and the app shows a Deprecated, Alpha
 or Beta badge wherever the component is offered or listed.
 
