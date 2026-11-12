@@ -1,8 +1,8 @@
 """Alembic environment configuration.
 
-Reads the database URL from the engine singleton initialised by
-``init_engine()``, so migrations share the exact same connection as the
-rest of the application.
+Migrates the engine `interloper_db.provision` hands over in the config's
+``attributes``; run from the Alembic CLI, where nothing is handed over, the
+engine singleton initialised by ``init_engine()``.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ def run_migrations_online() -> None:
     """Run migrations against a live database."""
     from interloper_db.engine import get_engine
 
-    connectable = get_engine()
+    connectable = context.config.attributes.get("engine") or get_engine()
 
     with connectable.connect() as connection:
         # Bound how long any migration will WAIT for a lock. Without this, a DDL

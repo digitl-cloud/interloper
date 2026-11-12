@@ -132,53 +132,70 @@ class TestMigrations:
         )
         return recorded
 
+    @pytest.fixture
+    def engine(self) -> sqlalchemy.Engine:
+        """An engine the migrations are handed, never connected to.
+
+        Returns:
+            An in-memory SQLite engine.
+        """
+        return sqlalchemy.create_engine("sqlite://")
+
     def test_upgrade_targets_head_by_default(
-        self, alembic: dict[str, list[Any]], monkeypatch: pytest.MonkeyPatch
+        self, alembic: dict[str, list[Any]], engine: sqlalchemy.Engine, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(provision_module, "get_engine", lambda: object())
+        monkeypatch.setattr(provision_module, "get_engine", lambda: engine)
 
         upgrade()
 
         ((_config, revision),) = alembic["upgrade"]
         assert revision == "head"
 
-    def test_upgrade_takes_an_explicit_revision(self, alembic: dict[str, list[Any]]) -> None:
-        upgrade(engine=object(), revision="0007")  # ty: ignore[invalid-argument-type]
+    def test_upgrade_takes_an_explicit_revision(self, alembic: dict[str, list[Any]], engine: sqlalchemy.Engine) -> None:
+        upgrade(engine=engine, revision="0007")
 
         assert alembic["upgrade"][0][1] == "0007"
 
     def test_downgrade_steps_back_one_by_default(
-        self, alembic: dict[str, list[Any]], monkeypatch: pytest.MonkeyPatch
+        self, alembic: dict[str, list[Any]], engine: sqlalchemy.Engine, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(provision_module, "get_engine", lambda: object())
+        monkeypatch.setattr(provision_module, "get_engine", lambda: engine)
 
         downgrade()
 
         assert alembic["downgrade"][0][1] == "-1"
 
-    def test_downgrade_takes_an_explicit_revision(self, alembic: dict[str, list[Any]]) -> None:
-        downgrade(engine=object(), revision="base")  # ty: ignore[invalid-argument-type]
+    def test_downgrade_takes_an_explicit_revision(
+        self, alembic: dict[str, list[Any]], engine: sqlalchemy.Engine
+    ) -> None:
+        downgrade(engine=engine, revision="base")
 
         assert alembic["downgrade"][0][1] == "base"
 
-    def test_without_an_engine_the_global_one_is_resolved(
-        self, alembic: dict[str, list[Any]], monkeypatch: pytest.MonkeyPatch
+    def test_the_given_engine_is_the_one_migrated(
+        self, alembic: dict[str, list[Any]], engine: sqlalchemy.Engine
     ) -> None:
-        # Resolved for its side effect only: alembic's env.py reads the
-        # global singleton, so an uninitialized engine must still surface.
-        resolved: list[bool] = []
-        monkeypatch.setattr(provision_module, "get_engine", lambda: resolved.append(True))
+        upgrade(engine=engine)
+        downgrade(engine=engine)
+
+        assert alembic["upgrade"][0][0].attributes["engine"] is engine
+        assert alembic["downgrade"][0][0].attributes["engine"] is engine
+
+    def test_without_an_engine_the_global_one_is_migrated(
+        self, alembic: dict[str, list[Any]], engine: sqlalchemy.Engine, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(provision_module, "get_engine", lambda: engine)
 
         upgrade()
 
-        assert resolved == [True]
+        assert alembic["upgrade"][0][0].attributes["engine"] is engine
 
 
 class TestAlembicConfig:
     """The config resolves from the package layout, not the working directory."""
 
     def test_the_script_location_is_the_packages_migrations(self) -> None:
-        config = _alembic_config()
+        config = _alembic_config(sqlalchemy.create_engine("sqlite://"))
 
         script_location = config.get_main_option("script_location")
         assert script_location is not None
