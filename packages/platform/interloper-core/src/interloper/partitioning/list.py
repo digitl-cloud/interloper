@@ -17,7 +17,7 @@ class ListPartition(Partition):
         value: The declared value, which is also the partition's key.
     """
 
-    value: str  # ty: ignore[incompatible-attribute-override]
+    value: str
 
     @property
     def key(self) -> str:
@@ -93,7 +93,7 @@ class ListPartitionWindow(PartitionWindow):
         return ListPartition(self.end)
 
     @property
-    def partitions(self) -> list[Partition]:
+    def partitions(self) -> list[ListPartition]:
         """Every value from ``start`` to ``end`` inclusive, as partitions."""
         first, last = self.values.index(self.start), self.values.index(self.end)
         return [ListPartition(value) for value in self.values[first : last + 1]]
@@ -158,7 +158,7 @@ class ListPartitionConfig(PartitionConfig):
         return f"partitioned by list {list(self.values)}"
 
     @property
-    def partitions(self) -> list[Partition]:
+    def partitions(self) -> list[ListPartition]:
         """Every declared value, in order, as partitions."""
         return [ListPartition(value) for value in self.values]
 

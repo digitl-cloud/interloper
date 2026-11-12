@@ -13,7 +13,7 @@ partitioning. The time kind lives in `interloper.partitioning.time`, the snapsho
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import asdict, dataclass, fields
 from typing import Any, ClassVar
 
@@ -47,14 +47,18 @@ class PartitionFilter:
             raise ValueError("A partition filter carries exactly one of values and bounds.")
 
 
+@dataclass(frozen=True)
 class Partition(ABC):
     """The storage unit: one slice of a partitioned asset, named by its key.
 
-    Concrete kinds are frozen dataclasses carrying the partition's ``value`` (a period start for
-    a time partition, a declared string for a list one); the base declares the contract and
-    types that one attribute every kind carries, so ``context.partition.value`` reads without
-    narrowing. ``str(partition)`` is the key, which is what reaches destination paths, run rows
-    and filters.
+    Concrete kinds narrow the partition's ``value`` (a period start for a time partition, a
+    declared string for a list one); the base declares the contract and types that one
+    attribute every kind carries, so ``context.partition.value`` reads without narrowing.
+    ``str(partition)`` is the key, which is what reaches destination paths, run rows and
+    filters.
+
+    Attributes:
+        value: The partition's value.
     """
 
     value: Any
@@ -129,7 +133,7 @@ class PartitionWindow(ABC):
 
     @property
     @abstractmethod
-    def partitions(self) -> list[Partition]:
+    def partitions(self) -> Sequence[Partition]:
         """Every partition of the window, first to last."""
 
     @abstractmethod

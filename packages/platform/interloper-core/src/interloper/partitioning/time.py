@@ -194,7 +194,7 @@ class TimePartition(Partition):
         granularity: The period one partition covers.
     """
 
-    value: dt.date  # ty: ignore[incompatible-attribute-override]
+    value: dt.date
     granularity: TimeGranularity = TimeGranularity.DAY
 
     @classmethod
@@ -305,7 +305,7 @@ class TimePartitionWindow(PartitionWindow):
         return TimePartition(self.end, self.granularity)
 
     @property
-    def partitions(self) -> list[Partition]:
+    def partitions(self) -> list[TimePartition]:
         """Every period from ``start`` to ``end`` inclusive, oldest first."""
         return [TimePartition(value, self.granularity) for value in self.granularity.period_range(self.start, self.end)]
 

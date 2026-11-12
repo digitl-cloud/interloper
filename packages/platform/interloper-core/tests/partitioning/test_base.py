@@ -45,7 +45,7 @@ class TestPartition:
 
     def test_the_bases_are_abstract(self):
         with pytest.raises(TypeError):
-            Partition()  # ty: ignore[abstract-class-instantiation]
+            Partition("a")  # ty: ignore[abstract-class-instantiation]
         with pytest.raises(TypeError):
             PartitionWindow("a", "b")  # ty: ignore[abstract-class-instantiation]
         with pytest.raises(TypeError):

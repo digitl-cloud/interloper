@@ -233,7 +233,7 @@ class TestTimePartitionWindow:
 
     def test_partitions_carry_the_window_granularity(self) -> None:
         window = TimePartitionWindow(start=dt.date(2026, 1, 1), end=dt.date(2026, 1, 2))
-        assert all(partition.granularity is TimeGranularity.DAY for partition in window.partitions)  # ty: ignore[missing-attribute]
+        assert all(partition.granularity is TimeGranularity.DAY for partition in window.partitions)
 
     def test_len_is_inclusive(self) -> None:
         assert len(TimePartitionWindow(dt.date(2026, 1, 1), dt.date(2026, 1, 3))) == 3
