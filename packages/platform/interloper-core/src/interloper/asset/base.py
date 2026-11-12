@@ -8,7 +8,7 @@ import functools
 import inspect
 import warnings
 from collections.abc import Sized
-from typing import TYPE_CHECKING, Any, ClassVar, cast, get_args, get_origin, get_type_hints, overload
+from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, cast, get_args, get_origin, get_type_hints, overload
 
 from pydantic import Field
 from pydantic._internal._model_construction import ModelMetaclass
@@ -87,6 +87,9 @@ class AssetDefinition(ComponentDefinition):
         return str(ComponentIdentity(self.source_key or None, self.key))
 
 
+AssetT = TypeVar("AssetT", bound="Asset")
+
+
 class AssetMeta(ModelMetaclass):
     """The metaclass of every asset class: an asset class read off a source instance is that source's asset.
 
@@ -98,11 +101,11 @@ class AssetMeta(ModelMetaclass):
     """
 
     @overload
-    def __get__(cls, instance: None, owner: type | None = None) -> type[Asset]: ...
+    def __get__(cls: type[AssetT], instance: None, owner: type | None = None) -> type[AssetT]: ...
     @overload
-    def __get__(cls, instance: Source, owner: type | None = None) -> Asset: ...
+    def __get__(cls: type[AssetT], instance: Source, owner: type | None = None) -> AssetT: ...
     @overload
-    def __get__(cls, instance: object, owner: type | None = None) -> type[Asset]: ...
+    def __get__(cls: type[AssetT], instance: object, owner: type | None = None) -> type[AssetT]: ...
     def __get__(cls, instance: object, owner: type | None = None) -> Any:
         """Resolve to the class, or to a source instance's live asset of this key.
 

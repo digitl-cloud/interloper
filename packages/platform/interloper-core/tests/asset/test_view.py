@@ -73,7 +73,7 @@ class TestDefinition:
         assert issubclass(il.View, il.Asset)
         assert il.View.reads_upstream_data is False
         assert il.View.kind == "asset"
-        assert Reporting.order_totals.dialect is None  # ty: ignore[missing-attribute]
+        assert Reporting.order_totals.dialect is None
 
     def test_upstream_relations_are_inferred_as_for_assets(self):
         relation = Reporting.daily_totals.relations["order_totals"]
