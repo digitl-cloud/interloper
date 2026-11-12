@@ -17,9 +17,12 @@ secrets:
   env:
     INTERLOPER_BING_ADS_DEVELOPER_TOKEN: ci-test-token
 
-# Render the optional MCP workload and the HTTPRoute so lint covers them
-# (disabled templates are skipped entirely).
+# Render the optional MCP workload, the Ingress and the HTTPRoute so lint
+# covers them (disabled templates are skipped entirely).
 mcp:
+  enabled: true
+
+ingress:
   enabled: true
 
 httpRoute:

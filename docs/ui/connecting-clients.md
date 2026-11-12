@@ -72,10 +72,9 @@ Both sides need to know where they are reachable.
   server both derive it from `server.external_url`, so the resource the MCP server advertises is
   the one the authorization server accepts, and there is no separate MCP address to set.
 
-The chart's HTTPRoute sends `/mcp` and `/.well-known/oauth-protected-resource` to the MCP service
-and `/.well-known/oauth-authorization-server` to the API, all on the app hostnames. The Ingress
-sends the authorization server's metadata to the API as well; it does not route the MCP
-endpoint, so an Ingress deployment that serves MCP clients adds those routes itself.
+The chart's HTTPRoute and Ingress both send `/mcp` and `/.well-known/oauth-protected-resource` to
+the MCP service when `mcp.enabled`, and `/.well-known/oauth-authorization-server` to the API, all
+on the app hostnames.
 
 Outside the chart, `interloper app`, the compose stack's nginx and the Nuxt dev server route
 `/.well-known/oauth-authorization-server` to the API too, and `make dev-up` and the compose stack

@@ -182,6 +182,11 @@ Either `ingress.enabled: true` or `httpRoute.enabled: true`.  The
 HTTPRoute uses `gateway.networking.k8s.io/v1` and requires the Gateway
 API CRDs installed in your cluster.
 
+Both route the same paths on the app host: `/api` and
+`/.well-known/oauth-authorization-server` to the API, `/mcp` and
+`/.well-known/oauth-protected-resource` to the MCP server (when
+`mcp.enabled`), and everything else to the frontend.
+
 ### Streaming endpoints and proxy timeouts
 
 The API serves long-lived SSE streams (agent chat), so any proxy in

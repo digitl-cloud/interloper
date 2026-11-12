@@ -405,7 +405,8 @@ ingress:
     enabled: false
     secretName: ""
   # The chart routes /api/* and /.well-known/oauth-authorization-server to the
-  # API service and everything else to the frontend service.
+  # API service, /mcp and /.well-known/oauth-protected-resource to the MCP
+  # service when mcp.enabled, and everything else to the frontend service.
   apiPath: /api
   apiPathType: Prefix
   rootPath: /
