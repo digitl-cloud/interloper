@@ -22,6 +22,7 @@ from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
+import interloper as il
 from fastapi import APIRouter, HTTPException, Query, Response
 from interloper.component import KINDS
 from interloper.errors import DataNotFoundError
@@ -505,12 +506,12 @@ def get_partition_row_counts(
     except ComponentDriftError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-    partitioning = getattr(il_asset, "partitioning", None)
-    if not partitioning:
+    if not isinstance(il_asset, il.Asset) or il_asset.partitioning is None:
         raise HTTPException(status_code=400, detail="Component is not a partitioned asset")
+    partitioning = il_asset.partitioning
 
     try:
-        counts = il_asset.partition_row_counts()  # ty: ignore[missing-attribute]
+        counts = il_asset.partition_row_counts()
     except NotImplementedError:
         raise HTTPException(status_code=400, detail="Destination does not support partition row counts")
     except DataNotFoundError as e:

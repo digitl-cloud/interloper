@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID, uuid4
@@ -687,27 +688,35 @@ class TestRemoveRelation:
         assert response.status_code == 400
 
 
+def _daily(counts: Callable[[], dict[str, int]]) -> il.Asset:
+    """A day-partitioned asset whose destination answers with *counts*.
+
+    Args:
+        counts: What counting the destination's partitions returns or raises.
+
+    Returns:
+        The asset.
+    """
+
+    class Daily(il.Asset):
+        """Partitioned asset whose row counts come from *counts*."""
+
+        partitioning = il.TimePartitionConfig(column="date")
+
+        def data(self) -> Any:
+            return []
+
+        def partition_row_counts(self) -> dict[str, int]:
+            return counts()
+
+    return Daily()
+
+
 class TestPartitionRowCounts:
     """``GET /components/{id}/partition-row-counts`` — asset data, not catalog metadata."""
 
     def test_returns_counts_ordered_by_partition(self, crud_client: TestClient, crud_store: CrudStore) -> None:
-        class Daily(il.Asset):
-            """Partitioned asset whose destination reports two partitions."""
-
-            partitioning = il.TimePartitionConfig(column="date")
-
-            def data(self) -> Any:
-                return []
-
-            def partition_row_counts(self) -> dict[str, int]:
-                """Counts in deliberately unsorted order.
-
-                Returns:
-                    Two partitions, newest first.
-                """
-                return {"2026-06-02": 5, "2026-06-01": 3}
-
-        crud_store.loaded = Daily()
+        crud_store.loaded = _daily(lambda: {"2026-06-02": 5, "2026-06-01": 3})
 
         response = crud_client.get(f"/components/{uuid4()}/partition-row-counts")
 
@@ -732,7 +741,21 @@ class TestPartitionRowCounts:
         assert response.status_code == 404
 
     def test_an_unpartitioned_asset_is_a_400(self, crud_client: TestClient, crud_store: CrudStore) -> None:
-        crud_store.loaded = SimpleNamespace(partitioning=None)
+        class Whole(il.Asset):
+            """Unpartitioned asset."""
+
+            def data(self) -> Any:
+                return []
+
+        crud_store.loaded = Whole()
+
+        response = crud_client.get(f"/components/{uuid4()}/partition-row-counts")
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Component is not a partitioned asset"
+
+    def test_a_component_that_is_no_asset_is_a_400(self, crud_client: TestClient, crud_store: CrudStore) -> None:
+        crud_store.loaded = il.MemoryDestination()
 
         response = crud_client.get(f"/components/{uuid4()}/partition-row-counts")
 
@@ -743,9 +766,7 @@ class TestPartitionRowCounts:
         def unsupported() -> dict[str, int]:
             raise NotImplementedError
 
-        crud_store.loaded = SimpleNamespace(
-            partitioning=SimpleNamespace(column="date"), partition_row_counts=unsupported
-        )
+        crud_store.loaded = _daily(unsupported)
 
         response = crud_client.get(f"/components/{uuid4()}/partition-row-counts")
 
@@ -756,7 +777,7 @@ class TestPartitionRowCounts:
         def empty() -> dict[str, int]:
             raise DataNotFoundError("no data for asset 'daily'")
 
-        crud_store.loaded = SimpleNamespace(partitioning=SimpleNamespace(column="date"), partition_row_counts=empty)
+        crud_store.loaded = _daily(empty)
 
         response = crud_client.get(f"/components/{uuid4()}/partition-row-counts")
 
@@ -768,7 +789,7 @@ class TestPartitionRowCounts:
         def broken() -> dict[str, int]:
             raise RuntimeError("warehouse unreachable")
 
-        crud_store.loaded = SimpleNamespace(partitioning=SimpleNamespace(column="date"), partition_row_counts=broken)
+        crud_store.loaded = _daily(broken)
 
         response = crud_client.get(f"/components/{uuid4()}/partition-row-counts")
 
