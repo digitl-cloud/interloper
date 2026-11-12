@@ -15,7 +15,7 @@ once per process, to read datetimes back aware.
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -49,7 +49,7 @@ class _AwareDATETIME(DATETIME):
         def to_aware(value: Any) -> datetime | None:
             parsed = parse(value) if parse is not None else value
             if parsed is not None and parsed.tzinfo is None:
-                return parsed.replace(tzinfo=timezone.utc)
+                return parsed.replace(tzinfo=UTC)
             return parsed
 
         return to_aware

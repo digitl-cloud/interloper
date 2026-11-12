@@ -8,10 +8,9 @@ import inspect
 import threading
 from collections.abc import Coroutine, Iterable
 from types import TracebackType
-from typing import Any, TypeVar
+from typing import Any, Self, TypeVar
 
 from opentelemetry import context as otel_context
-from typing_extensions import Self
 
 _T = TypeVar("_T")
 

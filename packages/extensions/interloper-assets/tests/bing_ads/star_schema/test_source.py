@@ -20,7 +20,7 @@ duckdb = pytest.importorskip("interloper_duckdb")
 
 DAY = dt.date(2026, 10, 1)
 SNAPSHOT_DAY = dt.date(2026, 9, 30)
-UPDATED = dt.datetime(2026, 9, 29, 7, 30, tzinfo=dt.timezone.utc)
+UPDATED = dt.datetime(2026, 9, 29, 7, 30, tzinfo=dt.UTC)
 FACT_COLUMNS = [
     "date",
     "account_id",

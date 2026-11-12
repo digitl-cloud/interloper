@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class Maturity(str, Enum):
+class Maturity(StrEnum):
     """How far a component is from being relied on in production.
 
     Informational: it is shown beside the component wherever it is offered

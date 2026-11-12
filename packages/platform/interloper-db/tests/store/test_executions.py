@@ -8,7 +8,7 @@ serves in production.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import interloper as il
@@ -78,7 +78,7 @@ class TestList:
                     org_id=_ORG_ID,
                     component_key="a",
                     status="success",
-                    completed_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                    completed_at=datetime(2026, 1, 1, tzinfo=UTC),
                 )
             ]
         )
@@ -98,7 +98,7 @@ class TestList:
         assert page.total == 0
 
     def test_without_a_run_lists_every_run_oldest_first(self, store: Store) -> None:
-        t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        t0 = datetime(2026, 1, 1, tzinfo=UTC)
         older, newer = uuid4(), uuid4()
         _seed(
             [
@@ -119,7 +119,7 @@ class TestList:
         assert page.total == 2
 
     def test_a_components_executions_newest_first(self, store: Store) -> None:
-        t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        t0 = datetime(2026, 1, 1, tzinfo=UTC)
         asset, other = uuid4(), uuid4()
         runs = [uuid4() for _ in range(3)]
         _seed(
@@ -148,7 +148,7 @@ class TestList:
         other_org = uuid4()
         asset_a, asset_b, foreign = uuid4(), uuid4(), uuid4()
         old_run, new_run = uuid4(), uuid4()
-        t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        t0 = datetime(2026, 1, 1, tzinfo=UTC)
         rows = [
             (old_run, asset_a, _ORG_ID, "a", "failed", t0),
             (new_run, asset_a, _ORG_ID, "a", "success", t0 + timedelta(hours=1)),
@@ -175,7 +175,7 @@ class TestList:
         assert store.executions.list(uuid4(), ExecutionQuery(latest=True, limit=None)).items == []
 
     def test_latest_is_one_row_per_component_under_a_window(self, store: Store) -> None:
-        t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        t0 = datetime(2026, 1, 1, tzinfo=UTC)
         components = [uuid4() for _ in range(3)]
         _seed(
             [
@@ -200,7 +200,7 @@ class TestList:
         assert sorted(listed) == sorted(components)
         assert first.total == rest.total == 3
         # SQLite round-trips the column naive.
-        newest = {row.created_at.replace(tzinfo=timezone.utc) for row in first.items + rest.items if row.created_at}
+        newest = {row.created_at.replace(tzinfo=UTC) for row in first.items + rest.items if row.created_at}
         assert newest == {t0 + timedelta(hours=1)}
 
     def test_latest_leaves_out_a_deleted_component(self, store: Store) -> None:
@@ -220,7 +220,7 @@ class TestList:
 
     def test_latest_within_a_run_is_the_runs_executions(self, store: Store) -> None:
         run_id, other_run, asset = uuid4(), uuid4(), uuid4()
-        t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        t0 = datetime(2026, 1, 1, tzinfo=UTC)
         _seed(
             [
                 Execution(run_id=run_id, component_id=asset, org_id=_ORG_ID, status="failed", created_at=t0),

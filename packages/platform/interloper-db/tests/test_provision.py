@@ -10,11 +10,10 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 import pytest
 import sqlalchemy
-from typing_extensions import Self
 
 from interloper_db import provision as provision_module
 from interloper_db.provision import (

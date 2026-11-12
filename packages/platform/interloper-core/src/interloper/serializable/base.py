@@ -20,10 +20,9 @@ import re
 import uuid
 from collections.abc import Callable, Collection, Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Self, cast
 
 from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
-from typing_extensions import Self
 
 from interloper.utils.annotations import classvar_type, is_classvar, type_adapter
 from interloper.utils.imports import get_object_path, import_from_path

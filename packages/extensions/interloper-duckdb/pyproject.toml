@@ -7,7 +7,7 @@ version = "0.132.0"
 description = "Interloper DuckDB integration: DuckDB and MotherDuck destination and connection"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "duckdb>=1.0",
     "interloper-core",

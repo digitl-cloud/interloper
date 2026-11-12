@@ -148,7 +148,7 @@ class RunCommand(Command):
         from interloper.settings import AppSettings
 
         configure_logging(quiet=args.quiet, verbose=args.verbose)
-        metadata = {"observed_at": dt.datetime.now(dt.timezone.utc).isoformat()}
+        metadata = {"observed_at": dt.datetime.now(dt.UTC).isoformat()}
         try:
             dag = _build_dag(args)
             window = _resolve_window(args, dag)

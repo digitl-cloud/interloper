@@ -88,7 +88,7 @@ class TestErrorCause:
         assert ErrorCause.from_text("").fingerprint == "None|"
 
 
-_T0 = dt.datetime(2026, 9, 29, 4, tzinfo=dt.timezone.utc)
+_T0 = dt.datetime(2026, 9, 29, 4, tzinfo=dt.UTC)
 
 
 def _row(error: str, *, event_type: str = "operation_failed", count: int = 1, minute: int = 0, **fields) -> ErrorRow:

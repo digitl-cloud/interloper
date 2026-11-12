@@ -61,7 +61,7 @@ class TestObservedPeriod:
 
     def test_a_past_window_writes_the_observation_day(self) -> None:
         past = TimePartitionWindow(dt.date(2026, 10, 26), dt.date(2026, 10, 28))
-        observed_at = dt.datetime(2026, 10, 29, 6, tzinfo=dt.timezone.utc)
+        observed_at = dt.datetime(2026, 10, 29, 6, tzinfo=dt.UTC)
 
         window = SnapshotPartitionConfig(column="date").effective_window(past, _observed(observed_at))
 
@@ -87,7 +87,7 @@ class TestObservedPeriod:
         assert (len(window), window.first.key) == (1, key)
 
     def test_the_day_is_the_zone_of_the_instant(self) -> None:
-        late_in_utc = dt.datetime(2026, 10, 29, 23, 30, tzinfo=dt.timezone.utc)
+        late_in_utc = dt.datetime(2026, 10, 29, 23, 30, tzinfo=dt.UTC)
 
         utc = SnapshotPartitionConfig(column="date").effective_window(None, _observed(late_in_utc))
         berlin = SnapshotPartitionConfig(column="date").effective_window(
@@ -97,11 +97,11 @@ class TestObservedPeriod:
         assert (utc.first.key, berlin.first.key) == ("2026-10-29", "2026-10-30")
 
     def test_a_run_stating_no_instant_observes_now_in_utc(self) -> None:
-        before = dt.datetime.now(dt.timezone.utc).date()
+        before = dt.datetime.now(dt.UTC).date()
 
         window = SnapshotPartitionConfig(column="date").effective_window(None, {})
 
-        assert before <= window.first.value <= dt.datetime.now(dt.timezone.utc).date()
+        assert before <= window.first.value <= dt.datetime.now(dt.UTC).date()
 
     def test_an_instant_without_its_offset_is_refused(self) -> None:
         with pytest.raises(PartitionError, match="needs its offset"):
@@ -109,7 +109,7 @@ class TestObservedPeriod:
 
     def test_a_time_partitioning_consumes_the_run_window(self) -> None:
         window = TimePartition(dt.date(2026, 10, 26)).window
-        observed_at = dt.datetime(2026, 10, 29, tzinfo=dt.timezone.utc)
+        observed_at = dt.datetime(2026, 10, 29, tzinfo=dt.UTC)
 
         assert TimePartitionConfig(column="date").effective_window(window, _observed(observed_at)) is window
 

@@ -8,7 +8,7 @@ store stands in for persistence so these stay pure unit tests.
 from __future__ import annotations
 
 import sys
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
@@ -34,9 +34,7 @@ class FakeStore:
     """In-memory stand-in exposing only the store facets the admin routes reach for."""
 
     def __init__(self) -> None:
-        self.org = SimpleNamespace(
-            id=uuid4(), name="Acme", key="acme", created_at=datetime.now(timezone.utc), deleted_at=None
-        )
+        self.org = SimpleNamespace(id=uuid4(), name="Acme", key="acme", created_at=datetime.now(UTC), deleted_at=None)
         self.profile_rows: dict[UUID, SimpleNamespace] = {}
         self.member = self.add_profile("member@acme.test", name="Member")
         self.deleted_profiles: list[UUID] = []
@@ -112,7 +110,7 @@ class FakeStore:
             name=name,
             avatar_url=None,
             is_super_admin=is_super_admin,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             organisations=[self.org],
         )
         self.profile_rows[row.id] = row
@@ -129,7 +127,7 @@ class FakeStore:
 
     def _create_organisation(self, name: str, creator_id: UUID | None = None):
         return SimpleNamespace(
-            id=uuid4(), name=name, key=derive_key(name), created_at=datetime.now(timezone.utc), deleted_at=None
+            id=uuid4(), name=name, key=derive_key(name), created_at=datetime.now(UTC), deleted_at=None
         )
 
     def _get_organisation(self, org_id: UUID):
@@ -620,7 +618,7 @@ def test_update_quota_rejects_negative_limits(store: FakeStore) -> None:
 
 def test_deleted_org_is_listed_but_not_manageable(store: FakeStore) -> None:
     """Soft-deleted orgs surface in the list (billing history) but 404 on management routes."""
-    store.org.deleted_at = datetime.now(timezone.utc)
+    store.org.deleted_at = datetime.now(UTC)
 
     def _deleted(org_id: UUID) -> None:
         raise NotFoundError(f"Organisation {org_id} not found")
@@ -643,7 +641,7 @@ def test_non_super_admin_cannot_read_activity(store: FakeStore) -> None:
 
 
 def test_activity_feed_composes_titles(store: FakeStore) -> None:
-    when = datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc)
+    when = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
     store.activity = [
         ActivityEntry(kind="runs_completed", when=when, subject="1204"),
         ActivityEntry(kind="invitation_sent", when=when, subject="a@b.io", extra="Root"),
@@ -695,7 +693,7 @@ def test_update_quota_rejects_an_unknown_quota(store: FakeStore) -> None:
 class TestActivityTitles:
     """``AdminActivityEntry.from_entry`` words each derived entry kind."""
 
-    _WHEN = datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc)
+    _WHEN = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
 
     @classmethod
     def _title(cls, kind: str, subject: str | None = None, extra: str | None = None) -> tuple[str, str | None]:

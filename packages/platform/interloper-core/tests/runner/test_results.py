@@ -97,7 +97,7 @@ class TestExecutionTime:
 
     def test_measured_from_both_timestamps(self) -> None:
         info = _info()
-        info.start_time = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+        info.start_time = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
         info.end_time = info.start_time + dt.timedelta(seconds=2, milliseconds=500)
 
         assert info.execution_time == 2.5
@@ -117,7 +117,7 @@ class TestToDict:
 
     def test_carries_status_timestamps_and_error(self) -> None:
         info = _info(key="demo.a")
-        info.start_time = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+        info.start_time = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
         info.finish(OperationResult(error="nope", config={"x": 1}, traceback="tb", exception=ValueError("nope")))
 
         payload = info.to_dict()

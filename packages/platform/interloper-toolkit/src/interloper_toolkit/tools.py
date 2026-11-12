@@ -16,7 +16,7 @@ import types
 import typing
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from interloper_toolkit import analytics, catalog, collection, jobs, lineage, scheduling, sources
@@ -24,7 +24,7 @@ from interloper_toolkit.context import ToolkitContext
 from interloper_toolkit.models import ToolError
 
 
-class Effect(str, Enum):
+class Effect(StrEnum):
     """What a tool does to the platform."""
 
     READ = "read"

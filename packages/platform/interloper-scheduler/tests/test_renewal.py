@@ -120,7 +120,7 @@ class TestRenewalController:
         assert run.partition_key is None
         assert run.billable is False
         # Provisional slot: re-arms only if the run vanishes.
-        assert _state(store, conn_id)["next_renewal_at"] > dt.datetime.now(dt.timezone.utc).isoformat()
+        assert _state(store, conn_id)["next_renewal_at"] > dt.datetime.now(dt.UTC).isoformat()
 
     def test_non_renewable_connection_is_never_scanned(self, store: Store):
         conn_id = _connection(store, key="static_conn")
@@ -138,10 +138,10 @@ class TestRenewalController:
         assert _runs(store) == []
         stamped = _state(store, conn_id)["next_renewal_at"]
         # Reconsidered on the recheck horizon, not every tick.
-        assert stamped > (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=12)).isoformat()
+        assert stamped > (dt.datetime.now(dt.UTC) + dt.timedelta(hours=12)).isoformat()
 
     def test_not_due_connection_is_untouched(self, store: Store):
-        future = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=6)).isoformat()
+        future = (dt.datetime.now(dt.UTC) + dt.timedelta(hours=6)).isoformat()
         conn_id = _connection(store, state={"next_renewal_at": future})
 
         RenewalController(catalog=_CATALOG, store=store)._tick()
@@ -150,7 +150,7 @@ class TestRenewalController:
         assert _state(store, conn_id)["next_renewal_at"] == future
 
     def test_open_run_blocks_a_second_enqueue(self, store: Store):
-        past = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=5)).isoformat()
+        past = (dt.datetime.now(dt.UTC) - dt.timedelta(minutes=5)).isoformat()
         conn_id = _connection(store, state={"next_renewal_at": past})
         with Session(store.engine) as session:
             session.add(Run(component_id=conn_id, org_id=_ORG, status="running"))
@@ -214,7 +214,7 @@ class TestRenewalRuns:
         assert state["last_renewal_error"] is None
         # expires_in/2 with the reported 7200s validity.
         due = dt.datetime.fromisoformat(state["next_renewal_at"])
-        assert dt.timedelta(minutes=55) < due - dt.datetime.now(dt.timezone.utc) < dt.timedelta(minutes=65)
+        assert dt.timedelta(minutes=55) < due - dt.datetime.now(dt.UTC) < dt.timedelta(minutes=65)
 
     def test_failed_renewal_stamps_curated_error_and_fails_the_run(self, store: Store, monkeypatch: pytest.MonkeyPatch):
         conn_id = _connection(store)

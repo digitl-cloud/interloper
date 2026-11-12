@@ -13,7 +13,7 @@ class TestCoerceToDate:
         assert coerce_to_date(date) is date
 
     def test_datetime_is_reduced_to_date(self) -> None:
-        assert coerce_to_date(dt.datetime(2026, 1, 1, 12, 30, tzinfo=dt.timezone.utc)) == dt.date(2026, 1, 1)
+        assert coerce_to_date(dt.datetime(2026, 1, 1, 12, 30, tzinfo=dt.UTC)) == dt.date(2026, 1, 1)
 
     def test_iso_string_is_parsed(self) -> None:
         assert coerce_to_date("2026-01-01") == dt.date(2026, 1, 1)
@@ -51,7 +51,7 @@ class TestCoerceToDatetime:
 
 class TestAssumeUtc:
     def test_naive_is_labelled_utc(self) -> None:
-        assert assume_utc(dt.datetime(2026, 7, 1, 9, 30)).tzinfo is dt.timezone.utc
+        assert assume_utc(dt.datetime(2026, 7, 1, 9, 30)).tzinfo is dt.UTC
 
     def test_aware_is_left_alone(self) -> None:
         berlin = dt.timezone(dt.timedelta(hours=2))

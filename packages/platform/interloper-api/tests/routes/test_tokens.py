@@ -8,7 +8,7 @@ owner revokes, anyone else getting a 404 that doesn't leak token existence.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
@@ -30,7 +30,7 @@ def _row(*, user_id: UUID = USER_ID, name: str = "t") -> SimpleNamespace:
         name=name,
         token_prefix="ilp_12345678",
         token_hash="deadbeef" * 8,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         expires_at=None,
         last_used_at=None,
         revoked_at=None,
@@ -80,7 +80,7 @@ class FakeStore:
 
     def _revoke_token(self, token_id: UUID):
         row = self.rows[token_id]
-        row.revoked_at = datetime.now(timezone.utc)
+        row.revoked_at = datetime.now(UTC)
         return row
 
 

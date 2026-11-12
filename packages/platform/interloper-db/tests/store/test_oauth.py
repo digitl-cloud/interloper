@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import importlib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -251,7 +251,7 @@ def _age(auth_db: Engine, client: OAuthClient, age: timedelta) -> None:
         session.connection().execute(
             update(OAuthClient)
             .where(col(OAuthClient.client_id) == client.client_id)
-            .values(created_at=datetime.now(timezone.utc) - age)
+            .values(created_at=datetime.now(UTC) - age)
         )
         session.commit()
 
@@ -268,7 +268,7 @@ def _expire_refresh(auth_db: Engine, client: OAuthClient, ago: timedelta) -> Non
         session.connection().execute(
             update(RefreshToken)
             .where(col(RefreshToken.client_id) == client.client_id)
-            .values(expires_at=datetime.now(timezone.utc) - ago)
+            .values(expires_at=datetime.now(UTC) - ago)
         )
         session.commit()
 
@@ -358,17 +358,17 @@ class TestCodes:
         assert second is None
 
     def test_code_lives_ten_minutes(self, store: Store, profile: Profile, client: OAuthClient):
-        before = datetime.now(timezone.utc)
+        before = datetime.now(UTC)
         code = store.oauth.consume_code(_issue_code(store, profile, client))
 
         assert code is not None
-        assert before + timedelta(minutes=10) <= code.expires_at <= datetime.now(timezone.utc) + timedelta(minutes=10)
+        assert before + timedelta(minutes=10) <= code.expires_at <= datetime.now(UTC) + timedelta(minutes=10)
 
     def test_code_expires(self, store: Store, profile: Profile, client: OAuthClient, auth_db: Engine):
         raw = _issue_code(store, profile, client)
         with session_scope(auth_db) as session:
             session.connection().execute(
-                update(AuthorizationCode).values(expires_at=datetime.now(timezone.utc) - timedelta(seconds=1))
+                update(AuthorizationCode).values(expires_at=datetime.now(UTC) - timedelta(seconds=1))
             )
             session.commit()
 
@@ -396,7 +396,7 @@ class TestCodes:
         assert store.oauth.consume_code(raw) is not None
         with session_scope(auth_db) as session:
             session.connection().execute(
-                update(AuthorizationCode).values(expires_at=datetime.now(timezone.utc) - timedelta(seconds=1))
+                update(AuthorizationCode).values(expires_at=datetime.now(UTC) - timedelta(seconds=1))
             )
             session.commit()
         newer = store.oauth.consume_code(_issue_code(store, profile, client))
@@ -420,7 +420,7 @@ class TestRefreshTokens:
         assert rotated.rotated_at is not None
         assert rotated.user_id == profile.id
         assert rotated.resource == "mcp"
-        before = datetime.now(timezone.utc)
+        before = datetime.now(UTC)
         new = store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP, family_id=rotated.family_id)
 
         successor = store.oauth.rotate_refresh(new, client.client_id)
@@ -488,7 +488,7 @@ class TestRefreshTokens:
         raw = store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP)
         with session_scope(auth_db) as session:
             session.connection().execute(
-                update(RefreshToken).values(expires_at=datetime.now(timezone.utc) - timedelta(seconds=1))
+                update(RefreshToken).values(expires_at=datetime.now(UTC) - timedelta(seconds=1))
             )
             session.commit()
 
@@ -587,7 +587,7 @@ class TestAuthorisedClients:
             session.connection().execute(
                 update(RefreshToken)
                 .where(col(RefreshToken.client_id) == expired.client_id)
-                .values(expires_at=datetime.now(timezone.utc) - timedelta(seconds=1))
+                .values(expires_at=datetime.now(UTC) - timedelta(seconds=1))
             )
             session.commit()
 

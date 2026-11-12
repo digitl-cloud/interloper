@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import interloper as il
@@ -20,7 +20,7 @@ from interloper_db.store import EventQuery, Page, Store
 _RUN_ID = UUID("99c018d6-98fe-4de5-a867-1f1a9a545a38")
 _OTHER_RUN_ID = uuid4()
 _ORG_ID = uuid4()
-_BASE_TS = datetime(2026, 6, 4, 12, 0, 0, tzinfo=timezone.utc)
+_BASE_TS = datetime(2026, 6, 4, 12, 0, 0, tzinfo=UTC)
 
 
 @pytest.fixture

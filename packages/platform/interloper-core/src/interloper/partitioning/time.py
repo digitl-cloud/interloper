@@ -12,7 +12,7 @@ from __future__ import annotations
 import datetime as dt
 from collections.abc import Generator
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any, ClassVar
 
 from interloper.errors import PartitionError
@@ -22,7 +22,7 @@ from interloper.utils import add_months, coerce_to_date, coerce_to_datetime
 # -- Granularity ---------------------------------------------------------------
 
 
-class TimeGranularity(str, Enum):
+class TimeGranularity(StrEnum):
     """The length of the period one time partition covers.
 
     Partition keys are ISO-8601 prefixes (``2026``, ``2026-08``, ``2026-08-21``, ``2026-08-21T13``):

@@ -228,8 +228,8 @@ class TestOnDuckDB:
         _seed(warehouse, "111", campaigns_entity=True)
         _materialize(warehouse, first)
         [row] = _rows(warehouse, "dim_campaigns")
-        assert row["created_at"] == dt.datetime(2026, 9, 1, 8, 0, tzinfo=dt.timezone.utc)
-        assert row["updated_at"] == dt.datetime(2026, 9, 2, 8, 0, tzinfo=dt.timezone.utc)
+        assert row["created_at"] == dt.datetime(2026, 9, 1, 8, 0, tzinfo=dt.UTC)
+        assert row["updated_at"] == dt.datetime(2026, 9, 2, 8, 0, tzinfo=dt.UTC)
 
     def test_a_newer_fact_does_not_displace_an_older_entity_row(self, warehouse):
         first = _account("111", warehouse)
@@ -340,7 +340,7 @@ class TestOnDuckDB:
         assert (row["ad_group_id"], row["campaign_id"], row["account_id"]) == ("s1", "c111", "111")
         assert (row["ad_group_name"], row["status"], row["budget_type"]) == ("Set from entity", "ACTIVE", "lifetime")
         assert (row["start_date"], row["end_date"]) == (dt.date(2026, 10, 1), None)
-        assert row["created_at"] == dt.datetime(2026, 9, 1, 8, 0, tzinfo=dt.timezone.utc)
+        assert row["created_at"] == dt.datetime(2026, 9, 1, 8, 0, tzinfo=dt.UTC)
         assert row["as_of_date"] == dt.date(2026, 9, 30)
 
     def test_accounts_come_from_the_report_then_the_fact(self, warehouse):

@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 from interloper_db.models import Run
 from interloper_db.store.insights.outcomes import Activity, JobOutcome
 
-_T0 = dt.datetime(2026, 9, 29, 4, tzinfo=dt.timezone.utc)
+_T0 = dt.datetime(2026, 9, 29, 4, tzinfo=dt.UTC)
 
 
 def _attempt(job: UUID, root: UUID | None, attempt: int, status: str, minutes: int) -> Run:

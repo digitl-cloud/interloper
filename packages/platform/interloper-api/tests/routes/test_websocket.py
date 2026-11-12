@@ -10,14 +10,13 @@ from __future__ import annotations
 import asyncio
 import json
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Self
 from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI, WebSocketDisconnect
 from fastapi.testclient import TestClient
 from interloper_db import Audience
-from typing_extensions import Self
 
 from interloper_api.app import ORG_PREFIX, install_error_handlers
 from interloper_api.dependencies import State

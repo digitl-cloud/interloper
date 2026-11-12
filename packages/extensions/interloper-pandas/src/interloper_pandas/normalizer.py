@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
 import pandas as pd
 from interloper.errors import NormalizerError
 from interloper.normalizer import Normalizer
 from pydantic import Field, model_validator
-from typing_extensions import Self
 
 from interloper_pandas.representation import DataFrameRepresentation
 

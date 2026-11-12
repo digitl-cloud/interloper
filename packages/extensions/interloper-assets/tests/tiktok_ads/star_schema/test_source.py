@@ -204,7 +204,7 @@ class TestOnDuckDB:
             100.0,
             "BUDGET_MODE_DAY",
         )
-        assert row["updated_at"] == dt.datetime(2026, 9, 2, 8, 0, tzinfo=dt.timezone.utc)
+        assert row["updated_at"] == dt.datetime(2026, 9, 2, 8, 0, tzinfo=dt.UTC)
 
     def test_without_entities_the_dimensions_take_the_reports_names(self, warehouse):
         first = _advertiser("111", warehouse)

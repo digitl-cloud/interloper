@@ -18,8 +18,8 @@ duckdb = pytest.importorskip("interloper_duckdb")
 
 DAY = dt.date(2026, 10, 1)
 CREATED_SQL, UPDATED_SQL = "TIMESTAMPTZ '2026-07-27 19:04:13.888+00'", "TIMESTAMPTZ '2026-07-28 19:04:13.888+00'"
-CREATED = dt.datetime(2026, 7, 27, 19, 4, 13, 888000, tzinfo=dt.timezone.utc)
-UPDATED = dt.datetime(2026, 7, 28, 19, 4, 13, 888000, tzinfo=dt.timezone.utc)
+CREATED = dt.datetime(2026, 7, 27, 19, 4, 13, 888000, tzinfo=dt.UTC)
+UPDATED = dt.datetime(2026, 7, 28, 19, 4, 13, 888000, tzinfo=dt.UTC)
 CAMPAIGN_REPORTS = [
     "amazon_ads.products_campaigns_stats",
     "amazon_ads.brands_campaigns_stats",
@@ -322,7 +322,7 @@ class TestOnDuckDB:
         )
         assert (products["budget"], products["budget_type"]) == (55.0, "DAILY")
         assert (products["start_date"], products["end_date"]) == (dt.date(2026, 9, 1), None)
-        assert products["created_at"] == dt.datetime(2026, 8, 1, 10, 0, tzinfo=dt.timezone.utc)
+        assert products["created_at"] == dt.datetime(2026, 8, 1, 10, 0, tzinfo=dt.UTC)
         assert products["as_of_date"] == dt.date(2026, 9, 30)
         brands = rows["221"]
         assert (brands["budget_type"], brands["start_date"], brands["end_date"]) == (
@@ -347,7 +347,7 @@ class TestOnDuckDB:
         _materialize(warehouse, first)
         rows = {row["ad_group_id"]: row for row in _rows(warehouse, "dim_ad_groups")}
         assert (rows["1"]["ad_group_name"], rows["1"]["status"]) == ("SP group from entity", "ENABLED")
-        assert rows["1"]["updated_at"] == dt.datetime(2026, 8, 2, 10, 0, tzinfo=dt.timezone.utc)
+        assert rows["1"]["updated_at"] == dt.datetime(2026, 8, 2, 10, 0, tzinfo=dt.UTC)
         assert (rows["3"]["status"], rows["3"]["as_of_date"]) == ("PAUSED", dt.date(2026, 9, 30))
         assert (rows["4"]["campaign_id"], rows["4"]["account_id"]) == ("331", "1")
         assert (rows["3"]["created_at"], rows["4"]["updated_at"]) == (CREATED, UPDATED)
@@ -361,7 +361,7 @@ class TestOnDuckDB:
         products, brands, display = rows["91"], rows["93"], rows["94"]
         assert (products["ad_group_id"], products["campaign_id"], products["account_id"]) == ("1", "111", "1")
         assert (products["ad_name"], products["asin"], products["status"]) == (None, "B000SP", "ENABLED")
-        assert products["updated_at"] == dt.datetime(2026, 8, 2, 10, 0, tzinfo=dt.timezone.utc)
+        assert products["updated_at"] == dt.datetime(2026, 8, 2, 10, 0, tzinfo=dt.UTC)
         assert (brands["ad_name"], brands["status"], brands["created_at"]) == ("SB ad from entity", "PAUSED", CREATED)
         assert (display["asin"], display["status"], display["as_of_date"]) == (
             "B000SD",

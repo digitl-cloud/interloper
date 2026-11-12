@@ -186,7 +186,7 @@ class TestReconcile:
         normalized = child.normalizer.normalize(rows)
         reconciled = TableData.from_data(normalized).reconcile(schemas.Campaigns)
         row = reconciled.iloc[0]
-        assert row["created_time"] == dt.datetime(2025, 9, 14, tzinfo=dt.timezone.utc)
+        assert row["created_time"] == dt.datetime(2025, 9, 14, tzinfo=dt.UTC)
         assert float(row["daily_spend_cap"]) == 25000000.0
         assert json.loads(row["tracking_urls_click"]) == ["https://t.example/c"]
         assert json.loads(row["bid_options_gender_multipliers"]) == {"female": 1.2}
@@ -206,7 +206,7 @@ class TestReconcile:
         row = reconciled.iloc[0]
         assert json.loads(row["targeting_spec_apptype"]) == ["iphone", "web"]
         assert row["targeting_spec_minimum_age"] == "25"
-        assert row["start_time"] == dt.datetime(2025, 9, 14, tzinfo=dt.timezone.utc)
+        assert row["start_time"] == dt.datetime(2025, 9, 14, tzinfo=dt.UTC)
 
     def test_ad_account_owner_flattens(self):
         child = _child("ad_accounts")

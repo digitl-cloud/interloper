@@ -275,7 +275,7 @@ class Connection(Resource, Operation):
             The renewal's effects.
         """
         renewal = cast(Renewal, await asyncio.wait_for(invoke(self.renew), timeout=_RENEWAL_TIMEOUT))
-        now = dt.datetime.now(dt.timezone.utc)
+        now = dt.datetime.now(dt.UTC)
         if renewal.expires_in:
             due = now + max(dt.timedelta(seconds=renewal.expires_in / 2), dt.timedelta(minutes=15))
         else:
@@ -304,7 +304,7 @@ class Connection(Resource, Operation):
             A failed result stamping the curated error and the retry slot.
         """
         message = self.renewal_failure_message(error)
-        retry_at = dt.datetime.now(dt.timezone.utc) + _RENEWAL_RETRY_INTERVAL
+        retry_at = dt.datetime.now(dt.UTC) + _RENEWAL_RETRY_INTERVAL
         return OperationResult(
             error=message,
             state={"next_renewal_at": retry_at.isoformat(), "last_renewal_error": message},

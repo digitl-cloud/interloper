@@ -9,7 +9,7 @@ further tokens.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
@@ -77,7 +77,7 @@ def create_token(
     """
     expires_at = None
     if body.expires_in_days is not None:
-        expires_at = datetime.now(timezone.utc) + timedelta(days=body.expires_in_days)
+        expires_at = datetime.now(UTC) + timedelta(days=body.expires_in_days)
 
     row, raw = store.tokens.create_personal(user.id, body.name, expires_at)
     return CreatedTokenResponse(

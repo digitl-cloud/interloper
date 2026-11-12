@@ -41,7 +41,7 @@ from interloper_db.store.insights import base as insights_base
 from interloper_db.store.runs import partition_keys_overlapping
 
 _ORG = uuid4()
-_T0 = dt.datetime(2026, 6, 4, 12, tzinfo=dt.timezone.utc)
+_T0 = dt.datetime(2026, 6, 4, 12, tzinfo=dt.UTC)
 
 
 class DemoSource(il.Source):
@@ -328,7 +328,7 @@ class TestCoverageByKey:
         _execution(_run(job.id, partition_key="2026-07-03"), campaigns, "success", partition_key="2026-07-03")
         # an earlier firing's observation of the 1st failed and was never healed
         _execution(_run(job.id, partition_key="2026-06-30"), campaigns, "failed", partition_key="2026-07-01")
-        now = dt.datetime(2026, 7, 3, 10, tzinfo=dt.timezone.utc)
+        now = dt.datetime(2026, 7, 3, 10, tzinfo=dt.UTC)
 
         coverage = store.insights.coverage_by_key(_ORG, job.id, start_key="2026-07-01", end_key="2026-07-03", now=now)
 

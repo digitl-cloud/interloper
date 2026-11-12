@@ -11,7 +11,7 @@ from __future__ import annotations
 import builtins
 import uuid
 from collections.abc import Callable, Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 import interloper as il
@@ -215,7 +215,7 @@ class BackfillStore:
                 concurrency=concurrency,
                 fail_fast=fail_fast,
                 status=BackfillStatus.RUNNING,
-                started_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
             )
             session.add(db_backfill)
             session.flush()
@@ -291,7 +291,7 @@ class BackfillStore:
         """
         with session_scope(self._engine) as session:
             db_backfill = self._lock(backfill_id)
-            db_backfill.hooks_evaluated_at = datetime.now(timezone.utc)
+            db_backfill.hooks_evaluated_at = datetime.now(UTC)
             save(session, db_backfill)
 
     def advance(self, backfill_id: UUID, *, failed: bool) -> None:
@@ -362,7 +362,7 @@ class BackfillStore:
                 pending_run.cancel()
                 session.add(pending_run)
             db_backfill.status = BackfillStatus.FAILED
-            db_backfill.completed_at = datetime.now(timezone.utc)
+            db_backfill.completed_at = datetime.now(UTC)
             session.add(db_backfill)
             self._record_verdict(db_backfill)
             return
@@ -385,7 +385,7 @@ class BackfillStore:
                 select(Run.id).where(Run.backfill_id == backfill_id, Run.status == RunStatus.FAILED, latest_attempt())
             ).first()
             db_backfill.status = BackfillStatus.FAILED if any_failed else BackfillStatus.SUCCESS
-            db_backfill.completed_at = datetime.now(timezone.utc)
+            db_backfill.completed_at = datetime.now(UTC)
             session.add(db_backfill)
             self._record_verdict(db_backfill)
             return
@@ -464,7 +464,7 @@ class BackfillStore:
                 db_run.cancel()
                 session.add(db_run)
             db_backfill.status = BackfillStatus.CANCELED
-            db_backfill.completed_at = db_backfill.hooks_evaluated_at = datetime.now(timezone.utc)
+            db_backfill.completed_at = db_backfill.hooks_evaluated_at = datetime.now(UTC)
             session.add(db_backfill)
 
     def _record_verdict(self, db_backfill: Backfill) -> None:

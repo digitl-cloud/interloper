@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import Engine, func, select
@@ -170,4 +170,4 @@ def database_now(session: Session) -> datetime:
     """
     value = session.scalar(select(func.current_timestamp()))
     assert value is not None
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return value if value.tzinfo else value.replace(tzinfo=UTC)

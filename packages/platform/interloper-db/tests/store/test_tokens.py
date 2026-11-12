@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib
 from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -143,7 +143,7 @@ class TestResolve:
         assert store.tokens.resolve("ila_api", Audience.APP) is None
 
     def test_expired_revoked_unknown_refused(self, store: Store, profile: Profile):
-        past = datetime.now(timezone.utc) - timedelta(seconds=1)
+        past = datetime.now(UTC) - timedelta(seconds=1)
         _, expired = store.tokens.create_personal(profile.id, "expired", past)
         revoked_row, revoked = store.tokens.create_personal(profile.id, "revoked", None)
         store.tokens.revoke(revoked_row.id)
@@ -218,28 +218,28 @@ class TestAccess:
     def test_access_expiry_from_settings(self, token_db: Engine, profile: Profile):
         tokens = TokenStore(token_db, session_expiry=timedelta(days=30), access_token_expiry=timedelta(minutes=5))
 
-        before = datetime.now(timezone.utc)
+        before = datetime.now(UTC)
         raw = tokens.create_access(profile.id, "client-1", Audience.API)
 
         resolved = tokens.resolve(raw, Audience.API)
         assert resolved is not None
         expires_at = resolved[1].expires_at
         assert expires_at is not None
-        assert before + timedelta(minutes=5) <= expires_at <= datetime.now(timezone.utc) + timedelta(minutes=5)
+        assert before + timedelta(minutes=5) <= expires_at <= datetime.now(UTC) + timedelta(minutes=5)
 
 
 class TestSessions:
     def test_session_expiry_from_settings(self, token_db: Engine, profile: Profile):
         tokens = TokenStore(token_db, session_expiry=timedelta(days=2), access_token_expiry=timedelta(hours=1))
 
-        before = datetime.now(timezone.utc)
+        before = datetime.now(UTC)
         raw = tokens.create_session(profile.id)
 
         resolved = tokens.resolve(raw, Audience.APP)
         assert resolved is not None
         expires_at = resolved[1].expires_at
         assert expires_at is not None
-        assert before + timedelta(days=2) <= expires_at <= datetime.now(timezone.utc) + timedelta(days=2)
+        assert before + timedelta(days=2) <= expires_at <= datetime.now(UTC) + timedelta(days=2)
 
     def test_revoke_sessions_ends_every_session_of_the_user_only(self, store: Store, profile: Profile):
         other = store.profiles.upsert(google_id="g-other", email="other@example.com", name="Other")
@@ -268,8 +268,8 @@ class TestSessions:
                 )
             )
             for raw, expires_at in (
-                ("live-cookie", datetime.now(timezone.utc) + timedelta(days=1)),
-                ("expired-cookie", datetime.now(timezone.utc) - timedelta(days=1)),
+                ("live-cookie", datetime.now(UTC) + timedelta(days=1)),
+                ("expired-cookie", datetime.now(UTC) - timedelta(days=1)),
             ):
                 connection.execute(
                     text(

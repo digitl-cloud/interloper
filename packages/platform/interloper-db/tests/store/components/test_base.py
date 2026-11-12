@@ -384,7 +384,7 @@ class TestCrud:
         with Session(component_db) as session:
             row = session.get(Component, connection.id)
             assert row is not None
-            row.created_at = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+            row.created_at = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
             session.add(row)
             session.commit()
 
@@ -1105,7 +1105,7 @@ class TestStampState:
         import datetime as dt
 
         row = store.components.create(_ORG, kind="connection", key="conn", name="C", config={}, encrypted=False)
-        moment = dt.datetime(2026, 8, 27, 12, 0, tzinfo=dt.timezone.utc)
+        moment = dt.datetime(2026, 8, 27, 12, 0, tzinfo=dt.UTC)
 
         updated = store.components.stamp_state(row.id, refreshed_at=moment, error=None)
 
@@ -1381,7 +1381,7 @@ class TestLockDue:
         return job.id
 
     def test_due_and_unscheduled_rows_are_locked_most_overdue_first(self, store: Store):
-        now = dt.datetime(2026, 10, 5, 12, tzinfo=dt.timezone.utc)
+        now = dt.datetime(2026, 10, 5, 12, tzinfo=dt.UTC)
         unscheduled = self._job(store, due=None)
         late = self._job(store, due=now - dt.timedelta(hours=2))
         just_due = self._job(store, due=now)
@@ -1393,7 +1393,7 @@ class TestLockDue:
         assert [row.id for row in rows] == [late, just_due, unscheduled]
 
     def test_the_limit_and_the_filters_narrow_the_rows(self, store: Store):
-        now = dt.datetime(2026, 10, 5, 12, tzinfo=dt.timezone.utc)
+        now = dt.datetime(2026, 10, 5, 12, tzinfo=dt.UTC)
         oldest = self._job(store, due=now - dt.timedelta(hours=3))
         self._job(store, due=now - dt.timedelta(hours=2), enabled=False)
 

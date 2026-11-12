@@ -8,7 +8,7 @@ live on every call.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import interloper as il
@@ -103,7 +103,7 @@ def test_super_admin_refused_on_a_deleted_organisation(store: Store, catalog: il
     with Session(engine_module.get_engine()) as session:
         org = session.get(Organisation, seeded["org"].id)
         assert org is not None
-        org.deleted_at = datetime.now(timezone.utc)
+        org.deleted_at = datetime.now(UTC)
         session.add(org)
         session.commit()
     _act_as(store, catalog, admin)

@@ -401,8 +401,8 @@ def test_list_runs_forwards_the_time_window(store: FakeStore) -> None:
     ((org_id, query),) = store.list_calls
     assert org_id == _ORG_ID
     assert (query.after, query.before) == (
-        dt.datetime(2026, 2, 4, tzinfo=dt.timezone.utc),
-        dt.datetime(2026, 2, 5, tzinfo=dt.timezone.utc),
+        dt.datetime(2026, 2, 4, tzinfo=dt.UTC),
+        dt.datetime(2026, 2, 5, tzinfo=dt.UTC),
     )
 
 
@@ -435,10 +435,10 @@ def test_list_runs_forwards_every_query_field(store: FakeStore) -> None:
         backfill_id=backfill_id,
         root_run_id=root_run_id,
         status=[RunStatus.FAILED],
-        after=dt.datetime(2026, 2, 4, tzinfo=dt.timezone.utc),
-        before=dt.datetime(2026, 2, 5, tzinfo=dt.timezone.utc),
-        completed_after=dt.datetime(2026, 2, 4, 6, tzinfo=dt.timezone.utc),
-        completed_before=dt.datetime(2026, 2, 4, 18, tzinfo=dt.timezone.utc),
+        after=dt.datetime(2026, 2, 4, tzinfo=dt.UTC),
+        before=dt.datetime(2026, 2, 5, tzinfo=dt.UTC),
+        completed_after=dt.datetime(2026, 2, 4, 6, tzinfo=dt.UTC),
+        completed_before=dt.datetime(2026, 2, 4, 18, tzinfo=dt.UTC),
         q="acm",
         component_kind="job",
         component_key="facebook_ads",
@@ -610,7 +610,7 @@ class EventsStore:
                 org_id=_ORG_ID,
                 run_id=run_id,
                 event_type="asset_completed",
-                timestamp=dt.datetime.now(dt.timezone.utc),
+                timestamp=dt.datetime.now(dt.UTC),
             )
             for _ in range(n)
         ]

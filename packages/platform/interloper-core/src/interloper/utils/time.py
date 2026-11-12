@@ -57,7 +57,7 @@ def coerce_to_datetime(value: object) -> dt.datetime:
     """
     if isinstance(value, dt.datetime):
         if value.tzinfo is not None:
-            return value.astimezone(dt.timezone.utc).replace(tzinfo=None)
+            return value.astimezone(dt.UTC).replace(tzinfo=None)
         return value
     if isinstance(value, dt.date):
         return dt.datetime(value.year, value.month, value.day)
@@ -99,7 +99,7 @@ def assume_utc(value: dt.datetime) -> dt.datetime:
     Returns:
         An aware datetime; an already-aware *value* is returned unchanged.
     """
-    return value if value.tzinfo else value.replace(tzinfo=dt.timezone.utc)
+    return value if value.tzinfo else value.replace(tzinfo=dt.UTC)
 
 
 def month_start(value: dt.datetime) -> dt.date:
@@ -114,4 +114,4 @@ def month_start(value: dt.datetime) -> dt.date:
     Returns:
         The first day of that UTC month, as a date.
     """
-    return assume_utc(value).astimezone(dt.timezone.utc).date().replace(day=1)
+    return assume_utc(value).astimezone(dt.UTC).date().replace(day=1)

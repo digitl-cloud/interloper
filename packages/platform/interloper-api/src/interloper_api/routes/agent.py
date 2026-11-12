@@ -18,7 +18,7 @@ import html
 import logging
 from collections.abc import AsyncIterable, AsyncIterator, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import cached_property
 from typing import Annotated, Any, ClassVar, cast
 from uuid import UUID
@@ -38,7 +38,6 @@ from pydantic_ai.messages import (
     ModelMessage,
     ModelMessagesTypeAdapter,
     ModelRequest,
-    RetryPromptPart,  # type: ignore
     ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
@@ -145,7 +144,7 @@ class ThreadContext(BaseModel):
             The framing sentence and the messages, each starting on its own line with its time in UTC.
         """
         lines = [
-            f"[{message.sent_at.astimezone(timezone.utc):%Y-%m-%d %H:%M} UTC] "
+            f"[{message.sent_at.astimezone(UTC):%Y-%m-%d %H:%M} UTC] "
             f"{html.escape(' '.join(message.author.splitlines()), quote=False)}: "
             + "\n  ".join(html.escape(message.text, quote=False).splitlines())
             for message in self.messages
@@ -202,10 +201,7 @@ class ConversationAdapter(VercelAIAdapter[ToolkitContext, Any]):
         """
         approved = super().deferred_tool_results
         called = {part.tool_call_id for part in self._parts(self.history, ToolCallPart)}
-        # Python 3.10 resolves pydantic-ai before 2.60, where a retry answering a call is still a RetryPromptPart.
-        # Deprecated only from 2.60, so a plain type: ignore here and on its import: a ty: ignore goes unused on 3.10.
-        replies = (ToolReturnPart, RetryPromptPart)  # type: ignore
-        answered = {part.tool_call_id for part in self._parts(self.history, replies)}
+        answered = {part.tool_call_id for part in self._parts(self.history, ToolReturnPart)}
         calls = {
             part.tool_call_id: part.content
             for part in self._parts(self.messages, ToolReturnPart)
@@ -240,12 +236,12 @@ class ConversationAdapter(VercelAIAdapter[ToolkitContext, Any]):
         return super().sanitize_messages(additions, deferred_tool_results=deferred_tool_results)
 
     @staticmethod
-    def _parts(messages: Sequence[ModelMessage], part_type: type | tuple[type, ...]) -> list[Any]:
+    def _parts(messages: Sequence[ModelMessage], part_type: type) -> list[Any]:
         """The parts of a type, across the messages.
 
         Args:
             messages: The messages to read.
-            part_type: The part class, or classes, to collect.
+            part_type: The part class to collect.
 
         Returns:
             The matching parts, in order.

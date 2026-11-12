@@ -32,7 +32,7 @@ import builtins
 import logging
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID
 
@@ -647,7 +647,7 @@ class RunStore:
             if db_run.status in (RunStatus.DISPATCHED, RunStatus.RUNNING):
                 return db_run
             ended = db_run.completed_at
-            if ended is not None and ended >= datetime.now(timezone.utc) - grace:
+            if ended is not None and ended >= datetime.now(UTC) - grace:
                 return db_run
             return None
 
@@ -790,7 +790,7 @@ class RunStore:
         """
         with session_scope(self._engine) as session:
             db_run = self._lock(run_id)
-            db_run.hooks_evaluated_at = datetime.now(timezone.utc)
+            db_run.hooks_evaluated_at = datetime.now(UTC)
             save(session, db_run)
 
     def complete(self, run_id: UUID) -> Run:
@@ -912,7 +912,7 @@ class RunStore:
             logger.warning("Run %s reported starting while already %s", db_run.id, db_run.status)
             return
         db_run.status = RunStatus.RUNNING
-        db_run.started_at = datetime.now(timezone.utc)
+        db_run.started_at = datetime.now(UTC)
 
     def _end(self, db_run: Run, status: RunStatus, *, error: str | None = None) -> None:
         """Fold a run's own ending, unless another ending came first.
@@ -1027,7 +1027,7 @@ class RunStore:
                 db_run.cancel()
             else:
                 db_run.status = status
-            db_run.completed_at = datetime.now(timezone.utc)
+            db_run.completed_at = datetime.now(UTC)
             db_run.error = Event.sanitize_text(error)
             session.add(db_run)
 
@@ -1079,7 +1079,7 @@ class RunStore:
             backfill_id=db_run.backfill_id,
             partition_key=db_run.partition_key,
             status=RunStatus.QUEUED,
-            scheduled_for=datetime.now(timezone.utc) + timedelta(seconds=policy.delay_before(db_run.attempt + 1)),
+            scheduled_for=datetime.now(UTC) + timedelta(seconds=policy.delay_before(db_run.attempt + 1)),
             retry_of=db_run.id,
             root_run_id=db_run.root_run_id,
             attempt=db_run.attempt + 1,

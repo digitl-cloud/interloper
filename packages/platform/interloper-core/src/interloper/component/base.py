@@ -15,10 +15,9 @@ import uuid
 from collections.abc import Mapping
 from copy import deepcopy
 from functools import cache
-from typing import TYPE_CHECKING, Any, ClassVar, ForwardRef
+from typing import TYPE_CHECKING, Any, ClassVar, ForwardRef, Self
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
-from typing_extensions import Self
 
 from interloper.component.inherited import InheritedSetting
 from interloper.component.maturity import Maturity

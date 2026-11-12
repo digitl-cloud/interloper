@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
-from enum import Enum
+from enum import StrEnum
 from typing import Any, ClassVar
 
 import pytest
@@ -21,7 +21,7 @@ from interloper.serializable import SerializationContext, Spec
 # -- Fixtures ------------------------------------------------------------------
 
 
-class Mode(str, Enum):
+class Mode(StrEnum):
     FAST = "fast"
     SLOW = "slow"
 

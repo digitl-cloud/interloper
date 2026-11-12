@@ -545,7 +545,7 @@ class TestLiteral:
             (datetime.date(2024, 1, 1), "DATE'2024-01-01'"),
             (datetime.datetime(2024, 1, 1, 10), "TIMESTAMP'2024-01-01T10:00:00Z'"),
             (
-                datetime.datetime(2024, 1, 1, 10, tzinfo=datetime.timezone.utc),
+                datetime.datetime(2024, 1, 1, 10, tzinfo=datetime.UTC),
                 "TIMESTAMP'2024-01-01T10:00:00+00:00'",
             ),
             (None, "NULL"),

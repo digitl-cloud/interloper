@@ -233,7 +233,7 @@ def get_overview(
         The overview.
     """
     org_id = scope.organisation.id
-    now = assume_utc(now or dt.datetime.now(dt.timezone.utc)).astimezone(dt.timezone.utc)
+    now = assume_utc(now or dt.datetime.now(dt.UTC)).astimezone(dt.UTC)
     health = store.insights.health(org_id, now=now)
     activity = store.insights.activity(org_id, now=now)
     attention = [AttentionItem.from_attention(item, now) for item in health.attention]
@@ -281,6 +281,6 @@ def get_coverage(
     """
     if until < since or (until - since).days + 1 > MAX_COVERAGE_SPAN_DAYS:
         raise HTTPException(status_code=422, detail=f"The window must span 1 to {MAX_COVERAGE_SPAN_DAYS} days")
-    now = assume_utc(now or dt.datetime.now(dt.timezone.utc)).astimezone(dt.timezone.utc)
+    now = assume_utc(now or dt.datetime.now(dt.UTC)).astimezone(dt.UTC)
     groups = store.insights.coverage_by_day(scope.organisation.id, since=since, until=until, now=now)
     return CoverageResponse(since=since, until=until, sources=[CoverageSource.from_group(group) for group in groups])

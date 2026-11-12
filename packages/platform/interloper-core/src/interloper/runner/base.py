@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 from pydantic import Field
-from typing_extensions import Self
 
 from interloper.errors import ConfigError
 from interloper.events import Event

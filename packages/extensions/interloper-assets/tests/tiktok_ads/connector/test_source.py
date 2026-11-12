@@ -152,7 +152,7 @@ class TestSpecRoundtripAndReconcile:
         child = self._child("advertisers")
         normalized = child.normalizer.normalize([{"advertiser_id": "123", "create_time": 1600000000}])
         reconciled = TableData.from_data(normalized).reconcile(schemas.Advertisers)
-        assert reconciled.loc[0, "create_time"] == dt.datetime(2020, 9, 13, 12, 26, 40, tzinfo=dt.timezone.utc)
+        assert reconciled.loc[0, "create_time"] == dt.datetime(2020, 9, 13, 12, 26, 40, tzinfo=dt.UTC)
 
     def test_an_ad_group_row_conforms_with_its_utc_schedule(self):
         child = self._child("adgroups")

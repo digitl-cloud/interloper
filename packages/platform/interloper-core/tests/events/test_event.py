@@ -116,7 +116,7 @@ class TestFromDictValidation:
             Event.from_dict({"type": EventType.RUN_STARTED.value, "timestamp": 1767225600})
 
     def test_a_datetime_timestamp_is_taken_as_is(self) -> None:
-        timestamp = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+        timestamp = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
 
         event = Event.from_dict({"type": EventType.RUN_STARTED.value, "timestamp": timestamp})
 

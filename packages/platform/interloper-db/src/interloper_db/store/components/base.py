@@ -27,7 +27,7 @@ import builtins
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
@@ -60,7 +60,7 @@ COMPONENT_LOAD_OPTIONS = [
 ]
 
 
-class ComponentStatus(str, Enum):
+class ComponentStatus(StrEnum):
     """Usability state of a persisted component in this deployment."""
 
     OK = "ok"

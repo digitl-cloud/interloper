@@ -1,8 +1,8 @@
 """Operation runs, the backfills that batch them, and the events they emit."""
 
 import json
-from datetime import datetime, timedelta, timezone
-from enum import Enum
+from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from typing import Any, ClassVar, NamedTuple, Optional
 from uuid import UUID, uuid4
 
@@ -23,7 +23,7 @@ PROMOTED_METADATA_KEYS = frozenset(
 """Metadata keys promoted to their own ``events`` columns; everything else spills into ``data``."""
 
 
-class RunStatus(str, Enum):
+class RunStatus(StrEnum):
     """Where a run stands in its lifecycle.
 
     ``pending`` holds a backfill's runs beyond its concurrency until a slot
@@ -41,7 +41,7 @@ class RunStatus(str, Enum):
     CANCELED = "canceled"
 
 
-class BackfillStatus(str, Enum):
+class BackfillStatus(StrEnum):
     """Where a backfill stands: its verdict is its runs' once the last one ends."""
 
     QUEUED = "queued"
@@ -203,7 +203,7 @@ class Run(SQLModel, table=True):
     def cancel(self) -> None:
         """Cancel a run; a canceled run fires no hooks, so they are settled here."""
         self.status = RunStatus.CANCELED
-        self.hooks_evaluated_at = datetime.now(timezone.utc)
+        self.hooks_evaluated_at = datetime.now(UTC)
 
     def overdue(
         self,
@@ -254,7 +254,7 @@ class Run(SQLModel, table=True):
         A failure whose hooks already ran stays stamped as it was.
         """
         if self.hooks_evaluated_at is None:
-            self.hooks_evaluated_at = datetime.now(timezone.utc)
+            self.hooks_evaluated_at = datetime.now(UTC)
 
     @property
     def observed_at(self) -> datetime:
@@ -266,9 +266,9 @@ class Run(SQLModel, table=True):
         timezone, so a daily snapshot of a Berlin job is Berlin's day, and UTC
         for any other target. The target must be loaded.
         """
-        due = self.scheduled_for or self.created_at or datetime.now(timezone.utc)
+        due = self.scheduled_for or self.created_at or datetime.now(UTC)
         if self.target is None or self.target.kind != "job":
-            return due.astimezone(timezone.utc)
+            return due.astimezone(UTC)
         return due.astimezone(il.CronJob.zone(self.target.config or {}))
 
     def event_metadata(self, target: Component | None) -> dict[str, Any]:

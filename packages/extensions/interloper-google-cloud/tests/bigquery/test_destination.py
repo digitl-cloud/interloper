@@ -628,7 +628,7 @@ class TestPartitionParam:
         assert param.array_type == "TIMESTAMP"
         # Date-only strings are coerced to datetime for client serialization
         # (which normalizes them to UTC).
-        assert param.values == [datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc)]
+        assert param.values == [datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC)]
 
     def test_select_on_a_missing_table_is_data_not_found(self):
         from google.cloud.exceptions import NotFound

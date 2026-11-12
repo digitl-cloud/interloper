@@ -11,7 +11,7 @@ an OAuth access token, which a client holds for the surface it was issued for.
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import Engine, update
@@ -70,7 +70,7 @@ class TokenStore:
                     kind=TokenKind.SESSION,
                     token_prefix="",
                     token_hash=hash_token(raw),
-                    expires_at=datetime.now(timezone.utc) + self._session_expiry,
+                    expires_at=datetime.now(UTC) + self._session_expiry,
                 ),
             )
         return raw
@@ -89,7 +89,7 @@ class TokenStore:
                     col(Token.kind) == TokenKind.SESSION,
                     col(Token.revoked_at).is_(None),
                 )
-                .values(revoked_at=datetime.now(timezone.utc))
+                .values(revoked_at=datetime.now(UTC))
             )
             commit(session)
 
@@ -118,7 +118,7 @@ class TokenStore:
                     resource=resource.value,
                     token_prefix="",
                     token_hash=hash_token(raw),
-                    expires_at=datetime.now(timezone.utc) + self._access_token_expiry,
+                    expires_at=datetime.now(UTC) + self._access_token_expiry,
                 ),
             )
         return raw
@@ -181,7 +181,7 @@ class TokenStore:
             revocation, expiry, or a deleted profile.
         """
         token_hash = hash_token(raw)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         with session_scope(self._engine) as session:
             db_token = session.exec(select(Token).where(Token.token_hash == token_hash)).first()
@@ -257,6 +257,6 @@ class TokenStore:
         with session_scope(self._engine) as session:
             db_token = self.get(token_id)
             if db_token.revoked_at is None:
-                db_token.revoked_at = datetime.now(timezone.utc)
+                db_token.revoked_at = datetime.now(UTC)
                 save(session, db_token)
             return db_token

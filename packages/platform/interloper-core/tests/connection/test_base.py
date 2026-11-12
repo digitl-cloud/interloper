@@ -411,7 +411,7 @@ class TestConnectionOperation:
         assert result.state["last_renewal_error"] is None
         due = dt.datetime.fromisoformat(result.state["next_renewal_at"])
         # expires_in/2 with the reported 7200s validity.
-        assert dt.timedelta(minutes=55) < due - dt.datetime.now(dt.timezone.utc) < dt.timedelta(minutes=65)
+        assert dt.timedelta(minutes=55) < due - dt.datetime.now(dt.UTC) < dt.timedelta(minutes=65)
 
     async def test_execute_falls_back_to_the_class_interval(self):
         class Renewed(Connection):
@@ -424,7 +424,7 @@ class TestConnectionOperation:
 
         assert result.config == {}
         due = dt.datetime.fromisoformat(result.state["next_renewal_at"])
-        assert dt.timedelta(hours=5) < due - dt.datetime.now(dt.timezone.utc) <= dt.timedelta(hours=6)
+        assert dt.timedelta(hours=5) < due - dt.datetime.now(dt.UTC) <= dt.timedelta(hours=6)
 
     def test_failure_stamps_the_curated_message_and_a_retry_slot(self):
         class Renewed(Connection):
@@ -440,7 +440,7 @@ class TestConnectionOperation:
         assert failure.state["last_renewal_error"] == failure.error
         assert "SECRET" not in str(failure.state)
         retry_at = dt.datetime.fromisoformat(failure.state["next_renewal_at"])
-        assert retry_at > dt.datetime.now(dt.timezone.utc)
+        assert retry_at > dt.datetime.now(dt.UTC)
 
 
 class TestCheckResultFromFailure:

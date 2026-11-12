@@ -21,7 +21,7 @@ class TestPipelineOverview:
         green = Component(org_id=ctx.org_id, kind="job", key="cron_job", name="Green job")
         red = Component(org_id=ctx.org_id, kind="job", key="cron_job", name="Red job")
         red_id = red.id
-        finished = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)
+        finished = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=1)
         runs = [
             Run(id=uuid4(), org_id=ctx.org_id, component_id=green.id, status="success", completed_at=finished),
             Run(id=uuid4(), org_id=ctx.org_id, component_id=red_id, status="failed", completed_at=finished),
@@ -56,7 +56,7 @@ class TestJobHealth:
         green = Component(org_id=ctx.org_id, kind="job", key="cron_job", name="A green job")
         red = Component(org_id=ctx.org_id, kind="job", key="cron_job", name="B red job")
         green_id, red_id = green.id, red.id
-        finished = datetime.datetime(2026, 7, 16, 12, tzinfo=datetime.timezone.utc)
+        finished = datetime.datetime(2026, 7, 16, 12, tzinfo=datetime.UTC)
         runs = [
             Run(id=uuid4(), org_id=ctx.org_id, component_id=green_id, status="success", completed_at=finished),
             Run(id=uuid4(), org_id=ctx.org_id, component_id=red_id, status="failed", completed_at=finished),
@@ -80,7 +80,7 @@ class TestRunStats:
     def test_verdicts_durations_and_retries_per_job(self, ctx: ToolkitContext):
         job = Component(org_id=ctx.org_id, kind="job", key="daily", name="Daily")
         job_id = job.id
-        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        now = datetime.datetime.now(tz=datetime.UTC)
 
         def run(status: str, minutes: int, **fields: Any) -> Run:
             start = now - datetime.timedelta(hours=1)

@@ -156,7 +156,7 @@ class FacebookInsights(il.Source):
                 },
             )
 
-            since_instant = dt.datetime.combine(since, dt.time.min, tzinfo=dt.timezone.utc)
+            since_instant = dt.datetime.combine(since, dt.time.min, tzinfo=dt.UTC)
             items = [
                 item
                 for item in [*posts, *stories]

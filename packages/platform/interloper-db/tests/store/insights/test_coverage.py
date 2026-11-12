@@ -18,7 +18,7 @@ from interloper_db.store.insights.coverage import (
     Verdict,
 )
 
-_NOW = dt.datetime(2026, 8, 13, 9, 30, tzinfo=dt.timezone.utc)
+_NOW = dt.datetime(2026, 8, 13, 9, 30, tzinfo=dt.UTC)
 DAY = il.TimeGranularity.DAY
 
 
@@ -318,7 +318,7 @@ class TestGroupCoverage:
     def test_an_asset_with_no_days_inside_the_window_has_no_group(self):
         dated = il.TimePartitionConfig(column="date")
         results = [_result(uuid4(), "2026-07-01", "success")]
-        now = dt.datetime(2026, 8, 13, tzinfo=dt.timezone.utc)
+        now = dt.datetime(2026, 8, 13, tzinfo=dt.UTC)
 
         assert _calendar(dated, ["2026-07-01"], results, dt.date(2026, 6, 1), dt.date(2026, 6, 30), now=now) is None
         assert _calendar(dated, ["2026-07-01"], results, dt.date(2026, 7, 1), dt.date(2026, 7, 31), now=now)

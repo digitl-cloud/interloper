@@ -72,7 +72,7 @@ class SnapshotPartitionConfig(TimePartitionConfig):
             PartitionError: If ``observed_at`` carries no offset.
         """
         value = metadata.get("observed_at")
-        observed_at = dt.datetime.fromisoformat(value) if value else dt.datetime.now(dt.timezone.utc)
+        observed_at = dt.datetime.fromisoformat(value) if value else dt.datetime.now(dt.UTC)
         if observed_at.tzinfo is None:
             raise PartitionError(f"The run's observed_at needs its offset (e.g. +01:00 or Z): {value!r}")
         return TimePartition(observed_at, self.granularity).window

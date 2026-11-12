@@ -59,7 +59,7 @@ class TestWindow:
     """The partitions a firing covers, counted back from the firing in the job's zone."""
 
     def test_the_lookback_ends_offset_periods_before_the_local_firing(self) -> None:
-        fires_at = dt.datetime(2026, 3, 9, 23, 30, tzinfo=dt.timezone.utc)
+        fires_at = dt.datetime(2026, 3, 9, 23, 30, tzinfo=dt.UTC)
         config = {"timezone": "Europe/Berlin", "lookback": 3, "offset": 1}
 
         window = CronJob.window(config, fires_at=fires_at, granularity=TimeGranularity.DAY)
@@ -71,4 +71,4 @@ class TestWindow:
     def test_no_lookback_or_an_unpartitioned_job_has_no_window(
         self, config: dict, granularity: TimeGranularity | None
     ) -> None:
-        assert CronJob.window(config, fires_at=dt.datetime.now(dt.timezone.utc), granularity=granularity) is None
+        assert CronJob.window(config, fires_at=dt.datetime.now(dt.UTC), granularity=granularity) is None

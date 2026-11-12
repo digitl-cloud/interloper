@@ -64,7 +64,7 @@ def build_agent(model: str) -> Agent[ToolkitContext, str | DeferredToolRequests]
     def current_time() -> str:
         # The model has no reliable notion of "now"; without this the relative
         # timestamps the presentation rules ask for drift to its training data.
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.datetime.now(datetime.UTC)
         return f"Current date and time: {now:%Y-%m-%d %H:%M} UTC. Compute relative timestamps from it."
 
     return agent

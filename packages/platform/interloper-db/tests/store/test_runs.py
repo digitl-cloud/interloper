@@ -699,7 +699,7 @@ class TestListRunsWindow:
     """`after`/`before` select runs whose execution overlaps the window."""
 
     def test_overlapping_runs_only(self, store: Store):
-        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
+        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.UTC)
         before_window = _timed_run(store, started_at=base - _H(3), completed_at=base - _H(2))
         straddling_start = _timed_run(store, started_at=base - _H(2), completed_at=base + _H(1))
         inside = _timed_run(store, started_at=base + _H(2), completed_at=base + _H(3))
@@ -712,7 +712,7 @@ class TestListRunsWindow:
         assert after_window not in {r.id for r in found}
 
     def test_running_run_is_open_ended(self, store: Store):
-        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
+        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.UTC)
         running = _timed_run(store, started_at=base - _H(5), completed_at=None)
 
         found = store.runs.list(_ORG_ID, RunQuery(after=base, before=base + _H(1), limit=100)).items
@@ -720,7 +720,7 @@ class TestListRunsWindow:
         assert [r.id for r in found] == [running]
 
     def test_never_started_runs_are_excluded(self, store: Store):
-        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
+        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.UTC)
         _timed_run(store, started_at=None, completed_at=None)
 
         assert store.runs.list(_ORG_ID, RunQuery(after=base, before=base + _H(1), limit=100)).items == []
@@ -729,7 +729,7 @@ class TestListRunsWindow:
         assert after_only.total == 0
 
     def test_the_total_matches_the_same_window(self, store: Store):
-        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
+        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.UTC)
         _timed_run(store, started_at=base + _H(1), completed_at=base + _H(2))
         _timed_run(store, started_at=base + _H(9), completed_at=base + _H(10))
 
@@ -739,7 +739,7 @@ class TestListRunsWindow:
         assert page.total == 1
 
     def test_unbounded_listing_keeps_every_run(self, store: Store):
-        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
+        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.UTC)
         _timed_run(store, started_at=base, completed_at=base + _H(1))
         _timed_run(store, started_at=None, completed_at=None)
 
@@ -772,7 +772,7 @@ class TestListRunsSort:
         assert [run.partition_key for run in runs] == ["2026-01-03", "2026-01-02", "2026-01-01"]
 
     def test_runs_never_started_sort_last_either_way(self, store: Store):
-        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
+        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.UTC)
         earlier = _timed_run(store, started_at=base, completed_at=base + _H(1))
         later = _timed_run(store, started_at=base + _H(2), completed_at=base + _H(3))
         never = _timed_run(store, started_at=None, completed_at=None)
@@ -793,7 +793,7 @@ class TestListRunsCompleted:
     """`completed_after`/`completed_before` select runs by the instant they completed."""
 
     def test_a_run_that_failed_before_starting_is_kept(self, store: Store):
-        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
+        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.UTC)
         never_started = _timed_run(store, started_at=None, completed_at=base + _H(1), status="failed")
 
         by_completion = store.runs.list(_ORG_ID, RunQuery(completed_after=base, completed_before=base + _H(4)))
@@ -804,7 +804,7 @@ class TestListRunsCompleted:
         assert by_overlap.items == []
 
     def test_runs_not_completed_or_completed_outside_are_left_out(self, store: Store):
-        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
+        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.UTC)
         at_start = _timed_run(store, started_at=base - _H(1), completed_at=base)
         at_end = _timed_run(store, started_at=base, completed_at=base + _H(4))
         _timed_run(store, started_at=base - _H(3), completed_at=base - _H(2))
@@ -818,7 +818,7 @@ class TestListRunsCompleted:
         assert len(store.runs.list(_ORG_ID, RunQuery(completed_before=base + _H(4))).items) == 3
 
     def test_completed_order_lists_the_most_recently_completed_first(self, store: Store):
-        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
+        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.UTC)
         long_run = _timed_run(store, started_at=base, completed_at=base + _H(5), created_at=base)
         short_run = _timed_run(store, started_at=base + _H(1), completed_at=base + _H(2), created_at=base + _H(1))
 
@@ -917,7 +917,7 @@ class TestCompletionStamping:
             assert stamped is not None and stamped.state is not None
             # SQLite round-trips the column naive; the stamped ISO string is aware UTC.
             stamped_at = dt.datetime.fromisoformat(stamped.state["last_run_at"])
-            assert stamped_at == completed.completed_at.replace(tzinfo=dt.timezone.utc)
+            assert stamped_at == completed.completed_at.replace(tzinfo=dt.UTC)
             assert stamped.state["last_run_status"] == "success"
 
     def test_a_failure_stamps_a_failed_status(self, store: Store) -> None:
@@ -1165,7 +1165,7 @@ def _schedule(store: Store, run_id: UUID, *, seconds: float) -> None:
     with Session(store.engine) as session:
         db_run = session.get(Run, run_id)
         assert db_run is not None
-        db_run.scheduled_for = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=seconds)
+        db_run.scheduled_for = dt.datetime.now(dt.UTC) + dt.timedelta(seconds=seconds)
         session.add(db_run)
         session.commit()
 
@@ -1182,7 +1182,7 @@ def _stamp(store: Store, run_id: UUID, **fields: Any) -> None:
 
 
 def _ago(seconds: float) -> dt.datetime:
-    return dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=seconds)
+    return dt.datetime.now(dt.UTC) - dt.timedelta(seconds=seconds)
 
 
 def _drain(store: Store) -> list[UUID]:
@@ -1329,7 +1329,7 @@ class TestRunToken:
         Returns:
             The run's id.
         """
-        ended = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=seconds_ago)
+        ended = dt.datetime.now(dt.UTC) - dt.timedelta(seconds=seconds_ago)
         return _timed_run(store, started_at=ended - _H(1), completed_at=ended, status="failed")
 
     def test_a_dispatched_runs_token_resolves_to_it(self, keyed: Store) -> None:
@@ -1518,7 +1518,7 @@ class TestHeartbeat:
 
         assert store.runs.ingest(run, il.EventBatch([])) is True
         heartbeat = store.runs.get(run).heartbeat_at
-        assert heartbeat is not None and heartbeat.replace(tzinfo=dt.timezone.utc) > _ago(30)
+        assert heartbeat is not None and heartbeat.replace(tzinfo=dt.UTC) > _ago(30)
 
     def test_a_run_ended_elsewhere_is_told_to_stop(self, store: Store) -> None:
         run = _running(store)
@@ -1768,7 +1768,7 @@ class TestNamedReads:
         store.runs.complete(first.id)
         store.runs.fail(second.id, "failed")
 
-        recent = store.runs.recent(_ORG_ID, until=dt.datetime.now(dt.timezone.utc), limit=5)
+        recent = store.runs.recent(_ORG_ID, until=dt.datetime.now(dt.UTC), limit=5)
 
         assert [run.id for run in recent] == [second.id, first.id]
 
@@ -1813,7 +1813,7 @@ class TestNamedReads:
         assert [run.id for run in store.backfills.attempts(backfill.id)] == [queued[2].id, queued[0].id, queued[1].id]
 
 
-_T0 = dt.datetime(2026, 6, 4, 12, tzinfo=dt.timezone.utc)
+_T0 = dt.datetime(2026, 6, 4, 12, tzinfo=dt.UTC)
 
 
 def _attempt(

@@ -373,7 +373,7 @@ class HookController(Controller):
 
         self._store.components.stamp_state(
             hook_row.id,
-            last_fired_at=dt.datetime.now(dt.timezone.utc),
+            last_fired_at=dt.datetime.now(dt.UTC),
             last_error=error,
             **({"last_run_id": str(run_id)} if run_id else {}),
         )
