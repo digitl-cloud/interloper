@@ -1510,6 +1510,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#clients-identified-by-a-metadata-document" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Clients identified by a metadata document
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#revoking-a-connection" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2480,14 +2491,43 @@ with nothing to copy between the two sides.</p>
 <ol>
 <li>In the client, add a custom connector and enter the MCP endpoint as its URL, for example
    <code>https://app.example.com/mcp</code>.</li>
-<li>The client discovers the authorization server on its own, registers itself with it, and opens
-   the app's consent page in a browser.</li>
+<li>The client discovers the authorization server on its own, registers itself with it or names
+   itself by the URL of its metadata document (below), and opens the app's consent page in a
+   browser.</li>
 <li>Sign in to the app if you are not already, check that the application named on the page is the
    one you just started, and approve.</li>
 <li>The client returns with an access token and a refresh token and keeps itself signed in.</li>
 </ol>
 <p>The consent page names the application, where it returns you to and the account it will act as.
-Approve only a connection you started.</p>
+The name is whatever the application declared; for an application identified by a metadata
+document, the page also shows the domain the document came from (<code>Claude Code (from claude.ai)</code>),
+which the server proved by reading it. Approve only a connection you started.</p>
+<h3 id="clients-identified-by-a-metadata-document">Clients identified by a metadata document<a class="headerlink" href="#clients-identified-by-a-metadata-document" title="Permanent link">&para;</a></h3>
+<p>Instead of registering, a client may use as its <code>client_id</code> the <code>https</code> URL of a JSON document
+describing it (an OAuth Client ID Metadata Document, which the MCP specification recommends):
+Claude Code uses <code>https://claude.ai/oauth/claude-code-client-metadata</code>. The server advertises the
+support in its metadata (<code>client_id_metadata_document_supported</code>), and nothing is set up on
+either side.</p>
+<p>Each authorization request with such a <code>client_id</code> reads the document again. It must answer <code>200</code>
+directly (a redirect is not followed) with at most 5 KB of JSON, within five seconds, and is
+refused unless:</p>
+<ul>
+<li>its <code>client_id</code> is exactly the URL it was read from;</li>
+<li>it carries no secret and the client authenticates with <code>none</code> (a document that declares no
+  method is taken as <code>none</code>);</li>
+<li>it lists redirect URIs, every one under the same rule as registration (below), and the request
+  names one of them;</li>
+<li>it shares the <code>authorization_code</code> or <code>refresh_token</code> grant and the <code>code</code> response type with
+  the server.</li>
+</ul>
+<p>The URL must be <code>https</code>, with a path, and no credentials, fragment or <code>.</code>/<code>..</code> segment, and must
+not be on the app's own address. The server reads it only from a host whose every address is on
+the public internet, connecting to the address it checked, so a URL cannot reach the cluster, the
+cloud metadata service or a private network. A refused document is reported on the authorization
+page itself, never sent to the client.</p>
+<p>The client is then kept like one that registered itself, under its URL, as a public client: the
+consent, token and revocation steps use it as its document last read, so a refresh never reaches
+the client's host. It appears under Authorised apps with the domain it came from.</p>
 <p>A connection acts as you, in every organisation you belong to, with the role you hold in each:
 an editor can use the write tools in the organisations where they are editor and only read in the
 others, and a role change applies to the connection at once. Every tool takes an <code>organisation</code>
@@ -2523,10 +2563,12 @@ stays in use never asks you again. Both lifetimes are settings:</p>
 </table>
 <p>A client idle for longer than the refresh lifetime has to ask for consent again. Presenting a
 refresh token that was already used is treated as theft: the whole chain it belongs to is revoked.</p>
-<p>A client that registered itself is deleted once nobody uses it: when it never obtained a grant
-within 24 hours of registering, or when its last refresh token expired more than 30 days ago,
-and it holds no live refresh token and no code still to exchange. Its conversations go with it.
-The scheduler's reaper checks hourly. Clients an operator registered are never deleted this way.</p>
+<p>A client that registered itself, or was identified by a metadata document, is deleted once nobody
+uses it: when it never obtained a grant within 24 hours of registering (or of its document last
+being read), or when its last refresh token expired more than 30 days ago, and it holds no live
+refresh token and no code still to exchange. Its conversations go with it. A client identified by
+a metadata document comes back the next time a user authorises it. The scheduler's reaper checks
+hourly. Clients an operator registered are never deleted this way.</p>
 <p>Credentials that can no longer be used are kept for a while, so an incident can still be traced,
 and then deleted by the same hourly pass:</p>
 <table>
@@ -2593,7 +2635,8 @@ usually has a fixed client id and secret, registered as below.</p>
 They are deleted when the grant ends: when the user revokes the client, or the client revokes its
 refresh token.</p>
 <h2 id="registering-a-client-yourself">Registering a client yourself<a class="headerlink" href="#registering-a-client-yourself" title="Permanent link">&para;</a></h2>
-<p>A client that registers itself needs no setup, and it is shown to the user by the name it gave.
+<p>A client that registers itself, or is identified by a metadata document, needs no setup, and it
+is shown to the user by the name it gave.
 An application that cannot, because it is configured with a fixed client id and secret (a Slack
 app, a connector a vendor hosts), is registered by an operator. A super-admin does it from the
 admin portal's <strong>OAuth clients</strong> page, which lists these clients, registers one (its name and one
@@ -2613,7 +2656,8 @@ one matches on any port, since a native app picks a free port for each sign-in.<
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>interloper<span class="w"> </span>oauth<span class="w"> </span>delete<span class="w"> </span>&lt;client_id&gt;
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>interloper<span class="w"> </span>oauth<span class="w"> </span>rotate<span class="w"> </span>&lt;client_id&gt;
 </span></code></pre></div>
-<p><code>list</code> shows the clients an operator registered, not the ones that registered themselves; the
+<p><code>list</code> shows the clients an operator registered, not the ones that registered themselves or came
+from a metadata document; the
 page leaves them out too, since each belongs to the users who approved it, who revoke it under
 Authorised apps. <code>delete</code> removes a client together with its codes and refresh tokens, revokes its
 access tokens for every user and deletes the conversations it started, so nothing it was given
