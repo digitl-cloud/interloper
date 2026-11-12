@@ -464,7 +464,7 @@ class InsightStore:
             .limit(MAX_ERROR_ROWS + 1)
         )
         with session_scope(self._engine) as session:
-            return [ErrorRow(*row) for row in session.execute(statement).all()]  # ty: ignore[deprecated]
+            return [ErrorRow._make(row) for row in session.connection().execute(statement)]
 
     def _run_error_rows(
         self,
@@ -534,9 +534,9 @@ class InsightStore:
         # Cast for a portable max(): Postgres has no max(uuid), and UUID() parses both its dashed text and SQLite's hex.
         failed_run = func.max(case((col(Execution.status) == "failed", cast(col(Execution.run_id), String))))
         # The asset id comes back as text and is parsed once per asset: a UUID per row costs more than the roll-up.
-        asset = cast(col(Execution.component_id), String)
+        asset = cast(col(Execution.component_id), String())
         statement = (
-            sa_select(asset, key, func.max(case((col(Execution.status) == "success", 1), else_=0)), failed_run)
+            select(asset, key, func.max(case((col(Execution.status) == "success", 1), else_=0)), failed_run)
             .where(*filters)
             .group_by(col(Execution.component_id), key)
         )
@@ -550,7 +550,8 @@ class InsightStore:
                     failed=failed is not None,
                     failed_run_id=UUID(failed) if failed else None,
                 )
-                for asset_text, partition_key, succeeded, failed in session.execute(statement).all()  # ty: ignore[deprecated]
+                for asset_text, partition_key, succeeded, failed in session.exec(statement).all()
+                if partition_key is not None
             ]
 
     def _attempted_spans(self, org_id: UUID) -> dict[UUID, Period]:
@@ -585,12 +586,12 @@ class InsightStore:
                 .scalar_subquery()
             )
 
-        statement = sa_select(col(Component.id), edge(func.min), edge(func.max)).where(
+        statement = select(col(Component.id), edge(func.min), edge(func.max)).where(
             col(Component.org_id) == org_id, col(Component.kind) == "asset"
         )
         with session_scope(self._engine) as session:
             return {
                 asset_id: Period.enclosing([Period.from_key(first), Period.from_key(last)])
-                for asset_id, first, last in session.execute(statement).all()  # ty: ignore[deprecated]
+                for asset_id, first, last in session.exec(statement).all()
                 if first is not None
             }

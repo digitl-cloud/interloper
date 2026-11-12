@@ -15,7 +15,6 @@ from uuid import UUID
 
 from interloper.utils import add_months
 from sqlalchemy import Engine, func
-from sqlalchemy import select as sa_select
 from sqlmodel import col, select
 
 from interloper_db.models import Component, Run, RunStatus, Usage
@@ -140,13 +139,13 @@ class UsageStore:
             with no parented assets are absent.
         """
         per_source = (
-            sa_select(col(Component.org_id).label("org_id"), func.count().label("n"))
+            select(col(Component.org_id).label("org_id"), func.count().label("n"))
             .where(col(Component.kind) == "asset", col(Component.parent_id).is_not(None))
             .group_by(col(Component.org_id), col(Component.parent_id))
         ).subquery()
-        statement = sa_select(per_source.c.org_id, func.max(per_source.c.n)).group_by(per_source.c.org_id)
+        statement = select(per_source.c.org_id, func.max(per_source.c.n)).group_by(per_source.c.org_id)
         with session_scope(self._engine) as session:
-            return {org_id: count for org_id, count in session.execute(statement).all()}  # ty: ignore[deprecated]
+            return {org_id: count for org_id, count in session.exec(statement).all()}
 
     def reconcile(self) -> builtins.list[UsageDrift]:
         """Compare the current period's ledger against the runs table.

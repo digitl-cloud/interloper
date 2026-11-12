@@ -117,7 +117,7 @@ class UsageLedger:
                 set_={"used": table.c.used + used, "reserved": table.c.reserved + reserved},
             )
         )
-        self._session.execute(statement)  # ty: ignore[deprecated]
+        self._session.exec(statement)
 
     def reserve(self, org_id: UUID, metric: str, limit: int) -> datetime | None:
         """Atomically reserve one unit against the period's ledger row.
@@ -147,8 +147,8 @@ class UsageLedger:
                 where=(table.c.used + table.c.reserved < limit),
             )
         )
-        result = self._session.execute(statement)  # ty: ignore[deprecated]
-        return now if result.rowcount == 1 else None  # ty: ignore[missing-attribute]
+        result = self._session.exec(statement)
+        return now if result.rowcount == 1 else None
 
     def settle_run(self, db_run: Run, *, success: bool) -> None:
         """Charge or release a completing run's usage.

@@ -131,7 +131,7 @@ class EventStore:
                 .on_conflict_do_nothing(index_elements=["id"])
                 .returning(table.c.id)
             )
-            inserted = [row[0] for row in session.execute(statement)]  # ty: ignore[deprecated]
+            inserted = [row[0] for row in session.exec(statement)]
             commit(session)
             return inserted
 
