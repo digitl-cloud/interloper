@@ -2,6 +2,49 @@
 
 <!-- version list -->
 
+## v0.132.0 (2026-11-12)
+
+### Bug Fixes
+
+- **api**: Option lookups show a provider's curated error message
+  ([`3ea8ac3`](https://github.com/digitl-cloud/interloper/commit/3ea8ac3d83433aef3c81edac841833f2915a827a))
+
+- **assets**: Asset descriptions no longer carry a Raises section
+  ([`56cb3d1`](https://github.com/digitl-cloud/interloper/commit/56cb3d17f83f52b7bb1d4593d108fb4009116240))
+
+- **assets**: The TikTok Ads connection check shows TikTok's own error
+  ([`b02dccc`](https://github.com/digitl-cloud/interloper/commit/b02dcccdcf49a5339e813c44b2dcf4a1daa3670f))
+
+- **core**: Component settings live on Component, so a schema column can take any name
+  ([`5119242`](https://github.com/digitl-cloud/interloper/commit/5119242546cdd2e58a6d170c72a18f8f0b006354))
+
+### Refactoring
+
+- Derive the MCP address from the app's public URL
+  ([`41fcdd6`](https://github.com/digitl-cloud/interloper/commit/41fcdd6b3d1c2bc1f83bb38e753713d064b09f25))
+
+- Every settings section is a block
+  ([`9d432ea`](https://github.com/digitl-cloud/interloper/commit/9d432eaeb077932ae73675a02260508785f320ac))
+
+- Only the API reads the auth settings
+  ([`b1baa87`](https://github.com/digitl-cloud/interloper/commit/b1baa87d1c31056cc93d8b1a1abaf544fa32fcbf))
+
+- Only the scheduler reads the reaper settings
+  ([`e2667cd`](https://github.com/digitl-cloud/interloper/commit/e2667cd8ec6f32dc08c495769fa810c80efa8865))
+
+### Breaking Changes
+
+- Interloper.yaml writes the catalog as a block: `catalog: [pkg.sources.Shop]` becomes `catalog:
+  {include: [pkg.sources.Shop]}`, and
+  INTERLOPER_CATALOG='["pkg.sources.Shop","pkg.sources.Finance"]' becomes
+  INTERLOPER_CATALOG_INCLUDE=pkg.sources.Shop,pkg.sources.Finance. A `secrets: {encryption_key:
+  ...}` block becomes `encryption: {key: ...}`. The old shapes fail validation at startup.
+  INTERLOPER_ENCRYPTION_KEY is unchanged, so a deployment that sets the key from its environment
+  changes nothing, and the chart's values keep their shape. In code, AppSettings.catalog is a
+  CatalogSettings (read .include), AppSettings.secrets.encryption_key is AppSettings.encryption.key,
+  and SecretsSettings is EncryptionSettings.
+
+
 ## v0.131.0 (2026-11-12)
 
 ### Bug Fixes
