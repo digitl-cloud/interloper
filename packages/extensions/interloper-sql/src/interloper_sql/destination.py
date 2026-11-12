@@ -6,7 +6,7 @@ import datetime
 import math
 import threading
 import warnings
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from typing import Any
 
@@ -68,7 +68,7 @@ class SQLDestination(DatabaseDestination):
         return dataset or self.default_dataset
 
     @contextmanager
-    def _begin(self) -> Iterator[SAConnection]:
+    def _begin(self) -> Generator[SAConnection, None, None]:
         """Yield the connection held by :meth:`transaction`, or a fresh one in its own transaction.
 
         Yields:
@@ -159,7 +159,7 @@ class SQLDestination(DatabaseDestination):
     # -- DatabaseDestination hooks ---------------------------------------------
 
     @contextmanager
-    def transaction(self) -> Iterator[None]:
+    def transaction(self) -> Generator[None, None, None]:
         """Run a delete and its insert in one database transaction.
 
         Yields:

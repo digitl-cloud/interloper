@@ -38,7 +38,7 @@ from pydantic_ai.messages import (
     ModelMessage,
     ModelMessagesTypeAdapter,
     ModelRequest,
-    RetryPromptPart,
+    RetryPromptPart,  # ty: ignore[deprecated]
     ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
@@ -202,7 +202,9 @@ class ConversationAdapter(VercelAIAdapter[ToolkitContext, Any]):
         """
         approved = super().deferred_tool_results
         called = {part.tool_call_id for part in self._parts(self.history, ToolCallPart)}
-        answered = {part.tool_call_id for part in self._parts(self.history, (ToolReturnPart, RetryPromptPart))}
+        # Python 3.10 resolves pydantic-ai before 2.60, where a retry answering a call is still a RetryPromptPart.
+        replies = (ToolReturnPart, RetryPromptPart)  # ty: ignore[deprecated]
+        answered = {part.tool_call_id for part in self._parts(self.history, replies)}
         calls = {
             part.tool_call_id: part.content
             for part in self._parts(self.messages, ToolReturnPart)

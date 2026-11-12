@@ -211,7 +211,7 @@ class TestInProcessLauncher:
             _wait_for(lambda: "did not complete" in caplog.text)
 
         (record,) = [record for record in caplog.records if "did not complete" in record.getMessage()]
-        assert record.exc_info is not None and "recorder bug" in str(record.exc_info[1])
+        assert record.exc_info and "recorder bug" in str(record.exc_info[1])
 
     def test_the_launch_thread_carries_the_launch_context(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from interloper.events import EventRecorder

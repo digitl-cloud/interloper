@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pytest
 from authlib.oauth2 import OAuth2Error
+from cryptography import fernet
 from cryptography.fernet import Fernet
 from interloper_db import Audience, Store
 
@@ -100,9 +101,9 @@ class TestRequests:
         sealed = server.seal(server.authorization_request([("client_id", "c")]), USER_ID)
         now = __import__("time").time()
 
-        monkeypatch.setattr("cryptography.fernet.time.time", lambda: now + 599)
+        monkeypatch.setattr(fernet, "time", SimpleNamespace(time=lambda: now + 599))
         assert server.unseal(sealed, USER_ID) is not None
-        monkeypatch.setattr("cryptography.fernet.time.time", lambda: now + 601)
+        monkeypatch.setattr(fernet, "time", SimpleNamespace(time=lambda: now + 601))
         assert server.unseal(sealed, USER_ID) is None
 
     def test_a_request_sealed_for_another_user_is_refused(self, server: AuthorizationServer):

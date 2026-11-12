@@ -220,8 +220,8 @@ class Relation(BaseModel):
             raise TypeError("Relation.name is stamped from the attribute the relation is declared under")
         if isinstance(kind_or_class, type):
             data.update(
-                kind=kind_or_class.kind,  # ty: ignore[unresolved-attribute]
-                key=kind_or_class.key,  # ty: ignore[unresolved-attribute]
+                kind=kind_or_class.kind,  # ty: ignore[missing-attribute]
+                key=kind_or_class.key,  # ty: ignore[missing-attribute]
             )
         else:
             data.setdefault("kind", kind_or_class)

@@ -36,7 +36,7 @@ def store() -> Iterator[Store]:
         poolclass=StaticPool,
     )
     for model in (Component, Run, Execution):
-        model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
+        model.__table__.create(engine)  # ty: ignore[missing-attribute]
     try:
         yield Store(catalog=il.Catalog(components={}), engine=engine)
     finally:

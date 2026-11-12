@@ -27,8 +27,8 @@ class TestBareForm:
 
         assert issubclass(Credentials, Config)
         instance = Credentials(api_key="secret")  # ty: ignore[unknown-argument]
-        assert instance.api_key == "secret"  # ty: ignore[unresolved-attribute]
-        assert instance.base_url == "https://api.example.com"  # ty: ignore[unresolved-attribute]
+        assert instance.api_key == "secret"  # ty: ignore[missing-attribute]
+        assert instance.base_url == "https://api.example.com"  # ty: ignore[missing-attribute]
 
     def test_the_key_is_derived_from_the_class_name(self) -> None:
         @config
@@ -59,7 +59,7 @@ class TestBareForm:
 
             api_key: str
 
-        assert Credentials().api_key == "from-env"  # ty: ignore[unresolved-attribute]
+        assert Credentials().api_key == "from-env"  # ty: ignore[missing-attribute]
 
 
 class TestParameterizedForm:
@@ -76,7 +76,7 @@ class TestParameterizedForm:
         assert Other.name == "Custom Config"
         assert Other.icon == "carbon:settings"
         assert Other.tags == ["Testing"]
-        assert Other(timeout=5).timeout == 5  # ty: ignore[unknown-argument, unresolved-attribute]
+        assert Other(timeout=5).timeout == 5  # ty: ignore[unknown-argument, missing-attribute]
 
     def test_omitted_metadata_falls_back_to_the_defaults(self) -> None:
         @config(name="Just A Name")
@@ -126,4 +126,4 @@ class TestRelationChannel:
         connection = ConfigConnection()
 
         assert Scoped.relations["connection"].target is ConfigConnection
-        assert Scoped(connection=connection).connection is connection  # ty: ignore[unknown-argument, unresolved-attribute]
+        assert Scoped(connection=connection).connection is connection  # ty: ignore[unknown-argument, missing-attribute]

@@ -44,7 +44,7 @@ def token_db() -> Iterator[Engine]:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
     for model in (Profile, Organisation, UserOrganisation, Token):
-        model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
+        model.__table__.create(eng)  # ty: ignore[missing-attribute]
     try:
         yield eng
     finally:

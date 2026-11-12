@@ -510,7 +510,7 @@ def get_partition_row_counts(
         raise HTTPException(status_code=400, detail="Component is not a partitioned asset")
 
     try:
-        counts = il_asset.partition_row_counts()  # ty: ignore[unresolved-attribute]
+        counts = il_asset.partition_row_counts()  # ty: ignore[missing-attribute]
     except NotImplementedError:
         raise HTTPException(status_code=400, detail="Destination does not support partition row counts")
     except DataNotFoundError as e:

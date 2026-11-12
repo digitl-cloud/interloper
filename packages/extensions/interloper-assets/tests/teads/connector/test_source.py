@@ -41,7 +41,7 @@ CSV = (
 
 
 def _source(connection: TeadsConnection | None = None) -> Any:
-    return Teads(id="src-1", advertiser_id=20765, connection=connection)
+    return Teads(id="src-1", advertiser_id=20765, connection=connection)  # ty: ignore[invalid-argument-type]
 
 
 def _asset(source: Any = None) -> Any:

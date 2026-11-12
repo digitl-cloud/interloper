@@ -594,7 +594,7 @@ class TestReachingAnAsset:
         class Listing(il.Source):
             asset_types: ClassVar[list[type[il.Asset]]] = [listed]
 
-        assert Listing.listed is listed  # ty: ignore[unresolved-attribute]
+        assert Listing.listed is listed  # ty: ignore[missing-attribute]
         assert Listing().listed.parent is not None
 
     def test_another_holder_reads_the_class(self):
@@ -1000,9 +1000,9 @@ class TestSpecRule:
 
         rebuilt = il.CronJob.from_spec(job.to_spec())
         rebuilt_shop, rebuilt_finance = rebuilt.targets
-        assert rebuilt_finance.revenue.orders is rebuilt_shop.orders  # ty: ignore[unresolved-attribute]
+        assert rebuilt_finance.revenue.orders is rebuilt_shop.orders  # ty: ignore[missing-union-attribute]
         assert rebuilt_shop.destinations[0] is rebuilt_finance.destinations[0]
-        assert rebuilt_shop.orders.destinations == [  # ty: ignore[unresolved-attribute]
+        assert rebuilt_shop.orders.destinations == [  # ty: ignore[missing-union-attribute]
             rebuilt_shop.destinations[0]
         ]
 

@@ -359,7 +359,7 @@ class TestCrossSourceUpstream:
         revenue = store.components.load(revenue_row.id)
 
         assert isinstance(revenue, il.Asset)
-        assert revenue.orders.id == str(shop_orders.id)  # ty: ignore[unresolved-attribute]
+        assert revenue.orders.id == str(shop_orders.id)  # ty: ignore[missing-attribute]
 
     def test_a_shared_upstream_reached_twice_hydrates_once(
         self, store: Store, shop_connection: Component, monkeypatch: pytest.MonkeyPatch

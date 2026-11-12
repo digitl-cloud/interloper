@@ -5,7 +5,7 @@ from __future__ import annotations
 import tempfile
 import uuid
 import warnings
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import cached_property
@@ -129,7 +129,7 @@ class SnowflakeDestination(DatabaseDestination):
         return cursor
 
     @contextmanager
-    def transaction(self) -> Iterator[None]:
+    def transaction(self) -> Generator[None, None, None]:
         """Run one write, a delete followed by an insert, as ``BEGIN ... COMMIT``.
 
         Yields:

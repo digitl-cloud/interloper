@@ -71,7 +71,7 @@ class TestContract:
                 pass
 
         with pytest.raises(TypeError, match="abstract"):
-            Incomplete()
+            Incomplete()  # ty: ignore[abstract-class-instantiation]
 
     def test_defaults(self):
         dest = FakeBucket()

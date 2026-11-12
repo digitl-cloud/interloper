@@ -16,6 +16,7 @@ import json
 import logging
 import select as _select
 import threading
+import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from uuid import UUID
@@ -129,8 +130,6 @@ def _start_notify_listener(dsn: str, loop: asyncio.AbstractEventLoop) -> None:
             # would end it for the life of the process, so every failure is
             # logged and the connection retried instead.
             logger.error("[Realtime] NOTIFY listener error: %s, reconnecting in 5s...", e)
-            import time
-
             time.sleep(5)
 
 

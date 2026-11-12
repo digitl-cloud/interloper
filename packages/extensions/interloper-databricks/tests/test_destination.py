@@ -345,7 +345,7 @@ class TestStaging:
     def test_missing_nested_values_stay_null(self, session):
         _destination().write(_ctx(ads_stats(), schema=_AllTypes), [{"n": 1, "nested": None, "tags": None}])
 
-        uploaded = session.uploads[0].to_dict("records")[0]
+        uploaded = pq.read_table(pa.BufferReader(session.raw_uploads[0])).to_pylist()[0]
         assert uploaded["nested"] is None
         assert uploaded["tags"] is None
 

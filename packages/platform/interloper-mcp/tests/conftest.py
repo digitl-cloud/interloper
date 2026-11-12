@@ -59,7 +59,7 @@ def mcp_db() -> Iterator[Engine]:
         Backfill,
         Run,
     ):
-        model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
+        model.__table__.create(eng)  # ty: ignore[missing-attribute]
     try:
         yield eng
     finally:

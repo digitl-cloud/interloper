@@ -250,10 +250,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # QEMU for the linux/arm64 target — emulating that bundler is what made the
 # multi-arch frontend build hang. Only the final nginx runtime stage below
 # is built per-target-arch (a trivial COPY).
-FROM --platform=$BUILDPLATFORM node:24-alpine AS build-spa
+FROM --platform=$BUILDPLATFORM node:26-alpine AS build-spa
 
 WORKDIR /app
-RUN corepack enable
+# Node ships without corepack since v25; it installs the pnpm `packageManager` pins.
+RUN npm install --global corepack && corepack enable
 COPY packages/platform/interloper-app/app/package.json packages/platform/interloper-app/app/pnpm-lock.yaml packages/platform/interloper-app/app/pnpm-workspace.yaml ./
 COPY packages/platform/interloper-app/app/patches/ patches/
 RUN pnpm install --frozen-lockfile --ignore-scripts
@@ -316,7 +317,7 @@ EXPOSE 3001
 CMD ["interloper-mcp"]
 
 # ── frontend (nginx serving the pre-built SPA) ────────────────
-FROM nginx:1.27-alpine-slim AS frontend
+FROM nginx:1.30-alpine-slim AS frontend
 COPY --from=build-spa /app/.output/public/ /usr/share/nginx/html/
 # nginx-alpine expands /etc/nginx/templates/*.template into
 # /etc/nginx/conf.d/ at startup with envsubst. API_UPSTREAM is required;

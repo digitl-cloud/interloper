@@ -36,7 +36,7 @@ class _CapturingBatchV1:
 
     def create_namespaced_job(self, namespace: str, body: client.V1Job) -> client.V1Job:
         self.jobs.append(body)
-        body.metadata.uid = "job-uid"
+        _metadata(body).uid = "job-uid"
         return body
 
     def patch_namespaced_job(self, name: str, namespace: str, body: dict[str, Any]) -> None:
@@ -71,17 +71,28 @@ def _launch(
 
 def _launched_container(launcher: KubernetesLauncher) -> client.V1Container:
     batch, _core = _launch(launcher)
-    return batch.jobs[0].spec.template.spec.containers[0]
+    return _pod_spec(batch.jobs[0]).containers[0]
+
+
+def _pod_spec(job: client.V1Job) -> client.V1PodSpec:
+    assert job.spec is not None and job.spec.template.spec is not None
+    return job.spec.template.spec
+
+
+def _metadata(resource: client.V1Job | client.V1Secret) -> client.V1ObjectMeta:
+    assert resource.metadata is not None
+    return resource.metadata
 
 
 def test_the_run_pod_holds_no_database_credentials_and_reads_its_token_from_the_secret(
     launcher_factory: Callable[..., KubernetesLauncher],
 ) -> None:
     container = _launched_container(launcher_factory())
-    env = {variable.name: variable for variable in container.env}
+    env = {variable.name: variable for variable in container.env or []}
 
     token = env["INTERLOPER_RUN_TOKEN"]
     assert token.value is None
+    assert token.value_from is not None and token.value_from.secret_key_ref is not None
     assert token.value_from.secret_key_ref.key == "token"
     assert env["INTERLOPER_SERVER_INTERNAL_URL"].value == "http://api"
     assert not [name for name in env if name.startswith("INTERLOPER_POSTGRES") or name == "INTERLOPER_ENCRYPTION_KEY"]
@@ -90,21 +101,23 @@ def test_the_run_pod_holds_no_database_credentials_and_reads_its_token_from_the_
 def test_the_job_starts_once_the_secret_it_owns_exists(launcher_factory: Callable[..., KubernetesLauncher]) -> None:
     batch, core = _launch(launcher_factory(), partition_key="2026-10-26")
     (job,), (secret,) = batch.jobs, core.secrets
-    container = job.spec.template.spec.containers[0]
+    pod_spec, job_metadata, secret_metadata = _pod_spec(job), _metadata(job), _metadata(secret)
+    container = pod_spec.containers[0]
 
-    assert job.spec.suspend is True
-    assert batch.patches == [(job.metadata.name, {"spec": {"suspend": False}})]
+    assert job.spec is not None and job.spec.suspend is True
+    assert batch.patches == [(job_metadata.name, {"spec": {"suspend": False}})]
     # The pod loads the run's DAG, partition and metadata by its id: only the token is handed over.
-    assert container.args == ["launch", job.metadata.labels["interloper.run_id"]]
+    assert job_metadata.labels is not None
+    assert container.args == ["launch", job_metadata.labels["interloper.run_id"]]
     assert secret.string_data == {"token": "ilr_x"}
-    (owner,) = secret.metadata.owner_references
+    (owner,) = secret_metadata.owner_references or []
     assert (owner.kind, owner.name, owner.uid, owner.block_owner_deletion) == (
         "Job",
-        job.metadata.name,
+        job_metadata.name,
         "job-uid",
         None,
     )
-    assert job.spec.template.spec.volumes is None
+    assert pod_spec.volumes is None
     assert container.volume_mounts is None
 
 
@@ -119,14 +132,17 @@ def test_a_job_whose_secret_cannot_be_created_is_deleted_unstarted(
     with pytest.raises(RuntimeError, match="forbidden"):
         launcher.launch(Run(id=uuid4(), org_id=uuid4(), status=RunStatus.DISPATCHED), "ilr_x")
 
-    assert batch.deleted == [batch.jobs[0].metadata.name]
+    assert batch.deleted == [_metadata(batch.jobs[0]).name]
     assert batch.patches == []
 
 
 def test_env_from_mounts_secrets(launcher_factory: Callable[..., KubernetesLauncher]) -> None:
     """Configured secret names become envFrom secret refs on the run container."""
     container = _launched_container(launcher_factory(env_from=["oauth-providers", "extra"]))
-    assert [source.secret_ref.name for source in container.env_from] == ["oauth-providers", "extra"]
+    assert [source.secret_ref for source in container.env_from or []] == [
+        client.V1SecretEnvSource(name="oauth-providers"),
+        client.V1SecretEnvSource(name="extra"),
+    ]
 
 
 def test_env_from_defaults_to_none(launcher_factory: Callable[..., KubernetesLauncher]) -> None:
@@ -139,7 +155,7 @@ def test_the_heartbeat_settings_reach_the_run_container_as_its_run_settings(
     launcher_factory: Callable[..., KubernetesLauncher],
 ) -> None:
     container = _launched_container(launcher_factory(heartbeat_interval=5, heartbeat_timeout=45))
-    env = {variable.name: variable.value for variable in container.env}
+    env = {variable.name: variable.value for variable in container.env or []}
     assert (env["INTERLOPER_RUN_HEARTBEAT_INTERVAL"], env["INTERLOPER_RUN_HEARTBEAT_TIMEOUT"]) == ("5", "45")
     assert not [name for name in env if name.startswith("INTERLOPER_REAPER_")]
 
@@ -149,8 +165,10 @@ def test_the_catalog_reaches_the_run_container_as_its_catalog_include(
 ) -> None:
     catalog = Catalog.from_assets([])
     container = _launched_container(launcher_factory(catalog=catalog))
-    env = {variable.name: variable.value for variable in container.env}
-    monkeypatch.setenv("INTERLOPER_CATALOG_INCLUDE", env["INTERLOPER_CATALOG_INCLUDE"])
+    env = {variable.name: variable.value for variable in container.env or []}
+    include = env["INTERLOPER_CATALOG_INCLUDE"]
+    assert include is not None
+    monkeypatch.setenv("INTERLOPER_CATALOG_INCLUDE", include)
 
     assert CatalogSettings().include == catalog.to_paths()
     assert "INTERLOPER_CATALOG" not in env

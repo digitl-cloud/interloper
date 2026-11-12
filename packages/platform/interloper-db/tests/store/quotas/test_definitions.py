@@ -39,7 +39,7 @@ class TestRegistry:
     def test_definition_is_abstract(self):
         """The base class cannot be instantiated — subclasses must implement check()."""
         with pytest.raises(TypeError, match="abstract"):
-            QuotaDefinition(key="max_bananas", label="Max bananas", message=lambda used, limit, subject: "")
+            QuotaDefinition(key="max_bananas", label="Max bananas", message=lambda used, limit, subject: "")  # ty: ignore[abstract-class-instantiation]
 
     def test_definitions_require_key_and_label(self):
         with pytest.raises(ValueError, match="key and a label"):

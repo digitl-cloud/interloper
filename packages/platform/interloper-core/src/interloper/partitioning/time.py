@@ -194,7 +194,7 @@ class TimePartition(Partition):
         granularity: The period one partition covers.
     """
 
-    value: dt.date
+    value: dt.date  # ty: ignore[incompatible-attribute-override]
     granularity: TimeGranularity = TimeGranularity.DAY
 
     @classmethod

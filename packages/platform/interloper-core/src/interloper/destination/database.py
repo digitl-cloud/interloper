@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import warnings
 from abc import abstractmethod
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, runtime_checkable
@@ -166,7 +166,7 @@ class DatabaseDestination(Destination):
         """
 
     @contextmanager
-    def transaction(self) -> Iterator[None]:
+    def transaction(self) -> Generator[None, None, None]:
         """Wrap one write, a delete followed by an insert.
 
         Override to make the pair atomic (``BEGIN ... COMMIT``); the default

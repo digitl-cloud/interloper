@@ -108,7 +108,7 @@ class UsageLedger:
         """
         if metric not in METRICS:
             raise ValueError(f"Unknown usage metric: {metric}")
-        table = Usage.__table__  # ty: ignore[unresolved-attribute]
+        table = Usage.__table__  # ty: ignore[missing-attribute]
         statement = (
             dialect_insert(self._session)(table)
             .values(org_id=org_id, metric=metric, period_start=period_start, used=used, reserved=reserved)
@@ -137,7 +137,7 @@ class UsageLedger:
         if limit <= 0:
             return None
         now = self.now()
-        table = Usage.__table__  # ty: ignore[unresolved-attribute]
+        table = Usage.__table__  # ty: ignore[missing-attribute]
         statement = (
             dialect_insert(self._session)(table)
             .values(org_id=org_id, metric=metric, period_start=month_start(now), used=0, reserved=1)
@@ -148,7 +148,7 @@ class UsageLedger:
             )
         )
         result = self._session.execute(statement)  # ty: ignore[deprecated]
-        return now if result.rowcount == 1 else None  # ty: ignore[unresolved-attribute]
+        return now if result.rowcount == 1 else None  # ty: ignore[missing-attribute]
 
     def settle_run(self, db_run: Run, *, success: bool) -> None:
         """Charge or release a completing run's usage.

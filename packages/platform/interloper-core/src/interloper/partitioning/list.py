@@ -17,7 +17,7 @@ class ListPartition(Partition):
         value: The declared value, which is also the partition's key.
     """
 
-    value: str
+    value: str  # ty: ignore[incompatible-attribute-override]
 
     @property
     def key(self) -> str:

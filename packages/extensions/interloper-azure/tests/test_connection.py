@@ -120,4 +120,5 @@ class TestMetadata:
 
     def test_secret_is_a_password_field(self):
         extra = AzureConnection.model_fields["client_secret"].json_schema_extra
+        assert isinstance(extra, dict)
         assert extra["x-widget"] == "password"

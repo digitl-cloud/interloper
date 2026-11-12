@@ -256,7 +256,7 @@ class TestHookContract:
             pass
 
         with pytest.raises(TypeError, match=r"abstract.*(partition_row_counts|read_partition|write_partition)"):
-            Bare(id="b")
+            Bare(id="b")  # ty: ignore[abstract-class-instantiation]
 
     def test_the_three_hooks_are_the_whole_contract(self):
         class Minimal(il.Destination):

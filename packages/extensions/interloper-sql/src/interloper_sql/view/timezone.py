@@ -39,7 +39,7 @@ def _compile_local_date(
 
 # Ibis converts between zones only by a constant; sqlglot's ConvertTimezone takes a column and renders
 # in each dialect's own syntax, so every Ibis SQL compiler learns this node from their common base
-SQLGlotCompiler.visit_LocalDate = _compile_local_date  # ty: ignore[unresolved-attribute]
+SQLGlotCompiler.visit_LocalDate = _compile_local_date  # ty: ignore[missing-attribute]
 
 
 def local_date(instant: ir.TimestampValue, timezone: ir.StringValue | str) -> ir.DateValue:

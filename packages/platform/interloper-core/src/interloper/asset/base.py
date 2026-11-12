@@ -157,7 +157,7 @@ class Asset(Operation, metaclass=AssetMeta):
     # Definition
     kind: ClassVar[str] = "asset"
     destinations: list[Destination] = Relation("destination", many=True, optional=True)
-    schema: ClassVar[type[Schema] | None] = None
+    schema: ClassVar[type[Schema] | None] = None  # ty: ignore[incompatible-attribute-override]
     internal_fields: ClassVar[frozenset[str]] = frozenset({"normalizer"})
     tags: ClassVar[list[str]] = []
 

@@ -38,7 +38,7 @@ def store() -> Iterator[Store]:
     # Only what these tests exercise; creating the full schema would pull in
     # Postgres-only column types (e.g. ARRAY) that SQLite can't render.
     for model in (Component, Event, Execution):
-        model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
+        model.__table__.create(engine)  # ty: ignore[missing-attribute]
     try:
         yield Store(catalog=il.Catalog(components={}), engine=engine)
     finally:

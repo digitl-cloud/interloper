@@ -146,7 +146,7 @@ def engine() -> Iterator[Engine]:
 
     models = (Profile, Organisation, UserOrganisation, Component, ComponentRelation, Backfill, Run, Event, Quota, Usage)
     for model in (*models, Execution):
-        model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
+        model.__table__.create(engine)  # ty: ignore[missing-attribute]
     try:
         yield engine
     finally:

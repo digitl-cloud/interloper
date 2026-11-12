@@ -68,7 +68,7 @@ class TestConnectionDecorator:
         config = ConnectionConfig()
 
         assert MyConn.relations["config"].target is ConnectionConfig
-        assert MyConn(config=config).config is config  # ty: ignore[unknown-argument, unresolved-attribute]
+        assert MyConn(config=config).config is config  # ty: ignore[unknown-argument, missing-attribute]
 
     def test_oauth_kwarg_does_not_become_model_field(self):
         @connection(oauth=OAuthConfig("amazon"))

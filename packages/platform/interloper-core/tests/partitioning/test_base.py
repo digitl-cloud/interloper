@@ -45,11 +45,11 @@ class TestPartition:
 
     def test_the_bases_are_abstract(self):
         with pytest.raises(TypeError):
-            Partition()
+            Partition()  # ty: ignore[abstract-class-instantiation]
         with pytest.raises(TypeError):
-            PartitionWindow("a", "b")
+            PartitionWindow("a", "b")  # ty: ignore[abstract-class-instantiation]
         with pytest.raises(TypeError):
-            PartitionConfig(column="x")
+            PartitionConfig(column="x")  # ty: ignore[abstract-class-instantiation]
 
 
 class TestPartitionWindow:

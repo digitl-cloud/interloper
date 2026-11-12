@@ -85,7 +85,7 @@ class SnowflakeConnection(Connection):
         try:
             cursor.execute(sql)
             rows: list[Any] = cursor.fetchall()
-            index = [column[0] for column in cursor.description].index("name")
+            index = [column[0] for column in cursor.description or []].index("name")
         finally:
             cursor.close()
         return sorted(({"name": row[index]} for row in rows), key=lambda option: option["name"].lower())
