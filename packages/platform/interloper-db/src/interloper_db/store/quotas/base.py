@@ -74,7 +74,7 @@ class QuotaStore:
                     .values(org_id=org_id, key=key)
                     .on_conflict_do_nothing(index_elements=["org_id", "key"])
                 )
-                session.execute(statement)  # ty: ignore[deprecated]
+                session.exec(statement)
                 override = session.exec(
                     select(Quota).where(Quota.org_id == org_id, Quota.key == key).with_for_update()
                 ).first()
@@ -143,7 +143,7 @@ class QuotaStore:
                     .values(org_id=org_id, key=key, limit=value)
                     .on_conflict_do_update(index_elements=["org_id", "key"], set_={"limit": value})
                 )
-                session.execute(statement)  # ty: ignore[deprecated]
+                session.exec(statement)
             commit(session)
             return self.overrides(org_id)
 
