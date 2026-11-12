@@ -2547,8 +2547,10 @@ constructs the class with <code>runner.config</code>, so a registered runner is 
 executes. The scheduler's queue claims a run, checks that its spec can be built, mints its token,
 and calls <code>launch(run, token)</code> on the configured <code>Launcher</code>. A launcher that starts another
 process (a container, a pod) runs <code>Launcher.command(run)</code> there, <code>interloper launch &lt;run-id&gt;</code>,
-with the run's token in <code>INTERLOPER_RUN_TOKEN</code> and the API's <code>server.internal_url</code> in
-<code>INTERLOPER_SERVER_INTERNAL_URL</code>. That process holds no database credentials: it loads what the
+with the run's token in <code>INTERLOPER_RUN_TOKEN</code>, the reaper's heartbeat interval and timeout in
+<code>INTERLOPER_RUN_HEARTBEAT_INTERVAL</code> and <code>INTERLOPER_RUN_HEARTBEAT_TIMEOUT</code>, and the API's
+<code>server.internal_url</code> in <code>INTERLOPER_SERVER_INTERNAL_URL</code>. That process holds no database
+credentials: it loads what the
 run executes from the API (<code>RunSpec</code>: the DAG, connections resolved, its partition and its event
 metadata) and reports its events back there. Register a launcher in the <code>interloper.launchers</code>
 entry-point group and give it a <code>from_settings</code> classmethod, as the Docker and Kubernetes
@@ -2557,8 +2559,9 @@ launchers do.</p>
 <p>A run that executes each operation in a child process (the Docker and Kubernetes runners) still
 owns its operations' lifecycle: the host reports every start, retry and verdict, and the child
 only what happens inside the operation. On the platform, have the child run
-<code>interloper launch &lt;run-id&gt; --operation-id &lt;id&gt;</code> with the host's <code>INTERLOPER_RUN_TOKEN</code>
-and <code>INTERLOPER_SERVER_INTERNAL_URL</code>: the child loads the run and executes that one operation once,
+<code>interloper launch &lt;run-id&gt; --operation-id &lt;id&gt;</code> with the host's <code>INTERLOPER_RUN_TOKEN</code>,
+<code>INTERLOPER_RUN_HEARTBEAT_*</code> and <code>INTERLOPER_SERVER_INTERNAL_URL</code>: the child loads the run and
+executes that one operation once,
 in its own process, walking nothing, so it reports only its asset and destination events to the
 API and no lifecycle event. Outside the platform, hand the child the operation's DAG instead,
 <code>interloper run --format inline &lt;dag&gt; --operation-id &lt;id&gt;</code>. A failed execution leaves its

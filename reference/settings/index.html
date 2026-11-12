@@ -3071,7 +3071,7 @@
 </tbody>
 </table>
 <h3 id="run"><code>run</code><a class="headerlink" href="#run" title="Permanent link">&para;</a></h3>
-<p>The platform run this process executes, as the launcher that started it sets it; never set by hand. Prefix <code>INTERLOPER_RUN_</code>.</p>
+<p>The platform run this process executes: its token and heartbeat cadence. Prefix <code>INTERLOPER_RUN_</code>.</p>
 <table>
 <thead>
 <tr>
@@ -3087,6 +3087,18 @@
 <td><code>str</code></td>
 <td><code>''</code></td>
 <td>The run's token, with which <code>interloper launch</code> loads the run from the API and reports its events back.</td>
+</tr>
+<tr>
+<td><code>heartbeat_interval</code></td>
+<td><code>int</code></td>
+<td><code>10</code></td>
+<td>Seconds between the run's heartbeats: the scheduler's <code>reaper.heartbeat_interval</code>.</td>
+</tr>
+<tr>
+<td><code>heartbeat_timeout</code></td>
+<td><code>int</code></td>
+<td><code>90</code></td>
+<td>Seconds the run may go without a heartbeat before the reaper fails it, the scheduler's <code>reaper.heartbeat_timeout</code>; a run that cannot record one for half of it stops itself first.</td>
 </tr>
 </tbody>
 </table>

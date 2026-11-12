@@ -2485,6 +2485,11 @@ environment, not in <code>${VAR}</code> placeholders.</p>
 <td><code>run.token</code>, set by a launcher on a run's pod and forwarded by a container runner to its children: the bearer the run is loaded from the API and its events are reported with.</td>
 </tr>
 <tr>
+<td><code>INTERLOPER_RUN_HEARTBEAT_INTERVAL</code>, <code>_TIMEOUT</code></td>
+<td><code>interloper launch</code></td>
+<td><code>run.heartbeat_interval</code> and <code>run.heartbeat_timeout</code>, set and forwarded the same way from the scheduler's <code>reaper</code> settings: how often the run heartbeats, and the silence after which the reaper fails it.</td>
+</tr>
+<tr>
 <td><code>INTERLOPER_&lt;PROVIDER&gt;_CLIENT_ID</code>, <code>_CLIENT_SECRET</code></td>
 <td>OAuth connections and providers</td>
 <td>In-house OAuth app credentials per provider.</td>
