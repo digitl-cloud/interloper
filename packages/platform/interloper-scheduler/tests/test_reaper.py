@@ -184,20 +184,22 @@ class TestTick:
 
         assert "Reaped" not in caplog.text
 
-    def test_the_first_tick_reconciles(self, store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_the_first_tick_reconciles_and_prunes(self, store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
         # ``_ticks_since_reconcile`` starts at the threshold on purpose.
-        calls: list[bool] = []
+        calls: list[str] = []
         reaper = Reaper(store=store, launcher=_FakeLauncher(None))
-        monkeypatch.setattr(reaper, "_reconcile_usage", lambda: calls.append(True))
+        monkeypatch.setattr(reaper, "_reconcile_usage", lambda: calls.append("reconcile"))
+        monkeypatch.setattr(reaper, "_prune_oauth_clients", lambda: calls.append("prune"))
 
         reaper._tick()
 
-        assert calls == [True]
+        assert calls == ["reconcile", "prune"]
 
     def test_later_ticks_wait_for_the_interval(self, store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
         calls: list[bool] = []
         reaper = Reaper(store=store, launcher=_FakeLauncher(None), poll_interval=60)
         monkeypatch.setattr(reaper, "_reconcile_usage", lambda: calls.append(True))
+        monkeypatch.setattr(reaper, "_prune_oauth_clients", lambda: None)
 
         reaper._tick()  # the first one reconciles
         reaper._tick()
@@ -269,6 +271,53 @@ class TestReconcileUsage:
             reaper._reconcile_usage()
 
         assert "Usage reconciliation failed" in caplog.text
+
+
+class TestPruneOAuthClients:
+    """Unused dynamically registered clients are deleted hourly, within the windows the reaper was given."""
+
+    def test_the_windows_reach_the_store_and_deletions_are_logged(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        windows: list[tuple[dt.timedelta, dt.timedelta]] = []
+
+        def prune(*, unused_for: dt.timedelta, ended_for: dt.timedelta) -> list[object]:
+            windows.append((unused_for, ended_for))
+            return [object(), object()]
+
+        monkeypatch.setattr(store.oauth, "prune_clients", prune)
+        reaper = Reaper(store=store, launcher=_FakeLauncher(None))
+
+        with caplog.at_level("INFO", logger="interloper_scheduler.reaper"):
+            reaper._prune_oauth_clients()
+
+        assert windows == [(dt.timedelta(hours=24), dt.timedelta(days=30))]
+        assert "Deleted 2 unused OAuth client(s)" in caplog.text
+
+    def test_nothing_pruned_logs_nothing(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        monkeypatch.setattr(store.oauth, "prune_clients", lambda **windows: [])
+        reaper = Reaper(store=store, launcher=_FakeLauncher(None))
+
+        with caplog.at_level("INFO", logger="interloper_scheduler.reaper"):
+            reaper._prune_oauth_clients()
+
+        assert "OAuth client" not in caplog.text
+
+    def test_a_failed_prune_does_not_stop_the_loop(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        def broken(**windows: dt.timedelta) -> list[object]:
+            raise RuntimeError("query failed")
+
+        monkeypatch.setattr(store.oauth, "prune_clients", broken)
+        reaper = Reaper(store=store, launcher=_FakeLauncher(None))
+
+        with caplog.at_level("ERROR", logger="interloper_scheduler.reaper"):
+            reaper._prune_oauth_clients()
+
+        assert "Pruning OAuth clients failed" in caplog.text
 
 
 class TestFailureReportingIsBestEffort:

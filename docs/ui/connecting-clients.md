@@ -46,6 +46,11 @@ stays in use never asks you again. Both lifetimes are settings:
 A client idle for longer than the refresh lifetime has to ask for consent again. Presenting a
 refresh token that was already used is treated as theft: the whole chain it belongs to is revoked.
 
+A client that registered itself is deleted once nobody uses it: when it never obtained a grant
+within 24 hours of registering, or when its last refresh token expired more than 30 days ago,
+and it holds no live refresh token and no code still to exchange. Its conversations go with it.
+The scheduler's reaper checks hourly. Clients an operator registered are never deleted this way.
+
 ## Personal access tokens
 
 A client that cannot run a browser flow (a script, a CI job, an older MCP client) takes a

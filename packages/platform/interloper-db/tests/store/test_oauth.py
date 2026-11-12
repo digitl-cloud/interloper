@@ -235,6 +235,111 @@ class TestClients:
         assert store.oauth.get_client(dynamic.client_id) == dynamic
 
 
+UNUSED_FOR = timedelta(hours=24)
+ENDED_FOR = timedelta(days=30)
+
+
+def _age(auth_db: Engine, client: OAuthClient, age: timedelta) -> None:
+    """Backdate a client's registration.
+
+    Args:
+        auth_db: The fixture database.
+        client: The client to age.
+        age: How long ago it registered.
+    """
+    with session_scope(auth_db) as session:
+        session.connection().execute(
+            update(OAuthClient)
+            .where(col(OAuthClient.client_id) == client.client_id)
+            .values(created_at=datetime.now(timezone.utc) - age)
+        )
+        session.commit()
+
+
+def _expire_refresh(auth_db: Engine, client: OAuthClient, ago: timedelta) -> None:
+    """Make every refresh token of a client expire at a given time in the past.
+
+    Args:
+        auth_db: The fixture database.
+        client: The client whose refresh tokens to expire.
+        ago: How long ago they expired.
+    """
+    with session_scope(auth_db) as session:
+        session.connection().execute(
+            update(RefreshToken)
+            .where(col(RefreshToken.client_id) == client.client_id)
+            .values(expires_at=datetime.now(timezone.utc) - ago)
+        )
+        session.commit()
+
+
+class TestPruneClients:
+    def _prune(self, store: Store) -> set[str]:
+        return {client.client_id for client in store.oauth.prune_clients(unused_for=UNUSED_FOR, ended_for=ENDED_FOR)}
+
+    def test_a_dynamic_client_never_granted_past_the_window_is_deleted(
+        self, store: Store, client: OAuthClient, auth_db: Engine
+    ):
+        _age(auth_db, client, UNUSED_FOR + timedelta(minutes=1))
+
+        assert self._prune(store) == {client.client_id}
+        assert store.oauth.get_client(client.client_id) is None
+
+    def test_a_dynamic_client_still_in_the_window_is_kept(self, store: Store, client: OAuthClient, auth_db: Engine):
+        _age(auth_db, client, UNUSED_FOR - timedelta(minutes=1))
+
+        assert self._prune(store) == set()
+        assert store.oauth.get_client(client.client_id) is not None
+
+    def test_an_operator_client_is_never_deleted(self, store: Store, auth_db: Engine):
+        operator, _ = store.oauth.register_client(
+            "Slack", ["https://slack.example.com/cb"], registered_by="operator", confidential=True
+        )
+        _age(auth_db, operator, timedelta(days=365))
+
+        assert self._prune(store) == set()
+        assert store.oauth.get_client(operator.client_id) is not None
+
+    def test_a_client_holding_a_live_refresh_token_is_kept(
+        self, store: Store, profile: Profile, client: OAuthClient, auth_db: Engine
+    ):
+        store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP, family_id=uuid4())
+        _age(auth_db, client, timedelta(days=365))
+
+        assert self._prune(store) == set()
+
+    def test_a_client_whose_last_refresh_token_expired_long_ago_is_deleted_with_its_grants(
+        self, store: Store, profile: Profile, client: OAuthClient, auth_db: Engine
+    ):
+        refresh = store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP, family_id=uuid4())
+        org_id = store.organisations.create(name="Acme", creator_id=profile.id).id
+        conversation = store.conversations.create(org_id, profile.id, client.client_id)
+        _age(auth_db, client, timedelta(days=365))
+        _expire_refresh(auth_db, client, ENDED_FOR + timedelta(days=1))
+
+        assert self._prune(store) == {client.client_id}
+        assert store.oauth.find_refresh(refresh) is None
+        with session_scope(auth_db) as session:
+            assert session.get(Conversation, conversation.id) is None
+
+    def test_a_client_whose_last_refresh_token_expired_recently_is_kept(
+        self, store: Store, profile: Profile, client: OAuthClient, auth_db: Engine
+    ):
+        store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP, family_id=uuid4())
+        _age(auth_db, client, timedelta(days=365))
+        _expire_refresh(auth_db, client, ENDED_FOR - timedelta(days=1))
+
+        assert self._prune(store) == set()
+
+    def test_a_client_with_a_code_not_yet_exchanged_is_kept(
+        self, store: Store, profile: Profile, client: OAuthClient, auth_db: Engine
+    ):
+        _issue_code(store, profile, client)
+        _age(auth_db, client, UNUSED_FOR + timedelta(hours=1))
+
+        assert self._prune(store) == set()
+
+
 class TestCodes:
     def test_code_single_use(self, store: Store, profile: Profile, client: OAuthClient):
         raw = _issue_code(store, profile, client)
