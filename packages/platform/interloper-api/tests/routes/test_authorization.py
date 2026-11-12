@@ -30,7 +30,6 @@ PREFIX = "/api/auth/oauth"
 def client(oauth_store: Store, fake_settings: SimpleNamespace) -> TestClient:
     fake_settings.agent.enabled = False
     fake_settings.server.external_url = ISSUER
-    fake_settings.mcp.external_url = MCP_RESOURCE
     return TestClient(create_app(store=oauth_store, settings=fake_settings), follow_redirects=False)
 
 

@@ -46,6 +46,28 @@ class Audience(str, Enum):
             return (TokenKind.SESSION,)
         return (TokenKind.PERSONAL, TokenKind.ACCESS)
 
+    def resource_url(self, public_url: str) -> str:
+        """The RFC 8707 resource URL naming this surface: its endpoint on the app's public URL.
+
+        The API is served at ``/api`` and the MCP server at ``/mcp``, so the
+        authorization server, which accepts the resource, and the MCP server,
+        which advertises it, both derive it here from ``server.public_url``.
+
+        Args:
+            public_url: The app's public base URL, without a trailing slash.
+
+        Returns:
+            The URL, ``https://app.example.com/mcp`` for ``mcp`` on
+            ``https://app.example.com``.
+
+        Raises:
+            ValueError: For ``app``, whose session is issued at login, never
+                for a resource.
+        """
+        if self is Audience.APP:
+            raise ValueError("The app's session is issued at login, never for a resource.")
+        return f"{public_url}/{self.value}"
+
 
 class Token(SQLModel, table=True):
     """A bearer secret standing for its user, in every organisation they belong to.

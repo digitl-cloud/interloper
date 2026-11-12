@@ -2,7 +2,9 @@
 
 The properties under test: no token, bad tokens and tokens of a kind or
 audience MCP does not accept are rejected with 401 before any tool machinery
-runs; a valid PAT reaches the MCP endpoint and its tools act as its holder.
+runs; a valid PAT reaches the MCP endpoint and its tools act as its holder;
+the resource the server advertises is the one the authorization server
+issues tokens for.
 """
 
 from __future__ import annotations
@@ -11,6 +13,7 @@ from typing import Any
 
 import httpx2
 import interloper as il
+import pytest
 from interloper.settings import AppSettings, McpSettings, SecretsSettings, ServerSettings
 from interloper_api.authorization import AuthorizationServer
 from interloper_db import engine as engine_module
@@ -35,6 +38,8 @@ INITIALIZE = {
 
 HEADERS = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
 
+PUBLIC_URL = "https://app.example.com"
+
 
 async def _post(app: Any, json: dict, headers: dict[str, str]) -> httpx2.Response:
     # The session manager only runs inside the app lifespan.
@@ -53,10 +58,9 @@ def _insert_token(profile: Profile, raw: str, kind: TokenKind, resource: str | N
         session.commit()
 
 
-def _app(store: Store, catalog: il.Catalog, settings: McpSettings | None = None) -> Any:
-    settings = settings or McpSettings()
+def _app(store: Store, catalog: il.Catalog, public_url: str = PUBLIC_URL) -> Any:
     init_context(store, catalog)
-    return create_mcp_server(settings, store=store).streamable_http_app(**http_options(settings))
+    return create_mcp_server(public_url, store=store).streamable_http_app(**http_options(McpSettings()))
 
 
 async def test_missing_token_is_401(store: Store, catalog: il.Catalog, seeded: dict):
@@ -79,60 +83,45 @@ async def test_valid_token_initializes(store: Store, catalog: il.Catalog, seeded
 
 
 async def test_anonymous_request_advertises_resource_metadata(store: Store, catalog: il.Catalog, seeded: dict):
-    settings = McpSettings(external_url="https://mcp.example.com/mcp")
-    app = _app(store, catalog, settings)
+    app = _app(store, catalog)
     resp = await _post(app, INITIALIZE, HEADERS)
     assert resp.status_code == 401
     assert (
-        'resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp"'
+        'resource_metadata="https://app.example.com/.well-known/oauth-protected-resource/mcp"'
         in resp.headers["www-authenticate"]
     )
 
     async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url="http://testserver") as client:
         metadata = await client.get("/.well-known/oauth-protected-resource/mcp")
     assert metadata.status_code == 200
-    assert metadata.json()["resource"] == "https://mcp.example.com/mcp"
+    assert metadata.json()["resource"] == "https://app.example.com/mcp"
 
 
-async def test_protected_resource_metadata_names_interloper_issuer(store: Store, catalog: il.Catalog, seeded: dict):
+@pytest.mark.parametrize(
+    ("external_url", "public_url"),
+    [("https://app.example.com/", "https://app.example.com"), ("", "http://localhost:3100")],
+    ids=["external-url", "local-server"],
+)
+async def test_a_client_signs_in_to_the_resource_the_server_advertises(
+    store: Store, catalog: il.Catalog, seeded: dict, external_url: str, public_url: str
+):
     settings = AppSettings(
-        server=ServerSettings(external_url="https://app.example.com/"),
-        mcp=McpSettings(external_url="https://app.example.com/mcp"),
+        server=ServerSettings(external_url=external_url, port=3100),
         secrets=SecretsSettings(encryption_key="key-material"),
     )
-    AppSettings.activate(settings)
-    try:
-        app = _app(store, catalog, settings.mcp)
-        issuer = AuthorizationServer.from_settings(store, settings).metadata["issuer"]
-    finally:
-        AppSettings.clear_active()
+    authorization_server = AuthorizationServer.from_settings(store, settings)
+    app = _app(store, catalog, settings.server.public_url)
 
     async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url="http://testserver") as client:
-        metadata = await client.get("/.well-known/oauth-protected-resource/mcp")
+        metadata = (await client.get("/.well-known/oauth-protected-resource/mcp")).json()
+    audience = authorization_server.resolve_resource([metadata["resource"]])
+    access_token = store.tokens.create_access(seeded["profile"].id, "a-client", audience)
+    resp = await _post(app, INITIALIZE, {**HEADERS, "Authorization": f"Bearer {access_token}"})
 
-    assert metadata.json()["resource"] == "https://app.example.com/mcp"
-    assert metadata.json()["authorization_servers"] == [issuer] == ["https://app.example.com"]
-
-
-async def test_protected_resource_metadata_falls_back_to_the_local_api(store: Store, catalog: il.Catalog, seeded: dict):
-    # Both the issuer and the resource are the API's, as the authorization server derives them, not the MCP server's
-    # own port: a client signs in to the resource the authorization server accepts.
-    settings = AppSettings(
-        server=ServerSettings(external_url="", port=3100), secrets=SecretsSettings(encryption_key="key-material")
-    )
-    AppSettings.activate(settings)
-    try:
-        app = _app(store, catalog, McpSettings(port=8123))
-        server = AuthorizationServer.from_settings(store, settings)
-    finally:
-        AppSettings.clear_active()
-
-    async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url="http://testserver") as client:
-        metadata = await client.get("/.well-known/oauth-protected-resource/mcp")
-
-    assert metadata.json()["resource"] == "http://localhost:3100/mcp"
-    assert server.resources[metadata.json()["resource"]] is Audience.MCP
-    assert metadata.json()["authorization_servers"] == [server.metadata["issuer"]] == ["http://localhost:3100"]
+    assert metadata["resource"] == f"{public_url}/mcp"
+    assert metadata["authorization_servers"] == [authorization_server.metadata["issuer"]] == [public_url]
+    assert audience is Audience.MCP
+    assert resp.status_code == 200
 
 
 async def test_session_token_refused(store: Store, catalog: il.Catalog, seeded: dict):

@@ -173,10 +173,6 @@ mcp, db-init); their secrets come from the release Secret (interloper.envFrom).
 - name: INTERLOPER_SERVER_EXTERNAL_URL
   value: {{ . | quote }}
 {{- end }}
-{{- with .Values.mcp.externalUrl }}
-- name: INTERLOPER_MCP_EXTERNAL_URL
-  value: {{ . | quote }}
-{{- end }}
 - name: INTERLOPER_POSTGRES_HOST
   value: {{ include "interloper.postgresHost" . | quote }}
 - name: INTERLOPER_POSTGRES_PORT

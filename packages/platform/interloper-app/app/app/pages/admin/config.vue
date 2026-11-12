@@ -152,7 +152,6 @@ const sections = computed<ConfigSection[]>(() => {
                 : {}),
         },
         ...(services.app_external_url ? [{ label: 'App URL', value: services.app_external_url, mono: true }] : []),
-        ...(services.mcp_external_url ? [{ label: 'MCP URL', value: services.mcp_external_url, mono: true }] : []),
     ]
 
     const CATALOG_PREVIEW = 4

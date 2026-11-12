@@ -396,26 +396,7 @@ class McpSettings(BaseSettings):
 
     host: str = Field(default="0.0.0.0", description="Bind host.")
     port: int = Field(default=3001, description="Bind port.")
-    external_url: str = Field(
-        default="",
-        description="Public URL of the MCP endpoint, the OAuth resource clients sign in to; empty means `/mcp` on "
-        "the app's public URL, where the chart serves it.",
-    )
     token: str = Field(default="", description="Personal access token the stdio transport authenticates with.")
-
-    def public_url(self, server: ServerSettings) -> str:
-        """The MCP endpoint's public URL: ``external_url``, else ``/mcp`` on the app's public URL.
-
-        It is the OAuth resource the MCP server advertises and the
-        authorization server accepts, so both read it here.
-
-        Args:
-            server: The server settings whose public URL the endpoint defaults under.
-
-        Returns:
-            The URL, without a trailing slash.
-        """
-        return self.external_url.rstrip("/") or f"{server.public_url}/mcp"
 
 
 class QuotaSettings(BaseSettings):

@@ -23,7 +23,6 @@ def server(oauth_store: Store) -> AuthorizationServer:
     return AuthorizationServer(
         oauth_store,
         issuer=ISSUER,
-        mcp_url=MCP_URL,
         encryption_key="key-material",
         access_token_expiry=timedelta(minutes=60),
     )
@@ -53,16 +52,17 @@ class TestResources:
 
 
 class TestFromSettings:
-    def test_the_issuer_is_the_external_url(self, oauth_store: Store, fake_settings: SimpleNamespace):
+    def test_the_issuer_is_the_external_url_and_the_resources_live_under_it(
+        self, oauth_store: Store, fake_settings: SimpleNamespace
+    ):
         fake_settings.server.external_url = "https://app.example.com/"
-        fake_settings.mcp.external_url = "https://mcp.example.com/mcp"
 
         server = AuthorizationServer.from_settings(oauth_store, fake_settings)
 
         assert server.issuer == "https://app.example.com"
         assert server.resources == {
             "https://app.example.com/api": Audience.API,
-            "https://mcp.example.com/mcp": Audience.MCP,
+            "https://app.example.com/mcp": Audience.MCP,
         }
         assert server.access_token_expires_in == 3600
 

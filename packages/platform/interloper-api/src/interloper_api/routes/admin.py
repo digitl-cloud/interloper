@@ -269,7 +269,6 @@ class AdminServicesConfig(BaseModel):
     smtp: AdminSmtpConfig
     telemetry: AdminTelemetryConfig
     app_external_url: str
-    mcp_external_url: str
 
 
 class AdminDataConfig(BaseModel):
@@ -497,7 +496,6 @@ class AdminConfigResponse(BaseModel):
                     sample_ratio=settings.otel.sample_ratio,
                 ),
                 app_external_url=settings.server.external_url,
-                mcp_external_url=settings.mcp.external_url,
             ),
             data=AdminDataConfig(
                 encryption_configured=bool(settings.secrets.encryption_key),
