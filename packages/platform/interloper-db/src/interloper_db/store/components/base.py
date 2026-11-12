@@ -628,7 +628,7 @@ class ComponentStore:
         Returns:
             The locked rows.
         """
-        due = Component.state[state_key].as_string()  # ty: ignore[not-subscriptable]
+        due = col(Component.state)[state_key].as_string()
         statement = (
             select(Component)
             .where(Component.kind == kind)
@@ -640,7 +640,7 @@ class ComponentStore:
         if keys is not None:
             statement = statement.where(col(Component.key).in_(keys))
         if enabled_only:
-            statement = statement.where(Component.config["enabled"].as_boolean())  # ty: ignore[not-subscriptable]
+            statement = statement.where(col(Component.config)["enabled"].as_boolean())
         with session_scope(self._engine) as session:
             return [*session.exec(statement).all()]
 
