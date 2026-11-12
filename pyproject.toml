@@ -89,7 +89,6 @@ include = ["packages"]
 [tool.ty.rules]
 incompatible-method-override = "ignore"
 incompatible-mutable-override = "ignore"
-unused-type-ignore-comment = "ignore"
 
 [tool.ty.analysis]
 # Optional vendor SDKs ship no type information and are only pulled in via
@@ -109,7 +108,6 @@ include = [
     "**/schemas/**",
     "packages/platform/interloper-core/src/interloper/schema/base.py",
     "packages/platform/interloper-core/src/interloper/normalizer/base.py",
-    "**/tests/**",
 ]
 
 [tool.ty.overrides.rules]

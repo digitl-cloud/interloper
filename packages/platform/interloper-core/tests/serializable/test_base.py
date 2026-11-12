@@ -449,7 +449,7 @@ class TestSortSettings:
             class FakeAmbiguous(FakeSetting):
                 """Redeclares the setting as a field."""
 
-                label: str = "field-default"
+                label: str = "field-default"  # ty: ignore[incompatible-attribute-override]
 
         with pytest.raises(TypeError, match=r"FakeAmbiguous declares 'label' both as a ClassVar and a field"):
             FakeAmbiguous._sort_settings({"label": "Given"})
