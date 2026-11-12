@@ -2526,11 +2526,10 @@ you revoke it on the same page. Treat it like a password.</p>
   public base URL of the app. It is the issuer of the authorization server, whose metadata the
   API serves at <code>/.well-known/oauth-authorization-server</code>, and the MCP server names it as the
   authorization server in its own metadata. Every pod of the deployment gets it.</li>
-<li>The MCP endpoint's public URL is the resource clients sign in to. It is <code>/mcp</code> on the app's
-  public URL, <code>https://app.example.com/mcp</code>, where the chart serves it. Set
-  <code>mcp.external_url</code> (<code>INTERLOPER_MCP_EXTERNAL_URL</code>, the chart's <code>mcp.externalUrl</code>) only when the
-  endpoint lives elsewhere; the API and the MCP server both read it, so the resource the MCP
-  server advertises is the one the authorization server accepts.</li>
+<li>The MCP endpoint's public URL is the resource clients sign in to. It is always <code>/mcp</code> on the
+  app's public URL, <code>https://app.example.com/mcp</code>, where the chart serves it. The API and the MCP
+  server both derive it from <code>server.external_url</code>, so the resource the MCP server advertises is
+  the one the authorization server accepts, and there is no separate MCP address to set.</li>
 </ul>
 <p>The chart's HTTPRoute sends <code>/mcp</code> and <code>/.well-known/oauth-protected-resource</code> to the MCP service
 and <code>/.well-known/oauth-authorization-server</code> to the API, all on the app hostnames. The Ingress
