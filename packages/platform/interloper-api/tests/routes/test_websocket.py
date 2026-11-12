@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from types import SimpleNamespace
 from typing import Any, Self
 from uuid import uuid4
@@ -366,16 +367,20 @@ class FakeStore:
             authenticated: Whether the session cookie resolves.
             role: The caller's role in every organisation; ``None`` means not a member.
         """
-        profile = SimpleNamespace(id=uuid4(), email="user@example.com", is_super_admin=False)
+        self.authenticated = authenticated
+        self.role = role
         self.presented: list[tuple[str, Audience]] = []
-        self._resolved = (profile, SimpleNamespace(kind="session")) if authenticated else None
+        self._profile = SimpleNamespace(id=uuid4(), email="user@example.com", is_super_admin=False)
         self.tokens = SimpleNamespace(resolve=self._resolve)
-        self.members = SimpleNamespace(role_of=lambda org_id, user: role)
+        self.members = SimpleNamespace(role_of=self._role_of)
         self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
 
     def _resolve(self, raw: str, audience: Audience) -> tuple[Any, Any] | None:
         self.presented.append((raw, audience))
-        return self._resolved
+        return (self._profile, SimpleNamespace(kind="session")) if self.authenticated else None
+
+    def _role_of(self, org_id: Any, user: Any) -> str | None:
+        return self.role
 
 
 @pytest.fixture
@@ -476,5 +481,66 @@ class TestWebSocketEndpoint:
         with client.websocket_connect(_PATH) as socket:
             connection = next(iter(fresh_manager._connections[str(_ORG_ID)]))
             asyncio.run(connection.send_json({"table": "runs", "event": "INSERT"}))
+
+            assert socket.receive_json() == {"table": "runs", "event": "INSERT"}
+
+
+class TestOpenSocketRecheck:
+    """An open socket is closed once its caller may no longer read the organisation."""
+
+    @pytest.fixture(autouse=True)
+    def fresh_manager(self, monkeypatch: pytest.MonkeyPatch) -> ConnectionManager:
+        """Give each test its own registry and a recheck interval short enough to wait on.
+
+        Args:
+            monkeypatch: Fixture used to install the fresh manager and the interval.
+
+        Returns:
+            The manager the endpoint will register into.
+        """
+        manager = ConnectionManager()
+        monkeypatch.setattr(websocket_module, "_manager", manager)
+        monkeypatch.setattr(websocket_module, "RECHECK_SECONDS", 0.01)
+        return manager
+
+    def test_a_revoked_session_is_closed_with_4001(
+        self, endpoint_client: Any, fresh_manager: ConnectionManager
+    ) -> None:
+        store = FakeStore()
+        client = endpoint_client(store)
+        client.cookies.set("session_token", "tok")
+
+        with client.websocket_connect(_PATH) as socket:
+            store.authenticated = False
+            with pytest.raises(WebSocketDisconnect) as excinfo:
+                socket.receive_text()
+
+        assert excinfo.value.code == 4001
+        assert fresh_manager._connections == {}
+
+    def test_a_removed_member_is_closed_with_4004(self, endpoint_client: Any, fresh_manager: ConnectionManager) -> None:
+        store = FakeStore()
+        client = endpoint_client(store)
+        client.cookies.set("session_token", "tok")
+
+        with client.websocket_connect(_PATH) as socket:
+            store.role = None
+            with pytest.raises(WebSocketDisconnect) as excinfo:
+                socket.receive_text()
+
+        assert excinfo.value.code == 4004
+        assert fresh_manager._connections == {}
+
+    def test_a_caller_still_allowed_keeps_receiving(
+        self, endpoint_client: Any, fresh_manager: ConnectionManager
+    ) -> None:
+        store = FakeStore()
+        client = endpoint_client(store)
+        client.cookies.set("session_token", "tok")
+
+        with client.websocket_connect(_PATH) as socket:
+            while len(store.presented) < 3:
+                time.sleep(0.01)
+            asyncio.run(fresh_manager.broadcast(str(_ORG_ID), {"table": "runs", "event": "INSERT"}))
 
             assert socket.receive_json() == {"table": "runs", "event": "INSERT"}
