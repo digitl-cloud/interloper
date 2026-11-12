@@ -2591,7 +2591,7 @@ the Nuxt dev server with hot reload instead of the built assets.</p>
 variable, which is where secrets go. <code>INTERLOPER_ENCRYPTION_KEY</code> is required: resource configs are
 encrypted at rest, and the Google login signs the cookie it keeps between Google's two legs with a key
 derived from it, so every replica can finish a login another one started. Login is Google OAuth. <code>allowed_domains</code> restricts who may sign up; <code>super_admin_emails</code>
-bootstraps platform administrators, promoted by <code>interloper db init</code> and at login (promote-only). Once
+bootstraps platform administrators, promoted when the API starts and at login (promote-only). Once
 one exists, super-admins grant and revoke the access from the admin portal's Users page, and
 register the OAuth clients of apps that cannot register themselves on its OAuth clients page (see
 <a href="../connecting-clients/#registering-a-client-yourself">Connecting clients</a>). In-house OAuth app credentials for connectors live in
