@@ -2039,6 +2039,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#interloper-oauth-rotate" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>interloper oauth rotate</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2779,6 +2790,24 @@ deleted here.</p>
 <p>List operator-registered clients.</p>
 <h3 id="interloper-oauth-delete"><code>interloper oauth delete</code><a class="headerlink" href="#interloper-oauth-delete" title="Permanent link">&para;</a></h3>
 <p>Delete a client and revoke every token it holds.</p>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>client_id</code></td>
+<td>The client id <code>oauth list</code> shows</td>
+</tr>
+</tbody>
+</table>
+<h3 id="interloper-oauth-rotate"><code>interloper oauth rotate</code><a class="headerlink" href="#interloper-oauth-rotate" title="Permanent link">&para;</a></h3>
+<p>Replace a client's secret and print the new one.</p>
+<p>The old secret stops working at once; tokens the client holds are untouched, so no user has to authorise it
+again. The new secret is printed once and cannot be recovered.</p>
 <table>
 <thead>
 <tr>
