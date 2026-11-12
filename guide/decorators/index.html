@@ -2661,30 +2661,8 @@ carrying its annotations and attributes over. <code>il.Connection</code> and <co
 <p>A source's <code>assets</code> and <code>select</code>, and the components bound to any relation, are instance settings:
 they mean something only as constructor arguments.</p>
 <h2 id="ilschema"><code>@il.schema</code><a class="headerlink" href="#ilschema" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Option</th>
-<th>Type</th>
-<th>Kind</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>key</code></td>
-<td><code>str</code></td>
-<td>class</td>
-<td>Schema key.</td>
-</tr>
-<tr>
-<td><code>name</code></td>
-<td><code>str</code></td>
-<td>class</td>
-<td>Display name.</td>
-</tr>
-</tbody>
-</table>
+<p>Takes no options: a schema declares no settings, so every annotation of the decorated class is a
+column, <code>name</code> and <code>key</code> included.</p>
 <h2 id="instance-reconfiguration">Instance reconfiguration<a class="headerlink" href="#instance-reconfiguration" title="Permanent link">&para;</a></h2>
 <p>Calling any component instance returns a copy, with one rule: naming a field or a relation
 changes it, leaving it out keeps it.</p>

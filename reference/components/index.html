@@ -1978,6 +1978,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#interloper.Component.build_class" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;build_class
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#interloper.Component.inherited" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2114,6 +2125,17 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;definition
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper.Component.config_schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;config_schema
       </span>
     </span>
   </a>
@@ -2951,8 +2973,9 @@
 <p>Every catalog citizen extends <code>Component</code>. On top of
 <code>Serializable</code> it provides:</p>
 <ul>
-<li><strong>Identity</strong>: <code>kind</code> (class-level category), <code>id</code> (instance-level,
-  overridable) and <code>identity</code>, the pair relation matching reads.</li>
+<li><strong>Identity</strong>: <code>kind</code> (class-level category), <code>key</code> (class-level,
+  its catalog key), <code>id</code> (instance-level, overridable) and
+  <code>identity</code>, the pair relation matching reads.</li>
 <li><strong>Relations</strong>: one <code>relations</code> map, name to
   <code>Relation</code>, collected from the
   class body and bound per instance.</li>
@@ -3233,6 +3256,99 @@ for sources, the per-instance asset table names.</p>
             </td>
             <td>
                 <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.Component.build_class" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">build_class</span>
+
+
+<a href="#interloper.Component.build_class" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">build_class</span><span class="p">(</span><span class="n">body</span><span class="p">:</span> <span class="n"><span title="interloper.serializable.body.ClassBody">ClassBody</span></span><span class="p">,</span> <span class="o">**</span><span class="n">settings</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="type">type</span></span><span class="p">[</span><span class="n"><span title="typing_extensions.Self">Self</span></span><span class="p">]</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Build a new class from a decorated target's body and a decorator's settings.</p>
+<p>A target already extending this class is the same declaration, not a
+new one: the class built over it keeps its key, so a key declared in
+the target's body survives a decorator that sets none.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>body</code>
+            </td>
+            <td>
+                  <code><span title="interloper.serializable.body.ClassBody">ClassBody</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>What the decorated target contributes.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>**settings</code>
+            </td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The decorator's settings (see <code>_sort_settings</code>).</p>
+              </div>
+            </td>
+            <td>
+                  <code>{}</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="type">type</span>[<span title="typing_extensions.Self">Self</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The new class.</p>
+              </div>
             </td>
           </tr>
       </tbody>
@@ -4331,6 +4447,64 @@ rather than in a form.</p>
             <td>
               <div class="doc-md-description">
                 <p>A ComponentDefinition with metadata derived from the class.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.Component.config_schema" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">config_schema</span>
+
+
+<a href="#interloper.Component.config_schema" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">config_schema</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>JSON Schema of the class's user-configurable fields.</p>
+<p>Properties are listed most specific first: the class's own fields, then
+each ancestor's, closest first, each in declaration order. Pydantic
+lists inherited fields first, which would open every form with what a
+whole kind shares (a source's dataset, a job's retry) rather than with
+what defines the component; forms render in property order.</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The stripped schema, or <code>{}</code> when no configurable field remains,</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>as a copy the caller is free to adjust.</p>
               </div>
             </td>
           </tr>

@@ -2412,17 +2412,6 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#interloper.Serializable.config_schema" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;config_schema
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
       </ul>
     </nav>
   
@@ -3335,14 +3324,15 @@ and only the mapping is rebuilt.</p>
 
 
 
-        <p>A class-identified, serializable configuration object.</p>
+        <p>A serializable configuration object, identified by its import path.</p>
 <p>Anything whose instances are "a class plus its configuration" extends
 <code>Serializable</code>: it round-trips through <code>Spec</code>
 (<code>to_spec()</code> / <code>from_spec()</code>), resolves back from its import path,
-exposes a JSON Schema of its user-configurable fields, and rejects
-unknown constructor kwargs loudly. Runners, schemas and normalizers are
-<code>Serializable</code>; catalog citizens extend <code>Component</code>, which adds
-kind, identity and relations on top.</p>
+and rejects unknown constructor kwargs loudly. Runners, schemas and
+normalizers are <code>Serializable</code>; catalog citizens extend <code>Component</code>,
+which adds kind, identity and relations on top.</p>
+<p><code>Serializable</code> declares no settings of its own, so a subclass may give
+a field any name: a schema's columns are its vendor's vocabulary.</p>
 
         <p>Validate kwargs strictly against the model's fields.</p>
 <p>Unknown kwargs are a loud error rather than pydantic's silent
@@ -3443,7 +3433,7 @@ classes, they never modify one. Everything goes into the namespace of
 one new class, so the metaclass sees field defaults as fields and
 <code>__init_subclass__</code> collects relations and validates settings where
 they are written. A target already extending this class is the base of
-the new one, which keeps its key and kind (<code>rebuild</code>).</p>
+the new one.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -4138,64 +4128,6 @@ does not carry; <code>None</code> makes such a reference an error.</p>
             <td>
               <div class="doc-md-description">
                 <p>The reconstructed instance.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="interloper.Serializable.config_schema" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">config_schema</span>
-
-
-<a href="#interloper.Serializable.config_schema" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">config_schema</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>JSON Schema of the class's user-configurable fields.</p>
-<p>Properties are listed most specific first: the class's own fields, then
-each ancestor's, closest first, each in declaration order. Pydantic
-lists inherited fields first, which would open every form with what a
-whole kind shares (a source's dataset, a job's retry) rather than with
-what defines the component; forms render in property order.</p>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>]</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The stripped schema, or <code>{}</code> when no configurable field remains,</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>]</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>as a copy the caller is free to adjust.</p>
               </div>
             </td>
           </tr>

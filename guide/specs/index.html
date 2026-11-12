@@ -2598,13 +2598,12 @@ and stays read-only after the round-trip.</p>
 <h2 id="what-makes-something-serializable">What makes something serializable<a class="headerlink" href="#what-makes-something-serializable" title="Permanent link">&para;</a></h2>
 <p><code>Serializable</code> is a pydantic model with a few additions:</p>
 <ul>
-<li>a class-level <code>key</code>, snake_cased from the class name unless declared;</li>
 <li>strict construction: unknown keyword arguments raise <code>TypeError</code> instead of being dropped;</li>
-<li><code>to_spec()</code>, <code>from_spec()</code>, <code>from_spec_file()</code>, <code>classpath()</code>, <code>resolve_path()</code>;</li>
-<li><code>config_schema()</code>, the JSON Schema of the user-facing fields.</li>
+<li><code>to_spec()</code>, <code>from_spec()</code>, <code>from_spec_file()</code>, <code>classpath()</code>, <code>resolve_path()</code>.</li>
 </ul>
-<p><code>Component</code> extends it with identity (<code>kind</code>, <code>id</code>, <code>parent</code>) and relations. Runners, normalizers
-and schemas are serializable without being components. The full picture is in the
+<p><code>Component</code> extends it with identity (<code>kind</code>, <code>key</code>, <code>id</code>, <code>parent</code>), relations and
+<code>config_schema()</code>, the JSON Schema of the user-facing fields. Runners, normalizers and schemas
+are serializable without being components. The full picture is in the
 <a href="../../extending/components/">component model</a>.</p>
 
 

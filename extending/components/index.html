@@ -2480,23 +2480,22 @@ through it in the order you would do it.</p>
 <h2 id="serializable">Serializable<a class="headerlink" href="#serializable" title="Permanent link">&para;</a></h2>
 <p>A pydantic model with:</p>
 <ul>
-<li><strong><code>key</code></strong>: class-level, snake_cased from the class name unless declared.</li>
 <li><strong>Strict construction</strong>: unknown keyword arguments raise <code>TypeError</code>.</li>
 <li><strong>Specs</strong>: <code>to_spec()</code>, <code>from_spec()</code>, <code>from_spec_file()</code>, <code>classpath()</code>, <code>resolve_path()</code>.
   See <a href="../../guide/specs/">Specs and serialization</a>. Several roots written or read as one document
   share a <code>SerializationContext</code>, which holds the one rule for inlining, referencing and dropping
   a bound target; every public entry point starts its own, so only a multi-root container such
   as the DAG ever passes one.</li>
-<li><strong><code>config_schema()</code></strong>: the JSON Schema of user-facing fields, with framework fields and the
-  class's <code>internal_fields</code> stripped.</li>
 <li><strong><code>build_class(body, **settings)</code></strong>: the one construction behind every decorator. A decorator
   reads its target into a <code>ClassBody</code> (a class as written, or a function read by the kind's
   <code>body_from_function</code>) and gets one new class back, with every setting in its namespace: public
   <code>ClassVar</code>s as values, field defaults as fields, relations in the <code>relations</code> dict. A class
-  that already extends the kind becomes the base of the new one and keeps its key and kind.
-  Decorators build classes; they never modify one.</li>
+  that already extends the kind becomes the base of the new one; a component keeps its key and
+  kind. Decorators build classes; they never modify one.</li>
 </ul>
-<p>Runners, normalizers and schemas are <code>Serializable</code> without being components.</p>
+<p><code>Serializable</code> declares no settings of its own, so a subclass may give a field any name: a
+schema's columns are its vendor's vocabulary, <code>name</code> and <code>key</code> included. Runners, normalizers and
+schemas are <code>Serializable</code> without being components.</p>
 <h2 id="component">Component<a class="headerlink" href="#component" title="Permanent link">&para;</a></h2>
 <p>On top of <code>Serializable</code>:</p>
 <table>
@@ -2512,6 +2511,11 @@ through it in the order you would do it.</p>
 <td><code>kind</code></td>
 <td>class</td>
 <td>The component category (<code>source</code>, <code>asset</code>, <code>connection</code>, …). Set automatically for direct children of <code>Component</code>; inherited below that.</td>
+</tr>
+<tr>
+<td><code>key</code></td>
+<td>class</td>
+<td>The catalog key, snake_cased from the class name unless declared.</td>
 </tr>
 <tr>
 <td><code>id</code></td>
@@ -2555,6 +2559,9 @@ through it in the order you would do it.</p>
 </tr>
 </tbody>
 </table>
+<p><code>config_schema()</code> is the JSON Schema of the user-facing fields, with framework fields and the
+class's <code>internal_fields</code> stripped. A component's fields and its class-level settings never share
+a name: a field named after one (<code>name</code>, <code>key</code>, <code>icon</code>, …) is refused when the class is defined.</p>
 <p><code>definition()</code> returns a <code>ComponentDefinition</code> (kind, key, path, name, icon, description, tags,
 <code>config_schema</code>, <code>state_schema</code>, <code>relations</code>); it is the one place a class is described, and every
 <code>FetchField</code> provider is checked against the relations there. A kind whose definition carries more
