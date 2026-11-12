@@ -6,6 +6,8 @@ const ALL = '__all__'
 
 const enabled = defineModel<boolean | null>({ required: true })
 
+const appConfig = useAppConfig()
+
 const items = [
     { label: 'All states', value: ALL },
     { label: 'Enabled', value: 'enabled' },
@@ -17,7 +19,7 @@ const items = [
     <USelect :model-value="enabled === null ? ALL : enabled ? 'enabled' : 'disabled'"
              :items="items"
              value-key="value"
-             icon="i-lucide-power"
+             :icon="appConfig.icons.enabled"
              class="w-40"
              @update:model-value="enabled = $event === ALL ? null : $event === 'enabled'" />
 </template>

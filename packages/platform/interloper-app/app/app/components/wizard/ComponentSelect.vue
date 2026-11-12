@@ -7,9 +7,11 @@
  * behind a component's key); the bulk buttons act on what the filters leave
  * visible, so selections made under another filter survive.
  */
+import { capitalize } from 'vue'
 import type { ComponentRecord } from '~/types/component'
 
 const organisationStore = useOrganisationStore()
+const appConfig = useAppConfig()
 
 const selectedIds = defineModel<string[]>({ default: () => [] })
 
@@ -66,53 +68,56 @@ function deselectVisible() {
         </div>
 
         <div class="flex items-center justify-between">
-            <span class="text-sm text-muted">
+            <span class="text-sm text-muted tabular-nums">
                 {{ selectedIds.length }} of {{ components.length }} components {{ noun ?? 'selected' }}
             </span>
             <div class="flex gap-2">
-                <UButton size="xs"
+                <UButton size="sm"
+                         color="neutral"
                          variant="ghost"
                          label="Select all"
                          @click="selectVisible()" />
-                <UButton size="xs"
+                <UButton size="sm"
+                         color="neutral"
                          variant="ghost"
                          label="Deselect all"
                          @click="deselectVisible()" />
             </div>
         </div>
 
-        <InlineEmptyState v-if="components.length === 0"
-                          icon="i-lucide-plug"
-                          message="No sources, assets or jobs configured yet."
-                          action-label="Go to Sources"
-                          @action="navigateTo(organisationStore.path(kindPath('source')))" />
+        <UEmpty v-if="components.length === 0"
+                variant="subtle"
+                size="sm"
+                :icon="appConfig.icons.source"
+                title="Nothing to pick yet"
+                description="No sources, assets or jobs are set up in this organisation."
+                :actions="[{ label: 'Go to sources', onClick: () => navigateTo(organisationStore.path(kindPath('source'))) }]" />
 
-        <div v-else-if="filtered.length === 0"
-             class="flex items-center justify-center rounded-md p-6 text-sm text-muted">
-            No components match these filters.
-        </div>
+        <UEmpty v-else-if="filtered.length === 0"
+                variant="naked"
+                size="sm"
+                :icon="appConfig.ui.icons.search"
+                title="No components match these filters" />
 
         <div v-else
-             class="flex flex-col gap-2.5">
+             class="flex flex-col gap-2">
             <SelectionCard v-for="component in filtered"
                            :key="component.id"
                            :selected="selectedIds.includes(component.id)"
-                           class="flex items-center gap-3 px-4 py-3"
+                           :label="component.name ?? component.key"
+                           :description="component.key"
+                           :icon="componentIcon(component.key)"
                            @select="toggle(component.id)">
-                <UCheckbox :model-value="selectedIds.includes(component.id)"
-                           @click.stop
-                           @update:model-value="toggle(component.id)" />
-                <UIcon :name="componentIcon(component.key)"
-                       class="size-6 shrink-0" />
-                <div class="flex flex-col min-w-0">
-                    <span class="text-sm font-semibold text-highlighted truncate">{{ component.name }}</span>
-                    <span class="text-xs text-dimmed truncate">{{ component.key }}</span>
-                </div>
-                <UBadge color="neutral"
-                        size="xs"
-                        class="ml-auto capitalize">
-                    {{ component.kind }}
-                </UBadge>
+                <template #leading>
+                    <UCheckbox :model-value="selectedIds.includes(component.id)"
+                               @click.stop
+                               @update:model-value="toggle(component.id)" />
+                </template>
+                <template #trailing>
+                    <UBadge color="neutral"
+                            size="sm"
+                            :label="capitalize(component.kind)" />
+                </template>
             </SelectionCard>
         </div>
     </div>

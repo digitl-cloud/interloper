@@ -120,6 +120,7 @@ const isValid = defineModel<boolean>('isValid', { default: false })
 const manualMode = defineModel<boolean>('manualMode', { default: true })
 
 const catalogStore = useCatalogStore()
+const appConfig = useAppConfig()
 
 /** Tracks which password fields have their value visible. */
 const revealedFields = ref<Record<string, boolean>>({})
@@ -151,7 +152,7 @@ const oauthLabel = computed(() => {
 
 /** Tabs items for OAuth toggle. */
 const oauthTabs = computed<TabsItem[]>(() => [
-    { label: `Sign in with ${oauthLabel.value}`, value: 'oauth', icon: 'i-lucide-lock-open' },
+    { label: `Sign in with ${oauthLabel.value}`, value: 'oauth', icon: appConfig.icons.signIn },
     { label: 'Manual', value: 'manual', icon: 'i-lucide-keyboard' },
 ])
 
@@ -304,7 +305,7 @@ async function fetchOptions(fieldKey: string, meta: FetchMeta) {
     catch (e) {
         updateFetchState(fieldKey, {
             loading: false,
-            error: errorDetail(e) ?? 'Failed to fetch options',
+            error: errorDetail(e) ?? "Couldn't load the options",
             options: [],
         })
     }
@@ -418,6 +419,16 @@ function cronText(value: unknown): string {
     }
 }
 
+/** A cron field's help line: its schedule in words, in the zone it is read in. */
+function cronHelp(value: unknown): string | undefined {
+    const text = cronText(value)
+    if (!text) return undefined
+    return cronZone.value ? `${text} · ${cronZone.value}` : text
+}
+
+/** The one look of an input holding code (cron, JSON): the code family. */
+const CODE_INPUT_UI = { base: 'font-mono' }
+
 /** A date field's ISO `YYYY-MM-DD` value as a calendar date, or undefined when unset or unparsable. */
 function dateValue(value: unknown): CalendarDate | undefined {
     if (!value || typeof value !== 'string') return undefined
@@ -438,9 +449,10 @@ const cronZone = computed<string | null>(() => {
     return key ? data.value[key] ?? null : null
 })
 
-/** Human label for a raw enum value: "reconcile" → "Reconcile". */
+/** Human label for a raw enum value, in sentence case: "full_refresh" → "Full refresh". */
 function enumLabel(value: unknown): string {
-    return String(value).replaceAll(/[_-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+    const words = String(value).replaceAll(/[_-]/g, ' ')
+    return words.charAt(0).toUpperCase() + words.slice(1)
 }
 
 /**
@@ -680,6 +692,7 @@ watch(
 )
 
 const UForm = resolveComponent('UForm')
+const UCard = resolveComponent('UCard')
 const form = useTemplateRef<{ setErrors: (errors: FormError[]) => void }>('form')
 
 /** Surface externally-produced errors (e.g. a connection check) under the matching fields. */
@@ -708,9 +721,11 @@ defineExpose({ setErrors })
                   :schema="schema"
                   :component-key="componentKey" />
             <template v-else>
-                <div v-for="(block, blockIndex) in section.blocks"
-                     :key="blockIndex"
-                     :class="block.signIn ? 'flex flex-col gap-4 rounded-lg bg-muted p-4 ring ring-default' : 'contents'">
+                <!-- The sign-in block sits in its own card; the other fields flow in the form. -->
+                <component :is="block.signIn ? UCard : 'div'"
+                           v-for="(block, blockIndex) in section.blocks"
+                           :key="blockIndex"
+                           v-bind="block.signIn ? { ui: { body: 'flex flex-col gap-4' } } : { class: 'contents' }">
                     <UTabs v-if="block.signIn"
                            v-model="activeTab"
                            :items="oauthTabs"
@@ -725,14 +740,16 @@ defineExpose({ setErrors })
                                 :name="field.key"
                                 :label="field.label"
                                 :description="field.description"
-                                :required="field.required">
+                                :required="field.required"
+                                :error="field.widget === 'fetch' ? fetchState[field.key]?.error ?? undefined : undefined"
+                                :help="field.widget === 'cron' ? cronHelp(data[field.key]) : undefined">
                         <!-- Info tooltip next to the label (long explanatory text) -->
                         <template v-if="field.info"
                                   #hint>
                             <UTooltip :text="field.info"
                                       :delay-duration="0"
-                                      :ui="{ content: 'max-w-72 h-auto py-2', text: 'whitespace-normal' }">
-                                <UIcon name="i-lucide-info"
+                                      :ui="{ content: 'max-w-72 h-auto', text: 'whitespace-normal' }">
+                                <UIcon :name="appConfig.ui.icons.info"
                                        class="size-4 text-dimmed transition-colors hover:text-highlighted" />
                             </UTooltip>
                         </template>
@@ -743,11 +760,11 @@ defineExpose({ setErrors })
                                 :type="revealedFields[field.key] ? 'text' : 'password'"
                                 class="w-full">
                             <template #trailing>
-                                <UButton :icon="revealedFields[field.key] ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+                                <UButton :icon="revealedFields[field.key] ? appConfig.ui.icons.eyeOff : appConfig.ui.icons.eye"
                                          color="neutral"
                                          variant="link"
                                          size="sm"
-                                         :padded="false"
+                                         :aria-label="revealedFields[field.key] ? 'Hide value' : 'Show value'"
                                          @click="revealedFields[field.key] = !revealedFields[field.key]" />
                             </template>
                         </UInput>
@@ -766,28 +783,25 @@ defineExpose({ setErrors })
                                 :step="field.step"
                                 class="w-full" />
 
-                        <!-- Fetch select (x-fetch) — with deps available -->
+                        <!-- Fetch select (x-fetch), its dependency available; a failed fetch is the field's error -->
                         <div v-else-if="field.widget === 'fetch' && field.fetchMeta && fetchDepsReady(field.fetchMeta)"
-                             class="flex flex-col gap-1.5 w-full">
-                            <div class="flex items-center gap-2">
-                                <USelectMenu v-model="data[field.key]"
-                                             :items="fetchState[field.key]?.options ?? []"
-                                             value-key="value"
-                                             :loading="fetchState[field.key]?.loading"
-                                             :disabled="!fetchState[field.key]?.options?.length && !fetchState[field.key]?.loading"
-                                             :placeholder="fetchState[field.key]?.loading ? 'Loading...' : 'Select...'"
-                                             class="flex-1" />
-                                <UButton icon="i-lucide-refresh-cw"
+                             class="flex w-full items-center gap-2">
+                            <USelectMenu v-model="data[field.key]"
+                                         :items="fetchState[field.key]?.options ?? []"
+                                         value-key="value"
+                                         :loading="fetchState[field.key]?.loading"
+                                         :disabled="!fetchState[field.key]?.options?.length && !fetchState[field.key]?.loading"
+                                         :placeholder="fetchState[field.key]?.loading ? 'Loading…' : 'Select…'"
+                                         class="flex-1" />
+                            <UTooltip text="Reload the options">
+                                <UButton :icon="appConfig.icons.refresh"
                                          color="neutral"
                                          variant="ghost"
                                          size="xs"
+                                         aria-label="Reload the options"
                                          :loading="fetchState[field.key]?.loading"
                                          @click="fetchOptions(field.key, field.fetchMeta!)" />
-                            </div>
-                            <p v-if="fetchState[field.key]?.error"
-                               class="text-xs text-error">
-                                {{ fetchState[field.key]!.error }}
-                            </p>
+                            </UTooltip>
                         </div>
 
                         <!-- Fetch field fallback — deps not available, degrade to text input -->
@@ -795,16 +809,13 @@ defineExpose({ setErrors })
                                 v-model="data[field.key]"
                                 class="w-full" />
 
-                        <!-- Cron expression: presets and a human-readable rendering -->
+                        <!-- Cron expression: presets; its reading is the field's help -->
                         <div v-else-if="field.widget === 'cron'"
-                             class="flex flex-col gap-1.5 w-full">
+                             class="flex w-full flex-col gap-2">
                             <UInput v-model="data[field.key]"
                                     placeholder="0 0 * * *"
-                                    class="w-full font-mono" />
-                            <p v-if="cronText(data[field.key])"
-                               class="text-xs text-muted">
-                                {{ cronText(data[field.key]) }}<template v-if="cronZone"> · {{ cronZone }}</template>
-                            </p>
+                                    :ui="CODE_INPUT_UI"
+                                    class="w-full" />
                             <div class="flex flex-wrap gap-1.5">
                                 <UButton v-for="preset in CRON_PRESETS"
                                          :key="preset.value"
@@ -850,14 +861,13 @@ defineExpose({ setErrors })
                             <USwitch v-if="field.nullable"
                                      :model-value="data[field.key] != null"
                                      @update:model-value="(on: boolean) => data[field.key] = on ? {} : null" />
-                            <div v-if="data[field.key] != null"
-                                 class="rounded-lg bg-muted p-4 ring ring-default">
+                            <UCard v-if="data[field.key] != null">
                                 <SchemaForm v-model:data="data[field.key]"
                                             v-model:is-valid="nestedValid[field.key]"
                                             :schema="nestedSchemas[field.key]!"
                                             :component-key="componentKey"
                                             nested />
-                            </div>
+                            </UCard>
                         </div>
 
                         <!-- Date: an empty picker clears the value -->
@@ -885,7 +895,8 @@ defineExpose({ setErrors })
                         <!-- JSON / code -->
                         <UTextarea v-else-if="field.widget === 'json'"
                                    :model-value="typeof data[field.key] === 'string' ? data[field.key] : JSON.stringify(data[field.key], null, 2)"
-                                   class="w-full font-mono"
+                                   :ui="CODE_INPUT_UI"
+                                   class="w-full"
                                    :rows="6"
                                    @update:model-value="(v: string) => { try { data[field.key] = JSON.parse(v) } catch { data[field.key] = v } }" />
 
@@ -908,7 +919,7 @@ defineExpose({ setErrors })
 
                     <slot v-if="block.signIn ? activeTab === 'manual' : !section.label && !showOAuth"
                           name="credentials-actions" />
-                </div>
+                </component>
             </template>
         </template>
     </component>

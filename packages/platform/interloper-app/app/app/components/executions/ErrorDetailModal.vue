@@ -9,10 +9,7 @@ const emit = defineEmits<{
     close: []
 }>()
 
-const title = computed(() => {
-    const key = props.event.component_key ?? 'Unknown'
-    return `Error: ${key}`
-})
+const title = computed(() => `Error in ${props.event.component_key ?? 'an unknown component'}`)
 
 const { html: tracebackHtml, highlight } = useHighlighter()
 
@@ -28,16 +25,16 @@ watch(() => props.event.traceback, (tb) => {
         <template #body>
             <div class="space-y-4">
                 <div v-if="event.error">
-                    <h4 class="text-xs font-medium text-muted uppercase mb-1">
+                    <h4 class="caption mb-1 text-muted">
                         Error
                     </h4>
-                    <pre class="whitespace-pre overflow-x-auto text-sm text-error bg-error/5 rounded-md p-3 font-mono max-h-40">{{ event.error }}</pre>
+                    <pre class="max-h-40 overflow-x-auto whitespace-pre rounded-lg bg-error/10 p-3 font-mono text-sm text-error">{{ event.error }}</pre>
                 </div>
                 <div v-if="event.traceback">
-                    <h4 class="text-xs font-medium text-muted uppercase mb-1">
+                    <h4 class="caption mb-1 text-muted">
                         Traceback
                     </h4>
-                    <div class="rounded-md overflow-auto max-h-96 text-xs [&_pre]:!p-3 [&_pre]:!m-0 [&_pre]:!min-w-fit [&_code]:!text-xs"
+                    <div class="max-h-96 overflow-auto rounded-lg text-xs [&_pre]:!p-3 [&_pre]:!m-0 [&_pre]:!min-w-fit [&_code]:!text-xs"
                          v-html="tracebackHtml" />
                 </div>
             </div>

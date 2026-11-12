@@ -11,11 +11,18 @@ const PAGE_SIZE = 50
 const EntityBadge = resolveComponent('EntityBadge')
 const StatusBadge = resolveComponent('StatusBadge')
 const UProgressGroup = resolveComponent('UProgressGroup')
+const UTooltip = resolveComponent('UTooltip')
 
 const BACKFILL_STATUSES = ['queued', 'running', 'success', 'failed', 'canceled']
 
 const backfillsStore = useBackfillsStore()
-const { backfills, loading } = storeToRefs(backfillsStore)
+const { backfills, loading, error } = storeToRefs(backfillsStore)
+const appConfig = useAppConfig()
+
+/** No backfill at all, as opposed to none matching the filters: the page explains backfills instead. */
+const showEmpty = computed(() => !loading.value && !error.value && backfills.value.length === 0)
+/** A failed fetch with nothing to show: its alert stands alone, rows from an earlier fetch stay listed under it. */
+const showTable = computed(() => !showEmpty.value && !(error.value && backfills.value.length === 0))
 
 onMounted(async () => {
     if (!loading.value) await backfillsStore.fetch()
@@ -38,6 +45,16 @@ const shown = computed(() => {
     )
 })
 
+/** What can bring rows back when the filters leave none: dropping the search and status, or showing the single-partition ones. */
+const filteredEmptyActions = computed(() => [
+    ...(search.value || status.value
+        ? [{ label: 'Clear filters', icon: appConfig.ui.icons.close, onClick: () => { search.value = ''; status.value = null } }]
+        : []),
+    ...(showSinglePartition.value
+        ? []
+        : [{ label: 'Show single partition', icon: appConfig.ui.icons.eye, onClick: () => { showSinglePartition.value = true } }]),
+].map(action => ({ ...action, color: 'neutral' as const, variant: 'outline' as const, size: 'sm' as const })))
+
 const pagination = ref({ pageIndex: 0, pageSize: PAGE_SIZE })
 const sorting = ref([{ id: 'started_at', desc: true }])
 watch(shown, () => { pagination.value = { ...pagination.value, pageIndex: 0 } })
@@ -46,7 +63,7 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
     {
         accessorKey: 'id',
         header: 'ID',
-        cell: ({ row }) => h('span', { class: 'font-mono text-xs' }, row.getValue<string>('id').substring(0, 8)),
+        cell: ({ row }) => idCell(row.getValue<string>('id')),
     },
     {
         id: 'target',
@@ -66,7 +83,7 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
         header: 'Range',
         cell: ({ row }) => {
             const backfill = row.original as Backfill
-            return h('span', { class: 'text-muted text-xs' }, `${backfill.start_key} → ${backfill.end_key}`)
+            return h('span', { class: 'tabular-nums text-muted' }, `${backfill.start_key} → ${backfill.end_key}`)
         },
     },
     {
@@ -74,50 +91,46 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
         header: 'Partitions',
         cell: ({ row }) => {
             const stats = runStats(null, row.original.run_counts ?? {})
-            if (!stats.total) return h('span', { class: 'text-muted' }, '—')
-            return h('div', { class: 'flex w-40 items-center gap-2', title: outcomeSummary(stats).join(' · ') }, [
+            if (!stats.total) return emptyCell()
+            return h(UTooltip, { text: outcomeSummary(stats).join(' · '), delayDuration: 0 }, () => h('div', { class: 'flex w-40 items-center gap-2' }, [
                 h(UProgressGroup, { items: progressSegments(stats), max: stats.total, size: 'sm', class: 'flex-1' }),
-                h('span', { class: 'text-xs text-muted tabular-nums' }, `${stats.succeeded}/${stats.total}`),
-            ])
+                h('span', { class: 'text-xs tabular-nums text-muted' }, `${stats.succeeded}/${stats.total}`),
+            ]))
         },
     },
-    {
-        accessorKey: 'started_at',
-        header: 'Started',
-        cell: ({ row }) => h('span', { class: 'text-muted' }, formatDate(row.getValue<string>('started_at')) || '—'),
-    },
+    dateColumn<Backfill>('started_at', 'Started'),
     {
         id: 'elapsed',
         header: 'Elapsed',
         cell: ({ row }) => {
             const backfill = row.original as Backfill
-            return h('span', { class: 'text-muted' }, formatElapsed(backfill.started_at, backfill.completed_at) || '—')
+            const elapsed = formatElapsed(backfill.started_at, backfill.completed_at)
+            return elapsed ? h('span', { class: 'tabular-nums text-muted' }, elapsed) : emptyCell()
         },
     },
 ])
 </script>
 
 <template>
-    <div class="flex flex-col flex-1 min-h-0">
-        <div v-if="!loading && backfills.length === 0"
-             class="w-full max-w-[1040px] mx-auto">
-            <EmptyState icon="i-lucide-history"
-                        title="No backfills yet"
-                        description="Backfills re-run historical partitions to fill gaps or reprocess past data. Trigger one from a job and every partition it replays shows up here.">
-                <UButton icon="i-lucide-calendar-plus"
-                         label="Go to Jobs"
-                         class="mt-5"
-                         :to="organisationStore.path(kindPath('job'))" />
-            </EmptyState>
-        </div>
+    <div class="flex min-h-0 flex-1 flex-col gap-4">
+        <LoadError v-if="error"
+                   title="Couldn't load backfills"
+                   :error="error"
+                   @retry="backfillsStore.fetch()" />
 
-        <UCard v-else
+        <UEmpty v-if="showEmpty"
+                :icon="appConfig.icons.backfill"
+                title="No backfills yet"
+                description="Backfills re-run past partitions to fill gaps or reprocess data. Start one from a job and every partition it replays shows up here."
+                :actions="[{ label: 'Go to jobs', icon: appConfig.icons.job, to: organisationStore.path(kindPath('job')) }]" />
+
+        <UCard v-else-if="showTable"
                :ui="FILL_CARD_UI">
             <template #header>
                 <div class="flex flex-wrap items-center gap-3">
                     <UInput v-model="search"
-                            placeholder="Search backfills by target..."
-                            icon="i-lucide-search"
+                            placeholder="Search backfills by target…"
+                            :icon="appConfig.ui.icons.search"
                             class="max-w-sm" />
                     <StatusFilter v-model="status"
                                   :statuses="BACKFILL_STATUSES" />
@@ -133,17 +146,25 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
                     :loading="loading"
                     :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
                     sticky
-                    class="flex-1 min-h-0"
+                    class="min-h-0 flex-1"
                     :ui="{ tr: 'cursor-pointer' }"
-                    @select="(_e: Event, row: any) => navigateTo(organisationStore.path(`/executions/backfills/${row.original.id}`))" />
+                    @select="(_e: Event, row: any) => navigateTo(organisationStore.path(`/executions/backfills/${row.original.id}`))">
+                <template #empty>
+                    <UEmpty :icon="appConfig.ui.icons.search"
+                            title="No backfills match these filters"
+                            :description="showSinglePartition ? undefined : 'Single-partition backfills are hidden.'"
+                            variant="naked"
+                            size="sm"
+                            :actions="filteredEmptyActions" />
+                </template>
+            </UTable>
 
             <template #footer>
                 <TableFooter :page="pagination.pageIndex + 1"
                              :total="shown.length"
                              :page-size="PAGE_SIZE"
-                             @update:page="(p: number) => pagination = { ...pagination, pageIndex: p - 1 }">
-                    {{ shown.length }} backfill(s) total.
-                </TableFooter>
+                             noun="backfill"
+                             @update:page="(p: number) => pagination = { ...pagination, pageIndex: p - 1 }" />
             </template>
         </UCard>
     </div>

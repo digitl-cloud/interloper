@@ -30,6 +30,7 @@ export interface DriftBadge {
  */
 export function useDrift() {
     const componentsStore = useComponentsStore()
+    const { ui, icons } = useAppConfig()
 
     const sources = computed(() => componentsStore.byKind('source'))
 
@@ -37,13 +38,13 @@ export function useDrift() {
     function statusBadge(status: SourceDriftStatus): DriftBadge | null {
         switch (status) {
             case 'missing':
-                return { label: 'Unavailable in catalog', color: 'error', icon: 'i-lucide-unplug' }
+                return { label: 'Unavailable in catalog', color: 'error', icon: icons.drift }
             case 'partial':
-                return { label: 'Some assets unavailable', color: 'warning', icon: 'i-lucide-triangle-alert' }
+                return { label: 'Some assets unavailable', color: 'warning', icon: ui.icons.warning }
             case 'unreadable':
-                return { label: 'Config unreadable', color: 'error', icon: 'i-lucide-lock' }
+                return { label: 'Config unreadable', color: 'error', icon: icons.unreadable }
             case 'disabled':
-                return { label: 'Disabled', color: 'neutral', icon: 'i-lucide-circle-slash' }
+                return { label: 'Disabled', color: 'neutral', icon: 'i-lucide-power-off' }
             default:
                 return null
         }

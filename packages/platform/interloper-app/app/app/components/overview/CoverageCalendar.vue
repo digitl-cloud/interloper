@@ -17,7 +17,8 @@ const switching = computed(() => !!coverage.value && coverageLoading.value && co
 /** No partition in the window: an all-blank calendar would read as one still loading. */
 const empty = computed(() => !!coverage.value && !coverage.value.sources.length)
 const SKELETON_DETAIL_ROWS = 3
-const colorMode = useColorMode()
+const theme = useChartTheme()
+const appConfig = useAppConfig()
 
 const catalogStore = useCatalogStore()
 const typeFilter = ref('all')
@@ -64,14 +65,13 @@ const gap = computed(() => (cell.value >= 13 ? 3 : 2))
 /** Room above the cells for the month labels. */
 const CALENDAR_TOP = 20
 
+/** The cell colours, resolved once per colour mode rather than on every redraw. */
+const cellColors = computed(() => CELL_ORDER.map(key => theme.value.resolve(CELL[key])))
+
 const option = computed(() => {
     if (!coverage.value) return {}
-    const dark = colorMode.value === 'dark'
-    const mode = dark ? 'dark' : 'light'
-    const axis = CHART_AXIS_COLORS.axis[mode]
-    const line = CHART_AXIS_COLORS.grid[mode]
-    const surface = CHART_AXIS_COLORS.surface[mode]
-    const ink = CHART_AXIS_COLORS.ink[mode]
+    const { text, line, surface, ink, fontFamily, fontSize } = theme.value
+    const label = { color: text, fontFamily, fontSize }
     const data: unknown[] = []
     const cursor = new Date(`${coverage.value.since}T00:00:00Z`)
     const until = new Date(`${coverage.value.until}T00:00:00Z`)
@@ -90,7 +90,7 @@ const option = computed(() => {
             type: 'piecewise',
             dimension: 1,
             seriesIndex: 0,
-            pieces: CELL_ORDER.map((key, i) => ({ value: i, color: CELL[key][mode] })),
+            pieces: cellColors.value.map((color, i) => ({ value: i, color })),
         },
         calendar: {
             left: CALENDAR_LEFT,
@@ -100,8 +100,8 @@ const option = computed(() => {
             orient: 'horizontal',
             splitLine: { show: false },
             itemStyle: { color: surface, borderWidth: 0 },
-            dayLabel: { firstDay: 1, nameMap: ['', 'Mon', '', 'Wed', '', 'Fri', ''], color: axis, fontSize: 10.5, margin: 6 },
-            monthLabel: { color: axis, fontSize: 11, margin: 8 },
+            dayLabel: { ...label, firstDay: 1, nameMap: ['', 'Mon', '', 'Wed', '', 'Fri', ''], margin: 6 },
+            monthLabel: { ...label, margin: 8 },
             yearLabel: { show: false },
         },
         series: [
@@ -179,7 +179,7 @@ watch(coverage, (value) => {
                         :description="coverage && !coverageError && !empty ? summary : undefined"
                         :loading="!coverage && !coverageError">
                 <UIcon v-if="switching"
-                       name="i-lucide-loader-circle"
+                       :name="appConfig.ui.icons.loading"
                        class="size-4 animate-spin text-dimmed" />
                 <USelect v-if="!empty"
                          v-model="typeFilter"
@@ -195,27 +195,16 @@ watch(coverage, (value) => {
         </template>
         <div ref="frame"
              class="overflow-x-auto">
-            <div v-if="coverageError"
-                 class="flex items-center"
-                 :style="{ minHeight: `${chartHeight}px` }">
-                <UAlert color="error"
-                        icon="i-lucide-triangle-alert"
-                        title="Couldn't load coverage"
-                        :description="errorDetail(coverageError) ?? GENERIC_ERROR"
-                        :actions="[{
-                            label: 'Try again',
-                            icon: 'i-lucide-refresh-cw',
-                            color: 'neutral',
-                            variant: 'outline',
-                            onClick: () => overviewStore.fetchCoverage(),
-                        }]"
-                        class="mx-auto w-full max-w-xl" />
-            </div>
+            <LoadError v-if="coverageError"
+                       title="Couldn't load coverage"
+                       :error="coverageError"
+                       @retry="overviewStore.fetchCoverage()" />
             <UEmpty v-else-if="empty"
-                    icon="i-lucide-calendar-days"
-                    title="No partitions in this window"
-                    :description="`No partitioned asset had a partition in the last ${coverageMonths} months. Coverage fills in once a job materializes one.`"
+                    :icon="appConfig.icons.window"
+                    :title="NO_PARTITIONS"
+                    :description="`No partitioned asset had a partition in the last ${coverageMonths} months. Coverage fills in once a job materialises one.`"
                     variant="naked"
+                    size="sm"
                     class="transition-opacity"
                     :class="switching ? 'opacity-50' : ''"
                     :style="{ minHeight: `${chartHeight}px` }" />
@@ -224,7 +213,7 @@ watch(coverage, (value) => {
                       :reference="hovered?.reference"
                       :delay-duration="0"
                       :content="{ side: 'top', sideOffset: 6 }"
-                      :ui="{ content: 'h-auto py-1.5 pointer-events-none' }">
+                      :ui="{ content: 'h-auto pointer-events-none' }">
                 <VChart ref="chart"
                         :option="option"
                         class="mx-auto transition-opacity"
@@ -248,7 +237,6 @@ watch(coverage, (value) => {
                      :style="{ gap: `${gap}px`, gridAutoColumns: `${cell - gap}px` }">
                     <USkeleton v-for="i in weeks * 7"
                                :key="i"
-                               class="rounded-[2px]"
                                :style="{ height: `${cell - gap}px` }" />
                 </div>
             </div>
@@ -259,7 +247,7 @@ watch(coverage, (value) => {
                                     :type-filter="typeFilter"
                                     @select="selected = $event" />
         <div v-else-if="!coverage && !coverageError"
-             class="mt-5 flex flex-col gap-2.5">
+             class="mt-4 flex flex-col gap-3">
             <USkeleton class="h-4 w-48" />
             <USkeleton v-for="i in SKELETON_DETAIL_ROWS"
                        :key="i"

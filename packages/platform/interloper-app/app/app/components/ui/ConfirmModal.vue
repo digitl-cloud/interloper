@@ -1,27 +1,39 @@
-<script setup lang="ts">
+<script lang="ts">
 import type { UsedByRef } from '~/utils/apiErrors'
 
-const props = withDefaults(defineProps<{
+/** What `useConfirm().confirm()` takes: this dialog's props. */
+export interface ConfirmOptions {
     title?: string
-    /** Body text. A ``{subject}`` token is replaced by a badge of ``subject``. */
+    /** Body text. A `{subject}` token is replaced by a badge of `subject`. */
     description?: string
     confirmLabel?: string
     cancelLabel?: string
+    /** The confirm button's colour, which the icon takes too. */
     confirmColor?: 'error' | 'primary' | 'neutral'
+    /** The icon beside the text; the warning icon by default. */
     icon?: string
-    /** The entity the action targets, rendered as an inline badge at ``{subject}``. */
+    /** The entity the action targets, rendered as an inline badge at `{subject}`. */
     subject?: { name: string, icon?: string }
-    /** Referrers that block the action — listed, and the confirm button disabled. */
+    /** Referrers that block the action: listed, and the confirm button disabled. */
     blocking?: UsedByRef[]
-    /** Referrers the target will be detached from — listed as a heads-up. */
+    /** Referrers the target will be detached from, listed as a heads-up. */
     detaching?: UsedByRef[]
-}>(), {
+}
+</script>
+
+<script setup lang="ts">
+/**
+ * The confirmation dialog `useConfirm()` opens: a title, the description with
+ * an optional subject badge, the referrers that block or will be detached, and
+ * Cancel / confirm buttons. Closes with `true` only when confirmed.
+ */
+const props = withDefaults(defineProps<ConfirmOptions>(), {
     title: 'Are you sure?',
     description: 'This action cannot be undone.',
     confirmLabel: 'Delete',
     cancelLabel: 'Cancel',
     confirmColor: 'error',
-    icon: 'i-lucide-triangle-alert',
+    icon: undefined,
     subject: undefined,
     blocking: () => [],
     detaching: () => [],
@@ -30,6 +42,15 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
     close: [confirmed: boolean]
 }>()
+
+const appConfig = useAppConfig()
+
+/** The icon's soft disc, in the confirm button's colour. */
+const DISC: Record<NonNullable<ConfirmOptions['confirmColor']>, string> = {
+    error: 'bg-error/10 text-error',
+    primary: 'bg-primary/10 text-primary',
+    neutral: 'bg-elevated text-default',
+}
 
 // Text segments around the {subject} token; the badge slots between them.
 // Without a subject (or token), this is just the whole description, no badge.
@@ -40,17 +61,17 @@ const descriptionParts = computed(() =>
 
 <template>
     <UModal :title="props.title"
-            :close="{ onClick: () => emit('close', false) }"
-            :ui="{ footer: 'justify-end' }">
+            :close="{ onClick: () => emit('close', false) }">
         <template #body>
-            <div class="flex gap-4 items-start">
-                <div class="flex size-10 shrink-0 items-center justify-center rounded-full bg-error/10">
-                    <UIcon :name="props.icon"
-                           class="size-5 text-error" />
+            <div class="flex items-start gap-4">
+                <div class="flex size-10 shrink-0 items-center justify-center rounded-full"
+                     :class="DISC[props.confirmColor]">
+                    <UIcon :name="props.icon ?? appConfig.ui.icons.warning"
+                           class="size-5" />
                 </div>
                 <div class="flex-1 space-y-3 text-sm text-muted">
                     <template v-if="props.blocking.length">
-                        <p>Still in use — rebind or delete these first:</p>
+                        <p>In use by the components below. {{ IN_USE_HINT }}</p>
                         <UsedByTable :referrers="props.blocking" />
                     </template>
                     <template v-else>

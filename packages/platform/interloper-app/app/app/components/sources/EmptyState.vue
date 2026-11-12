@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
  * Placeholder for pages that need at least one source (sources, catalog):
- * design hero + the connector catalog with tag filters.
+ * the empty state with its "New source" action, then the connector catalog
+ * filtered by tag.
  */
 const emit = defineEmits<{
     /** Open the source wizard on the type step. */
@@ -11,6 +12,7 @@ const emit = defineEmits<{
 }>()
 
 const catalogStore = useCatalogStore()
+const appConfig = useAppConfig()
 
 /** Filter pills: the catalog's real tags (first tag per connector). */
 const connectorFilters = computed(() => {
@@ -33,50 +35,43 @@ const connectorCards = computed(() => catalogStore.sourceDefinitions
             description: d.description,
             chips: [
                 ...(d.tags ?? []).map(t => ({ label: t })),
-                { icon: 'i-lucide-layers', label: `${d.assets.length} assets` },
+                { icon: appConfig.icons.asset, label: `${d.assets.length} assets` },
             ],
         },
     })))
 </script>
 
 <template>
-    <div>
-        <EmptyState icon="i-lucide-plug"
-                    title="No sources yet"
-                    description="A source is a typed connector Interloper pulls from — authenticate once and it materializes its assets straight into your own warehouse. Pick one from the catalog below to add your first.">
-            <UButton icon="i-lucide-plus"
-                     label="New source"
-                     class="mt-5"
-                     @click="emit('create')" />
-        </EmptyState>
+    <div class="flex flex-col gap-4 sm:gap-6">
+        <UEmpty :icon="appConfig.icons.source"
+                title="No sources yet"
+                description="A source is a connector Interloper pulls from. Authenticate once and it materialises its assets into your own warehouse."
+                :actions="[{ label: 'New source', icon: appConfig.ui.icons.plus, onClick: () => emit('create') }]" />
 
-        <div class="mt-9 mb-3.5">
-            <h2 class="text-lg font-bold tracking-[-0.015em] text-highlighted">
-                Connector catalog
-            </h2>
-            <p class="text-sm text-muted mt-1.5">
-                Every source Interloper can pull from — pick what you need, authenticate once,
-                and materialize into your own warehouse.
-            </p>
-        </div>
+        <section class="flex flex-col gap-4">
+            <UPageCard title="Connector catalog"
+                       description="Every source Interloper can pull from. Pick one to set it up."
+                       variant="naked"
+                       orientation="horizontal" />
 
-        <div class="flex items-center gap-2 mb-4 flex-wrap">
-            <UTabs v-model="connectorFilter"
-                   :items="connectorFilters"
-                   variant="pill"
-                   size="xs"
-                   :content="false" />
-            <span class="ml-auto font-mono text-xs text-dimmed">
-                {{ connectorCards.length }} of {{ catalogStore.sourceDefinitions.length }} connectors
-            </span>
-        </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <UTabs v-model="connectorFilter"
+                       :items="connectorFilters"
+                       variant="pill"
+                       size="xs"
+                       :content="false" />
+                <span class="ml-auto text-xs text-dimmed tabular-nums">
+                    {{ connectorCards.length }} of {{ catalogStore.sourceDefinitions.length }} connectors
+                </span>
+            </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            <CatalogCard v-for="card in connectorCards"
-                         :key="card.key"
-                         variant="rich"
-                         v-bind="card.props"
-                         @click="emit('createType', card.key)" />
-        </div>
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <CatalogCard v-for="card in connectorCards"
+                             :key="card.key"
+                             variant="rich"
+                             v-bind="card.props"
+                             @click="emit('createType', card.key)" />
+            </div>
+        </section>
     </div>
 </template>

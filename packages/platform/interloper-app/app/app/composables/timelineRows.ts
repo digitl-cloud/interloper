@@ -9,8 +9,27 @@ import type { TimelineBar, TimelineRow } from '~/types/timeline'
  * run, or a job across a window of wall-clock time.
  */
 
-const DEFAULT_ICON = 'i-lucide-box'
-const JOB_ICON = 'i-lucide-calendar-clock'
+/** Lane geometry in px, shared by the chart and the skeletons that stand in for it. */
+export const TIMELINE_LAYOUT = {
+    rowHeight: 40,
+    barHeight: 28,
+    axisHeight: 30,
+}
+
+/**
+ * The statuses a timeline's bars and legend show, one per colour of the status
+ * table: `dispatched` draws as running and `pending` as queued.
+ */
+export const TIMELINE_STATUSES = ['success', 'failed', 'running', 'queued', 'canceled'] as const
+
+/** Fill of a bar: its status colour; a scheduled firing has none, only the dashed outline. */
+export function timelineBarColor(status: string): string | undefined {
+    return status === 'scheduled' ? undefined : STATUS_CSS[statusMeta(status).color]
+}
+
+/** The dashed outline of a firing that has not happened yet, in the colour of work still waiting. */
+export const SCHEDULED_BAR_STYLE = { borderColor: STATUS_CSS[statusMeta('pending').color] }
+
 const DELETED_ICON = 'i-lucide-circle-slash'
 const DELETED_LABEL = 'Deleted target'
 
@@ -40,6 +59,7 @@ export function useExecutionRows(
 ): ComputedRef<TimelineRow[]> {
     const assetDisplayName = useAssetDisplayName()
     const assetIcon = useAssetIcon()
+    const { icons } = useAppConfig()
 
     return computed(() => toValue(executions)
         .map((execution) => {
@@ -48,7 +68,7 @@ export function useExecutionRows(
             return {
                 id: execution.component_id,
                 name: names?.label ?? execution.component_key,
-                icon: (execution.component_id ? assetIcon.value.get(execution.component_id) : undefined) ?? DEFAULT_ICON,
+                icon: (execution.component_id ? assetIcon.value.get(execution.component_id) : undefined) ?? icons.asset,
                 status: execution.status,
                 bars: interval
                     ? [{ id: `${execution.run_id}:${execution.component_key}`, status: execution.status, ...interval }]
@@ -73,6 +93,7 @@ export function useRunTimelineRows(runs: MaybeRefOrGetter<Run[]>): ComputedRef<T
     const componentsStore = useComponentsStore()
     const assetDisplayName = useAssetDisplayName()
     const assetIcon = useAssetIcon()
+    const { icons } = useAppConfig()
 
     return computed(() => {
         const barsByTarget = new Map<string, TimelineBar[]>()
@@ -107,7 +128,7 @@ export function useRunTimelineRows(runs: MaybeRefOrGetter<Run[]>): ComputedRef<T
             .map(job => ({
                 id: job.id,
                 name: job.name ?? job.key,
-                icon: JOB_ICON,
+                icon: icons.job,
                 bars: barsByTarget.get(job.id) ?? [],
                 kind: job.kind,
             }))
@@ -121,12 +142,12 @@ export function useRunTimelineRows(runs: MaybeRefOrGetter<Run[]>): ComputedRef<T
             const names = component?.kind === 'asset' ? assetDisplayName.value.get(id) : undefined
             adHocRows.push({
                 id,
-                name: names?.label ?? component?.name ?? component?.key ?? targetNames.get(id) ?? id.slice(0, 8),
+                name: names?.label ?? component?.name ?? component?.key ?? targetNames.get(id) ?? shortId(id),
                 icon: component?.kind === 'asset'
-                    ? assetIcon.value.get(id) ?? DEFAULT_ICON
+                    ? assetIcon.value.get(id) ?? icons.asset
                     : component
                         ? componentIcon(component.key)
-                        : DEFAULT_ICON,
+                        : icons.asset,
                 bars,
                 kind: component?.kind ?? targetKinds.get(id),
             })

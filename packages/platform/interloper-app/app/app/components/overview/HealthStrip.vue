@@ -5,15 +5,21 @@ const organisationStore = useOrganisationStore()
 
 const props = defineProps<{ overview: Overview | null }>()
 
-const SPARK_HEIGHT = 30
+const overviewStore = useOverviewStore()
+const { error } = storeToRefs(overviewStore)
 
+const SPARK_HEIGHT = 32
+const SUCCESS = STATUS_CSS[statusMeta('success').color]
+const FAILED = STATUS_CSS[statusMeta('failed').color]
+
+/** One bar per hour, oldest first: the failed runs stacked on the successful ones, an empty hour a hairline on the track. */
 const spark = computed(() => {
     const hourly = props.overview?.runs.hourly ?? []
     const max = Math.max(1, ...hourly.map(b => b.succeeded + b.failed))
     return hourly.map((bucket, i) => ({
         key: bucket.hour,
-        title: `${23 - i}h ago · ${bucket.succeeded} ok · ${bucket.failed} failed`,
-        ok: bucket.succeeded ? Math.max(2, Math.round(SPARK_HEIGHT * bucket.succeeded / max)) : 1,
+        tooltip: `${23 - i}h ago · ${bucket.succeeded} succeeded · ${bucket.failed} failed`,
+        ok: bucket.succeeded ? Math.max(2, Math.round(SPARK_HEIGHT * bucket.succeeded / max)) : 0,
         fail: bucket.failed ? Math.max(2, Math.round(SPARK_HEIGHT * bucket.failed / max)) : 0,
     }))
 })
@@ -21,12 +27,13 @@ const spark = computed(() => {
 const activity = computed(() => {
     const { running, queued, longest_running_seconds } = props.overview?.activity
         ?? { running: 0, queued: 0, longest_running_seconds: null }
-    const total = running + queued
     return {
         running,
         queued,
-        runningPct: total ? (100 * running) / total : 0,
-        queuedPct: total ? (100 * queued) / total : 0,
+        segments: [
+            { value: running, color: STATUS_CSS[statusMeta('running').color] },
+            { value: queued, color: STATUS_CSS[statusMeta('queued').color] },
+        ],
         longest: longest_running_seconds === null ? null : formatElapsed(new Date(0), new Date(longest_running_seconds * 1000)),
     }
 })
@@ -39,16 +46,21 @@ const backfillPct = computed(() => {
 const jobs = computed(() => {
     const { enabled, failing } = props.overview?.jobs ?? { enabled: 0, failing: 0 }
     return {
+        enabled,
         failing,
         healthy: enabled - failing,
-        failingPct: enabled ? (100 * failing) / enabled : 0,
-        healthyPct: enabled ? (100 * (enabled - failing)) / enabled : 100,
+        segments: [{ value: enabled - failing, color: SUCCESS }, { value: failing, color: FAILED }],
     }
 })
 </script>
 
 <template>
-    <div class="grid grid-cols-2 gap-4 sm:gap-6 xl:grid-cols-4">
+    <LoadError v-if="!overview && error"
+               title="Couldn't load the overview"
+               :error="error"
+               @retry="overviewStore.fetchOverview()" />
+    <div v-else
+         class="grid grid-cols-2 gap-4 sm:gap-6 xl:grid-cols-4">
         <OverviewHealthTile label="Runs · last 24h"
                             :to="organisationStore.path('/executions/runs')"
                             :loading="!overview"
@@ -63,19 +75,23 @@ const jobs = computed(() => {
             <template #footer>
                 <div class="flex items-end gap-0.5"
                      :style="{ height: `${SPARK_HEIGHT}px` }">
-                    <div v-for="bar in spark"
-                         :key="bar.key"
-                         class="flex h-full flex-1 flex-col justify-end gap-px"
-                         :title="bar.title">
-                        <div v-if="bar.fail"
-                             class="rounded-t-sm bg-error"
-                             :style="{ height: `${bar.fail}px` }" />
-                        <div class="rounded-sm"
-                             :class="bar.ok > 1 ? 'bg-success' : 'bg-accented'"
-                             :style="{ height: `${bar.ok}px` }" />
-                    </div>
+                    <UTooltip v-for="bar in spark"
+                              :key="bar.key"
+                              :text="bar.tooltip"
+                              :delay-duration="0">
+                        <div class="flex h-full flex-1 flex-col justify-end gap-px">
+                            <div v-if="bar.fail"
+                                 class="rounded-full"
+                                 :style="{ height: `${bar.fail}px`, backgroundColor: FAILED }" />
+                            <div v-if="bar.ok"
+                                 class="rounded-full"
+                                 :style="{ height: `${bar.ok}px`, backgroundColor: SUCCESS }" />
+                            <div v-if="!bar.ok && !bar.fail"
+                                 class="h-px rounded-full bg-accented" />
+                        </div>
+                    </UTooltip>
                 </div>
-                <div class="flex justify-between text-xs text-dimmed"><span>24h ago</span><span>now</span></div>
+                <div class="flex justify-between text-xs text-dimmed"><span>24h ago</span><span>Now</span></div>
             </template>
         </OverviewHealthTile>
 
@@ -89,15 +105,11 @@ const jobs = computed(() => {
                        class="relative text-muted hover:underline">{{ activity.queued }} queued</ULink>
             </template>
             <template #footer>
-                <div class="flex h-1.5 gap-0.5 overflow-hidden rounded-full bg-accented">
-                    <div class="bg-primary"
-                         :style="{ width: `${activity.runningPct}%` }" />
-                    <div class="bg-(--ui-text-dimmed)/40"
-                         :style="{ width: `${activity.queuedPct}%` }" />
-                </div>
-                <div class="flex justify-between text-xs text-dimmed">
+                <UProgressGroup :items="activity.segments"
+                                :max="activity.running + activity.queued" />
+                <div class="flex justify-between text-xs tabular-nums text-dimmed">
                     <span>{{ activity.running }} running · {{ activity.queued }} queued</span>
-                    <span v-if="activity.longest">longest {{ activity.longest }}</span>
+                    <span v-if="activity.longest">Longest {{ activity.longest }}</span>
                 </div>
             </template>
         </OverviewHealthTile>
@@ -108,15 +120,14 @@ const jobs = computed(() => {
                             :headline="overview?.backfills.active"
                             :empty="overview?.backfills.active ? undefined : 'No backfills in progress'">
             <template v-if="overview?.backfills.active"
-                      #detail>{{ overview.backfills.partitions_done }} of {{ overview.backfills.partitions_total }} partitions</template>
+                      #detail>
+                <span class="tabular-nums">{{ overview.backfills.partitions_done }} of {{ overview.backfills.partitions_total }} partitions</span>
+            </template>
             <template #footer>
-                <div class="flex h-1.5 overflow-hidden rounded-full bg-accented">
-                    <div class="bg-primary"
-                         :style="{ width: `${backfillPct}%` }" />
-                </div>
+                <UProgress :model-value="backfillPct" />
                 <div class="flex justify-between text-xs text-dimmed">
-                    <span>combined progress</span>
-                    <span class="font-semibold text-primary">{{ backfillPct }}%</span>
+                    <span>Combined progress</span>
+                    <span class="font-semibold tabular-nums text-primary">{{ backfillPct }}%</span>
                 </div>
             </template>
         </OverviewHealthTile>
@@ -129,16 +140,11 @@ const jobs = computed(() => {
                             :empty="overview?.jobs.enabled ? undefined : 'No jobs enabled'">
             <template #detail>of {{ overview?.jobs.enabled }} enabled</template>
             <template #footer>
-                <div class="flex h-1.5 gap-0.5 overflow-hidden rounded-full bg-accented">
-                    <div class="bg-success"
-                         :style="{ width: `${jobs.healthyPct}%` }" />
-                    <div v-if="jobs.failing"
-                         class="bg-error"
-                         :style="{ width: `${jobs.failingPct}%` }" />
-                </div>
-                <div class="flex justify-between text-xs text-dimmed">
+                <UProgressGroup :items="jobs.segments"
+                                :max="jobs.enabled" />
+                <div class="flex justify-between text-xs tabular-nums text-dimmed">
                     <span>{{ jobs.healthy }} healthy</span>
-                    <span>{{ jobs.failing ? `${jobs.failing} failing` : 'none failing' }}</span>
+                    <span>{{ jobs.failing ? `${jobs.failing} failing` : 'None failing' }}</span>
                 </div>
             </template>
         </OverviewHealthTile>

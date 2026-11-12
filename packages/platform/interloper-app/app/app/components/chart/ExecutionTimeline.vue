@@ -64,31 +64,25 @@ const emit = defineEmits<{
 /**********************
  * Colors
  **********************/
-const colorMode = useColorMode()
-const isDark = computed(() => colorMode.value === 'dark')
+const appConfig = useAppConfig()
 
-function getStatusColor(status: string) {
-    if (status === 'scheduled') return 'transparent'
-    const entry = CHART_STATUS_COLORS[status] ?? CHART_STATUS_COLORS.default!
-    return isDark.value ? entry.dark : entry.light
+/** Outline of a row with nothing to draw: dashed (it never ran), tinted by its status. */
+const PLACEHOLDER_CLASS: Record<StatusColor, string> = {
+    success: 'border-success bg-success/10 text-success',
+    error: 'border-error bg-error/10 text-error',
+    info: 'border-info bg-info/10 text-info',
+    warning: 'border-warning bg-warning/10 text-warning',
+    neutral: 'border-accented text-dimmed',
 }
 
-/**
- * Outline for a row with nothing to draw. Dashed either way (it never ran),
- * but canceled reads amber so it is not mistaken for still-queued work.
- */
 function placeholderClass(status?: string) {
-    return status === 'canceled'
-        ? 'border-warning bg-warning/10 text-warning'
-        : 'border-accented text-dimmed'
+    return PLACEHOLDER_CLASS[statusMeta(status ?? 'pending').color]
 }
 
 /**********************
  * Layout constants
  **********************/
-const BAR_HEIGHT = 28
-const ROW_HEIGHT = 40
-const AXIS_HEIGHT = 30
+const { rowHeight: ROW_HEIGHT, barHeight: BAR_HEIGHT, axisHeight: AXIS_HEIGHT } = TIMELINE_LAYOUT
 const OVERSCAN = 4
 const MAX_ZOOM = 200
 /**
@@ -97,6 +91,8 @@ const MAX_ZOOM = 200
  * it, which keeps ticks, gridlines and bars on the same scale.
  */
 const PLOT_GUTTER = 16
+/** The future side of the plot: fine stripes of the card's inset tone. */
+const FUTURE_HATCH = 'repeating-linear-gradient(135deg, var(--ui-bg-muted) 0 6px, var(--ui-bg-elevated) 6px 7px)'
 
 function clamp(v: number, min: number, max: number) {
     return Math.min(Math.max(v, min), max)
@@ -296,13 +292,23 @@ function formatClock(absolute: number, step: number): string {
     return formatClockTime(date, step < MINUTE)
 }
 
-/** "Nice" evenly-spaced ticks across the current viewport. */
+/**
+ * Least centre-to-centre distance between two tick labels, in px: room for the
+ * widest label ("13 Nov", "12.5m") with air on both sides, even when an edge
+ * label is aligned to the plot's end rather than centred on its tick.
+ */
+const MIN_TICK_SPACING = 72
+
+/** How many ticks the plot has room for; before it is measured, the old fixed count. */
+const maxTicks = computed(() => plotWidth.value ? Math.max(2, Math.floor(plotWidth.value / MIN_TICK_SPACING)) : 8)
+
+/** "Nice" evenly-spaced ticks across the current viewport, as many as fit its width. */
 const ticks = computed(() => {
     const { start, end, span } = view.value
     const result: { value: number, percent: number, label: string }[] = []
 
     if (props.axis === 'clock') {
-        const step = CLOCK_STEPS.find(s => span / s <= 8) ?? CLOCK_STEPS.at(-1)!
+        const step = CLOCK_STEPS.find(s => span / s <= maxTicks.value) ?? CLOCK_STEPS.at(-1)!
         const anchor = startOfDay(baseTime.value + start) - baseTime.value
         for (let v = anchor + Math.ceil((start - anchor) / step) * step; v <= end; v += step) {
             result.push({ value: v, percent: toPercent(v), label: formatClock(baseTime.value + v, step) })
@@ -310,10 +316,11 @@ const ticks = computed(() => {
         return result
     }
 
-    const rawStep = span / 6
+    // Round the step up to a nice value, so the ticks never come closer than the width allows.
+    const rawStep = span / Math.min(6, maxTicks.value)
     const magnitude = 10 ** Math.floor(Math.log10(rawStep))
     const normalized = rawStep / magnitude
-    const step = (normalized < 1.5 ? 1 : normalized < 3 ? 2 : normalized < 7 ? 5 : 10) * magnitude
+    const step = (normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10) * magnitude
     for (let v = Math.ceil(start / step) * step; v <= end + step * 0.001; v += step) {
         result.push({ value: v, percent: toPercent(v), label: formatDuration(v) })
     }
@@ -423,6 +430,28 @@ function barTooltip(row: TimelineRow, layout: LayoutBar): string {
     if (props.axis === 'clock') parts.push(formatDate(new Date(layout.bar.start)))
     parts.push(formatElapsed(new Date(layout.bar.start), layout.bar.end ? new Date(layout.bar.end) : null))
     return parts.join(' · ')
+}
+
+/** Row name and the status it never got past. */
+function placeholderTooltip(row: TimelineRow): string {
+    return `${row.name} · ${statusMeta(row.status ?? 'pending').label}`
+}
+
+/**
+ * One tooltip for the whole chart, anchored to the hovered label or bar: a
+ * window can hold thousands of bars. The last anchor is kept after the pointer
+ * leaves, so the tooltip fades out with its content.
+ */
+const tip = shallowRef<{ reference: HTMLElement, text: string } | null>(null)
+const tipOpen = ref(false)
+
+function showTip(event: PointerEvent, text: string) {
+    tip.value = { reference: event.currentTarget as HTMLElement, text }
+    tipOpen.value = true
+}
+
+function hideTip() {
+    tipOpen.value = false
 }
 
 /**********************
@@ -547,157 +576,173 @@ watch(axisMax, () => {
 </script>
 
 <template>
-    <div ref="scrollEl"
-         class="relative h-full w-full overflow-y-auto overflow-x-hidden"
-         @scroll="onScroll"
-         @click="onBlankClick"
-         @dblclick="resetZoom">
-        <!-- Time axis / ruler: sticky, and the drag-to-pan surface when zoomed. -->
-        <div class="sticky top-0 z-30 flex select-none border-b border-default bg-default"
-             :class="fitted ? '' : 'cursor-ew-resize'"
-             :style="{ height: AXIS_HEIGHT + 'px' }"
-             @pointerdown="onRulerPointerDown"
-             @pointermove="onRulerPointerMove"
-             @pointerup="onRulerPointerUp"
-             @pointercancel="onRulerPointerUp">
-            <div v-if="labelWidth"
-                 class="flex shrink-0 items-center border-r border-default px-4"
-                 :style="{ width: labelWidth + 'px' }">
-                <span class="truncate text-xs font-medium uppercase tracking-wide text-muted">{{ labelTitle }}</span>
-            </div>
-            <div ref="plotEl"
-                 class="relative flex-1"
-                 :style="{ marginInline: PLOT_GUTTER + 'px' }">
-                <div v-for="t in rulerTicks"
-                     :key="t.value"
-                     class="absolute top-0 flex h-full items-center whitespace-nowrap text-xs font-medium text-muted"
-                     :style="{
-                         left: `min(${t.percent}%, calc(100% - 1px))`,
-                         transform: t.percent <= 1 ? 'translateX(0)' : t.percent >= 96 ? 'translateX(-100%)' : 'translateX(-50%)',
-                     }">
-                    {{ t.label }}
-                </div>
-
-                <div v-if="markerLabel && markerPercent !== null"
-                     class="pointer-events-none absolute top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-md bg-primary px-2 py-0.5 text-[11px] font-semibold tabular-nums text-white"
-                     :style="{ left: `${markerPercent}%` }">
-                    {{ markerLabel }}
-                </div>
-
-                <UButton v-if="!fitted"
-                         icon="i-lucide-zoom-out"
-                         label="Reset zoom"
-                         size="xs"
-                         color="neutral"
-                         variant="subtle"
-                         class="absolute right-2 top-1/2 z-30 -translate-y-1/2"
-                         @click.stop="resetZoom"
-                         @pointerdown.stop
-                         @dblclick.stop />
-            </div>
-        </div>
-
-        <!-- Rows -->
-        <div v-if="baseRows.length"
-             class="relative"
-             :style="{ height: totalHeight + 'px', minHeight: `calc(100% - ${AXIS_HEIGHT}px)` }">
-            <!-- Label gutter -->
-            <div v-if="labelWidth"
-                 class="absolute inset-y-0 left-0 z-20 border-r border-default bg-muted"
-                 :style="{ width: labelWidth + 'px' }">
-                <div v-for="{ row, index } in visibleRows"
-                     :key="`label-${row.id ?? row.name}`"
-                     class="absolute flex w-full items-center gap-2 px-4 cursor-pointer transition-opacity"
-                     :style="{
-                         top: index * ROW_HEIGHT + 'px',
-                         height: ROW_HEIGHT + 'px',
-                         opacity: rowOpacity(row.id),
-                     }"
-                     :title="labelTooltip(row)"
-                     @click.stop="toggleSelected(row.id)">
-                    <UIcon :name="row.icon"
-                           class="size-4 shrink-0 text-muted" />
-                    <span class="truncate text-sm font-medium">{{ row.name }}</span>
-                    <UBadge v-if="row.kind"
-                            color="neutral"
-                            variant="soft"
-                            class="ml-auto shrink-0 capitalize">
-                        {{ row.kind }}
-                    </UBadge>
-                </div>
-            </div>
-
-            <!-- Plot area: gridlines, bars, marker -->
-            <div class="absolute inset-y-0"
-                 :style="{ left: labelWidth + PLOT_GUTTER + 'px', right: PLOT_GUTTER + 'px' }">
-                <div v-if="futurePercent !== null"
-                     class="pointer-events-none absolute top-0 bottom-0 bg-[repeating-linear-gradient(135deg,var(--ui-bg-muted)_0_6px,var(--ui-bg-elevated)_6px_7px)]"
-                     :style="{ left: `${futurePercent}%`, right: 0 }" />
-
-                <!-- Gridlines -->
-                <div v-for="t in ticks"
-                     :key="`grid-${t.value}`"
-                     class="absolute top-0 bottom-0 w-px bg-(--ui-border)/50"
-                     :style="{ left: `${t.percent}%` }" />
-
-                <!-- Bars (virtualized: only rows intersecting the viewport are rendered) -->
-                <template v-for="{ row, bars, index, placeholder } in visibleRows"
-                          :key="row.id ?? row.name">
-                    <!-- Nothing to draw: a placeholder carrying the row's status -->
-                    <div v-if="placeholder && !labelWidth"
-                         class="absolute flex max-w-[45%] items-center gap-1.5 overflow-hidden rounded-md border border-dashed px-2 cursor-pointer transition-opacity"
-                         :class="placeholderClass(row.status)"
-                         :style="{
-                             top: index * ROW_HEIGHT + (ROW_HEIGHT - BAR_HEIGHT) / 2 + 'px',
-                             left: '0',
-                             height: BAR_HEIGHT + 'px',
-                             opacity: rowOpacity(row.id),
-                         }"
-                         :title="`${row.name} — ${statusLabel(row.status)}`"
-                         @click.stop="toggleSelected(row.id)">
-                        <UIcon :name="row.icon"
-                               class="size-3.5 shrink-0" />
-                        <span class="truncate text-xs font-medium">{{ row.name }}</span>
+    <UTooltip :open="tipOpen"
+              :reference="tip?.reference"
+              :text="tip?.text"
+              :delay-duration="0"
+              :content="{ side: 'top', sideOffset: 6 }"
+              :ui="{ content: 'pointer-events-none' }">
+        <div class="h-full w-full">
+            <div ref="scrollEl"
+                 class="relative h-full w-full overflow-y-auto overflow-x-hidden"
+                 @scroll="onScroll"
+                 @click="onBlankClick"
+                 @dblclick="resetZoom">
+                <!-- Time axis / ruler: sticky, and the drag-to-pan surface when zoomed. -->
+                <div class="sticky top-0 z-30 flex select-none border-b border-default bg-default"
+                     :class="fitted ? '' : 'cursor-ew-resize'"
+                     :style="{ height: AXIS_HEIGHT + 'px' }"
+                     @pointerdown="onRulerPointerDown"
+                     @pointermove="onRulerPointerMove"
+                     @pointerup="onRulerPointerUp"
+                     @pointercancel="onRulerPointerUp">
+                    <div v-if="labelWidth"
+                         class="flex shrink-0 items-center border-r border-default px-4"
+                         :style="{ width: labelWidth + 'px' }">
+                        <span class="caption truncate text-muted">{{ labelTitle }}</span>
                     </div>
+                    <div ref="plotEl"
+                         class="relative flex-1"
+                         :style="{ marginInline: PLOT_GUTTER + 'px' }">
+                        <div v-for="t in rulerTicks"
+                             :key="t.value"
+                             class="absolute top-0 flex h-full items-center whitespace-nowrap text-xs font-medium tabular-nums text-muted"
+                             :style="{
+                                 left: `min(${t.percent}%, calc(100% - 1px))`,
+                                 transform: t.percent <= 1 ? 'translateX(0)' : t.percent >= 96 ? 'translateX(-100%)' : 'translateX(-50%)',
+                             }">
+                            {{ t.label }}
+                        </div>
 
-                    <!-- Time bars -->
-                    <div v-for="layout in bars"
-                         :key="layout.bar.id"
-                         class="absolute flex items-center gap-1.5 overflow-hidden rounded-md cursor-pointer transition-opacity"
-                         :class="[
-                             labelWidth ? '' : 'px-2',
-                             layout.bar.status === 'scheduled' ? 'border-[1.5px] border-dashed border-dimmed bg-default' : '',
-                         ]"
-                         :style="{
-                             top: index * ROW_HEIGHT + (ROW_HEIGHT - BAR_HEIGHT) / 2 + 'px',
-                             left: `${layout.geometry.left}%`,
-                             width: `${layout.geometry.width}%`,
-                             minWidth: '6px',
-                             height: BAR_HEIGHT + 'px',
-                             backgroundColor: layout.bar.status === 'scheduled' ? undefined : getStatusColor(layout.bar.status),
-                             opacity: rowOpacity(row.id) * 0.96,
-                         }"
-                         :title="barTooltip(row, layout)"
-                         @click.stop="onBarClick(layout, row)">
-                        <template v-if="!labelWidth">
+                        <UBadge v-if="markerLabel && markerPercent !== null"
+                                :label="markerLabel"
+                                variant="solid"
+                                size="sm"
+                                class="pointer-events-none absolute top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap tabular-nums"
+                                :style="{ left: `${markerPercent}%` }" />
+
+                        <UButton v-if="!fitted"
+                                 icon="i-lucide-zoom-out"
+                                 label="Reset zoom"
+                                 size="xs"
+                                 color="neutral"
+                                 variant="outline"
+                                 class="absolute right-2 top-1/2 z-30 -translate-y-1/2"
+                                 @click.stop="resetZoom"
+                                 @pointerdown.stop
+                                 @dblclick.stop />
+                    </div>
+                </div>
+
+                <!-- Rows -->
+                <div v-if="baseRows.length"
+                     class="relative"
+                     :style="{ height: totalHeight + 'px', minHeight: `calc(100% - ${AXIS_HEIGHT}px)` }">
+                    <!-- Label gutter -->
+                    <div v-if="labelWidth"
+                         class="absolute inset-y-0 left-0 z-20 border-r border-default bg-muted"
+                         :style="{ width: labelWidth + 'px' }">
+                        <div v-for="{ row, index } in visibleRows"
+                             :key="`label-${row.id ?? row.name}`"
+                             class="absolute flex w-full cursor-pointer items-center gap-2 px-4 transition-opacity"
+                             :style="{
+                                 top: index * ROW_HEIGHT + 'px',
+                                 height: ROW_HEIGHT + 'px',
+                                 opacity: rowOpacity(row.id),
+                             }"
+                             @pointerenter="showTip($event, labelTooltip(row))"
+                             @pointerleave="hideTip"
+                             @click.stop="toggleSelected(row.id)">
                             <UIcon :name="row.icon"
-                                   class="size-3.5 shrink-0 text-white" />
-                            <span class="truncate text-xs font-bold text-white">{{ row.name }}</span>
-                        </template>
+                                   class="size-4 shrink-0 text-muted" />
+                            <span class="truncate text-sm font-medium">{{ row.name }}</span>
+                            <UBadge v-if="row.kind"
+                                    color="neutral"
+                                    size="sm"
+                                    :label="row.kind"
+                                    class="ml-auto shrink-0 capitalize" />
+                        </div>
                     </div>
-                </template>
 
-                <!-- Marker -->
-                <div v-if="markerPercent !== null"
-                     class="pointer-events-none absolute top-0 bottom-0 z-10 w-0.5 bg-primary/50"
-                     :style="{ left: `${markerPercent}%` }" />
+                    <!-- Plot area: gridlines, bars, marker -->
+                    <div class="absolute inset-y-0"
+                         :style="{ left: labelWidth + PLOT_GUTTER + 'px', right: PLOT_GUTTER + 'px' }">
+                        <div v-if="futurePercent !== null"
+                             class="pointer-events-none absolute inset-y-0"
+                             :style="{ left: `${futurePercent}%`, right: 0, backgroundImage: FUTURE_HATCH }" />
+
+                        <!-- Gridlines -->
+                        <div v-for="t in ticks"
+                             :key="`grid-${t.value}`"
+                             class="absolute inset-y-0 border-l border-default"
+                             :style="{ left: `${t.percent}%` }" />
+
+                        <!-- Bars (virtualized: only rows intersecting the viewport are rendered) -->
+                        <template v-for="{ row, bars, index, placeholder } in visibleRows"
+                                  :key="row.id ?? row.name">
+                            <!-- Nothing to draw: a placeholder carrying the row's status -->
+                            <div v-if="placeholder && !labelWidth"
+                                 class="absolute flex max-w-1/2 cursor-pointer items-center gap-1.5 overflow-hidden rounded-md border border-dashed px-2 transition-opacity"
+                                 :class="placeholderClass(row.status)"
+                                 :style="{
+                                     top: index * ROW_HEIGHT + (ROW_HEIGHT - BAR_HEIGHT) / 2 + 'px',
+                                     left: '0',
+                                     height: BAR_HEIGHT + 'px',
+                                     opacity: rowOpacity(row.id),
+                                 }"
+                                 @pointerenter="showTip($event, placeholderTooltip(row))"
+                                 @pointerleave="hideTip"
+                                 @click.stop="toggleSelected(row.id)">
+                                <UIcon :name="row.icon"
+                                       class="size-3.5 shrink-0" />
+                                <span class="truncate text-xs font-medium">{{ row.name }}</span>
+                            </div>
+
+                            <!-- Time bars -->
+                            <div v-for="layout in bars"
+                                 :key="layout.bar.id"
+                                 class="absolute flex cursor-pointer items-center gap-1.5 overflow-hidden rounded-md transition-opacity"
+                                 :class="[
+                                     labelWidth ? '' : 'px-2',
+                                     layout.bar.status === 'scheduled' ? 'border border-dashed bg-default' : '',
+                                 ]"
+                                 :style="{
+                                     top: index * ROW_HEIGHT + (ROW_HEIGHT - BAR_HEIGHT) / 2 + 'px',
+                                     left: `${layout.geometry.left}%`,
+                                     width: `${layout.geometry.width}%`,
+                                     minWidth: '6px',
+                                     height: BAR_HEIGHT + 'px',
+                                     backgroundColor: timelineBarColor(layout.bar.status),
+                                     ...(layout.bar.status === 'scheduled' ? SCHEDULED_BAR_STYLE : {}),
+                                     opacity: rowOpacity(row.id) * 0.96,
+                                 }"
+                                 @pointerenter="showTip($event, barTooltip(row, layout))"
+                                 @pointerleave="hideTip"
+                                 @click.stop="onBarClick(layout, row)">
+                                <template v-if="!labelWidth">
+                                    <UIcon :name="row.icon"
+                                           class="size-3.5 shrink-0"
+                                           :class="layout.bar.status === 'scheduled' ? 'text-dimmed' : 'text-inverted'" />
+                                    <span class="truncate text-xs font-medium"
+                                          :class="layout.bar.status === 'scheduled' ? 'text-dimmed' : 'text-inverted'">{{ row.name }}</span>
+                                </template>
+                            </div>
+                        </template>
+
+                        <!-- Marker -->
+                        <div v-if="markerPercent !== null"
+                             class="pointer-events-none absolute inset-y-0 z-10 w-px bg-primary"
+                             :style="{ left: `${markerPercent}%` }" />
+                    </div>
+                </div>
+
+                <UEmpty v-else-if="emptyMessage"
+                        :icon="appConfig.icons.timeline"
+                        :title="emptyMessage"
+                        variant="naked"
+                        size="sm"
+                        :style="{ minHeight: `calc(100% - ${AXIS_HEIGHT}px)` }" />
             </div>
         </div>
-
-        <!-- Empty state -->
-        <div v-else
-             class="flex h-full items-center justify-center text-sm text-muted">
-            {{ emptyMessage }}
-        </div>
-    </div>
+    </UTooltip>
 </template>

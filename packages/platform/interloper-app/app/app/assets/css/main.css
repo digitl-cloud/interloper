@@ -1,9 +1,14 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
 
-/* Custom Colors — palette from the Claude Design project ("Current" variant) */
-:root {
-    /* accent: 500 #2D7DF6 · 600 accent-2 (hover) · 50/100 tints (active/hover surfaces) */
+/* Loaded and self-hosted by @nuxt/fonts, which Nuxt UI registers. */
+@theme {
+    --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* The app's blue, from the Claude Design project; ui.colors.primary points at it. */
+@theme static {
     --color-blue-50: #edf3fe;
     --color-blue-100: #dceafd;
     --color-blue-200: #c3dbfc;
@@ -15,63 +20,39 @@
     --color-blue-800: #184189;
     --color-blue-900: #173867;
     --color-blue-950: #102344;
-    /* dark surfaces: header, terminal blocks */
-    --color-navy: #0b2a42;
-    /* neutrals: Tailwind neutral (pure greys) */
-    --color-gray-50: #fafafa;
-    --color-gray-100: #f5f5f5;
-    --color-gray-200: #e5e5e5;
-    --color-gray-300: #d4d4d4;
-    --color-gray-400: #a3a3a3;
-    --color-gray-500: #737373;
-    --color-gray-600: #525252;
-    --color-gray-700: #404040;
-    --color-gray-800: #262626;
-    --color-gray-900: #171717;
-    --color-gray-950: #0a0a0a;
-}
-
-
-:root {
-    --ui-font-sans: "Inter", sans-serif;
-    --font-mono: "JetBrains Mono", ui-monospace, monospace;
-    --ui-header-height: 3.5rem;
 }
 
 :root {
-    /* text: ink #0a0a0a · ink2 #525252 · ink3 #737373 */
-    --ui-text-dimmed: var(--color-gray-500);
-    --ui-text-muted: var(--color-gray-600);
-    --ui-text-toned: var(--color-gray-700);
-    --ui-text: var(--color-gray-950);
-    --ui-text-highlighted: var(--color-gray-950);
-    --ui-text-inverted: #ffffff;
-    /* surfaces: sidebar and cards share one tone, the panel sits lighter */
-    --ui-bg: #ffffff;
-    --ui-bg-muted: var(--color-gray-50);
-    --ui-bg-elevated: var(--color-gray-100);
-    --ui-bg-accented: var(--color-gray-200);
-    --ui-bg-inverted: var(--color-gray-950);
-    /* borders: one line color everywhere (#e5e5e5) */
-    --ui-border: var(--color-gray-200);
-    --ui-border-muted: var(--color-gray-200);
-    --ui-border-accented: var(--color-gray-200);
-    --ui-border-inverted: var(--color-gray-950);
-    /* Nuxt UI default: 6px controls, 8px cards */
-    --ui-radius: 0.25rem;
-    /* graph canvas: dependency edges read darker than card borders */
-    /* the canvas and nested cards take the container tone, parent cards the panel tone */
+    /* The agent panel sits as far from the navbar and the window's edges as the page's
+       content does: the panel body's padding. */
+    --agent-inset: --spacing(4);
+
+    @variant sm {
+        --agent-inset: --spacing(6);
+    }
+
+    /* Text sits one neutral step darker than Nuxt UI's defaults: its dimmed
+       neutral-400 on white is about 2.5:1 and fails WCAG AA for small text. */
+    --ui-text-dimmed: var(--ui-color-neutral-500);
+    --ui-text-muted: var(--ui-color-neutral-600);
+    --ui-text-toned: var(--ui-color-neutral-700);
+    --ui-text: var(--ui-color-neutral-950);
+    --ui-text-highlighted: var(--ui-color-neutral-950);
+
+    --scrollbar-thumb: var(--ui-color-neutral-300);
+    --scrollbar-thumb-hover: var(--ui-color-neutral-400);
+
+    /* Graph canvas: dependency edges read stronger than card borders. */
     --graph-canvas: var(--ui-bg-muted);
-    --graph-dot: #dcdcdc;
-    --graph-edge: #8fbbf7;
-    --graph-edge-dim: color-mix(in srgb, #8fbbf7 30%, transparent);
+    --graph-dot: var(--ui-color-neutral-300);
+    --graph-edge: var(--color-blue-300);
+    --graph-edge-dim: color-mix(in oklab, var(--graph-edge) 30%, transparent);
     --graph-node-bg: var(--ui-bg);
     --graph-card-line: var(--ui-border);
     --graph-nested-bg: var(--ui-bg-muted);
-    --graph-nested-line: #e9e9e9;
-    --graph-head-line: #ebebeb;
-    --id-chip-text: #1b5fbf;
-    --graph-model: #6c5ce7;
+    --graph-nested-line: var(--ui-border);
+    --graph-head-line: var(--ui-border);
+    --graph-model: var(--color-violet-500);
     --graph-card-shadow: 0 2px 8px rgb(11 42 66 / 0.07);
     --graph-card-shadow-raised: 0 6px 16px rgb(11 42 66 / 0.11);
     --graph-asset-shadow: 0 1px 4px rgb(11 42 66 / 0.06);
@@ -80,98 +61,127 @@
     --graph-layer-shadow-raised: 0 4px 10px rgb(11 42 66 / 0.09);
 }
 
+/* `:root` and `.dark` weigh the same, so a token overridden above must be restated
+   here or the light value wins in dark mode too; these are Nuxt UI's dark defaults. */
+.dark {
+    --ui-text-dimmed: var(--ui-color-neutral-500);
+    --ui-text-muted: var(--ui-color-neutral-400);
+    --ui-text-toned: var(--ui-color-neutral-300);
+    --ui-text: var(--ui-color-neutral-200);
+    --ui-text-highlighted: white;
+
+    /* The card tone (cards, sidebar) lifts only slightly off the panel in dark
+       mode, between neutral-900 and neutral-800 rather than Nuxt UI's 800. */
+    --ui-bg-muted: #1c1c1c;
+
+    --scrollbar-thumb: var(--ui-color-neutral-700);
+    --scrollbar-thumb-hover: var(--ui-color-neutral-600);
+
+    --graph-dot: var(--ui-color-neutral-800);
+    --graph-edge: color-mix(in oklab, var(--ui-primary) 55%, var(--ui-color-neutral-950));
+    --graph-edge-dim: color-mix(in oklab, var(--ui-primary) 18%, var(--ui-color-neutral-950));
+    --graph-card-line: var(--ui-border-accented);
+    --graph-nested-line: var(--ui-border-accented);
+    --graph-head-line: var(--ui-border-accented);
+    --graph-model: var(--color-violet-400);
+    --graph-card-shadow: 0 2px 8px rgb(0 0 0 / 0.45);
+    --graph-card-shadow-raised: 0 6px 16px rgb(0 0 0 / 0.55);
+    --graph-asset-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
+    --graph-asset-shadow-raised: 0 4px 12px rgb(0 0 0 / 0.5);
+    --graph-layer-shadow: 0 2px 6px rgb(0 0 0 / 0.4);
+    --graph-layer-shadow-raised: 0 4px 10px rgb(0 0 0 / 0.5);
+
+    --vf-node-bg: var(--ui-bg-elevated);
+    --vf-node-text: var(--ui-text-muted);
+    --vf-connection-path: var(--ui-color-neutral-600);
+    --vf-handle: var(--ui-color-neutral-600);
+}
+
 /* Markdown in a conversation: Nuxt UI's prose spacing is set for documentation pages, so the
-   agent's answers take a line height and rhythm sized to their 13.5px text. In the utilities
-   layer, so these outrank the prose's own utilities but not a first/last-child reset. */
+   agent's answers take a rhythm sized to the app's body text. In the utilities layer, so these
+   outrank the prose's own utilities but not a first/last-child reset. */
 @layer utilities {
+    .chat-prose {
+        font-size: var(--text-sm);
+    }
+
     .chat-prose :is(p, li) {
         line-height: 1.65;
     }
 
     .chat-prose p {
-        margin-block: 0.75rem;
+        margin-block: --spacing(3);
     }
 
     .chat-prose :is(ul, ol) {
-        margin-block: 0.75rem;
-        padding-inline-start: 1.25rem;
+        margin-block: --spacing(3);
+        padding-inline-start: --spacing(5);
     }
 
     .chat-prose li {
-        margin-block: 0.25rem;
-        padding-inline-start: 0.25rem;
+        margin-block: --spacing(1);
+        padding-inline-start: --spacing(1);
     }
 
     .chat-prose :is(h1, h2, h3, h4) {
-        margin-block: 1.25rem 0.5rem;
-        font-size: 0.9375rem;
-        line-height: 1.4;
+        margin-block: --spacing(5) --spacing(2);
+        font-size: var(--text-sm);
+        line-height: var(--text-sm--line-height);
     }
 
     .chat-prose h1 {
-        font-size: 1.0625rem;
-    }
-
-    .chat-prose h2 {
-        font-size: 1rem;
+        font-size: var(--text-base);
+        line-height: var(--text-base--line-height);
     }
 
     .chat-prose hr {
-        margin-block: 1.5rem;
+        margin-block: --spacing(6);
     }
 
     .chat-prose blockquote {
-        margin-block: 0.5rem;
+        margin-block: --spacing(2);
     }
 
     .chat-prose :is(th, td) {
-        padding: 0.5rem 0.75rem;
-        font-size: 0.8125rem;
-        line-height: 1.5;
+        padding: --spacing(2) --spacing(3);
+        font-size: var(--text-xs);
+        line-height: var(--text-xs--line-height);
     }
 
     .chat-prose div:has(> table) {
-        margin-block: 1rem;
+        margin-block: --spacing(4);
     }
 
     .chat-prose :not(pre) > code {
         display: inline;
-        padding: 0.0625rem 0.3125rem;
+        padding: 0 --spacing(1);
         font-size: 0.85em;
         box-decoration-break: clone;
     }
 
     .chat-prose pre {
-        padding: 0.5rem 0.75rem;
-        font-size: 0.75rem;
-        line-height: 1.5;
+        padding: --spacing(2) --spacing(3);
+        font-size: var(--text-xs);
+        line-height: var(--text-xs--line-height);
     }
 
     .chat-prose div:has(> pre) {
-        margin-block: 1rem;
+        margin-block: --spacing(4);
     }
 }
 
-/* Design mono section label ("eyebrow"): pair with a text color utility. */
-.eyebrow {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 600;
+/* A section's label (Input, History, a separator's label): one size, weight and spacing for all of
+   them, the colour from a text utility. Outside the layers, so it holds against a component's own
+   label size. */
+.caption {
+    font-size: --theme(--text-xs);
+    line-height: --theme(--text-xs--line-height);
+    font-weight: --theme(--font-weight-medium);
+    letter-spacing: --theme(--tracking-wider);
     text-transform: uppercase;
-    letter-spacing: 0.14em;
 }
 
 /* Scrollbar */
-:root {
-    --scrollbar-thumb: var(--color-gray-300);
-    --scrollbar-thumb-hover: var(--color-gray-400);
-}
-
-.dark {
-    --scrollbar-thumb: var(--color-gray-700);
-    --scrollbar-thumb-hover: #4a4a4a;
-}
-
 * {
     scrollbar-width: thin;
     scrollbar-color: var(--scrollbar-thumb) transparent;
@@ -188,59 +198,21 @@
 
 *::-webkit-scrollbar-thumb {
     background-color: var(--scrollbar-thumb);
-    border-radius: 3px;
+    border-radius: var(--radius-xs);
 }
 
 *::-webkit-scrollbar-thumb:hover {
     background-color: var(--scrollbar-thumb-hover);
 }
 
+/* A valid drop target while a connection is dragged. */
 @keyframes pulse-grow {
-    0%, 100% { box-shadow: 0 0 0 0 var(--ui-warning); }
-    50% { box-shadow: 0 0 0 4px var(--ui-warning); }
+    0%, 100% { box-shadow: 0 0 0 0 var(--ui-primary); }
+    50% { box-shadow: 0 0 0 4px var(--ui-primary); }
 }
 
 .animate-pulse-grow {
     animation: pulse-grow 1.5s ease-in-out infinite;
-}
-
-.dark {
-    --ui-text-dimmed: var(--color-gray-500);
-    --ui-text-muted: var(--color-gray-400);
-    --ui-text-toned: var(--color-gray-300);
-    --ui-text: var(--color-gray-200);
-    --ui-text-highlighted: #ffffff;
-    --ui-text-inverted: var(--color-gray-950);
-    /* surfaces: the panel is the darkest tone, sidebar and cards sit one step lighter */
-    --ui-bg: var(--color-gray-900);
-    --ui-bg-muted: #1c1c1c;
-    --ui-bg-elevated: var(--color-gray-800);
-    --ui-bg-accented: var(--color-gray-700);
-    --ui-bg-inverted: #ffffff;
-    --ui-border: var(--color-gray-800);
-    --ui-border-muted: var(--color-gray-800);
-    --ui-border-accented: #373737;
-    --ui-border-inverted: #ffffff;
-    --ui-radius: 0.25rem;
-    --graph-dot: var(--color-gray-800);
-    --graph-edge: color-mix(in srgb, var(--ui-primary) 55%, var(--color-gray-950));
-    --graph-edge-dim: color-mix(in srgb, var(--ui-primary) 18%, var(--color-gray-950));
-    --graph-card-line: var(--color-gray-700);
-    --graph-nested-line: var(--color-gray-700);
-    --graph-head-line: var(--color-gray-700);
-    --id-chip-text: color-mix(in srgb, var(--ui-primary) 70%, white);
-    --graph-model: #9d8ff0;
-    --graph-card-shadow: 0 2px 8px rgb(0 0 0 / 0.45);
-    --graph-card-shadow-raised: 0 6px 16px rgb(0 0 0 / 0.55);
-    --graph-asset-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
-    --graph-asset-shadow-raised: 0 4px 12px rgb(0 0 0 / 0.5);
-    --graph-layer-shadow: 0 2px 6px rgb(0 0 0 / 0.4);
-    --graph-layer-shadow-raised: 0 4px 10px rgb(0 0 0 / 0.5);
-
-    --vf-node-bg: var(--ui-bg-elevated);
-    --vf-node-text: var(--color-gray-400);
-    --vf-connection-path: var(--color-gray-600);
-    --vf-handle: var(--color-gray-600);
 }
 
 .graph-card,
@@ -292,18 +264,6 @@
     }
 }
 
-/* Identifier chip: a discriminator or other machine id shown next to a name. */
-.id-chip {
-    padding: 2px 8px;
-    border-radius: 6px;
-    background: color-mix(in srgb, var(--ui-primary) 12%, var(--ui-bg));
-    color: var(--id-chip-text);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 600;
-    line-height: 1.35;
-}
-
 /* Relayouts glide instead of cutting; the pane joins in only while the
    viewport is being shifted to hold the toggled node in place. */
 .vue-flow__node,
@@ -315,22 +275,22 @@
     transition: d 150ms ease;
 }
 
-/* Vue Flow dark mode overrides */
+/* Vue Flow dark mode */
 .dark .vue-flow__controls {
-    box-shadow: 0 0 2px 1px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--graph-card-shadow);
 }
 
 .dark .vue-flow__controls-button {
     background: var(--ui-bg-elevated);
-    border-bottom-color: var(--color-gray-700);
+    border-bottom-color: var(--ui-border-accented);
 }
 
 .dark .vue-flow__controls-button svg {
-    fill: var(--color-gray-400);
+    fill: var(--ui-text-muted);
 }
 
 .dark .vue-flow__controls-button:hover {
-    background: var(--color-gray-700);
+    background: var(--ui-bg-accented);
 }
 
 .dark .vue-flow__minimap {

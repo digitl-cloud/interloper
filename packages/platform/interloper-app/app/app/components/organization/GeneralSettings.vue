@@ -1,13 +1,19 @@
 <script setup lang="ts">
 /**
- * An organisation's display name and key, each saved on its own. Rows the
- * page adds about the same organisation go in the default slot.
+ * An organisation's display name and key, each saved on its own, as settings
+ * rows in a card. Given a `title`, the section header above the card comes
+ * with it. Rows the page adds about the same organisation go in the default
+ * slot, as more horizontal `UFormField`s; a separator comes before them.
  */
 import type { Organisation } from '~/types/organisation'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     organisation: Pick<Organisation, 'id' | 'name' | 'key'>
-}>()
+    /** The section header's title; without it, the page heads the card itself. */
+    title?: string
+    /** The section header's description. */
+    description?: string
+}>(), { title: undefined, description: undefined })
 
 const emit = defineEmits<{
     saved: [organisation: Organisation]
@@ -74,48 +80,62 @@ async function saveKey() {
 </script>
 
 <template>
-    <UCard :ui="{ body: 'p-0 sm:p-0' }">
-        <div class="divide-y divide-default">
-            <form class="flex items-start gap-4 px-4 py-4 sm:px-6"
-                  @submit.prevent="saveName">
-                <div class="min-w-0 flex-1">
-                    <div class="text-sm font-medium text-highlighted">Display name</div>
-                    <div class="mt-0.5 text-sm text-muted">Members see this name everywhere in the app.</div>
-                </div>
-                <UFormField :error="nameError ?? undefined"
-                            class="w-60 max-w-[50%]">
-                    <UInput v-model="name"
-                            class="w-full"
-                            :disabled="savingName" />
-                </UFormField>
-                <UButton type="submit"
-                         label="Save"
-                         :disabled="!name.trim() || !nameChanged || savingName"
-                         :loading="savingName" />
-            </form>
-            <form class="flex items-start gap-4 px-4 py-4 sm:px-6"
-                  @submit.prevent="saveKey">
-                <div class="min-w-0 flex-1">
-                    <div class="text-sm font-medium text-highlighted">Key</div>
-                    <div class="mt-0.5 text-sm text-muted">
-                        Identifies the organisation in the app's addresses, as in
-                        <span class="font-mono text-default">{{ origin }}/{{ organisation.key }}</span>.
-                        Links with the old key stop working once it changes.
-                    </div>
-                </div>
-                <UFormField :error="keyError ?? undefined"
-                            class="w-60 max-w-[50%]">
-                    <UInput v-model="key"
-                            class="w-full"
-                            :ui="{ base: 'font-mono' }"
-                            :disabled="savingKey" />
-                </UFormField>
-                <UButton type="submit"
-                         label="Save"
-                         :disabled="!key.trim() || !keyChanged || savingKey"
-                         :loading="savingKey" />
-            </form>
-            <slot />
-        </div>
-    </UCard>
+    <div class="flex flex-col gap-4">
+        <UPageCard v-if="title"
+                   :title="title"
+                   :description="description"
+                   variant="naked"
+                   orientation="horizontal" />
+
+        <UCard>
+            <div class="flex flex-col gap-4">
+                <form @submit.prevent="saveName">
+                    <UFormField label="Display name"
+                                description="Members see this name everywhere in the app."
+                                :error="nameError ?? undefined"
+                                required
+                                orientation="horizontal">
+                        <div class="flex items-center gap-2">
+                            <UInput v-model="name"
+                                    class="w-60"
+                                    :disabled="savingName" />
+                            <UButton type="submit"
+                                     label="Save"
+                                     :disabled="!name.trim() || !nameChanged || savingName"
+                                     :loading="savingName" />
+                        </div>
+                    </UFormField>
+                </form>
+
+                <USeparator />
+
+                <form @submit.prevent="saveKey">
+                    <UFormField label="Key"
+                                :error="keyError ?? undefined"
+                                required
+                                orientation="horizontal">
+                        <template #description>
+                            Identifies the organisation in the app's addresses, as in
+                            <span class="text-default">{{ origin }}/{{ organisation.key }}</span>.
+                            Links with the old key stop working once it changes.
+                        </template>
+                        <div class="flex items-center gap-2">
+                            <UInput v-model="key"
+                                    class="w-60"
+                                    :disabled="savingKey" />
+                            <UButton type="submit"
+                                     label="Save"
+                                     :disabled="!key.trim() || !keyChanged || savingKey"
+                                     :loading="savingKey" />
+                        </div>
+                    </UFormField>
+                </form>
+
+                <template v-if="$slots.default">
+                    <USeparator />
+                    <slot />
+                </template>
+            </div>
+        </UCard>
+    </div>
 </template>

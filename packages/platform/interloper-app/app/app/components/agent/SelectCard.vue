@@ -3,8 +3,8 @@
  * Inline selection card rendered in the agent chat.
  *
  * Triggered by the agent's `request_user_selection` tool call: the wizard's
- * SelectionCard rows, compacted for the agent panel — checkbox rows for
- * multi-select, plain accent-border rows for single. The confirmed values
+ * SelectionCard rows, checkbox rows for multi-select and plain selectable
+ * rows for single. The confirmed values
  * become the tool call's output, and the agent continues with them; a call
  * already answered (`answer`) renders locked.
  */
@@ -47,47 +47,49 @@ function confirm() {
     submitted.value = true
     emit('selected', [...picked.value])
 }
+
+const appConfig = useAppConfig()
 </script>
 
 <template>
-    <div class="mx-auto my-2 flex w-full min-w-80 max-w-md flex-col gap-3 rounded-lg border border-default bg-default p-4">
-        <div class="flex items-center justify-between gap-2">
-            <span class="text-[13px] font-semibold text-highlighted">{{ request.prompt }}</span>
-            <UButton v-if="request.multi && request.options.length > 3 && !submitted"
-                     :label="allSelected ? 'Deselect all' : 'Select all'"
+    <AgentCard :title="request.prompt">
+        <template v-if="request.multi && request.options.length > 3 && !submitted"
+                  #actions>
+            <UButton :label="allSelected ? 'Deselect all' : 'Select all'"
                      variant="link"
-                     size="xs"
-                     class="shrink-0"
+                     size="sm"
                      @click="toggleAll" />
-        </div>
+        </template>
 
         <!-- Answered: locked summary -->
         <div v-if="submitted"
-             class="flex items-center gap-2 text-[13px]">
-            <UIcon name="i-lucide-check-circle-2"
-                   class="size-4 text-success shrink-0" />
-            <span class="text-muted truncate">{{ selectedLabels.join(', ') }}</span>
+             class="flex items-center gap-2 text-sm">
+            <UIcon :name="appConfig.ui.icons.success"
+                   class="size-4 shrink-0 text-success" />
+            <span class="truncate text-muted">{{ selectedLabels.join(', ') }}</span>
         </div>
 
-        <template v-else>
-            <div class="flex flex-col gap-1.5 max-h-64 overflow-y-auto">
+        <div v-else
+             class="flex flex-col gap-3">
+            <div class="flex max-h-64 flex-col gap-1.5 overflow-y-auto p-0.5">
                 <SelectionCard v-for="option in request.options"
                                :key="option.value"
                                :as="request.multi ? 'div' : 'button'"
                                :selected="picked.includes(option.value)"
+                               :label="option.label"
                                class="shrink-0"
                                @select="toggle(option.value)">
-                    <div class="flex items-center gap-2.5 px-3 py-2"
-                         :class="request.multi ? 'cursor-pointer' : ''">
-                        <UCheckbox v-if="request.multi"
-                                   :model-value="picked.includes(option.value)"
+                    <template v-if="request.multi"
+                              #leading>
+                        <UCheckbox :model-value="picked.includes(option.value)"
                                    @click.stop
                                    @update:model-value="toggle(option.value)" />
-                        <span class="text-[13px] font-medium truncate">{{ option.label }}</span>
-                        <UIcon v-if="!request.multi && picked.includes(option.value)"
-                               name="i-lucide-check"
-                               class="size-3.5 text-primary ml-auto shrink-0" />
-                    </div>
+                    </template>
+                    <template v-if="!request.multi && picked.includes(option.value)"
+                              #trailing>
+                        <UIcon :name="appConfig.ui.icons.check"
+                               class="size-4 shrink-0 text-primary" />
+                    </template>
                 </SelectionCard>
             </div>
 
@@ -95,6 +97,6 @@ function confirm() {
                      :disabled="!picked.length"
                      block
                      @click="confirm" />
-        </template>
-    </div>
+        </div>
+    </AgentCard>
 </template>

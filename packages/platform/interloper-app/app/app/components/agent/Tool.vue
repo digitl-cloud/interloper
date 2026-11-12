@@ -26,11 +26,11 @@ const denied = computed(() => props.part.state === 'output-denied')
 
 const text = computed(() => {
     if (pending.value) return `Approve: ${toolLabel(name.value, true).toLowerCase()}?`
-    if (denied.value) return `${toolLabel(name.value, false)} — denied`
     return toolLabel(name.value, running.value)
 })
 
-const icon = computed(() => failed.value ? 'i-lucide-triangle-alert' : pending.value ? 'i-lucide-shield-question' : 'i-lucide-wrench')
+const appConfig = useAppConfig()
+const icon = computed(() => failed.value ? appConfig.ui.icons.warning : pending.value ? 'i-lucide-shield-question' : 'i-lucide-wrench')
 
 const actions = computed(() => {
     if (!pending.value || props.part.state !== 'approval-requested') return undefined
@@ -54,6 +54,7 @@ function status(output: unknown) {
 
 <template>
     <UChatTool :text="text"
+               :suffix="denied ? 'Denied' : undefined"
                :icon="icon"
                :streaming="running"
                :actions="actions"
@@ -63,19 +64,19 @@ function status(output: unknown) {
                :ui="failed ? { leadingIcon: 'text-error' } : undefined">
         <div class="flex flex-col gap-2">
             <div v-if="part.input !== undefined">
-                <div class="eyebrow text-dimmed mb-1">Input</div>
-                <pre class="overflow-x-auto rounded-md bg-elevated/50 p-2 text-[11px]/4 font-mono text-toned">{{ preview(part.input) }}</pre>
+                <div class="caption mb-1 text-muted">Input</div>
+                <pre class="overflow-x-auto rounded-md bg-elevated p-2 font-mono text-xs text-default">{{ preview(part.input) }}</pre>
             </div>
             <p v-if="elided"
-               class="text-[12px] text-dimmed">
+               class="text-xs text-dimmed">
                 Result no longer kept: older results are dropped from the conversation.
             </p>
             <div v-else-if="part.output !== undefined">
-                <div class="eyebrow text-dimmed mb-1">Output</div>
-                <pre class="overflow-x-auto rounded-md bg-elevated/50 p-2 text-[11px]/4 font-mono text-toned">{{ preview(part.output) }}</pre>
+                <div class="caption mb-1 text-muted">Output</div>
+                <pre class="overflow-x-auto rounded-md bg-elevated p-2 font-mono text-xs text-default">{{ preview(part.output) }}</pre>
             </div>
             <p v-if="part.state === 'output-error'"
-               class="text-error">
+               class="font-mono text-xs text-error">
                 {{ part.errorText }}
             </p>
         </div>

@@ -7,6 +7,7 @@ const organisationStore = useOrganisationStore()
 
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
+const UTooltip = resolveComponent('UTooltip')
 const EntityBadge = resolveComponent('EntityBadge')
 const StatusBadge = resolveComponent('StatusBadge')
 const UProgressGroup = resolveComponent('UProgressGroup')
@@ -15,7 +16,14 @@ type RunRow = Run & { children?: Run[] }
 
 const runsStore = useRunsStore()
 const componentsStore = useComponentsStore()
-const { runs, stacks, loading, total, pageIndex, pageSize, filtered } = storeToRefs(runsStore)
+const { runs, stacks, loading, error, total, pageIndex, pageSize, filtered } = storeToRefs(runsStore)
+const appConfig = useAppConfig()
+const editor = useCanEdit()
+
+/** Nothing ran yet at all, as opposed to nothing matching the filters: the page explains executions instead. */
+const showEmpty = computed(() => !loading.value && !error.value && runs.value.length === 0 && !filtered.value)
+/** A failed fetch with nothing to show: its alert stands alone, rows from an earlier fetch stay listed under it. */
+const showTable = computed(() => !showEmpty.value && !(error.value && runs.value.length === 0))
 
 /**
  * A row is a stack at its latest attempt; expanding it lists the attempts
@@ -86,15 +94,12 @@ onUnmounted(runsStore.clearFilters)
 /** A stack's attempt count on its own row, an earlier attempt's ordinal on its; none for a single attempt. */
 function attemptBadge(run: Run, depth: number) {
     if (depth > 0) {
-        return h(UBadge, { color: 'neutral', variant: 'outline', size: 'sm', title: `Attempt ${run.attempt}` }, () => `#${run.attempt}`)
+        return h(UTooltip, { text: `Attempt ${run.attempt}` }, () =>
+            h(UBadge, { color: 'neutral', size: 'sm', class: 'tabular-nums' }, () => `#${run.attempt}`))
     }
     if (run.attempt <= 1) return null
-    return h(UBadge, {
-        color: 'neutral',
-        size: 'sm',
-        icon: 'i-lucide-rotate-ccw',
-        title: `${run.attempt} attempts`,
-    }, () => String(run.attempt))
+    return h(UTooltip, { text: `${run.attempt} attempts` }, () =>
+        h(UBadge, { color: 'neutral', size: 'sm', icon: appConfig.ui.icons.reload, class: 'tabular-nums' }, () => String(run.attempt)))
 }
 
 const columns: TableColumn<RunRow>[] = [
@@ -108,8 +113,8 @@ const columns: TableColumn<RunRow>[] = [
                 h(UButton, {
                     'color': 'neutral',
                     'variant': 'ghost',
-                    'size': 'xs',
-                    'icon': open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right',
+                    'size': 'sm',
+                    'icon': open ? appConfig.ui.icons.chevronDown : appConfig.ui.icons.chevronRight,
                     'class': row.getCanExpand() ? undefined : 'invisible',
                     'aria-label': open ? 'Hide earlier attempts' : 'Show earlier attempts',
                     'onClick': (event: Event) => {
@@ -118,7 +123,7 @@ const columns: TableColumn<RunRow>[] = [
                         row.toggleExpanded()
                     },
                 }),
-                h('span', { class: 'font-mono text-xs' }, run.id.substring(0, 8)),
+                idCell(run.id),
                 attemptBadge(run, row.depth),
             ])
         },
@@ -134,7 +139,10 @@ const columns: TableColumn<RunRow>[] = [
     {
         accessorKey: 'partition_key',
         header: 'Partition',
-        cell: ({ row }) => h('span', { class: 'text-muted' }, row.getValue<string>('partition_key') || '—'),
+        cell: ({ row }) => {
+            const key = row.getValue<string | null>('partition_key')
+            return key ? h('span', { class: 'tabular-nums text-muted' }, key) : emptyCell()
+        },
     },
     {
         accessorKey: 'status',
@@ -146,33 +154,25 @@ const columns: TableColumn<RunRow>[] = [
         header: 'Assets',
         cell: ({ row }) => {
             const stats = runStats(row.original, row.original.execution_counts ?? {})
-            if (!stats.total) return h('span', { class: 'text-muted' }, '—')
-            return h('div', { class: 'flex w-40 items-center gap-2', title: outcomeSummary(stats).join(' · ') }, [
+            if (!stats.total) return emptyCell()
+            return h(UTooltip, { text: outcomeSummary(stats).join(' · '), delayDuration: 0 }, () => h('div', { class: 'flex w-40 items-center gap-2' }, [
                 h(UProgressGroup, { items: progressSegments(stats), max: stats.total, size: 'sm', class: 'flex-1' }),
-                h('span', { class: 'text-xs text-muted tabular-nums' }, `${stats.succeeded}/${stats.total}`),
-            ])
+                h('span', { class: 'text-xs tabular-nums text-muted' }, `${stats.succeeded}/${stats.total}`),
+            ]))
         },
     },
-    {
-        accessorKey: 'created_at',
-        header: 'Created',
-        cell: ({ row }) => h('span', { class: 'text-muted' }, formatDate(row.getValue<string>('created_at')) || '—'),
-    },
-    {
-        accessorKey: 'started_at',
-        header: 'Started',
-        cell: ({ row }) => h('span', { class: 'text-muted' }, formatDate(row.getValue<string>('started_at')) || '—'),
-    },
+    dateColumn<RunRow>('created_at', 'Created'),
+    dateColumn<RunRow>('started_at', 'Started'),
     {
         id: 'elapsed',
         header: 'Elapsed',
         cell: ({ row }) => {
             const run = row.original as Run
-            return h('span', { class: 'text-muted' }, formatElapsed(run.started_at, run.completed_at) || '—')
+            const elapsed = formatElapsed(run.started_at, run.completed_at)
+            return elapsed ? h('span', { class: 'tabular-nums text-muted' }, elapsed) : emptyCell()
         },
     },
 ]
-
 
 function onPageChange(page: number) {
     runsStore.goToPage(page - 1)
@@ -180,26 +180,25 @@ function onPageChange(page: number) {
 </script>
 
 <template>
-    <div class="flex flex-col flex-1 min-h-0">
-        <div v-if="!loading && runs.length === 0 && !filtered"
-             class="w-full max-w-[1040px] mx-auto">
-            <EmptyState icon="i-lucide-activity"
-                        title="No executions yet"
-                        description="Executions are the run history of your pipelines. Every time a job runs — on schedule or triggered manually — each materialized partition appears here with its status and timing.">
-                <UButton icon="i-lucide-calendar-plus"
-                         label="Create a job"
-                         class="mt-5"
-                         :to="organisationStore.path(kindPath('job'))" />
-            </EmptyState>
-        </div>
+    <div class="flex min-h-0 flex-1 flex-col gap-4">
+        <LoadError v-if="error"
+                   title="Couldn't load runs"
+                   :error="error"
+                   @retry="runsStore.fetch()" />
 
-        <UCard v-else
+        <UEmpty v-if="showEmpty"
+                :icon="appConfig.icons.executions"
+                title="No executions yet"
+                description="Executions are the run history of your pipelines. Every time a job runs, on schedule or by hand, each partition it materialises shows up here with its status and timing."
+                :actions="editor ? [{ label: 'New job', icon: appConfig.ui.icons.plus, to: { path: organisationStore.path(kindPath('job')), query: { new: '1' } } }] : undefined" />
+
+        <UCard v-else-if="showTable"
                :ui="FILL_CARD_UI">
             <template #header>
                 <div class="flex flex-wrap items-center gap-3">
                     <UInput v-model="search"
-                            placeholder="Search runs by target..."
-                            icon="i-lucide-search"
+                            placeholder="Search runs by target…"
+                            :icon="appConfig.ui.icons.search"
                             class="max-w-sm" />
                     <KindFilter v-model="kind"
                                 :components="componentsStore.all" />
@@ -210,16 +209,7 @@ function onPageChange(page: number) {
                 </div>
             </template>
 
-            <div v-if="!loading && runs.length === 0"
-                 class="flex flex-col items-center gap-3 py-16 text-sm text-muted">
-                No runs match these filters.
-                <UButton variant="ghost"
-                         icon="i-lucide-x"
-                         label="Clear filters"
-                         @click="clearFilters" />
-            </div>
-            <UTable v-else
-                    v-model:expanded="expanded"
+            <UTable v-model:expanded="expanded"
                     :data="rows"
                     :columns="columns"
                     :get-row-id="getRowId"
@@ -228,17 +218,24 @@ function onPageChange(page: number) {
                     :loading="loading"
                     :sorting="[{ id: 'created_at', desc: true }]"
                     sticky
-                    class="flex-1 min-h-0"
+                    class="min-h-0 flex-1"
                     :ui="tableUi"
-                    @select="(_e: Event, row: any) => navigateTo(organisationStore.path(`/executions/runs/${row.original.id}`))" />
+                    @select="(_e: Event, row: any) => navigateTo(organisationStore.path(`/executions/runs/${row.original.id}`))">
+                <template #empty>
+                    <UEmpty :icon="appConfig.ui.icons.search"
+                            title="No runs match these filters"
+                            variant="naked"
+                            size="sm"
+                            :actions="[{ label: 'Clear filters', icon: appConfig.ui.icons.close, color: 'neutral', variant: 'outline', size: 'sm', onClick: clearFilters }]" />
+                </template>
+            </UTable>
 
             <template #footer>
                 <TableFooter :page="pageIndex + 1"
                              :total="total"
                              :page-size="pageSize"
-                             @update:page="onPageChange">
-                    {{ total }} run(s) total.
-                </TableFooter>
+                             noun="run"
+                             @update:page="onPageChange" />
             </template>
         </UCard>
     </div>

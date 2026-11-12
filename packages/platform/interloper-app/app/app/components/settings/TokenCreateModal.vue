@@ -1,10 +1,16 @@
 <script setup lang="ts">
+/**
+ * Creates a personal token, then shows it once: from then on the modal
+ * closes only through its own buttons, so the token can't be lost to a
+ * stray click outside.
+ */
 import type { CreatedToken } from '~/types/token'
 
 const open = defineModel<boolean>('open', { default: false })
 
 const { apiFetch } = useApi()
 const toast = useToast()
+const appConfig = useAppConfig()
 
 const emit = defineEmits<{
     created: []
@@ -14,7 +20,6 @@ const name = ref('')
 const expiry = ref('90')
 const submitting = ref(false)
 const created = ref<CreatedToken | null>(null)
-const copied = ref(false)
 
 const expiryOptions = [
     { label: '30 days', value: '30' },
@@ -28,7 +33,6 @@ watch(open, (isOpen) => {
         name.value = ''
         expiry.value = '90'
         created.value = null
-        copied.value = false
     }
 })
 
@@ -48,17 +52,11 @@ async function submit() {
         emit('created')
     }
     catch (err) {
-        toast.add(errorToast(err, 'Failed to create token'))
+        toast.add(errorToast(err, "Couldn't create token"))
     }
     finally {
         submitting.value = false
     }
-}
-
-async function copy() {
-    if (!created.value) return
-    await navigator.clipboard.writeText(created.value.token)
-    copied.value = true
 }
 </script>
 
@@ -66,44 +64,37 @@ async function copy() {
     <UModal v-model:open="open"
             title="New token"
             description="A token acts as you in every organisation you belong to."
-            :ui="{ footer: 'justify-end' }">
+            :dismissible="!created">
         <template #body>
             <div v-if="!created"
                  class="flex flex-col gap-4">
                 <UFormField label="Name"
-                            help="What this token is for, e.g. “MCP — laptop”.">
+                            description="What this token is for, such as “MCP on my laptop”."
+                            required>
                     <UInput v-model="name"
                             placeholder="Token name"
                             class="w-full"
                             autofocus
                             @keydown.enter="submit" />
                 </UFormField>
-                <UFormField label="Expiration">
+                <UFormField label="Expiration"
+                            required>
                     <USelect v-model="expiry"
                              :items="expiryOptions"
                              value-key="value"
-                             class="w-40" />
+                             class="w-full" />
                 </UFormField>
             </div>
 
             <div v-else
-                 class="flex flex-col gap-3">
+                 class="flex flex-col gap-4">
                 <UAlert color="warning"
-                        variant="subtle"
-                        icon="i-lucide-triangle-alert"
+                        :icon="appConfig.ui.icons.warning"
                         title="Copy your token now"
                         description="It is shown only once and cannot be recovered later." />
-                <div class="flex items-center gap-2">
-                    <UInput :model-value="created.token"
-                            readonly
-                            class="min-w-0 flex-1"
-                            :ui="{ base: 'font-mono text-[13px]' }" />
-                    <UButton :icon="copied ? 'i-lucide-check' : 'i-lucide-copy'"
-                             :label="copied ? 'Copied' : 'Copy'"
-                             color="neutral"
-                             variant="outline"
-                             @click="copy" />
-                </div>
+                <UFormField label="Token">
+                    <CopyField :value="created.token" />
+                </UFormField>
             </div>
         </template>
 
@@ -114,7 +105,7 @@ async function copy() {
                          variant="outline"
                          @click="open = false" />
                 <UButton label="Create token"
-                         icon="i-lucide-key"
+                         :icon="appConfig.icons.token"
                          :disabled="!canSubmit"
                          :loading="submitting"
                          @click="submit" />

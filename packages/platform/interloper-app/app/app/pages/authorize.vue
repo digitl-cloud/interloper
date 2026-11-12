@@ -7,6 +7,7 @@ definePageMeta({
 
 const route = useRoute()
 const userStore = useUserStore()
+const appConfig = useAppConfig()
 const { apiFetch } = useApi()
 
 const RESOURCES: Record<ConsentRequest['resource'], string> = {
@@ -67,76 +68,78 @@ async function decide(approve: boolean) {
 </script>
 
 <template>
-    <div class="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
-        <div class="w-full max-w-md">
-            <UCard>
-                <template #header>
-                    <div class="text-center">
-                        <LogoIcon class="h-8 mx-auto text-primary" />
-                        <h2 class="text-2xl font-semibold tracking-[-0.01em] mt-3">
-                            Authorise application
-                        </h2>
-                    </div>
-                </template>
+    <div class="flex min-h-svh w-full items-center justify-center p-6">
+        <UCard class="w-full max-w-sm">
+            <template #header>
+                <div class="flex flex-col items-center gap-3 text-center">
+                    <LogoIcon class="h-8 text-primary" />
+                    <h1 class="text-2xl font-semibold text-highlighted">
+                        Authorise application
+                    </h1>
+                </div>
+            </template>
 
-                <div v-if="errorMessage"
-                     class="flex flex-col gap-4">
-                    <UAlert color="error"
-                            title="Unable to authorise"
-                            :description="errorMessage"
-                            icon="i-lucide-alert-circle" />
-                    <UButton label="Go Home"
+            <div v-if="errorMessage"
+                 class="flex flex-col gap-4">
+                <UAlert color="error"
+                        :icon="appConfig.ui.icons.error"
+                        title="Couldn't authorise"
+                        :description="errorMessage" />
+                <UButton label="Go home"
+                         color="neutral"
+                         variant="outline"
+                         block
+                         to="/" />
+            </div>
+
+            <div v-else-if="!consent"
+                 class="flex justify-center py-6">
+                <UIcon :name="appConfig.ui.icons.loading"
+                       class="size-5 animate-spin text-dimmed" />
+            </div>
+
+            <div v-else
+                 class="flex flex-col gap-4">
+                <p class="text-sm wrap-break-word">
+                    <span class="font-semibold text-highlighted">{{ consent.client_name }}</span>
+                    wants to act as you in every organisation you belong to, with your role in each.
+                    It will return you to
+                    <span class="font-semibold text-highlighted break-all">{{ consent.redirect_host }}</span>.
+                </p>
+
+                <div class="flex flex-col gap-2 rounded-lg bg-elevated p-3">
+                    <UFormField label="Signed in as"
+                                orientation="horizontal">
+                        <span class="truncate text-highlighted">{{ userStore.user?.email }}</span>
+                    </UFormField>
+                    <UFormField label="Access to"
+                                orientation="horizontal">
+                        <span class="text-highlighted">{{ RESOURCES[consent.resource] }}</span>
+                    </UFormField>
+                </div>
+
+                <p class="text-xs text-muted wrap-break-word">
+                    Approve only if you started this from {{ consent.client_name }}. You can revoke it at any time
+                    in Settings, under Authorised apps.
+                </p>
+
+                <div class="flex gap-3">
+                    <UButton label="Deny"
                              color="neutral"
                              variant="outline"
                              block
-                             to="/" />
+                             class="flex-1"
+                             :loading="deciding === 'deny'"
+                             :disabled="deciding !== null"
+                             @click="decide(false)" />
+                    <UButton label="Approve"
+                             block
+                             class="flex-1"
+                             :loading="deciding === 'approve'"
+                             :disabled="deciding !== null"
+                             @click="decide(true)" />
                 </div>
-
-                <div v-else-if="!consent"
-                     class="flex justify-center py-6">
-                    <UIcon name="i-lucide-loader-2"
-                           class="size-8 animate-spin text-primary" />
-                </div>
-
-                <div v-else
-                     class="flex flex-col gap-5">
-                    <p class="text-sm wrap-break-word">
-                        <span class="font-semibold text-highlighted">{{ consent.client_name }}</span>
-                        wants to act as you in every organisation you belong to, with your role in each.
-                        It will return you to
-                        <span class="font-mono font-semibold text-highlighted break-all">{{ consent.redirect_host }}</span>.
-                    </p>
-
-                    <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-md bg-elevated p-3 text-sm">
-                        <dt class="text-muted">Signed in as</dt>
-                        <dd class="truncate text-highlighted">{{ userStore.user?.email }}</dd>
-                        <dt class="text-muted">Access to</dt>
-                        <dd class="text-highlighted">{{ RESOURCES[consent.resource] }}</dd>
-                    </dl>
-
-                    <p class="text-xs text-muted wrap-break-word">
-                        Approve only if you started this from {{ consent.client_name }}. You can revoke it at any time
-                        in Settings, under Authorised apps.
-                    </p>
-
-                    <div class="flex gap-3">
-                        <UButton label="Deny"
-                                 color="neutral"
-                                 variant="outline"
-                                 block
-                                 class="flex-1"
-                                 :loading="deciding === 'deny'"
-                                 :disabled="deciding !== null"
-                                 @click="decide(false)" />
-                        <UButton label="Approve"
-                                 block
-                                 class="flex-1"
-                                 :loading="deciding === 'approve'"
-                                 :disabled="deciding !== null"
-                                 @click="decide(true)" />
-                    </div>
-                </div>
-            </UCard>
-        </div>
+            </div>
+        </UCard>
     </div>
 </template>

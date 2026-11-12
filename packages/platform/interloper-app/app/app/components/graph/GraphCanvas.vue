@@ -81,26 +81,28 @@ function toggleGroup(groupId: string) {
     expandedGroups.value = next
 }
 
-// Layout constants (assets render smaller in compact / run mode)
+// Layout constants. The cards are sized to match: AssetNode is w-64 h-32,
+// RunNode (compact) w-50 h-11, a nested source's header h-16, a top-level
+// source's and a group's header h-19.
 const ASSET_W = props.compact ? 200 : 256
 const ASSET_H = props.compact ? 44 : 128
-/** Vertical gap between stacked assets, and above the first one; fits two corner badges (8px each) with room to spare. */
-const ASSET_GAP = 20
-/** Vertical gap between the sources of a group, and above the first one. */
-const MEMBER_GAP = 20
+/** Vertical gap between stacked assets, above the first one and below the last; fits two corner badges (8px each) with room to spare. */
+const ASSET_GAP = 24
+/** Vertical gap between the sources of a group, above the first one and below the last. */
+const MEMBER_GAP = 24
 /** Horizontal gap between dependency ranks inside an expanded container. */
 const INNER_GAP_RANK = 48
-const SRC_PAD_X = 20
-const SRC_PAD_BOTTOM = 20
-const GRP_PAD_X = 20
-const GRP_PAD_BOTTOM = 20
-/** Header of a source nested in a group; a top-level source's header also holds its chip row. */
+/** Side padding of an expanded container: its header's own, so the header's tile lines up with the cards inside. */
+const SRC_PAD_X = 16
+const SRC_PAD_BOTTOM = ASSET_GAP
+const GRP_PAD_X = 16
+const GRP_PAD_BOTTOM = MEMBER_GAP
+/** Header of a source nested in a group; a top-level source's header also holds its name and id row. */
 const HEAD_H = 64
-const TOP_SOURCE_HEAD_H = 84
-/** Group header: its 36px tile with 20px above and below, matching the side padding. */
+const TOP_SOURCE_HEAD_H = 76
 const GRP_HEAD_H = 76
 /** Height each folded card adds under a collapsed nested source. */
-const LAYER_H = 6
+const LAYER_H = STACK_LAYER_H
 /** Folded cards a collapsed card peeks, so a stack reads as at most three deep. */
 const MAX_LAYERS = 2
 const SRC_W = ASSET_W + SRC_PAD_X * 2
@@ -367,8 +369,8 @@ const sourceLayout = computed(() => {
     return layoutDag(layoutNodes, topLevelEdges.value, {
         // gapX = within-layer, gapY = between-layer. In LR that means the
         // vertical gap within a rank and the horizontal gap between ranks.
-        gapX: props.compact ? 22 : 32,
-        gapY: props.compact ? 80 : 90,
+        gapX: props.compact ? 24 : 32,
+        gapY: props.compact ? 80 : 88,
         direction: props.direction,
     })
 })
@@ -401,10 +403,10 @@ const baseEdges = computed(() => {
 // ── Selection focus ──
 // Driven solely by the open panel (selectedId), never by VueFlow node
 // selection — expanding a source is not a selection. When an asset's panel is
-// open its incident edges turn blue and nodes outside its neighbourhood fade;
-// default (nothing open) leaves every edge faint and nothing dimmed. Hovering
-// an asset turns its incident edges blue and dims the other edges too, but
-// fades no node.
+// open its incident edges turn primary and nodes outside its neighbourhood fade;
+// default (nothing open) leaves every edge in the edge colour and nothing dimmed.
+// Hovering an asset turns its incident edges primary and dims the other edges
+// too, but fades no node.
 const hoveredId = ref<string | null>(null)
 
 function incidentEdges(id: string) {
@@ -568,19 +570,19 @@ const nodes = computed<Node[]>(() => {
 
 /**
  * Selection focus. Set opacity explicitly on EVERY node each pass — only
- * setting it on faded nodes leaves a stale 0.28 that VueFlow never clears,
+ * setting it on faded nodes leaves a stale value that VueFlow never clears,
  * so nodes would stay dimmed after the selection moves.
  */
 function applyFocus(result: Node[]): Node[] {
     const f = focus.value
     for (const node of result) {
         const faded = f ? !f.has(node.id) : false
-        node.style = { opacity: faded ? '0.28' : '1', transition: 'opacity 0.2s ease' }
+        node.style = { opacity: String(faded ? GRAPH_DIM_OPACITY : 1), transition: 'opacity 0.2s ease' }
     }
     return result
 }
 
-/** Styled edges: faint gray by default; the selected or hovered asset's incident edges go blue and the rest dim. */
+/** Styled edges in the edge colour; the selected or hovered asset's incident edges go primary and the rest dim. */
 const edges = computed<Edge[]>(() => {
     const dimmed = !!(props.selectedId || hoveredId.value)
     return baseEdges.value.map((e) => {
@@ -710,6 +712,7 @@ const edgeMenuVirtual = ref({ getBoundingClientRect: () => new DOMRect() })
 const edgeMenuEdge = ref<{ source: string; target: string; name?: string } | null>(null)
 
 const { confirm } = useConfirm()
+const appConfig = useAppConfig()
 
 const edgeMenuItems = computed<ContextMenuItem[][]>(() => {
     const edge = edgeMenuEdge.value
@@ -718,7 +721,7 @@ const edgeMenuItems = computed<ContextMenuItem[][]>(() => {
         [
             {
                 label: 'Delete dependency',
-                icon: 'i-lucide-trash',
+                icon: appConfig.icons.delete,
                 color: 'error' as const,
                 onSelect: async () => {
                     const confirmed = await confirm({
@@ -746,7 +749,7 @@ const paneMenuItems = computed<ContextMenuItem[][]>(() => [
     [
         {
             label: 'Expand all',
-            icon: 'i-lucide-maximize-2',
+            icon: appConfig.icons.expandAll,
             onSelect: () => {
                 expandedGroups.value = new Set(groups.value.keys())
                 expandedSources.value = new Set(sourceEntries.value.map(e => e.source.id))
@@ -754,7 +757,7 @@ const paneMenuItems = computed<ContextMenuItem[][]>(() => [
         },
         {
             label: 'Collapse all',
-            icon: 'i-lucide-minimize-2',
+            icon: appConfig.icons.collapseAll,
             onSelect: () => {
                 expandedGroups.value = new Set()
                 expandedSources.value = new Set()
@@ -769,6 +772,8 @@ const paneMenuItems = computed<ContextMenuItem[][]>(() => [
         },
     ],
 ])
+
+const emptyActions = [{ label: 'New source', icon: appConfig.ui.icons.plus, onClick: () => emit('add-source') }]
 
 function onPaneContextMenu(event: MouseEvent) {
     event.preventDefault()
@@ -814,7 +819,7 @@ function onEdgeContextMenu({ edge, event }: { edge: Edge; event: MouseEvent | To
                  :edges="edges"
                  :data-anchoring="anchoring || undefined"
                  fit-view
-                 class="!absolute inset-0 bg-[var(--graph-canvas)]"
+                 class="!absolute inset-0 bg-(--graph-canvas)"
                  :max-zoom="1"
                  :min-zoom="0.6"
                  :nodes-draggable="false"
@@ -843,7 +848,6 @@ function onEdgeContextMenu({ edge, event }: { edge: Edge; event: MouseEvent | To
                                  :open="data.open"
                                  :nested="data.nested"
                                  :layers="data.layers"
-                                 :selected="false"
                                  @edit="emit('edit-source', $event)"
                                  @delete="onDeleteSource" />
             </template>
@@ -865,7 +869,7 @@ function onEdgeContextMenu({ edge, event }: { edge: Edge; event: MouseEvent | To
             <template #edge-upstream="edgeProps">
                 <GraphDependencyEdge v-bind="edgeProps" />
             </template>
-            <Background :gap="23"
+            <Background :gap="24"
                         :size="2"
                         pattern-color="var(--graph-dot)" />
             <Controls position="bottom-left"
@@ -873,42 +877,27 @@ function onEdgeContextMenu({ edge, event }: { edge: Edge; event: MouseEvent | To
 
             <Panel v-if="editable && sourceEntries.length === 0"
                    position="top-left"
-                   class="!inset-0 !m-0 flex items-center justify-center pointer-events-none">
-                <div class="pointer-events-auto w-[430px] max-w-[92%] bg-default border border-default rounded-lg shadow-2xl px-8 py-9 text-center">
-                    <div class="size-14 mx-auto rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                        <UIcon name="i-lucide-workflow"
-                               class="size-7" />
-                    </div>
-                    <div class="eyebrow text-primary mt-4">
-                        Asset graph
-                    </div>
-                    <h2 class="text-[22px] font-bold tracking-[-0.02em] text-highlighted mt-2">
-                        Your data, wired together
-                    </h2>
-                    <p class="text-[15px] text-muted leading-relaxed mt-2.5">
-                        The graph is a live map of every source, the assets they produce and
-                        the dependencies between them — Interloper wires it automatically as
-                        you build. Add your first source to watch it take shape.
-                    </p>
-                    <UButton icon="i-lucide-plus"
-                             label="Add your first source"
-                             class="mt-6"
-                             @click="emit('add-source')" />
-                </div>
+                   class="!inset-0 !m-0 flex items-center justify-center p-4 pointer-events-none">
+                <UEmpty variant="outline"
+                        :icon="appConfig.icons.graph"
+                        title="Your data, wired together"
+                        description="The graph is a live map of every source, the assets they produce and the dependencies between them. It wires itself as you build: add your first source to watch it take shape."
+                        :actions="emptyActions"
+                        class="pointer-events-auto w-full max-w-md" />
             </Panel>
             <Panel v-else-if="editable && showNewSourceButton"
                    position="top-center"
                    class="!m-4">
-                <UButton icon="i-lucide-plus"
-                         label="New Source"
+                <UButton :icon="appConfig.ui.icons.plus"
+                         label="New source"
                          @click="emit('add-source')" />
             </Panel>
         </VueFlow>
 
         <div v-if="loading"
              class="absolute inset-0 z-50 flex items-center justify-center bg-default/50">
-            <UIcon name="i-lucide-loader-circle"
-                   class="size-8 text-muted animate-spin" />
+            <UIcon :name="appConfig.ui.icons.loading"
+                   class="size-5 animate-spin text-dimmed" />
         </div>
 
         <UDropdownMenu v-model:open="edgeMenuOpen"

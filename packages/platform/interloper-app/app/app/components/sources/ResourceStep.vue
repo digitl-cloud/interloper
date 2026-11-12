@@ -36,6 +36,7 @@ const emit = defineEmits<{
 
 const componentsStore = useComponentsStore()
 const toast = useToast()
+const appConfig = useAppConfig()
 
 const drawerOpen = ref(false)
 const newName = ref(props.definition.name ?? '')
@@ -55,10 +56,8 @@ const loadingInstances = ref(false)
 
 const schema = computed(() => (props.definition as any).config_schema ?? null)
 
-const kindLabel = computed(() => {
-    const s = props.relationName
-    return s.charAt(0).toUpperCase() + s.slice(1)
-})
+/** The relation as a lowercase noun for titles and buttons: "connection". */
+const noun = computed(() => props.relationName.toLowerCase())
 
 // ── Instance loading ─────────────────────────────────────────────
 
@@ -120,7 +119,7 @@ async function handleCreate() {
         if (!props.silent) toast.add({ title: `${props.definition.name} created`, color: 'success' })
     }
     catch (e) {
-        toast.add(errorToast(e, `Failed to create ${props.definition.name}`))
+        toast.add(errorToast(e, `Couldn't create ${noun.value}`))
     }
     finally {
         creating.value = false
@@ -134,48 +133,47 @@ defineExpose({ formData })
     <!-- ── Loading ─────────────────────────────────────────────── -->
     <div v-if="loadingInstances"
          class="flex items-center justify-center py-8">
-        <UIcon name="i-lucide-loader-circle"
-               class="size-5 animate-spin text-muted" />
+        <UIcon :name="appConfig.ui.icons.loading"
+               class="size-5 animate-spin text-dimmed" />
     </div>
 
     <!-- ── Select or create ─────────────────────────────────── -->
     <div v-else
          class="flex flex-col gap-4">
         <!-- Header -->
-        <div class="flex items-center justify-between">
+        <div class="flex items-center justify-between gap-2">
             <p class="text-sm text-muted">
-                Select an existing <strong>{{ definition.name }}</strong> or create a new one.
+                Select an existing <span class="font-medium text-highlighted">{{ definition.name }}</span> {{ noun }} or create one.
             </p>
-            <UButton size="xs"
-                     variant="ghost"
-                     icon="i-lucide-plus"
-                     label="Create new"
+            <UButton size="sm"
+                     color="neutral"
+                     variant="outline"
+                     :icon="appConfig.ui.icons.plus"
+                     :label="`New ${noun}`"
                      @click="openCreateDrawer" />
         </div>
 
-        <!-- Empty state -->
-        <InlineEmptyState v-if="instances.length === 0"
-                          :icon="componentIcon(definition.key)"
-                          :message="`No ${definition.name} ${definition.kind.toLowerCase()} yet.`"
-                          :action-label="`Create ${definition.kind.toLowerCase()}`"
-                          @action="openCreateDrawer" />
+        <UEmpty v-if="instances.length === 0"
+                variant="subtle"
+                size="sm"
+                :icon="componentIcon(definition.key)"
+                :title="`No ${definition.name} ${noun} yet`"
+                :actions="[{ label: `New ${noun}`, icon: appConfig.ui.icons.plus, onClick: openCreateDrawer }]" />
 
         <!-- Instance list -->
         <div v-else
-             class="flex flex-col gap-2.5">
+             class="flex flex-col gap-2">
             <SelectionCard v-for="inst in instances"
                            :key="inst.id"
                            :selected="selectedId === inst.id"
-                           class="flex items-center gap-3 px-4 py-3"
+                           :label="inst.name ?? definition.name"
+                           :icon="componentIcon(definition.key)"
                            @select="selectedId = inst.id">
-                <div class="size-10 shrink-0 rounded-lg border border-default bg-default flex items-center justify-center">
-                    <UIcon :name="componentIcon(definition.key)"
-                           class="size-6" />
-                </div>
-                <span class="text-[14.5px] font-semibold text-highlighted truncate">{{ inst.name }}</span>
-                <UIcon v-if="selectedId === inst.id"
-                       name="i-lucide-check"
-                       class="size-4 ml-auto text-primary shrink-0" />
+                <template v-if="selectedId === inst.id"
+                          #trailing>
+                    <UIcon :name="appConfig.ui.icons.check"
+                           class="size-4 shrink-0 text-primary" />
+                </template>
             </SelectionCard>
         </div>
 
@@ -185,10 +183,11 @@ defineExpose({ formData })
                  nested
                  :handle="false"
                  :handle-only="true"
-                 :title="`New ${kindLabel}`"
-                 :ui="{ content: 'w-[36rem]', description: 'sr-only' }">
+                 close
+                 :title="`New ${noun}`"
+                 :ui="{ description: 'sr-only' }">
             <template #description>
-                Create a new {{ definition.name }}
+                Create a new {{ definition.name }} {{ noun }}
             </template>
 
             <template #body>
@@ -225,10 +224,14 @@ defineExpose({ formData })
             </template>
 
             <template #footer>
-                <div class="flex justify-end w-full">
+                <div class="flex w-full justify-between gap-2">
+                    <UButton label="Cancel"
+                             color="neutral"
+                             variant="outline"
+                             @click="drawerOpen = false" />
                     <UButton :disabled="!canCreate || creating"
                              :loading="creating"
-                             :label="`Create ${kindLabel}`"
+                             :label="`Create ${noun}`"
                              @click="handleCreate" />
                 </div>
             </template>

@@ -10,13 +10,17 @@ definePageMeta({
 })
 
 const adminStore = useAdminStore()
+const appConfig = useAppConfig()
 
 const orgs = ref<AdminOrganisation[]>([])
 const users = ref<AdminUser[]>([])
 const quotas = ref<AdminQuotas | null>(null)
 const loading = ref(true)
+const loadError = ref<unknown>(null)
 
-onMounted(async () => {
+async function load() {
+    loading.value = true
+    loadError.value = null
     try {
         [orgs.value, users.value, quotas.value] = await Promise.all([
             adminStore.listOrganisations(),
@@ -25,12 +29,14 @@ onMounted(async () => {
         ])
     }
     catch (err) {
-        console.error('[Admin] Failed to load overview', err)
+        loadError.value = err
     }
     finally {
         loading.value = false
     }
-})
+}
+
+onMounted(load)
 
 const orgById = computed(() => new Map(orgs.value.map(org => [org.id, org])))
 const deletedOrgs = computed(() => orgs.value.filter(org => org.deleted_at))
@@ -41,10 +47,8 @@ const liveQuotaRows = computed(() => {
     return quotas.value?.organisations.filter(row => !deleted.has(row.id)) ?? []
 })
 
-const periodLabel = computed(() => {
-    if (!quotas.value) return ''
-    return new Date(quotas.value.period_start).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
-})
+// Quota periods are calendar months in UTC, so their start is a day, not an instant.
+const periodLabel = computed(() => quotas.value ? `Since ${formatCalendarDay(quotas.value.period_start.slice(0, 10))}` : '')
 
 // -- Stat tiles ---------------------------------------------------------------
 
@@ -84,7 +88,7 @@ const tiles = computed(() => {
 
 interface AttentionItem {
     icon: string
-    tone: 'error' | 'warning' | 'neutral'
+    tone: 'error' | 'warning' | 'muted'
     title: string
     detail: string
     action: string
@@ -97,7 +101,7 @@ const attention = computed<AttentionItem[]>(() => {
         const peak = peakQuota(row)
         if (peak && peak.pct >= 75) {
             items.push({
-                icon: 'i-lucide-gauge',
+                icon: appConfig.icons.quota,
                 tone: peak.pct >= 90 ? 'error' : 'warning',
                 title: `${row.name} at ${peak.pct}% of ${peak.label.toLowerCase()} quota`,
                 detail: `${peak.label} ${peak.used.toLocaleString()} / ${peak.limit.toLocaleString()}`
@@ -108,7 +112,7 @@ const attention = computed<AttentionItem[]>(() => {
         }
         if (row.successful_runs !== row.recomputed_successful_runs) {
             items.push({
-                icon: 'i-lucide-triangle-alert',
+                icon: appConfig.ui.icons.warning,
                 tone: 'warning',
                 title: `Ledger drift on ${row.name}`,
                 detail: `Counter reads ${row.successful_runs.toLocaleString()} successful runs; recomputed `
@@ -121,8 +125,8 @@ const attention = computed<AttentionItem[]>(() => {
     for (const user of users.value) {
         if (user.organisations.length === 0) {
             items.push({
-                icon: 'i-lucide-user-minus',
-                tone: 'neutral',
+                icon: appConfig.icons.user,
+                tone: 'muted',
                 title: `${user.name || user.email} belongs to no organisation`,
                 detail: `Signed up ${formatDay(user.created_at)} and was never invited anywhere — `
                     + 'cannot reach any workspace.',
@@ -133,9 +137,9 @@ const attention = computed<AttentionItem[]>(() => {
     }
     for (const org of deletedOrgs.value) {
         items.push({
-            icon: 'i-lucide-trash-2',
-            tone: 'neutral',
-            title: `${org.name} soft-deleted ${timeSince(new Date(org.deleted_at!))} ago`,
+            icon: appConfig.icons.delete,
+            tone: 'muted',
+            title: `${org.name} soft-deleted ${relativeTime(new Date(org.deleted_at!))}`,
             detail: 'Read-only and retained for billing history.',
             action: 'Review',
             to: '/admin/organisations',
@@ -144,10 +148,10 @@ const attention = computed<AttentionItem[]>(() => {
     return items
 })
 
-const ATTENTION_TILE: Record<AttentionItem['tone'], string> = {
-    error: 'bg-error/10 text-error',
-    warning: 'bg-warning/10 text-warning',
-    neutral: 'bg-elevated text-muted',
+const ATTENTION_ICON: Record<AttentionItem['tone'], string> = {
+    error: 'text-error',
+    warning: 'text-warning',
+    muted: 'text-muted',
 }
 
 // -- Quota pressure + top orgs ----------------------------------------------------
@@ -173,27 +177,17 @@ const topOrgs = computed(() => liveQuotaRows.value
     .map(row => ({
         id: row.id,
         name: row.name,
-        tint: avatarColor(row.id),
         runs: row.successful_runs,
         sources: row.sources,
         members: orgById.value.get(row.id)?.member_count ?? 0,
     })))
-
-function pctTone(pct: number): string {
-    if (pct >= 90) return 'text-error'
-    if (pct >= 75) return 'text-warning'
-    return 'text-success'
-}
 
 const topOrgColumns: TableColumn<(typeof topOrgs.value)[number]>[] = [
     {
         accessorKey: 'name',
         header: 'Organisation',
         meta: { class: { td: 'w-full' } },
-        cell: ({ row }) => h('span', { class: 'flex items-center gap-2.5' }, [
-            h('span', { class: 'h-5 w-1 shrink-0 rounded', style: { background: row.original.tint } }),
-            h('span', { class: 'truncate font-medium text-highlighted' }, row.original.name),
-        ]),
+        cell: ({ row }) => h('span', { class: 'truncate font-medium text-highlighted' }, row.original.name),
     },
     {
         accessorKey: 'runs',
@@ -219,15 +213,15 @@ const activity = computed(() => {
     const entries: { when: string, icon: string, text: string, who: string }[] = []
     for (const org of orgs.value) {
         if (org.created_at)
-            entries.push({ when: org.created_at, icon: 'i-lucide-building-2', text: 'Organisation created', who: org.name })
+            entries.push({ when: org.created_at, icon: appConfig.icons.organisation, text: 'Organisation created', who: org.name })
         if (org.deleted_at)
-            entries.push({ when: org.deleted_at, icon: 'i-lucide-trash-2', text: 'Organisation deleted', who: org.name })
+            entries.push({ when: org.deleted_at, icon: appConfig.icons.delete, text: 'Organisation deleted', who: org.name })
     }
     for (const user of users.value) {
         if (user.created_at)
             entries.push({
                 when: user.created_at,
-                icon: 'i-lucide-user-plus',
+                icon: appConfig.icons.user,
                 text: `${user.name || user.email} joined the platform`,
                 who: user.organisations[0]?.name ?? '—',
             })
@@ -235,7 +229,7 @@ const activity = computed(() => {
     return entries
         .sort((a, b) => new Date(b.when).getTime() - new Date(a.when).getTime())
         .slice(0, 8)
-        .map(entry => ({ ...entry, whenLabel: `${timeSince(new Date(entry.when))} ago` }))
+        .map(entry => ({ ...entry, whenLabel: relativeTime(new Date(entry.when)) }))
 })
 </script>
 
@@ -246,10 +240,15 @@ const activity = computed(() => {
         </template>
         <template #body>
             <div v-if="loading"
-                 class="flex items-center justify-center py-16">
-                <UIcon name="i-lucide-loader-circle"
+                 class="flex items-center justify-center py-12">
+                <UIcon :name="appConfig.ui.icons.loading"
                        class="size-5 animate-spin text-dimmed" />
             </div>
+
+            <LoadError v-else-if="loadError"
+                       title="Couldn't load the overview"
+                       :error="loadError"
+                       @retry="load" />
 
             <template v-else>
                 <div class="grid grid-cols-2 gap-4 sm:gap-6 xl:grid-cols-4">
@@ -266,26 +265,24 @@ const activity = computed(() => {
 
                 <div class="grid items-start gap-4 sm:gap-6 lg:grid-cols-2">
                     <UCard title="Needs attention"
-                           :description="`${attention.length} item${attention.length === 1 ? '' : 's'}`"
-                           :ui="{ body: 'p-0 sm:p-0' }">
-                        <div class="divide-y divide-default border-t border-default">
-                            <div v-if="attention.length === 0"
-                                 class="flex items-center gap-2.5 px-4 py-5 text-sm text-muted sm:px-6">
-                                <UIcon name="i-lucide-check-circle"
-                                       class="size-4 text-success" />
-                                All clear — nothing needs attention.
-                            </div>
+                           :description="`${attention.length} item${attention.length === 1 ? '' : 's'}`">
+                        <UEmpty v-if="attention.length === 0"
+                                variant="naked"
+                                size="sm"
+                                :icon="appConfig.ui.icons.success"
+                                title="All clear"
+                                description="Nothing needs attention." />
+                        <div v-else
+                             class="flex flex-col divide-y divide-default">
                             <div v-for="item in attention"
                                  :key="item.title"
-                                 class="flex items-center gap-3.5 px-4 py-3 sm:px-6">
-                                <span class="flex size-8 shrink-0 items-center justify-center rounded-full"
-                                      :class="ATTENTION_TILE[item.tone]">
-                                    <UIcon :name="item.icon"
-                                           class="size-4" />
-                                </span>
+                                 class="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                                <UIcon :name="item.icon"
+                                       class="size-5 shrink-0"
+                                       :class="ATTENTION_ICON[item.tone]" />
                                 <div class="min-w-0 flex-1">
-                                    <div class="text-sm font-medium leading-snug text-highlighted">{{ item.title }}</div>
-                                    <div class="mt-0.5 text-xs leading-normal text-muted">{{ item.detail }}</div>
+                                    <div class="text-sm font-medium text-highlighted">{{ item.title }}</div>
+                                    <div class="mt-0.5 text-xs text-muted">{{ item.detail }}</div>
                                 </div>
                                 <UButton :label="item.action"
                                          :to="item.to"
@@ -307,17 +304,18 @@ const activity = computed(() => {
                                          size="sm" />
                             </CardHeader>
                         </template>
-                        <div v-if="pressure.length === 0"
-                             class="text-sm text-muted">
-                            No quota limits configured — usage is unmetered pressure-wise.
-                        </div>
+                        <UEmpty v-if="pressure.length === 0"
+                                variant="naked"
+                                size="sm"
+                                title="No quota limits configured"
+                                description="Usage is unmetered, so nothing is under pressure." />
                         <div v-else
                              class="flex flex-col gap-4">
                             <div v-for="entry in pressure"
                                  :key="entry.id">
                                 <div class="flex items-baseline gap-2">
-                                    <span class="min-w-0 flex-1 truncate text-sm font-semibold">{{ entry.name }}</span>
-                                    <span class="font-mono text-xs text-muted">
+                                    <span class="min-w-0 flex-1 truncate text-sm font-medium text-highlighted">{{ entry.name }}</span>
+                                    <span class="text-xs text-muted tabular-nums">
                                         {{ entry.label }} {{ entry.used.toLocaleString() }} / {{ entry.limit.toLocaleString() }}
                                     </span>
                                 </div>
@@ -340,23 +338,23 @@ const activity = computed(() => {
                                 @select="(_e: Event, row: any) => navigateTo(`/admin/organisations/${row.original.id}`)" />
                     </UCard>
 
-                    <UCard title="Recent activity"
-                           :ui="{ body: 'p-0 sm:p-0' }">
-                        <div class="divide-y divide-default border-t border-default">
-                            <div v-if="activity.length === 0"
-                                 class="px-4 py-5 text-sm text-muted sm:px-6">
-                                Nothing yet.
-                            </div>
+                    <UCard title="Recent activity">
+                        <UEmpty v-if="activity.length === 0"
+                                variant="naked"
+                                size="sm"
+                                title="Nothing yet" />
+                        <div v-else
+                             class="flex flex-col divide-y divide-default">
                             <div v-for="entry in activity"
                                  :key="entry.when + entry.text"
-                                 class="flex items-start gap-3 px-4 py-3 sm:px-6">
-                                <span class="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-elevated text-muted">
-                                    <UIcon :name="entry.icon"
-                                           class="size-3.5" />
-                                </span>
+                                 class="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+                                <UIcon :name="entry.icon"
+                                       class="mt-0.5 size-4 shrink-0 text-muted" />
                                 <div class="min-w-0 flex-1">
-                                    <div class="text-sm leading-snug">{{ entry.text }}</div>
-                                    <div class="mt-0.5 text-xs text-dimmed">{{ entry.who }} · {{ entry.whenLabel }}</div>
+                                    <div class="text-sm">{{ entry.text }}</div>
+                                    <div class="mt-0.5 text-xs text-dimmed">
+                                        {{ entry.who }} · <span class="tabular-nums">{{ entry.whenLabel }}</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>

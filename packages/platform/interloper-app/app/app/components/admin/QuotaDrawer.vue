@@ -55,7 +55,7 @@ async function submit() {
         emit('saved')
     }
     catch (err) {
-        toast.add(errorToast(err, 'Failed to update quota limits'))
+        toast.add(errorToast(err, "Couldn't update quota limits"))
     }
     finally {
         saving.value = false
@@ -68,37 +68,29 @@ async function submit() {
              direction="right"
              :handle="false"
              :handle-only="true"
+             close
              title="Edit quotas"
-             :description="orgName"
-             :ui="{ content: 'w-[420px] max-w-[92vw]' }">
+             :description="orgName">
         <template #body>
-            <UButton icon="i-lucide-x"
-                     color="neutral"
-                     variant="soft"
-                     size="md"
-                     class="absolute top-[22px] right-[26px] rounded-md text-muted"
-                     aria-label="Close"
-                     @click="open = false" />
-            <p class="text-[13px] text-muted leading-normal mb-4">
-                Leave a field empty to inherit the instance default.
-            </p>
             <div class="flex flex-col gap-4">
-                <div v-for="field in fields"
-                     :key="field.key"
-                     class="flex flex-col gap-1.5">
-                    <label class="text-[13px] font-semibold">{{ field.label }}</label>
+                <p class="text-sm text-muted">
+                    Leave a field empty to inherit the instance default.
+                </p>
+                <UFormField v-for="field in fields"
+                            :key="field.key"
+                            :label="field.label"
+                            :help="hint(field)">
                     <UInput v-model="form[field.key]"
                             type="number"
                             min="0"
                             :placeholder="`Instance default (${defaultLabel(field)})`"
-                            class="w-full font-mono"
+                            class="w-full"
                             @keydown.enter="submit" />
-                    <span class="text-xs text-dimmed">{{ hint(field) }}</span>
-                </div>
+                </UFormField>
             </div>
         </template>
         <template #footer>
-            <div class="flex justify-end gap-2 w-full">
+            <div class="flex w-full justify-between gap-2">
                 <UButton label="Cancel"
                          color="neutral"
                          variant="outline"

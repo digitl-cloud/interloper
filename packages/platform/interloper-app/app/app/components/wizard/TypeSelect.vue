@@ -16,6 +16,7 @@ const props = defineProps<{
     definitions: DefinitionItem[]
 }>()
 
+const appConfig = useAppConfig()
 const search = ref('')
 
 function matches(defn: DefinitionItem, query: string): boolean {
@@ -49,36 +50,36 @@ const groups = computed(() => {
 </script>
 
 <template>
-    <div class="space-y-4">
+    <div class="flex flex-col gap-4">
         <UInput v-model="search"
-                placeholder="Search..."
-                icon="i-lucide-search"
+                placeholder="Search…"
+                :icon="appConfig.ui.icons.search"
                 class="w-full" />
 
-        <div v-if="filtered.length === 0"
-             class="flex items-center justify-center rounded-md p-6 text-sm text-muted">
-            No results match your search.
-        </div>
+        <UEmpty v-if="filtered.length === 0"
+                variant="naked"
+                size="sm"
+                :icon="appConfig.ui.icons.search"
+                title="No types match your search" />
 
         <template v-else>
             <div v-for="[tag, items] in groups"
                  :key="tag"
                  class="flex flex-col gap-3">
                 <span v-if="tag"
-                      class="eyebrow text-dimmed">{{ tag }}</span>
+                      class="caption text-muted">{{ tag }}</span>
                 <div class="grid grid-cols-2 gap-3">
                     <SelectionCard v-for="defn in items"
                                    :key="defn.key"
                                    :selected="selectedKey === defn.key"
-                                   class="relative flex flex-col items-center gap-2.5 px-3.5 py-4"
+                                   :label="defn.name"
+                                   :icon="componentIcon(defn.key)"
+                                   orientation="vertical"
                                    @select="selectedKey = defn.key">
-                        <UIcon :name="componentIcon(defn.key)"
-                               class="size-7 shrink-0" />
-                        <span class="text-sm font-semibold text-highlighted text-center leading-tight line-clamp-2">{{ defn.name }}</span>
-                        <div v-if="showsMaturity(defn.maturity)"
-                             class="absolute top-2 right-2">
+                        <template v-if="showsMaturity(defn.maturity)"
+                                  #trailing>
                             <MaturityBadge :maturity="defn.maturity" />
-                        </div>
+                        </template>
                     </SelectionCard>
                 </div>
             </div>

@@ -14,7 +14,7 @@ const props = withDefaults(defineProps<{
     members: GraphSourceEntry[]
     /** Group is expanded (members shown as nested nodes). */
     open?: boolean
-    /** Aggregated member status — reflected on the card border. */
+    /** Aggregated member status: the dot, and the border for the states that tint it. */
     status?: NodeStatus
     /** Folded cards drawn under the collapsed card. */
     layers?: number
@@ -29,7 +29,9 @@ const targetConnections = useNodeConnections({ handleType: 'target' })
 const hasDownstream = computed(() => sourceConnections.value.length > 0)
 const hasUpstream = computed(() => targetConnections.value.length > 0)
 
-const icon = computed(() => componentIcon(props.groupKey))
+const appConfig = useAppConfig()
+const icon = computed(() => componentIcon(props.groupKey, appConfig.icons.source))
+const state = computed<GraphNodeState>(() => props.status?.state ?? 'idle')
 const label = computed(() => props.sourceDefn?.name ?? props.groupKey)
 const sourceCount = computed(() => props.members.length)
 const assetCount = computed(() => props.members.reduce((sum, m) => sum + (m.source.children?.length ?? 0), 0))
@@ -55,32 +57,38 @@ const issueCount = computed(() =>
                 :class="!hasUpstream && 'opacity-0'" />
 
         <GraphCornerBadge v-if="issueCount > 0 && !open"
-                          icon="i-lucide-triangle-alert"
+                          :icon="appConfig.ui.icons.warning"
                           corner="top-right"
                           tone="warning">
-            <div class="text-xs">{{ issueCount }} {{ issueCount === 1 ? 'asset' : 'assets' }} with configuration issues</div>
+            {{ issueCount }} {{ issueCount === 1 ? 'asset' : 'assets' }} with configuration issues
         </GraphCornerBadge>
 
         <div class="relative isolate h-full w-full">
             <GraphCardStack v-if="!open"
                             :layers="layers" />
-            <div class="graph-card relative z-[1] flex h-full w-full flex-col rounded-2xl border border-[var(--graph-card-line)] bg-[var(--graph-node-bg)]"
-                 :class="[!open && 'graph-raise', !open && layers === 0 && 'graph-stack-floor']">
-                <div class="flex h-[76px] shrink-0 items-center gap-3.5 px-5">
-                    <div class="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-elevated">
+            <div class="graph-card relative z-1 flex h-full w-full flex-col rounded-2xl border bg-(--graph-node-bg)"
+                 :class="[
+                     statusBorderClass(state) || 'border-(--graph-card-line)',
+                     !open && 'graph-raise',
+                     !open && layers === 0 && 'graph-stack-floor',
+                 ]">
+                <div class="flex h-19 shrink-0 items-center gap-3 px-4">
+                    <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-elevated">
                         <UIcon :name="icon"
-                               class="size-5" />
+                               class="size-6" />
                     </div>
                     <div class="min-w-0 flex-1">
-                        <div class="flex items-center gap-[7px]">
-                            <span class="truncate text-sm font-semibold tracking-tight text-highlighted">{{ label }}</span>
-                            <span class="size-[7px] shrink-0 rounded-full"
-                                  :class="statusDotClass(status?.state ?? 'idle')" />
+                        <div class="flex items-center gap-2">
+                            <span class="truncate text-sm font-semibold text-highlighted">{{ label }}</span>
+                            <StatusDot :color="nodeStateColor(state)"
+                                       :pulse="nodeStateExecuting(state)" />
                         </div>
-                        <div class="mt-0.5 truncate text-[11.5px] text-dimmed">{{ meta }}</div>
+                        <div class="mt-0.5 truncate text-xs text-dimmed tabular-nums">{{ meta }}</div>
                     </div>
-                    <GraphCountBadge :count="assetCount"
-                                     emphasis />
+                    <UBadge color="neutral"
+                            class="shrink-0">
+                        <span class="tabular-nums">{{ assetCount }}</span>
+                    </UBadge>
                 </div>
             </div>
         </div>

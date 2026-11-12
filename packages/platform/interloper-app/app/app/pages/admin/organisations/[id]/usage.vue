@@ -1,30 +1,34 @@
 <script setup lang="ts">
-import { h } from 'vue'
-import type { TableColumn } from '@nuxt/ui'
-import { UBadge } from '#components'
 import type { AdminOrgQuotaStatus, AdminQuotas } from '~/types/admin'
 
 const adminStore = useAdminStore()
+const appConfig = useAppConfig()
 const { orgId, org } = useAdminOrganisation()
 
 const quotas = ref<AdminQuotas | null>(null)
+const loading = ref(false)
+const loadError = ref<unknown>(null)
 
 const quotaRow = computed<AdminOrgQuotaStatus | null>(() =>
     quotas.value?.organisations.find(row => row.id === orgId.value) ?? null)
 
 async function reloadQuotas() {
+    loading.value = true
+    loadError.value = null
     try {
         quotas.value = await adminStore.getQuotas()
     }
     catch (err) {
-        console.error('[Admin] Failed to load quotas', err)
+        loadError.value = err
+    }
+    finally {
+        loading.value = false
     }
 }
 
-const periodLabel = computed(() => {
-    if (!quotas.value) return ''
-    return new Date(quotas.value.period_start).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
-})
+// Quota periods are calendar months in UTC, so their start is a day, not an instant.
+const periodStart = computed(() => quotas.value?.period_start.slice(0, 10) ?? null)
+const periodStartLabel = computed(() => periodStart.value ? formatCalendarDay(periodStart.value) : '')
 
 const usageTiles = computed(() => {
     const row = quotaRow.value
@@ -84,125 +88,127 @@ const limitRows = computed(() => {
     })
 })
 
-const limitColumns: TableColumn<(typeof limitRows.value)[number]>[] = [
-    {
-        accessorKey: 'label',
-        header: 'Limit',
-        meta: { class: { td: 'whitespace-nowrap font-medium text-highlighted' } },
-    },
-    {
-        accessorKey: 'value',
-        header: 'Value',
-        meta: { class: { td: 'w-full' } },
-        cell: ({ row }) => h('span', [
-            h('span', { class: 'font-mono text-sm font-medium text-highlighted' }, row.original.value),
-            h('span', { class: 'ml-2 text-xs text-dimmed' }, row.original.note),
-        ]),
-    },
-    {
-        accessorKey: 'overridden',
-        header: 'Source',
-        cell: ({ row }) => h(UBadge, {
-            label: row.original.overridden ? 'Override' : 'Inherited',
-            color: row.original.overridden ? 'info' : 'neutral',
-            size: 'sm',
-        }),
-    },
-]
-
-/** Day-of-period progress for the usage strip (quota counters reset monthly). */
+/** Day-of-period progress (quota counters reset at each UTC month). */
 const periodElapsed = computed(() => {
-    if (!quotas.value) return null
-    const start = new Date(quotas.value.period_start)
-    const end = new Date(start.getFullYear(), start.getMonth() + 1, 0)
-    const day = Math.min(new Date().getDate(), end.getDate())
-    return { label: `Day ${day} of ${end.getDate()}`, pct: Math.round((day / end.getDate()) * 100) }
+    if (!periodStart.value) return null
+    const [year, month] = periodStart.value.split('-').map(Number) as [number, number]
+    const days = new Date(Date.UTC(year, month, 0)).getUTCDate()
+    const day = Math.min(new Date().getUTCDate(), days)
+    return { label: `Day ${day} of ${days}`, pct: Math.round((day / days) * 100) }
 })
+
+const ledgerRows = computed(() => quotaRow.value
+    ? [
+            { label: 'Counter', value: quotaRow.value.successful_runs },
+            { label: 'Runs table', value: quotaRow.value.recomputed_successful_runs },
+            { label: 'Reserved', value: quotaRow.value.reserved_runs },
+        ]
+    : [])
 
 const ledgerInSync = computed(() =>
     quotaRow.value != null && quotaRow.value.successful_runs === quotaRow.value.recomputed_successful_runs)
 
-// Edit drawer — the AdminQuotaDrawer owns the form; we just open it.
+// The AdminQuotaDrawer owns the form; the page only opens it.
 const editOpen = ref(false)
 
 watch(orgId, reloadQuotas, { immediate: true })
 </script>
 
 <template>
-    <div class="flex flex-col gap-4 sm:gap-6">
-        <div class="grid grid-cols-2 gap-4 sm:gap-6 xl:grid-cols-4">
-            <UCard v-for="tile in usageTiles"
-                   :key="tile.label"
-                   :ui="{ body: 'flex flex-col gap-3' }">
-                <div class="text-sm text-muted">{{ tile.label }}</div>
-                <div class="flex min-w-0 items-baseline gap-2">
-                    <span class="text-3xl font-semibold tabular-nums text-highlighted">{{ tile.value }}</span>
-                    <span class="truncate text-sm text-muted">{{ tile.sub }}</span>
-                </div>
-                <AdminUsageMeter v-if="tile.limit != null"
-                                 :used="tile.used"
-                                 :limit="tile.limit"
-                                 :show-label="false" />
-            </UCard>
+    <div class="mx-auto flex w-full max-w-2xl flex-col gap-4 sm:gap-6">
+        <div v-if="loading && !quotas"
+             class="flex items-center justify-center py-12">
+            <UIcon :name="appConfig.ui.icons.loading"
+                   class="size-5 animate-spin text-dimmed" />
         </div>
 
-        <UCard v-if="periodElapsed">
-            <div class="flex items-baseline gap-2">
-                <span class="flex-1 truncate text-sm font-medium text-highlighted">Period elapsed · {{ periodLabel }}</span>
-                <span class="whitespace-nowrap text-xs text-muted">{{ periodElapsed.label }}</span>
-                <span class="whitespace-nowrap text-xs font-semibold text-primary">{{ periodElapsed.pct }}%</span>
-            </div>
-            <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-accented">
-                <div class="h-full rounded-full bg-primary"
-                     :style="{ width: periodElapsed.pct + '%' }" />
-            </div>
-        </UCard>
+        <LoadError v-else-if="loadError"
+                   title="Couldn't load the usage"
+                   :error="loadError"
+                   @retry="reloadQuotas" />
 
-        <section v-if="quotaRow"
-                 class="flex flex-col gap-3">
-            <CardHeader title="Ledger"
-                        :description="ledgerInSync
-                            ? 'The runs counter and a recount from the runs table agree.'
-                            : 'The runs counter and a recount from the runs table disagree — inspect recent runs.'" />
-            <UCard :ui="{ body: 'p-0 sm:p-0' }">
-                <div class="divide-y divide-default">
-                    <div class="flex items-center gap-3 px-4 py-3 sm:px-6">
-                        <span class="w-56 shrink-0 text-sm text-muted">Status</span>
+        <template v-else-if="quotaRow">
+            <div class="grid grid-cols-2 gap-4 sm:gap-6">
+                <UCard v-for="tile in usageTiles"
+                       :key="tile.label"
+                       :ui="{ body: 'flex flex-col gap-3' }">
+                    <div class="text-sm text-muted">{{ tile.label }}</div>
+                    <div class="flex min-w-0 items-baseline gap-2">
+                        <span class="text-3xl font-semibold tabular-nums text-highlighted">{{ tile.value }}</span>
+                        <span class="truncate text-sm text-muted">{{ tile.sub }}</span>
+                    </div>
+                    <AdminUsageMeter v-if="tile.limit != null"
+                                     :used="tile.used"
+                                     :limit="tile.limit"
+                                     :show-label="false" />
+                </UCard>
+            </div>
+
+            <UCard v-if="periodElapsed"
+                   :ui="{ body: 'flex flex-col gap-2' }">
+                <div class="flex items-baseline gap-2">
+                    <span class="flex-1 truncate text-sm font-medium text-highlighted">Period elapsed since {{ periodStartLabel }}</span>
+                    <span class="whitespace-nowrap text-xs text-muted tabular-nums">{{ periodElapsed.label }}</span>
+                    <span class="whitespace-nowrap text-xs font-semibold text-highlighted tabular-nums">{{ periodElapsed.pct }}%</span>
+                </div>
+                <UProgress :model-value="periodElapsed.pct" />
+            </UCard>
+
+            <section class="flex flex-col gap-4">
+                <UPageCard variant="naked"
+                           orientation="horizontal"
+                           title="Ledger"
+                           :description="ledgerInSync
+                               ? 'The runs counter and a recount from the runs table agree.'
+                               : 'The runs counter and a recount from the runs table disagree, so inspect recent runs.'" />
+                <UCard :ui="{ body: 'flex flex-col gap-4' }">
+                    <UFormField label="Status"
+                                orientation="horizontal">
                         <UBadge :label="ledgerInSync ? 'In sync' : 'Drift'"
                                 :color="ledgerInSync ? 'success' : 'warning'"
-                                :icon="ledgerInSync ? 'i-lucide-check' : 'i-lucide-triangle-alert'" />
-                    </div>
-                    <div class="flex items-center gap-3 px-4 py-3 sm:px-6">
-                        <span class="w-56 shrink-0 text-sm text-muted">Counter</span>
-                        <span class="font-mono text-sm font-medium">{{ quotaRow.successful_runs.toLocaleString() }}</span>
-                    </div>
-                    <div class="flex items-center gap-3 px-4 py-3 sm:px-6">
-                        <span class="w-56 shrink-0 text-sm text-muted">Runs table</span>
-                        <span class="font-mono text-sm font-medium">{{ quotaRow.recomputed_successful_runs.toLocaleString() }}</span>
-                    </div>
-                    <div class="flex items-center gap-3 px-4 py-3 sm:px-6">
-                        <span class="w-56 shrink-0 text-sm text-muted">Reserved</span>
-                        <span class="font-mono text-sm font-medium">{{ quotaRow.reserved_runs.toLocaleString() }}</span>
-                    </div>
-                </div>
-            </UCard>
-        </section>
+                                :icon="ledgerInSync ? appConfig.ui.icons.success : appConfig.ui.icons.warning" />
+                    </UFormField>
+                    <template v-for="row in ledgerRows"
+                              :key="row.label">
+                        <USeparator />
+                        <UFormField :label="row.label"
+                                    orientation="horizontal">
+                            <span class="font-medium text-highlighted tabular-nums">{{ row.value.toLocaleString() }}</span>
+                        </UFormField>
+                    </template>
+                </UCard>
+            </section>
 
-        <section class="flex flex-col gap-3">
-            <CardHeader title="Limits"
-                        :description="`Current period: ${periodLabel}`">
-                <UButton icon="i-lucide-pencil"
-                         label="Edit limits"
-                         color="neutral"
-                         variant="outline"
-                         size="sm"
-                         @click="editOpen = true" />
-            </CardHeader>
-            <UCard>
-                <UTable :data="limitRows"
-                        :columns="limitColumns" />
-            </UCard>
-        </section>
+            <section class="flex flex-col gap-4">
+                <UPageCard variant="naked"
+                           orientation="horizontal"
+                           title="Limits"
+                           :description="`The current period started ${periodStartLabel}.`">
+                    <UButton :icon="appConfig.icons.edit"
+                             label="Edit limits"
+                             color="neutral"
+                             variant="outline"
+                             class="w-fit lg:ms-auto"
+                             @click="editOpen = true" />
+                </UPageCard>
+                <UCard :ui="{ body: 'flex flex-col gap-4' }">
+                    <template v-for="(row, index) in limitRows"
+                              :key="row.key">
+                        <USeparator v-if="index > 0" />
+                        <UFormField :label="row.label"
+                                    :description="row.note"
+                                    orientation="horizontal">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-highlighted tabular-nums">{{ row.value }}</span>
+                                <UBadge :label="row.overridden ? 'Override' : 'Inherited'"
+                                        :color="row.overridden ? 'info' : 'neutral'"
+                                        size="sm" />
+                            </div>
+                        </UFormField>
+                    </template>
+                </UCard>
+            </section>
+        </template>
 
         <AdminQuotaDrawer v-model:open="editOpen"
                           :org-id="orgId"

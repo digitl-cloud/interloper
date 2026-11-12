@@ -29,6 +29,7 @@ const emit = defineEmits<{
 const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
 const toast = useToast()
+const appConfig = useAppConfig()
 
 const selectedAssetKeys = ref<string[]>(props.source ? props.source.children.map(a => a.key) : [])
 const resolvedCrossDeps = ref<Record<string, string[]>>({})
@@ -49,7 +50,7 @@ const extraSteps = [
     {
         name: 'assets',
         title: 'Assets',
-        icon: 'i-lucide-layers',
+        icon: appConfig.icons.asset,
         placement: 'start' as const,
         canProceed: () => selectedAssetKeys.value.length > 0,
         recap: () => `${selectedAssetKeys.value.length} selected`,
@@ -57,7 +58,7 @@ const extraSteps = [
     {
         name: 'destinations',
         title: 'Destination',
-        icon: 'i-lucide-hard-drive',
+        icon: appConfig.icons.destination,
         placement: 'end' as const,
         recap: () => {
             const names = selectedDestinationIds.value
@@ -79,10 +80,10 @@ function extraInput() {
  * Cross-source deps are wired per child asset via the relations endpoint,
  * using the child ids from the save response.
  *
- * One leg at a time, and every failure is reported: the source itself is
- * already saved by the time this runs, so a leg that never binds leaves an
- * asset the user believes is wired unable to run. Re-submitting an
- * already-wired leg on edit is not a failure, the API returns the row it
+ * One upstream at a time, and every failure is reported: the source itself
+ * is already saved by the time this runs, so an upstream that never binds
+ * leaves an asset the user believes is wired unable to run. Re-submitting an
+ * already-wired upstream on edit is not a failure, the API returns the row it
  * holds.
  */
 async function wireCrossDeps(saved: ComponentRecord) {
@@ -102,11 +103,8 @@ async function wireCrossDeps(saved: ComponentRecord) {
         }
     }
     if (failed.length) {
-        toast.add({
-            title: 'Some dependencies were not wired',
-            description: `${failed.join(', ')} could not be bound. Edit the source to wire them again.`,
-            color: 'error',
-        })
+        const reason = new Error(`${failed.join(', ')} could not be bound. Edit the source to wire them again.`)
+        toast.add(errorToast(reason, "Couldn't wire some dependencies"))
     }
 }
 
@@ -129,7 +127,7 @@ defineExpose({
     isLastStep: computed(() => stepper.value?.isLastStep ?? false),
     submitting: computed(() => stepper.value?.submitting ?? false),
     submitLabel: computed(() => stepper.value?.submitLabel ?? 'Next'),
-    title: computed(() => stepper.value?.title ?? 'New Source'),
+    title: computed(() => stepper.value?.title ?? 'New source'),
     next: () => stepper.value?.next(),
     prev: () => stepper.value?.prev(),
 })

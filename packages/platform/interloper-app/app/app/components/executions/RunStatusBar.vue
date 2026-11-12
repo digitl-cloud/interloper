@@ -20,10 +20,10 @@ function toggle(bucket: RunStatusBucket) {
 </script>
 
 <template>
-    <div class="flex flex-col gap-2.5">
-        <div class="flex items-center gap-3.5">
+    <div class="flex flex-col gap-3">
+        <div class="flex items-center gap-3">
             <div class="flex shrink-0 items-baseline gap-1">
-                <span class="text-base font-semibold tabular-nums">{{ stats.total }}</span>
+                <span class="text-base font-semibold tabular-nums text-highlighted">{{ stats.total }}</span>
                 <span class="text-xs text-muted">{{ noun }}</span>
             </div>
             <UProgressGroup :items="progressSegments(stats)"
@@ -46,8 +46,7 @@ function toggle(bucket: RunStatusBucket) {
                      :class="statusFilter && statusFilter !== bucket.key ? 'opacity-60' : ''"
                      @click="toggle(bucket)">
                 <template #leading>
-                    <span class="size-2 rounded-full"
-                          :class="bucket.colorClass" />
+                    <StatusDot :color="statusMeta(bucket.key).color" />
                 </template>
                 {{ bucket.label }}
                 <span class="font-semibold tabular-nums">{{ bucket.count }}</span>

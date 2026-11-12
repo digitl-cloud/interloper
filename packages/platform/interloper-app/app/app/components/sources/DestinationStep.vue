@@ -3,9 +3,9 @@
  * Step for selecting destinations for a source.
  *
  * Behaves as a multiselect: lists all existing destinations, user toggles
- * which ones to attach. A "Create new" button opens a nested drawer with
- * the DestinationsStepper to collect config for a new destination (created
- * when the source is saved).
+ * which ones to attach. "New destination" opens a nested drawer with the
+ * destination wizard, which creates the destination right away; it then
+ * joins the list, selected.
  *
  * This step is optional — a source can exist without destinations.
  */
@@ -23,6 +23,7 @@ const props = defineProps<{
 
 const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
+const appConfig = useAppConfig()
 
 const drawerOpen = ref(false)
 const destStepperRef = ref<any>(null)
@@ -86,10 +87,6 @@ async function handleCreated() {
     drawerOpen.value = false
 }
 
-function destIcon(key: string) {
-    return componentIcon(key, 'i-lucide-hard-drive')
-}
-
 function destLabel(key: string) {
     const defn = catalogStore.getDestinationDefinition(key)
     return defn?.name ?? key
@@ -99,50 +96,49 @@ function destLabel(key: string) {
 <template>
     <div class="flex flex-col gap-4">
         <!-- Header -->
-        <div class="flex items-center justify-between">
+        <div class="flex items-center justify-between gap-2">
             <p class="text-sm text-muted">
                 Select where the data should be written.
             </p>
-            <UButton size="xs"
-                     variant="ghost"
-                     icon="i-lucide-plus"
-                     label="Create new"
+            <UButton size="sm"
+                     color="neutral"
+                     variant="outline"
+                     :icon="appConfig.ui.icons.plus"
+                     label="New destination"
                      @click="drawerOpen = true" />
         </div>
 
         <!-- Loading -->
         <div v-if="loading"
              class="flex items-center justify-center py-8">
-            <UIcon name="i-lucide-loader-circle"
-                   class="size-5 animate-spin text-muted" />
+            <UIcon :name="appConfig.ui.icons.loading"
+                   class="size-5 animate-spin text-dimmed" />
         </div>
 
         <template v-else>
             <!-- Existing destinations -->
             <div v-if="availableDestinations.length > 0"
-                 class="flex flex-col gap-2.5">
+                 class="flex flex-col gap-2">
                 <SelectionCard v-for="dest in availableDestinations"
                                :key="dest.id"
                                :selected="isSelected(dest.id)"
-                               class="flex items-center gap-3 px-4 py-3"
+                               :label="dest.name || destLabel(dest.key)"
+                               :icon="componentIcon(dest.key, appConfig.icons.destination)"
                                @select="toggle(dest.id)">
-                    <UCheckbox :model-value="isSelected(dest.id)"
-                               @click.stop
-                               @update:model-value="toggle(dest.id)" />
-                    <div class="size-10 shrink-0 rounded-lg border border-default bg-default flex items-center justify-center">
-                        <UIcon :name="destIcon(dest.key)"
-                               class="size-6" />
-                    </div>
-                    <span class="text-[14.5px] font-semibold text-highlighted truncate">{{ dest.name || destLabel(dest.key) }}</span>
+                    <template #leading>
+                        <UCheckbox :model-value="isSelected(dest.id)"
+                                   @click.stop
+                                   @update:model-value="toggle(dest.id)" />
+                    </template>
                 </SelectionCard>
             </div>
 
-            <!-- Empty state -->
-            <InlineEmptyState v-if="availableDestinations.length === 0"
-                              icon="i-lucide-hard-drive"
-                              message="No destinations yet."
-                              action-label="Create destination"
-                              @action="drawerOpen = true" />
+            <UEmpty v-else
+                    variant="subtle"
+                    size="sm"
+                    :icon="appConfig.icons.destination"
+                    title="No destinations yet"
+                    :actions="[{ label: 'New destination', icon: appConfig.ui.icons.plus, onClick: () => { drawerOpen = true } }]" />
         </template>
 
         <!-- Nested drawer for destination creation -->
@@ -151,8 +147,9 @@ function destLabel(key: string) {
                  nested
                  :handle="false"
                  :handle-only="true"
-                 :title="destStepperRef?.title ?? 'New Destination'"
-                 :ui="{ content: 'w-[36rem]', description: 'sr-only' }">
+                 close
+                 :title="destStepperRef?.title ?? 'New destination'"
+                 :ui="{ description: 'sr-only' }">
             <template #description>Create a destination</template>
             <template #body>
                 <WizardDefinitionStepper v-if="drawerOpen"
@@ -166,12 +163,13 @@ function destLabel(key: string) {
             </template>
             <template #footer>
                 <WizardStepperNav v-if="destStepperRef"
-                            :can-proceed="destStepperRef.canProceed"
-                            :has-prev="destStepperRef.hasPrev"
-                            :submitting="destStepperRef.submitting"
-                            :submit-label="destStepperRef.submitLabel"
-                            @next="destStepperRef.next()"
-                            @prev="destStepperRef.prev()" />
+                                  :last-step="destStepperRef.isLastStep"
+                                  :can-proceed="destStepperRef.canProceed"
+                                  :has-prev="destStepperRef.hasPrev"
+                                  :submitting="destStepperRef.submitting"
+                                  :submit-label="destStepperRef.submitLabel"
+                                  @next="destStepperRef.next()"
+                                  @prev="destStepperRef.prev()" />
             </template>
         </UDrawer>
     </div>

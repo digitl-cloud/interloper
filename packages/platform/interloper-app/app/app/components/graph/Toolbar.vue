@@ -1,21 +1,23 @@
 <script setup lang="ts">
 /**
- * Graph canvas toolbar: status filter pills on the left, the group-by tabs
- * on the right, followed by the page's `actions` slot.
+ * Graph canvas toolbar: the status filter tabs, then the group-by tabs, with
+ * the page's `actions` slot at the far end.
  */
 const groupBy = defineModel<GroupBy>('groupBy', { default: 'type' })
-
-const GROUP_OPTIONS = [
-    { value: 'type', label: 'Type', icon: 'i-lucide-group' },
-    { value: 'source', label: 'Source', icon: 'i-lucide-plug' },
-    { value: 'asset', label: 'Asset', icon: 'i-lucide-box' },
-]
 const statusFilter = defineModel<StatusFilter>('statusFilter', { default: 'all' })
 
 const props = defineProps<{
-    /** Per-state source counts for the filter pills. */
+    /** Per-state source counts for the filter tabs. */
     counts: Record<StatusFilter, number>
 }>()
+
+const appConfig = useAppConfig()
+
+const groupOptions = computed(() => [
+    { value: 'type', label: 'Type', icon: appConfig.icons.type },
+    { value: 'source', label: 'Source', icon: appConfig.icons.source },
+    { value: 'asset', label: 'Asset', icon: appConfig.icons.asset },
+])
 
 const FILTERS: Array<{ value: StatusFilter; label: string; dot?: GraphNodeState }> = [
     { value: 'all', label: 'All' },
@@ -24,10 +26,14 @@ const FILTERS: Array<{ value: StatusFilter; label: string; dot?: GraphNodeState 
     { value: 'paused', label: 'Paused', dot: 'paused' },
 ]
 
-// Hide a filter pill when it has no members (except All), to avoid dead options.
+// Hide a filter tab when it has no members (except All), to avoid dead options.
 const filterItems = computed(() => FILTERS
     .filter(f => f.value === 'all' || props.counts[f.value] > 0)
     .map(f => ({ label: f.label, value: f.value, badge: props.counts[f.value], dot: f.dot })))
+
+function dotOf(item: unknown): GraphNodeState | undefined {
+    return (item as { dot?: GraphNodeState }).dot
+}
 </script>
 
 <template>
@@ -39,18 +45,18 @@ const filterItems = computed(() => FILTERS
                size="sm"
                :content="false">
             <template #leading="{ item }">
-                <span v-if="(item as any).dot"
-                      class="size-1.5 rounded-full"
-                      :class="statusDotClass((item as any).dot)" />
+                <StatusDot v-if="dotOf(item)"
+                           :color="nodeStateColor(dotOf(item)!)"
+                           :pulse="nodeStateExecuting(dotOf(item)!)" />
             </template>
         </UTabs>
         <span class="ms-4 text-sm text-muted">Group by</span>
         <UTabs v-model="groupBy"
-               :items="GROUP_OPTIONS"
+               :items="groupOptions"
                variant="pill"
                size="sm"
                :content="false" />
-        <div class="ml-auto flex items-center gap-2">
+        <div class="ms-auto flex items-center gap-2">
             <slot name="actions" />
         </div>
     </div>

@@ -76,7 +76,7 @@ export function useOAuthPopup() {
             'oauth2popup',
             `width=${width},height=${height},left=${left},top=${top}`,
         )
-        if (!popup) throw new Error('Failed to open popup window')
+        if (!popup) throw new Error('The sign-in window was blocked. Allow pop-ups for this site and try again.')
 
         return new Promise((resolve, reject) => {
             const channel = new BroadcastChannel(OAUTH_CHANNEL)
@@ -113,7 +113,7 @@ export function useOAuthPopup() {
                 }
                 else {
                     // Leave the popup open — it displays the failure details.
-                    settle(() => reject(new Error(message.error || 'OAuth sign-in failed')))
+                    settle(() => reject(new Error(message.error || 'The provider did not complete the sign-in.')))
                 }
             }
         })

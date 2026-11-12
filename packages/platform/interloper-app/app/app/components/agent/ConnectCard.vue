@@ -8,7 +8,7 @@
  *
  * Creation is gated on the candidate check (`POST /catalog/{key}/check`): the
  * create button runs the check first and only creates when it passes. A
- * failure is surfaced by the button itself — it turns into an error state
+ * failure is surfaced by the button itself: it turns into an error state
  * carrying the categorised message, and a click retries. Config failures
  * additionally land under the form fields via `SchemaForm.setErrors`; any
  * edit resets the button. The created connection becomes the tool call's
@@ -39,8 +39,10 @@ const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
 const { apiFetch } = useOrgApi()
 const toast = useToast()
+const appConfig = useAppConfig()
 
 const defn = computed(() => catalogStore.catalog[props.request.connection_key])
+const icon = computed(() => componentIcon(props.request.connection_key, appConfig.icons.connection))
 const schema = computed(() => (defn.value as any)?.config_schema ?? null)
 
 const name = ref(props.request.name ?? '')
@@ -72,14 +74,14 @@ const button = computed(() => {
                     : `${failure.value?.message ?? 'The connection check failed.'} Try again`,
                 loading: false,
                 color: 'error' as const,
-                icon: 'i-lucide-circle-x',
+                icon: appConfig.ui.icons.error,
             }
         default:
             return { label: 'Create connection', loading: false, color: 'primary' as const, icon: undefined }
     }
 })
 
-// A failure goes stale as soon as the user edits anything — back to idle.
+// A failure goes stale as soon as the user edits anything: back to idle.
 watch([formData, name], () => {
     if (state.value === 'failed') {
         state.value = 'idle'
@@ -126,57 +128,43 @@ async function submit() {
             config: formData.value,
         })
         createdName.value = name.value.trim()
-        toast.add({ title: `Connection "${createdName.value}" created`, color: 'success' })
+        toast.add({ title: 'Connection created', description: createdName.value, color: 'success' })
         emit('created', { connection_id: created.id, name: createdName.value, verified: check.live })
     }
     catch (e) {
-        toast.add(errorToast(e, 'Failed to create connection'))
+        toast.add(errorToast(e, 'Couldn\'t create connection'))
         state.value = 'idle'
     }
 }
 </script>
 
 <template>
-    <div class="mx-auto my-2 w-full min-w-80 max-w-md rounded-lg border border-default bg-default p-4">
-        <!-- Unknown type: the catalog may not carry this key anymore -->
-        <div v-if="!defn"
-             class="flex items-center gap-2 text-[13px] text-muted">
-            <UIcon name="i-lucide-circle-alert"
+    <!-- Unknown type: the catalog may not carry this key anymore -->
+    <AgentCard v-if="!defn">
+        <p class="flex items-center gap-2 text-sm text-muted">
+            <UIcon :name="appConfig.ui.icons.caution"
                    class="size-4 shrink-0" />
             Connection type "{{ request.connection_key }}" is not in the catalog.
-        </div>
+        </p>
+    </AgentCard>
 
-        <!-- Created: locked summary -->
-        <div v-else-if="createdName"
-             class="flex items-center gap-2.5">
-            <div class="size-8 shrink-0 rounded-md border border-default bg-elevated/50 flex items-center justify-center">
-                <UIcon :name="componentIcon(request.connection_key)"
-                       class="size-4.5" />
-            </div>
-            <div class="flex-1 min-w-0 text-[13px]">
-                <span class="font-semibold text-highlighted">{{ createdName }}</span>
-                <span class="text-muted"> — {{ defn.name }} connection created</span>
-            </div>
-            <UIcon name="i-lucide-check-circle-2"
-                   class="size-4 text-success shrink-0" />
-        </div>
+    <!-- Created: locked summary -->
+    <AgentCard v-else-if="createdName"
+               :icon="icon"
+               :title="createdName"
+               :description="`${defn.name} connection created`">
+        <template #actions>
+            <UIcon :name="appConfig.ui.icons.success"
+                   class="size-5 shrink-0 text-success" />
+        </template>
+    </AgentCard>
 
-        <!-- Setup form -->
-        <div v-else
-             class="flex flex-col gap-3">
-            <div class="flex items-center gap-2.5">
-                <div class="size-8 shrink-0 rounded-md border border-default bg-elevated/50 flex items-center justify-center">
-                    <UIcon :name="componentIcon(request.connection_key)"
-                           class="size-4.5" />
-                </div>
-                <div class="flex-1 min-w-0">
-                    <div class="text-[13px] font-semibold text-highlighted truncate">{{ defn.name }}</div>
-                    <div class="font-mono text-[10px] uppercase tracking-[0.05em] text-dimmed truncate">
-                        New connection
-                    </div>
-                </div>
-            </div>
-
+    <!-- Setup form -->
+    <AgentCard v-else
+               :icon="icon"
+               :title="defn.name"
+               description="New connection">
+        <div class="flex flex-col gap-3">
             <UFormField label="Connection name"
                         required>
                 <UInput v-model="name"
@@ -198,5 +186,5 @@ async function submit() {
                      block
                      @click="submit" />
         </div>
-    </div>
+    </AgentCard>
 </template>

@@ -13,15 +13,19 @@ export function partitionCount(day: DayAggregate): number {
     return day.successful + day.failed + day.missing
 }
 
-/** Cell colours from Tailwind's status scales; the low states are their tints. */
+/**
+ * Cell colours as CSS expressions of the status tokens: the low states mix the
+ * colour into the panel, a successful day that missed snapshots darkens it.
+ * DOM cells bind them as styles; the canvas calendar resolves them with `useChartTheme`.
+ */
 export const CELL = {
-    successful: { light: '#00bc7d', dark: '#00d492' },
-    successfulMissed: { light: '#009966', dark: '#00bc7d' },
-    partial: { light: '#ffb900', dark: '#ffb900' },
-    partialLow: { light: '#fee685', dark: '#8d630e' },
-    failed: { light: '#fb2c36', dark: '#ff6467' },
-    failedLow: { light: '#ffa2a2', dark: '#8d4041' },
-    empty: { light: '#f5f5f5', dark: '#262626' },
+    successful: 'var(--ui-success)',
+    successfulMissed: 'color-mix(in oklab, var(--ui-success) 70%, var(--ui-text-highlighted))',
+    partial: 'var(--ui-warning)',
+    partialLow: 'color-mix(in oklab, var(--ui-warning) 40%, var(--ui-bg))',
+    failed: 'var(--ui-error)',
+    failedLow: 'color-mix(in oklab, var(--ui-error) 40%, var(--ui-bg))',
+    empty: 'var(--ui-bg-elevated)',
 }
 
 /** Status index order: a day's cell takes the colour at its `cellStatus`. */
@@ -45,27 +49,41 @@ export type PartitionState = 'successful' | 'missing' | 'failed' | 'missed'
 /** How each partition state is drawn wherever it is counted: the source list's badges and a day's breakdown. */
 export const PARTITION_STATES: {
     key: PartitionState
-    icon: string
     color: string
-    badge: 'success' | 'warning' | 'error' | 'neutral'
+    badge: StatusColor
     label: string
 }[] = [
-    { key: 'successful', icon: 'i-lucide-circle-check', color: 'text-success', badge: 'success', label: 'successful' },
-    { key: 'missing', icon: 'i-lucide-circle-dashed', color: 'text-warning', badge: 'warning', label: 'missing' },
-    { key: 'failed', icon: 'i-lucide-circle-alert', color: 'text-error', badge: 'error', label: 'failed' },
-    { key: 'missed', icon: 'i-lucide-circle-slash', color: 'text-muted', badge: 'neutral', label: 'missed' },
+    { key: 'successful', color: 'text-success', badge: 'success', label: 'successful' },
+    { key: 'missing', color: 'text-warning', badge: 'warning', label: 'missing' },
+    { key: 'failed', color: 'text-error', badge: 'error', label: 'failed' },
+    { key: 'missed', color: 'text-muted', badge: 'neutral', label: 'missed' },
 ]
 
-/** The states with a count, in `PARTITION_STATES` order, each with its count and the words that name it. */
+/** A partition state's icon, from the icon maps. Call it where `useAppConfig` is available (setup, render). */
+export function partitionStateIcon(state: PartitionState): string {
+    const { ui, icons } = useAppConfig()
+    switch (state) {
+        case 'successful': return ui.icons.success
+        case 'missing': return icons.missing
+        case 'failed': return ui.icons.error
+        case 'missed': return icons.missed
+    }
+}
+
+/** The states with a count, in `PARTITION_STATES` order, each with its icon, count and the words that name it. */
 export function stateCounts(counts: Record<PartitionState, number>) {
     return PARTITION_STATES
         .filter(state => counts[state.key] > 0)
         .map(state => ({
             ...state,
+            icon: partitionStateIcon(state.key),
             value: counts[state.key],
             text: `${counts[state.key].toLocaleString()} ${counts[state.key] === 1 ? 'partition' : 'partitions'} ${state.label}`,
         }))
 }
+
+/** What a coverage window with nothing to count says, wherever it says it. */
+export const NO_PARTITIONS = 'No partitions in this window'
 
 const DAY_MS = 86_400_000
 
@@ -136,7 +154,7 @@ export function useCoverageCalendar(
             if (day.failed) failures++
             else if (day.missing) missingDays++
         }
-        if (!total) return 'No partitions in this window'
+        if (!total) return NO_PARTITIONS
         const pct = Math.round((100 * successful) / total)
         return `${pct}% of ${total.toLocaleString()} partitions successful · ${missingDays} days with missing partitions · ${failures} with failures`
     })

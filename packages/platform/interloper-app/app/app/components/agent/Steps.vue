@@ -21,7 +21,7 @@ const text = computed(() => {
     if (props.live) {
         const last = props.parts[props.parts.length - 1]
         if (last && isToolUIPart(last)) return toolLabel(getToolName(last), isToolStreaming(last))
-        return 'Thinking...'
+        return 'Thinking…'
     }
     const count = tools.value.length
     return count ? `${count} step${count === 1 ? '' : 's'}` : 'Thought'
@@ -29,42 +29,34 @@ const text = computed(() => {
 
 const suffix = computed(() => !props.live && failed.value ? `${failed.value} failed` : undefined)
 
+const appConfig = useAppConfig()
 </script>
 
 <template>
-    <UCollapsible class="w-full">
-        <button type="button"
-                class="group flex items-center gap-1.5 w-full min-h-6 text-left text-sm text-muted hover:text-highlighted transition-colors cursor-pointer">
+    <AgentFold :icon="failed ? appConfig.ui.icons.warning : 'i-lucide-list-checks'"
+               :text="text"
+               :suffix="suffix"
+               :live="live"
+               :error="failed > 0">
+        <template #leading>
             <slot name="leading" />
-            <UIcon :name="failed ? 'i-lucide-triangle-alert' : 'i-lucide-list-checks'"
-                   class="size-4 shrink-0"
-                   :class="failed ? 'text-error' : ''" />
-            <UChatShimmer v-if="live"
-                          :text="text" />
-            <span v-else>{{ text }}</span>
-            <span v-if="suffix"
-                  class="text-dimmed">{{ suffix }}</span>
-            <UIcon name="i-lucide-chevron-down"
-                   class="size-4 shrink-0 transition-transform group-data-[state=open]:rotate-180" />
-        </button>
-
-        <template #content>
-            <div class="flex flex-col items-start gap-1 w-full pt-2 pl-1">
-                <template v-for="(part, index) in parts"
-                          :key="index">
-                    <UChatReasoning v-if="isReasoningUIPart(part)"
-                                    :text="part.text"
-                                    :streaming="isPartStreaming(part)"
-                                    chevron="leading"
-                                    class="w-full">
-                        <Markdown :value="part.text"
-                                  :streaming="isPartStreaming(part)"
-                                  class="chat-prose *:first:mt-0 *:last:mb-0" />
-                    </UChatReasoning>
-                    <AgentTool v-else-if="isToolUIPart(part)"
-                               :part="part" />
-                </template>
-            </div>
         </template>
-    </UCollapsible>
+
+        <div class="flex w-full flex-col items-start gap-1 pt-2 pl-1">
+            <template v-for="(part, index) in parts"
+                      :key="index">
+                <UChatReasoning v-if="isReasoningUIPart(part)"
+                                :text="part.text"
+                                :streaming="isPartStreaming(part)"
+                                chevron="leading"
+                                class="w-full">
+                    <Markdown :value="part.text"
+                              :streaming="isPartStreaming(part)"
+                              class="chat-prose *:first:mt-0 *:last:mb-0" />
+                </UChatReasoning>
+                <AgentTool v-else-if="isToolUIPart(part)"
+                           :part="part" />
+            </template>
+        </div>
+    </AgentFold>
 </template>

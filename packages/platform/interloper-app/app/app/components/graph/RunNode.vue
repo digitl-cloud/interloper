@@ -3,21 +3,22 @@ import { Handle, Position, useNodeConnections } from '@vue-flow/core'
 import type { ComponentRecord } from '~/types/component'
 
 /**
- * Compact run-graph node: status dot + type icon + name + duration, sized for
- * a dense left-to-right DAG. Left/Right handles match the LR flow (the catalog
- * AssetNode is large and uses Top/Bottom handles, made for the TB catalog).
+ * Compact run-graph node: status dot, type icon, name and duration, sized for
+ * a dense left-to-right DAG (GraphCanvas's compact asset size). Its status
+ * tints the border for the states that tint it.
  */
 const props = defineProps<{
     asset: ComponentRecord
     assetDefn: AssetDefinition | undefined
     status?: NodeStatus
-    /** VueFlow selection state — drives the selection ring. */
+    /** The open asset: drives the selection outline. */
     selected?: boolean
 }>()
 
 defineEmits<{ view: [] }>()
 
-const icon = computed(() => props.assetDefn ? componentIcon(props.assetDefn.key) : 'i-lucide-box')
+const appConfig = useAppConfig()
+const icon = computed(() => props.assetDefn ? componentIcon(props.assetDefn.key) : appConfig.icons.asset)
 const label = computed(() => props.assetDefn?.name ?? props.asset.key)
 const state = computed<GraphNodeState>(() => props.status?.state ?? 'idle')
 
@@ -26,25 +27,28 @@ const targetConnections = useNodeConnections({ handleType: 'target' })
 const hasUpstream = computed(() => targetConnections.value.length > 0)
 const hasDownstream = computed(() => sourceConnections.value.length > 0)
 
-const frameClass = computed(() => props.selected ? 'ring-2 ring-primary' : statusBorderClass(state.value) || 'border-[var(--ui-border-accented)]')
+const frameClass = computed(() => [
+    statusBorderClass(state.value) || 'border-(--graph-card-line)',
+    props.selected && GRAPH_SELECTED_CLASS,
+])
 </script>
 
 <template>
-    <div class="relative w-[190px]">
+    <div class="relative w-50">
         <Handle v-if="hasUpstream"
                 type="target"
                 :position="Position.Left"
                 :connectable="false" />
 
-        <div class="flex items-center gap-2 rounded-lg border bg-muted px-3 py-2 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.55)]"
+        <div class="graph-asset flex h-11 items-center gap-2 rounded-xl border bg-(--graph-node-bg) px-3"
              :class="frameClass">
-            <span class="size-2 shrink-0 rounded-full"
-                  :class="statusDotClass(state)" />
+            <StatusDot :color="nodeStateColor(state)"
+                       :pulse="nodeStateExecuting(state)" />
             <UIcon :name="icon"
                    class="size-4 shrink-0 text-muted" />
-            <span class="min-w-0 flex-1 truncate text-xs font-medium text-highlighted">{{ label }}</span>
+            <span class="min-w-0 flex-1 truncate text-sm font-medium text-highlighted">{{ label }}</span>
             <span v-if="status?.label"
-                  class="shrink-0 text-[11px] tabular-nums text-muted">{{ status.label }}</span>
+                  class="shrink-0 text-xs tabular-nums text-muted">{{ status.label }}</span>
         </div>
 
         <Handle v-if="hasDownstream"

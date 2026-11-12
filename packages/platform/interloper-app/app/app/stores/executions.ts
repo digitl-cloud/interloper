@@ -14,6 +14,7 @@ export const useExecutionsStore = defineStore('executions', () => {
     /** Latest execution per asset across the organisation, once `fetchLatest` has run. */
     const latest = ref<Execution[]>([])
     const latestLoaded = ref(false)
+    const latestError = ref<Error | null>(null)
     const latestByAssetId = computed(() => {
         const map = new Map<string, Execution>()
         for (const execution of latest.value) {
@@ -77,12 +78,13 @@ export const useExecutionsStore = defineStore('executions', () => {
     }
 
     async function fetchLatest() {
+        latestError.value = null
         try {
             latest.value = await fetchAll<Execution>('/executions', { latest: 'true' })
             latestLoaded.value = true
         }
         catch (e) {
-            error.value = e as Error
+            latestError.value = e as Error
         }
     }
 
@@ -93,6 +95,7 @@ export const useExecutionsStore = defineStore('executions', () => {
         error.value = null
         latest.value = []
         latestLoaded.value = false
+        latestError.value = null
     }
 
     watch(() => orgStore.organisation?.id, $reset)
@@ -103,6 +106,7 @@ export const useExecutionsStore = defineStore('executions', () => {
         loading,
         error,
         latest,
+        latestError,
         latestByAssetId,
         fetchForRun,
         fetchLatest,

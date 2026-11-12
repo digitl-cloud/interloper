@@ -37,21 +37,51 @@ export function startOfDay(ms: number): number {
     return midnight
 }
 
-/** Wall-clock label in the display timezone, e.g. "14:05" or "14:05:30" with `seconds`. */
-export function formatClockTime(date: Date, seconds = false): string {
-    return date.toLocaleTimeString(undefined, {
+/** Dates and times read day-first in every browser ("4 Feb 2026", "14:05"), matching `formatDate`. */
+const DISPLAY_LOCALE = 'en-GB'
+
+/**
+ * Wall-clock label in the display timezone, on a 24-hour clock: "14:05",
+ * "14:05:30" with `seconds`, "14:05:30.123" with `'ms'`.
+ */
+export function formatClockTime(date: Date, seconds: boolean | 'ms' = false): string {
+    return date.toLocaleTimeString(DISPLAY_LOCALE, {
         hour: '2-digit',
         minute: '2-digit',
+        hourCycle: 'h23',
         ...(seconds ? { second: '2-digit' } : {}),
+        ...(seconds === 'ms' ? { fractionalSecondDigits: 3 } : {}),
         timeZone: displayTimeZone,
     })
 }
 
 /** Short day label in the display timezone, e.g. "4 Feb". */
 export function formatShortDay(date: Date): string {
-    return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: displayTimeZone })
+    return date.toLocaleDateString(DISPLAY_LOCALE, { day: 'numeric', month: 'short', timeZone: displayTimeZone })
 }
 
+/** Short day and wall-clock time in the display timezone, e.g. "4 Feb 14:05". */
+export function formatDayTime(value: string | number | Date): string {
+    const date = value instanceof Date ? value : new Date(value)
+    return `${formatShortDay(date)} ${formatClockTime(date)}`
+}
+
+/**
+ * A calendar date (`YYYY-MM-DD`, such as a partition's) as a label, e.g.
+ * "Tue 4 Feb 2026". It names a day, not an instant, so no time zone shifts it.
+ */
+export function formatCalendarDay(isoDate: string, options: { weekday?: boolean, year?: boolean } = {}): string {
+    const { weekday = false, year = true } = options
+    return new Date(`${isoDate}T00:00:00Z`).toLocaleDateString(DISPLAY_LOCALE, {
+        weekday: weekday ? 'short' : undefined,
+        day: 'numeric',
+        month: 'short',
+        year: year ? 'numeric' : undefined,
+        timeZone: 'UTC',
+    })
+}
+
+/** Time elapsed since `date` in words, e.g. "3 hours"; prefer `relativeTime` for compact labels. */
 export function timeSince(date: Date): string {
     const seconds = Math.floor((new Date().valueOf() - date.valueOf()) / 1000)
     let interval = seconds / 31536000
@@ -82,9 +112,10 @@ export function timeSince(date: Date): string {
 export function formatDay(value: string | Date | null | undefined): string {
     if (!value) return '—'
     const date = typeof value === 'string' ? new Date(value) : value
-    return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: displayTimeZone })
+    return date.toLocaleDateString(DISPLAY_LOCALE, { day: 'numeric', month: 'short', year: 'numeric', timeZone: displayTimeZone })
 }
 
+/** Day, month and 24-hour time with seconds in the display timezone, e.g. "4 Feb, 14:05:30"; empty for no value. */
 export function formatDate(value: string | Date | null | undefined) {
     if (!value) return ''
     const date = typeof value === 'string' ? new Date(value) : value
@@ -101,6 +132,7 @@ export function formatDate(value: string | Date | null | undefined) {
     return `${day} ${month}, ${time}`
 }
 
+/** Duration between two instants (or until now), e.g. "1h 4m 12s" or "850ms"; empty without a start. */
 export function formatElapsed(start?: string | Date | null, end?: string | Date | null) {
     if (!start) return ''
 

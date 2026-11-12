@@ -158,7 +158,7 @@ export const useEventsStore = defineStore('events', () => {
      * (`null` for every type) and clearing the component filter.
      *
      * Events are ordered oldest-first, so the terminal/outcome events
-     * (`asset_completed`, `asset_failed`, `run_failed`, …) live at the end.
+     * (`operation_completed`, `operation_failed`, `run_failed`, …) live at the end.
      * The table reaches them by infinite-scrolling — see `loadMore` — rather
      * than loading the whole history up front.
      */

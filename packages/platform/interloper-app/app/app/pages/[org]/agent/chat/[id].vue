@@ -5,6 +5,8 @@ definePageMeta({ layout: 'agent' })
 
 const route = useRoute()
 const agentStore = useAgentStore()
+const organisationStore = useOrganisationStore()
+const appConfig = useAppConfig()
 const conversationId = route.params.id as string
 
 const { data: conversation, error: loadError } = await useAsyncData(
@@ -37,14 +39,13 @@ onMounted(() => {
         <template #body>
             <UContainer class="flex-1 flex flex-col gap-4 sm:gap-6 pt-6"
                         :ui="{ base: 'max-w-3xl' }">
-                <div v-if="loadError || !chat"
-                     class="flex flex-col items-center justify-center h-full text-muted py-12">
-                    <UIcon name="i-lucide-message-square-off"
-                           class="size-8 mb-2" />
-                    <p class="text-sm">
-                        This conversation is not available.
-                    </p>
-                </div>
+                <LoadError v-if="loadError"
+                           title="Couldn't load the conversation"
+                           :error="loadError" />
+                <UEmpty v-else-if="!chat"
+                        :icon="appConfig.icons.agent"
+                        title="This conversation is not available"
+                        :actions="[{ label: 'New chat', icon: appConfig.ui.icons.plus, to: organisationStore.path('/agent') }]" />
 
                 <AgentSummary v-if="chat && conversation?.summary"
                               :text="conversation.summary" />
@@ -74,11 +75,10 @@ onMounted(() => {
 
                 <UChatPrompt v-model="input"
                              variant="subtle"
-                             placeholder="Ask anything..."
+                             placeholder="Ask anything…"
                              :disabled="!chat"
                              :error="chat?.error.value"
-                             class="sticky bottom-0 [view-transition-name:chat-prompt] rounded-b-none z-10"
-                             :ui="{ base: 'px-1.5' }"
+                             class="sticky bottom-0 z-10"
                              @submit="onSubmit">
                     <UChatPromptSubmit :status="chat?.status.value ?? 'ready'"
                                        color="neutral"

@@ -27,7 +27,7 @@ async function onSaved(updated: Organisation) {
 <template>
     <UDashboardPanel id="organization-settings">
         <template #header>
-            <AppNavbar title="Organization" />
+            <AppNavbar title="Organisation" />
             <UDashboardToolbar>
                 <template #left>
                     <PageTabs :items="views" />
@@ -35,14 +35,11 @@ async function onSaved(updated: Organisation) {
             </UDashboardToolbar>
         </template>
         <template #body>
-            <div class="mx-auto flex w-full max-w-5xl flex-col gap-4 sm:gap-6">
-                <section class="flex flex-col gap-3">
-                    <CardHeader title="General"
-                                description="How the organisation is named and addressed." />
-                    <OrganizationGeneralSettings :organisation="organisationStore.requireOrganisation()"
-                                                 @saved="onSaved" />
-                </section>
-            </div>
+            <OrganizationGeneralSettings :organisation="organisationStore.requireOrganisation()"
+                                         title="General"
+                                         description="How the organisation is named and addressed."
+                                         class="mx-auto w-full max-w-2xl"
+                                         @saved="onSaved" />
         </template>
     </UDashboardPanel>
 </template>

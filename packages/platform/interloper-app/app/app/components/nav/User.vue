@@ -6,6 +6,7 @@ defineProps<{
 }>()
 
 const userStore = useUserStore()
+const appConfig = useAppConfig()
 const colorMode = useColorMode()
 const appVersion = useRuntimeConfig().public.version
 
@@ -14,49 +15,39 @@ function toggleColorMode() {
 }
 
 const displayName = computed(() => userStore.user?.name || userStore.user?.email || 'Account')
-const initials = computed(() => {
-    const name = userStore.user?.name?.trim()
-    if (name && name.length > 0) {
-        const parts = name.split(/\s+/)
-        const first = parts[0]?.[0] ?? ''
-        const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : ''
-        return last ? (first + last).toUpperCase() : first.toUpperCase()
-    }
-    return userStore.user?.email?.charAt(0).toUpperCase() ?? '?'
-})
 
 const items = computed<DropdownMenuItem[][]>(() => {
     const groups: DropdownMenuItem[][] = [
         [{
             label: displayName.value,
-            avatar: { text: initials.value },
+            avatar: { src: userStore.user?.avatar_url ?? undefined, alt: displayName.value },
             type: 'label',
         }],
     ]
 
     groups.push([{
         label: 'Profile',
-        icon: 'i-lucide-user',
-        onSelect: () => navigateTo('/settings/profile'),
+        icon: appConfig.icons.user,
+        to: '/settings/profile',
     }])
 
     if (userStore.isSuperAdmin) {
         groups.push([{
             label: 'Platform admin',
-            icon: 'i-lucide-shield',
-            onSelect: () => navigateTo('/admin'),
+            icon: appConfig.icons.admin,
+            to: '/admin',
         }])
     }
 
     groups.push(
         [{
-            label: colorMode.value === 'dark' ? 'Light Mode' : 'Dark Mode',
-            icon: colorMode.value === 'dark' ? 'i-lucide-sun' : 'i-lucide-moon',
+            label: colorMode.value === 'dark' ? 'Light mode' : 'Dark mode',
+            icon: colorMode.value === 'dark' ? appConfig.ui.icons.light : appConfig.ui.icons.dark,
             onSelect: toggleColorMode,
         }],
         [{
-            label: 'Log out',
-            icon: 'i-lucide-log-out',
+            label: 'Sign out',
+            icon: appConfig.icons.signOut,
             onSelect: () => userStore.signOut(),
         }],
     )
@@ -71,17 +62,18 @@ const items = computed<DropdownMenuItem[][]>(() => {
     <UDropdownMenu :items="items"
                    :content="{ align: 'start', side: 'top' }"
                    :ui="{ content: 'w-(--reka-dropdown-menu-trigger-width)' }">
-        <UButton :avatar="{ src: userStore.user?.avatar_url ?? undefined, text: initials }"
+        <UButton :avatar="{ src: userStore.user?.avatar_url ?? undefined, alt: displayName }"
                  :label="collapsed ? undefined : displayName"
-                 class="w-full justify-start data-[state=open]:bg-elevated"
+                 :aria-label="collapsed ? displayName : undefined"
+                 class="w-full justify-start"
                  variant="ghost"
                  color="neutral"
                  :square="collapsed"
                  truncate>
             <template v-if="!collapsed"
                       #trailing>
-                <UIcon name="i-lucide-chevrons-up-down"
-                       class="size-4 ms-auto text-dimmed" />
+                <UIcon :name="appConfig.icons.switcher"
+                       class="ms-auto size-4 text-dimmed" />
             </template>
         </UButton>
     </UDropdownMenu>

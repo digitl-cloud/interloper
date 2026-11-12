@@ -6,6 +6,11 @@ import { relationIds } from '~/types/component'
 import type { Page } from '~/composables/api'
 import type { Execution } from '~/types/execution'
 
+/**
+ * The open asset's side panel: its identity and warnings, then folding
+ * sections for its latest materializations, destinations, partitions,
+ * upstream dependencies and schema.
+ */
 const props = defineProps<{
     asset: ComponentRecord
     assetDefn: AssetDefinition | undefined
@@ -17,6 +22,7 @@ const componentsStore = useComponentsStore()
 const { apiFetch } = useOrgApi()
 const { statusBadge } = useDrift()
 const { getWarnings } = useAssetWarnings()
+const appConfig = useAppConfig()
 const sourceDefn = computed(() => catalogStore.getSourceDefinition(props.source.key))
 
 const driftBadge = computed(() => statusBadge(props.asset.status))
@@ -26,8 +32,7 @@ const warnings = computed(() =>
     props.asset.status === 'missing' ? [] : getWarnings(props.asset.id, props.asset.key),
 )
 
-const icon = computed(() => props.assetDefn ? componentIcon(props.assetDefn.key) : 'i-lucide-box')
-const sourceIcon = computed(() => componentIcon(props.source.key))
+const sourceIcon = computed(() => componentIcon(props.source.key, appConfig.icons.source))
 
 onMounted(() => {
     if (componentsStore.byKind('destination').length === 0 && !componentsStore.loading) {
@@ -44,7 +49,7 @@ interface PartitionData {
 
 const partitionData = ref<PartitionData[]>([])
 const partitionLoading = ref(false)
-const partitionError = ref<string | null>(null)
+const partitionError = ref<unknown>(null)
 const partitionNotMaterialized = ref(false)
 
 const isPartitioned = computed(() => !!props.assetDefn?.partitioning)
@@ -66,7 +71,7 @@ async function fetchPartitionCounts() {
             partitionNotMaterialized.value = true
         }
         else {
-            partitionError.value = errorDetail(e) ?? 'Failed to load partition data'
+            partitionError.value = e
         }
         partitionData.value = []
     }
@@ -87,7 +92,7 @@ const destinations = computed(() => {
                 id: dest.id,
                 label: dest.name ?? defn?.name ?? dest.key,
                 typeName: defn?.name ?? dest.key,
-                icon: componentIcon(dest.key, 'i-lucide-hard-drive'),
+                icon: componentIcon(dest.key, appConfig.icons.destination),
             }
         })
 })
@@ -172,19 +177,7 @@ const history = computed(() => [...recentExecutions.value].reverse())
 
 const lastRunText = computed(() => {
     const at = latestExecution.value?.completed_at ?? latestExecution.value?.started_at
-    return at ? `${timeSince(new Date(at))} ago` : null
-})
-
-/** Latest-materialization presentation: icon, label, colour. */
-const materialization = computed(() => {
-    switch (latestExecution.value?.status) {
-        case 'success': return { label: 'Healthy', icon: 'i-lucide-circle-check', color: 'text-[var(--ui-success)]', spin: false }
-        case 'failed': return { label: 'Failed', icon: 'i-lucide-circle-x', color: 'text-[var(--ui-error)]', spin: false }
-        case 'running': return { label: 'Running', icon: 'i-lucide-loader-circle', color: 'text-[var(--ui-info)]', spin: true }
-        case 'canceled': return { label: 'Canceled', icon: 'i-lucide-circle-slash', color: 'text-[var(--ui-warning)]', spin: false }
-        case undefined: return { label: 'Not materialized', icon: 'i-lucide-circle-dashed', color: 'text-dimmed', spin: false }
-        default: return { label: statusLabel(latestExecution.value!.status), icon: 'i-lucide-circle-dot', color: 'text-muted', spin: false }
-    }
+    return at ? relativeTime(new Date(at)) : null
 })
 
 /** Job that materialises this asset (the source's first job). */
@@ -195,15 +188,9 @@ const materializationMeta = computed(() => {
     return jobName.value ? `${head} · ${jobName.value}` : head
 })
 
-/** Heatmap cell colour for a run status. */
-function heatColor(status: string): string {
-    const color = statusColor(status)
-    return color === 'neutral' ? 'var(--ui-text-dimmed)' : `var(--ui-${color})`
-}
-
 function historyTooltip(execution: Execution): string {
     const elapsed = formatElapsed(execution.started_at, execution.completed_at)
-    return `${statusLabel(execution.status)}${elapsed ? ` · ${elapsed}` : ''} · ${formatDate(execution.started_at)}`
+    return `${statusMeta(execution.status).label}${elapsed ? ` · ${elapsed}` : ''} · ${formatDate(execution.started_at)}`
 }
 
 /** Upstream dependencies as display rows (param → resolved upstream asset). */
@@ -215,7 +202,7 @@ const dependencyRows = computed(() => {
             param,
             name: catalogStore.getAssetDefinition(qk)?.name ?? qk,
             sourceName: (sourceKey && catalogStore.getSourceDefinition(sourceKey)?.name) || sourceKey || qk,
-            icon: componentIcon(sourceKey || qk),
+            icon: componentIcon(sourceKey || qk, appConfig.icons.source),
         }
     })
 })
@@ -227,19 +214,19 @@ const dependencyRows = computed(() => {
         <GraphPanelSection class="shrink-0">
             <template #title>
                 <span class="flex min-w-0 flex-1 items-center gap-3 text-left">
-                    <span class="flex items-center justify-center size-10 rounded-lg bg-elevated shrink-0">
+                    <span class="flex size-10 shrink-0 items-center justify-center rounded-md bg-elevated">
                         <UIcon :name="sourceIcon"
-                               class="size-5" />
+                               class="size-6" />
                     </span>
                     <span class="min-w-0 flex-1">
-                        <span class="block text-base font-semibold truncate leading-tight text-highlighted">
+                        <span class="block truncate font-semibold text-highlighted">
                             {{ assetDefn?.name ?? asset.key }}
                         </span>
                         <span class="mt-0.5 flex min-w-0 items-center gap-2">
                             <span class="truncate text-xs text-muted">{{ sourceDefn?.name ?? source.key }}</span>
                             <UBadge v-for="tag in assetDefn?.tags ?? []"
                                     :key="tag"
-                                    :color="tagColor(tag)"
+                                    color="neutral"
                                     size="sm"
                                     :label="tag" />
                         </span>
@@ -256,10 +243,10 @@ const dependencyRows = computed(() => {
                 No description
             </p>
 
-            <!-- Warnings — same set as the graph node badge. -->
+            <!-- Warnings: the same set as the graph node's badge. -->
             <UAlert v-if="warnings.length"
                     color="warning"
-                    icon="i-lucide-triangle-alert"
+                    :icon="appConfig.ui.icons.warning"
                     variant="subtle"
                     class="mt-3"
                     :title="warnings.length === 1 ? 'Warning' : `${warnings.length} warnings`">
@@ -277,40 +264,41 @@ const dependencyRows = computed(() => {
 
         <!-- p-px keeps the cards' rings inside the scroll box, which clips overflow -->
         <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-px">
-            <!-- Drift notice — this asset no longer resolves against the catalog. -->
+            <!-- Drift notice: this asset no longer resolves against the catalog. -->
             <UAlert v-if="driftBadge"
                     :color="driftBadge.color"
                     :icon="driftBadge.icon"
                     variant="subtle"
                     :title="driftBadge.label"
                     :description="asset.status === 'missing'
-                        ? 'Its catalog key was renamed or removed in code. It can\'t materialize — remove the source (or edit it to drop this asset), or restore the catalog entry.'
+                        ? 'Its catalog key was renamed or removed in code, so it can\'t materialize. Remove the source (or edit it to drop this asset), or restore the catalog entry.'
                         : 'This component is not enabled in the current deployment.'" />
 
             <GraphPanelSection title="Materialization">
-                <div class="flex flex-col gap-2">
-                    <div class="flex items-center gap-4 rounded-md bg-elevated p-4">
-                        <UIcon :name="materialization.icon"
-                               class="size-10 shrink-0"
-                               :class="[materialization.color, materialization.spin && 'animate-spin']" />
+                <div class="flex flex-col gap-4">
+                    <div class="flex items-center gap-3">
                         <div class="min-w-0 flex-1">
-                            <div class="text-sm font-medium text-highlighted">
-                                Latest materialization: <span :class="materialization.color">{{ materialization.label }}</span>
-                            </div>
-                            <div class="truncate text-xs text-muted">{{ materializationMeta }}</div>
+                            <div class="text-sm font-medium text-highlighted">Latest materialization</div>
+                            <div class="truncate text-xs text-muted tabular-nums">{{ materializationMeta }}</div>
                         </div>
+                        <StatusBadge v-if="latestExecution"
+                                     :status="latestExecution.status" />
+                        <UBadge v-else
+                                color="neutral"
+                                label="Not materialized" />
                     </div>
 
                     <!-- History heatmap (max last 7 runs) -->
-                    <div v-if="history.length"
-                         class="rounded-md bg-elevated p-4">
-                        <div class="mb-2.5 text-xs font-medium text-muted">Materialization history</div>
+                    <div v-if="history.length">
+                        <div class="caption mb-2 text-muted">History</div>
                         <div class="flex gap-1.5">
-                            <div v-for="execution in history"
-                                 :key="execution.run_id"
-                                 class="size-7 rounded-md"
-                                 :style="{ backgroundColor: heatColor(execution.status) }"
-                                 :title="historyTooltip(execution)" />
+                            <UTooltip v-for="execution in history"
+                                      :key="execution.run_id"
+                                      :text="historyTooltip(execution)"
+                                      :delay-duration="0">
+                                <div class="size-7 rounded-md"
+                                     :class="STATUS_BG[statusMeta(execution.status).color]" />
+                            </UTooltip>
                         </div>
                     </div>
                 </div>
@@ -318,23 +306,24 @@ const dependencyRows = computed(() => {
 
             <GraphPanelSection title="Destinations"
                                :count="destinations.length">
-                <div v-if="destinations.length"
-                     class="flex flex-col gap-2">
-                    <div v-for="dest in destinations"
-                         :key="dest.id"
-                         class="flex items-center gap-4 rounded-md bg-elevated p-4">
+                <ul v-if="destinations.length"
+                    class="divide-y divide-default">
+                    <li v-for="dest in destinations"
+                        :key="dest.id"
+                        class="flex items-center gap-3 py-2">
                         <UIcon :name="dest.icon"
-                               class="size-10 shrink-0" />
+                               class="size-5 shrink-0" />
                         <div class="min-w-0 flex-1">
                             <div class="truncate text-sm font-medium">{{ dest.label }}</div>
                             <div class="text-xs text-muted">{{ dest.typeName }}</div>
                         </div>
-                    </div>
-                </div>
-                <p v-else
-                   class="text-sm text-dimmed italic">
-                    No destinations configured
-                </p>
+                    </li>
+                </ul>
+                <UEmpty v-else
+                        variant="naked"
+                        size="sm"
+                        :icon="appConfig.icons.destination"
+                        title="No destinations configured" />
             </GraphPanelSection>
 
             <GraphPanelSection v-if="isPartitioned"
@@ -342,49 +331,46 @@ const dependencyRows = computed(() => {
                                :count="partitionData.length">
                 <div v-if="partitionLoading"
                      class="flex items-center justify-center py-6">
-                    <UIcon name="i-lucide-loader-circle"
-                           class="size-5 animate-spin text-muted" />
+                    <UIcon :name="appConfig.ui.icons.loading"
+                           class="size-5 animate-spin text-dimmed" />
                 </div>
-                <UAlert v-else-if="partitionNotMaterialized"
-                        icon="i-lucide-info"
-                        color="warning"
-                        class="text-sm"
-                        title="Asset has not been materialized yet." />
-                <UAlert v-else-if="partitionError"
-                        icon="i-lucide-triangle-alert"
-                        color="error"
-                        class="text-sm"
-                        :title="partitionError" />
+                <UEmpty v-else-if="partitionNotMaterialized"
+                        variant="naked"
+                        size="sm"
+                        :icon="appConfig.icons.missing"
+                        title="Not materialized yet" />
+                <LoadError v-else-if="partitionError"
+                           title="Couldn't load partitions"
+                           :error="partitionError"
+                           @retry="fetchPartitionCounts" />
                 <ChartPartitionRowCounts v-else-if="partitionData.length > 0"
                                          :data="partitionData" />
-                <p v-else
-                   class="text-sm text-dimmed italic">
-                    No partition data available.
-                </p>
+                <UEmpty v-else
+                        variant="naked"
+                        size="sm"
+                        :icon="appConfig.icons.partition"
+                        title="No partition data" />
             </GraphPanelSection>
 
             <GraphPanelSection v-if="dependencyRows.length"
                                title="Upstream dependencies"
                                :count="dependencyRows.length">
-                <div class="flex flex-col gap-1.5">
-                    <div v-for="dep in dependencyRows"
-                         :key="dep.param"
-                         class="flex items-center gap-2.5 rounded-md bg-elevated px-3 py-2">
+                <ul class="divide-y divide-default">
+                    <li v-for="dep in dependencyRows"
+                        :key="dep.param"
+                        class="flex items-center gap-3 py-2">
                         <UIcon :name="dep.icon"
                                class="size-4 shrink-0 text-muted" />
                         <div class="min-w-0 flex-1">
                             <div class="truncate text-sm">{{ dep.name }}</div>
                             <div class="truncate text-xs text-muted">{{ dep.sourceName }}</div>
                         </div>
-                        <!-- Outline: a soft neutral badge is the tile's own tone. -->
                         <UBadge color="neutral"
-                                variant="outline"
                                 size="sm"
-                                class="shrink-0 font-mono">
-                            {{ dep.param }}
-                        </UBadge>
-                    </div>
-                </div>
+                                class="shrink-0"
+                                :label="dep.param" />
+                    </li>
+                </ul>
             </GraphPanelSection>
 
             <GraphPanelSection v-if="schemaFields.length"
@@ -392,21 +378,14 @@ const dependencyRows = computed(() => {
                                :count="schemaFields.length">
                 <UTable :data="schemaFields"
                         :columns="schemaColumns"
-                        class="rounded-md bg-elevated"
-                        :ui="{
-                            th: 'py-2 px-3 text-xs first:ps-4',
-                            td: 'py-2 px-3 text-xs whitespace-nowrap first:ps-4',
-                            tbody: 'divide-accented',
-                        }">
+                        :ui="{ td: 'whitespace-nowrap' }">
                     <template #name-cell="{ row }">
-                        <span class="font-mono text-default">{{ row.original.name }}</span>
+                        <span class="text-highlighted">{{ row.original.name }}</span>
                     </template>
                     <template #type-cell="{ row }">
                         <UBadge color="neutral"
-                                variant="outline"
-                                size="sm">
-                            {{ row.original.type }}
-                        </UBadge>
+                                size="sm"
+                                :label="row.original.type" />
                     </template>
                 </UTable>
             </GraphPanelSection>

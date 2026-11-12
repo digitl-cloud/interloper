@@ -24,30 +24,32 @@ const catalogStore = useCatalogStore()
 const { signIn } = useOAuthPopup()
 const { getAuthUrl } = useOAuthProvider()
 const toast = useToast()
+const appConfig = useAppConfig()
 
 const loading = ref(false)
 
 const providerInfo = computed(() => catalogStore.getOAuthProvider(props.provider))
 const available = computed(() => catalogStore.isOAuthProviderAvailable(props.provider))
+const providerLabel = computed(() => providerInfo.value?.label ?? props.provider)
 
 async function handleSignIn() {
     const url = getAuthUrl(props.provider, props.scope)
     if (!url) {
-        toast.add({ title: 'OAuth provider not configured', color: 'error' })
+        toast.add(errorToast(new Error(`${providerLabel.value} sign-in is not configured on this server.`), "Couldn't start sign-in"))
         return
     }
 
     loading.value = true
     try {
         const token = oauthToken(await signIn(url))
-        if (token === undefined) throw new Error('The provider response carried no token')
+        if (token === undefined) throw new Error('The provider returned no token.')
         emit('success', token)
-        toast.add({ title: `Connected to ${providerInfo.value?.label ?? props.provider}`, color: 'success' })
+        toast.add({ title: `Connected to ${providerLabel.value}`, color: 'success' })
     }
     catch (error) {
         // Closing the popup is a deliberate cancel, not a failure.
         if (!(error instanceof OAuthCancelledError)) {
-            toast.add(errorToast(error, 'Sign-in failed'))
+            toast.add(errorToast(error, `Couldn't sign in with ${providerLabel.value}`))
         }
     }
     finally {
@@ -58,15 +60,15 @@ async function handleSignIn() {
 
 <template>
     <UButton v-if="available && connected"
-             :icon="'i-lucide-circle-check'"
-             :label="`Connected to ${providerInfo?.label ?? provider}`"
+             :icon="appConfig.ui.icons.success"
+             :label="`Connected to ${providerLabel}`"
              color="success"
-             variant="subtle"
+             variant="soft"
              block
              disabled />
     <UButton v-else-if="available"
              :icon="providerInfo?.icon"
-             :label="`Sign in with ${providerInfo?.label ?? provider}`"
+             :label="`Sign in with ${providerLabel}`"
              :loading="loading"
              block
              @click="handleSignIn" />

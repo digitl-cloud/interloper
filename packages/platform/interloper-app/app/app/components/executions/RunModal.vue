@@ -4,7 +4,6 @@
  *
  * Jobs: same date → single run, date range → backfill.
  * Sources/assets: single partition date → run (backfills are job-only).
- * Mirrors the MaterializeModal layout from the old app.
  */
 import { parseDate, today } from '@internationalized/date'
 import type { DateRange } from 'reka-ui'
@@ -36,6 +35,7 @@ const props = withDefaults(defineProps<{
 const runsStore = useRunsStore()
 const backfillsStore = useBackfillsStore()
 const toast = useToast()
+const appConfig = useAppConfig()
 
 const isJob = computed(() => props.target.kind === 'job')
 // The modal's "today"/"yesterday" clock: the job's timezone, matching the
@@ -55,6 +55,13 @@ const keysValid = computed(() =>
     KEY_PATTERNS[granularity.value].test(startKey.value)
     && (!isJob.value || KEY_PATTERNS[granularity.value].test(endKey.value)),
 )
+
+/** A key field's error once it holds something that is not a key of the granularity. */
+function keyError(key: string): string | undefined {
+    return key && !KEY_PATTERNS[granularity.value].test(key)
+        ? `Use the form ${KEY_PLACEHOLDERS[granularity.value]}, one per ${granularity.value}.`
+        : undefined
+}
 
 const submitting = ref(false)
 const failFast = ref(false)
@@ -82,7 +89,7 @@ interface Preset {
 const presets: Preset[] = [
     {
         label: 'Today',
-        icon: 'i-lucide-calendar',
+        icon: 'i-lucide-calendar-check',
         range: () => {
             const t = today(clockZone.value)
             return { start: t, end: t }
@@ -98,7 +105,7 @@ const presets: Preset[] = [
     },
     {
         label: 'Last 7 days',
-        icon: 'i-lucide-calendar-range',
+        icon: appConfig.icons.window,
         range: () => {
             const t = today(clockZone.value)
             return { start: t.subtract({ days: 6 }), end: t }
@@ -106,7 +113,7 @@ const presets: Preset[] = [
     },
     {
         label: 'Last 30 days',
-        icon: 'i-lucide-calendar-range',
+        icon: appConfig.icons.window,
         range: () => {
             const t = today(clockZone.value)
             return { start: t.subtract({ days: 29 }), end: t }
@@ -175,19 +182,19 @@ async function onSubmit() {
                 endKey: endISO.value,
                 failFast: failFast.value,
             })
-            toast.add({ title: `Backfill queued (${backfillId.slice(0, 8)})`, color: 'success' })
+            toast.add({ title: `Backfill queued (${shortId(backfillId)})`, color: 'success' })
         }
         else {
             const runId = await runsStore.createRun(
                 props.target.id,
                 partitioned.value ? startISO.value : undefined,
             )
-            toast.add({ title: `Run queued (${runId.slice(0, 8)})`, color: 'success' })
+            toast.add({ title: `Run queued (${shortId(runId)})`, color: 'success' })
         }
         open.value = false
     }
     catch (e) {
-        toast.add(errorToast(e, `Failed to queue ${isRange.value ? 'backfill' : 'run'}`))
+        toast.add(errorToast(e, `Couldn't queue the ${isRange.value ? 'backfill' : 'run'}`))
     }
     finally {
         submitting.value = false
@@ -196,8 +203,7 @@ async function onSubmit() {
 </script>
 
 <template>
-    <UModal v-model:open="open"
-            :ui="{ footer: 'justify-end' }">
+    <UModal v-model:open="open">
         <template #title>
             <span>Run</span>
             <UBadge color="neutral"
@@ -224,44 +230,44 @@ async function onSubmit() {
 
                 <!-- Partition keys (non-daily targets) or calendar (daily) -->
                 <div v-if="usesKeys"
-                     class="flex flex-col w-full pl-4 gap-3">
+                     class="flex w-full flex-col gap-3 pl-4">
                     <UFormField :label="isJob ? 'From partition' : 'Partition'"
-                                :description="`One ${granularity} per key.`">
+                                :description="`One ${granularity} per key.`"
+                                :error="keyError(startKey)">
                         <UInput v-model="startKey"
                                 :placeholder="KEY_PLACEHOLDERS[granularity]"
-                                class="w-full font-mono" />
+                                class="w-full" />
                     </UFormField>
                     <UFormField v-if="isJob"
-                                label="To partition (inclusive)">
+                                label="To partition (inclusive)"
+                                :error="keyError(endKey)">
                         <UInput v-model="endKey"
                                 :placeholder="KEY_PLACEHOLDERS[granularity]"
-                                class="w-full font-mono" />
+                                class="w-full" />
                     </UFormField>
-                    <p class="text-xs text-muted">
-                        <template v-if="!keysValid">
-                            Keys must look like <code>{{ KEY_PLACEHOLDERS[granularity] }}</code> (one per {{ granularity }}).
-                        </template>
-                        <template v-else-if="isRange">
-                            This will create a <strong>backfill</strong> with one run per {{ granularity }} from {{ startISO }} to {{ endISO }}.
+                    <p v-if="keysValid"
+                       class="text-xs text-muted">
+                        <template v-if="isRange">
+                            This will create a <span class="font-semibold">backfill</span> with one run per {{ granularity }} from {{ startISO }} to {{ endISO }}.
                         </template>
                         <template v-else>
-                            This will queue a single <strong>run</strong> for {{ startISO }}.
+                            This will queue a single <span class="font-semibold">run</span> for {{ startISO }}.
                         </template>
                     </p>
                 </div>
                 <div v-else
-                     class="flex flex-col w-full pl-4">
+                     class="flex w-full flex-col pl-4">
                     <UCalendar v-if="isJob"
                                v-model="dateRange"
                                range />
                     <UCalendar v-else
                                v-model="singleDate" />
-                    <p class="text-xs text-muted mt-3">
+                    <p class="mt-3 text-xs text-muted">
                         <template v-if="isRange">
-                            This will create a <strong>backfill</strong> with daily runs from {{ startISO }} to {{ endISO }}.
+                            This will create a <span class="font-semibold">backfill</span> with daily runs from {{ startISO }} to {{ endISO }}.
                         </template>
                         <template v-else>
-                            This will queue a single <strong>run</strong> for {{ startISO }}.
+                            This will queue a single <span class="font-semibold">run</span> for {{ startISO }}.
                         </template>
                     </p>
                 </div>
@@ -270,7 +276,7 @@ async function onSubmit() {
             <!-- Options -->
             <div v-if="isRange"
                  class="mt-4 border-t border-default pt-4">
-                <div class="flex items-center gap-2 text-xs text-muted mb-2 font-medium">
+                <div class="caption mb-2 text-muted">
                     Options
                 </div>
                 <USwitch v-model="failFast"
@@ -285,7 +291,7 @@ async function onSubmit() {
                      color="neutral"
                      variant="outline"
                      @click="open = false" />
-            <UButton :label="isRange ? 'Start Backfill' : 'Start Run'"
+            <UButton :label="isRange ? 'Start backfill' : 'Start run'"
                      :loading="submitting"
                      :disabled="!startISO || !endISO || (usesKeys && !keysValid)"
                      @click="onSubmit" />

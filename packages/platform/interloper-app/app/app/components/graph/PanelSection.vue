@@ -7,6 +7,8 @@ defineProps<{
     title?: string
     count?: number
 }>()
+
+const appConfig = useAppConfig()
 </script>
 
 <template>
@@ -16,11 +18,14 @@ defineProps<{
             <slot name="title">
                 <span class="font-semibold text-highlighted">{{ title }}</span>
             </slot>
-            <span v-if="count"
-                  class="ms-auto text-xs text-muted tabular-nums">{{ count }}</span>
-            <UIcon name="i-lucide-chevron-down"
-                   class="size-3.5 shrink-0 text-dimmed transition-transform duration-200 group-data-[state=closed]:-rotate-90"
-                   :class="!count && 'ms-auto'" />
+            <UBadge v-if="count"
+                    color="neutral"
+                    size="sm"
+                    class="shrink-0">
+                <span class="tabular-nums">{{ count }}</span>
+            </UBadge>
+            <UIcon :name="appConfig.ui.icons.chevronDown"
+                   class="ms-auto size-4 shrink-0 text-dimmed transition-transform duration-200 group-data-[state=open]:rotate-180" />
         </button>
 
         <template #content>

@@ -6,6 +6,8 @@
  */
 import type { RouteLocationRaw } from 'vue-router'
 
+const appConfig = useAppConfig()
+
 defineProps<{
     label: string
     to: RouteLocationRaw
@@ -21,7 +23,7 @@ defineProps<{
            :ui="{ body: 'flex h-full min-h-32 flex-col gap-3' }">
         <NuxtLink :to="to"
                   :aria-label="label"
-                  class="absolute inset-0 rounded-[inherit]" />
+                  class="absolute inset-0 rounded-lg" />
         <div class="text-sm text-muted">{{ label }}</div>
         <div v-if="loading"
              class="flex h-9 items-center gap-2">
@@ -30,18 +32,18 @@ defineProps<{
         </div>
         <div v-else
              class="flex items-baseline gap-2">
-            <span class="text-3xl font-semibold tabular-nums text-highlighted"
-                  :class="headlineClass">{{ headline }}</span>
-            <span class="text-sm text-muted"><slot name="detail" /></span>
+            <span class="text-3xl font-semibold tabular-nums"
+                  :class="headlineClass || 'text-highlighted'">{{ headline }}</span>
+            <span class="text-sm tabular-nums text-muted"><slot name="detail" /></span>
         </div>
         <div class="mt-auto flex flex-col gap-1.5">
             <template v-if="loading">
-                <USkeleton class="h-7.5 w-full" />
+                <USkeleton class="h-8 w-full" />
                 <USkeleton class="h-4 w-2/3" />
             </template>
             <div v-else-if="empty"
                  class="flex items-center gap-1.5 text-xs text-dimmed">
-                <UIcon name="i-lucide-minus"
+                <UIcon :name="appConfig.ui.icons.minus"
                        class="size-3.5" />{{ empty }}
             </div>
             <slot v-else

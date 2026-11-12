@@ -4,7 +4,7 @@
  * own `ChatIndicator` so the agent reads the way their reference chat does.
  *
  * A 4x4 grid steps through a few patterns, one frame every 120ms. It has no
- * size of its own: the parent passes one (`size-4`, `size-[80%]`).
+ * size of its own: the parent passes one (`size-4`, `size-5`).
  */
 const SIZE = 4
 const GAP = 2

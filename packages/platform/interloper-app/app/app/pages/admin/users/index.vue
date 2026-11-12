@@ -14,11 +14,13 @@ const EntityBadge = resolveComponent('EntityBadge')
 
 const adminStore = useAdminStore()
 const userStore = useUserStore()
+const appConfig = useAppConfig()
 const toast = useToast()
 const { confirm } = useConfirm()
 
 const rows = ref<AdminUser[]>([])
 const loading = ref(false)
+const error = ref<Error | null>(null)
 
 const ALL_ORGS = 'all'
 const orgFilter = useQueryParam('org', ALL_ORGS)
@@ -41,11 +43,12 @@ const filteredRows = computed(() => orgFilter.value === ALL_ORGS
 
 async function loadData() {
     loading.value = true
+    error.value = null
     try {
         rows.value = await adminStore.listUsers()
     }
     catch (err) {
-        console.error('[Admin] Failed to load users', err)
+        error.value = err as Error
     }
     finally {
         loading.value = false
@@ -57,8 +60,7 @@ async function deleteUser(user: AdminUser) {
         title: 'Delete user',
         description: 'This permanently deletes {subject}, along with their sessions, tokens, '
             + 'organisation memberships, and the invitations they sent. This action cannot be undone.',
-        subject: { name: user.name || user.email, icon: 'i-lucide-user' },
-        confirmColor: 'error',
+        subject: { name: user.name || user.email, icon: appConfig.icons.user },
     })
     if (!confirmed) return
 
@@ -68,7 +70,7 @@ async function deleteUser(user: AdminUser) {
         await loadData()
     }
     catch (err) {
-        toast.add(errorToast(err, 'Failed to delete user'))
+        toast.add(errorToast(err, "Couldn't delete the user"))
     }
 }
 
@@ -78,16 +80,15 @@ async function setSuperAdmin(user: AdminUser, isSuperAdmin: boolean) {
                 title: 'Make super admin',
                 description: '{subject} will manage every organisation, user and quota on this instance. '
                     + 'Every super admin is notified by email.',
-                subject: { name: user.name || user.email, icon: 'i-lucide-user' },
+                subject: { name: user.name || user.email, icon: appConfig.icons.user },
                 confirmLabel: 'Make super admin',
                 confirmColor: 'primary',
             }
         : {
                 title: 'Remove super admin',
                 description: '{subject} loses access to the admin portal. Their organisation memberships are kept.',
-                subject: { name: user.name || user.email, icon: 'i-lucide-user' },
+                subject: { name: user.name || user.email, icon: appConfig.icons.user },
                 confirmLabel: 'Remove super admin',
-                confirmColor: 'error',
             })
     if (!confirmed) return
 
@@ -102,7 +103,7 @@ async function setSuperAdmin(user: AdminUser, isSuperAdmin: boolean) {
         })
     }
     catch (err) {
-        toast.add(errorToast(err, 'Failed to update super admin access'))
+        toast.add(errorToast(err, "Couldn't update the super admin access"))
     }
 }
 
@@ -114,19 +115,19 @@ function rowActions(user: AdminUser): DropdownMenuItem[][] {
             user.is_super_admin
                 ? {
                         label: 'Remove super admin',
-                        icon: 'i-lucide-shield-minus',
+                        icon: appConfig.icons.admin,
                         onSelect: () => setSuperAdmin(user, false),
                     }
                 : {
                         label: 'Make super admin',
-                        icon: 'i-lucide-shield-plus',
+                        icon: appConfig.icons.admin,
                         onSelect: () => setSuperAdmin(user, true),
                     },
         ],
         [
             {
                 label: 'Delete user',
-                icon: 'i-lucide-trash-2',
+                icon: appConfig.icons.delete,
                 color: 'error' as const,
                 onSelect: () => deleteUser(user),
             },
@@ -140,14 +141,9 @@ const columns: TableColumn<AdminUser>[] = [
         header: 'Name',
         cell: ({ row }) => {
             const user = row.original
-            const avatar = user.avatar_url
-                ? h(UAvatar, { src: user.avatar_url, alt: user.name ?? user.email, size: 'sm' })
-                : h('div', {
-                        class: 'size-8 shrink-0 rounded-full flex items-center justify-center text-white text-xs font-semibold',
-                        style: { background: avatarColor(user.email || user.id) },
-                    }, getInitials(user.name, user.email))
+            const avatar = h(UAvatar, { src: user.avatar_url ?? undefined, alt: user.name || user.email, size: 'sm' })
             const name = user.name
-                ? h('span', { class: 'font-semibold text-highlighted' }, user.name)
+                ? h('span', { class: 'font-medium text-highlighted' }, user.name)
                 : h('span', { class: 'text-dimmed' }, '—')
             return h('div', { class: 'flex items-center gap-3' }, [avatar, name])
         },
@@ -165,7 +161,7 @@ const columns: TableColumn<AdminUser>[] = [
             const orgs = row.original.organisations
             const first = orgs[0]
             return first
-                ? h(EntityBadge, { icon: 'i-lucide-building-2', label: first.name, extra: orgs.length - 1 })
+                ? h(EntityBadge, { icon: appConfig.icons.organisation, label: first.name, extra: orgs.length - 1 })
                 : h('span', { class: 'text-dimmed' }, '—')
         },
     },
@@ -173,13 +169,13 @@ const columns: TableColumn<AdminUser>[] = [
         accessorKey: 'is_super_admin',
         header: 'Super admin',
         cell: ({ row }) => row.original.is_super_admin
-            ? h(UBadge, { label: 'Super admin', icon: 'i-lucide-shield', color: 'primary', variant: 'subtle' })
+            ? h(UBadge, { label: 'Super admin', icon: appConfig.icons.admin, color: 'primary' })
             : h('span', { class: 'text-dimmed' }, '—'),
     },
     {
         accessorKey: 'created_at',
         header: 'Joined',
-        cell: ({ row }) => h('span', { class: 'text-muted' }, formatDay(row.original.created_at)),
+        cell: ({ row }) => h('span', { class: 'text-muted tabular-nums' }, formatDay(row.original.created_at)),
     },
 ]
 
@@ -196,15 +192,17 @@ onMounted(loadData)
                        fill
                        :data="filteredRows"
                        :loading="loading"
+                       :error="error"
                        :row-actions="rowActions"
                        no-actions
                        no-row-click
-                       search-placeholder="Search users...">
+                       search-placeholder="Search users…"
+                       @retry="loadData">
                 <template #filters>
                     <USelect v-model="orgFilter"
                              :items="orgOptions"
                              value-key="value"
-                             icon="i-lucide-building-2"
+                             :icon="appConfig.icons.organisation"
                              class="w-52" />
                 </template>
             </DataTable>

@@ -5,6 +5,7 @@ definePageMeta({
 })
 
 const route = useRoute()
+const appConfig = useAppConfig()
 const { exchangeCode, reportResult } = useOAuthPopup()
 
 const provider = route.params.provider?.toString()
@@ -37,7 +38,7 @@ onMounted(async () => {
         fail(description ? `${providerError}: ${description}` : providerError)
     }
     else if (!code) {
-        fail('Authorization code is missing', OAuthPopupStatus.MissingCode)
+        fail('Authorisation code is missing', OAuthPopupStatus.MissingCode)
     }
     else {
         try {
@@ -53,45 +54,54 @@ onMounted(async () => {
 </script>
 
 <template>
-    <div class="h-screen flex items-center justify-center p-8">
-        <UAlert v-if="status === OAuthPopupStatus.Loading"
-                color="info"
-                variant="subtle"
-                icon="i-lucide-loader-circle"
-                title="Authenticating"
-                :description="`Connecting to ${provider}...`" />
-        <UAlert v-else-if="status === OAuthPopupStatus.Success"
-                color="success"
-                variant="subtle"
-                icon="i-lucide-circle-check"
-                :title="`Successfully connected to ${provider}`"
-                description="You can close this window." />
-        <UAlert v-else-if="status === OAuthPopupStatus.MissingCode"
-                color="error"
-                variant="subtle"
-                icon="i-lucide-circle-x"
-                title="Authentication Error"
-                description="Authorization code is missing." />
-        <UAlert v-else
-                color="error"
-                variant="subtle"
-                icon="i-lucide-circle-x"
-                title="Authentication Failed"
-                class="max-w-md">
-            <template #description>
-                <p>Something went wrong during authentication. You can close this window.</p>
-                <UCollapsible v-if="errorDetail"
-                              class="mt-2">
-                    <button class="flex items-center gap-1 group cursor-pointer text-xs font-medium">
-                        <UIcon name="i-lucide-chevron-right"
-                               class="size-3.5 shrink-0 group-data-[state=open]:rotate-90 transition-transform duration-200" />
-                        Details
-                    </button>
-                    <template #content>
-                        <pre class="mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-error/10 p-2 text-xs">{{ errorDetail }}</pre>
-                    </template>
-                </UCollapsible>
+    <div class="flex min-h-svh w-full items-center justify-center p-6">
+        <UCard class="w-full max-w-sm">
+            <template #header>
+                <div class="flex flex-col items-center gap-3 text-center">
+                    <LogoIcon class="h-8 text-primary" />
+                    <h1 class="text-2xl font-semibold text-highlighted">
+                        Authentication
+                    </h1>
+                </div>
             </template>
-        </UAlert>
+
+            <UAlert v-if="status === OAuthPopupStatus.Loading"
+                    color="info"
+                    :icon="appConfig.ui.icons.loading"
+                    title="Authenticating"
+                    :description="`Connecting to ${provider}…`"
+                    :ui="{ icon: 'animate-spin' }" />
+            <UAlert v-else-if="status === OAuthPopupStatus.Success"
+                    color="success"
+                    :icon="appConfig.ui.icons.success"
+                    :title="`Connected to ${provider}`"
+                    description="You can close this window." />
+            <UAlert v-else-if="status === OAuthPopupStatus.MissingCode"
+                    color="error"
+                    :icon="appConfig.ui.icons.error"
+                    title="Couldn't authenticate"
+                    description="The authorisation code is missing. You can close this window." />
+            <UAlert v-else
+                    color="error"
+                    :icon="appConfig.ui.icons.error"
+                    title="Couldn't authenticate">
+                <template #description>
+                    <p>Something went wrong during authentication. You can close this window.</p>
+                    <UCollapsible v-if="errorDetail"
+                                  class="mt-2">
+                        <UButton label="Details"
+                                 color="error"
+                                 variant="link"
+                                 size="xs"
+                                 :trailing-icon="appConfig.ui.icons.chevronDown"
+                                 class="group"
+                                 :ui="{ trailingIcon: 'transition-transform duration-200 group-data-[state=open]:rotate-180' }" />
+                        <template #content>
+                            <pre class="mt-1.5 max-h-64 overflow-auto rounded-md bg-error/10 p-2 font-mono text-xs whitespace-pre-wrap break-words">{{ errorDetail }}</pre>
+                        </template>
+                    </UCollapsible>
+                </template>
+            </UAlert>
+        </UCard>
     </div>
 </template>

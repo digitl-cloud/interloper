@@ -4,14 +4,17 @@ import type { Connection } from '@vue-flow/core'
 import { Handle, Position, useNodeConnections, useVueFlow, useNodeId } from '@vue-flow/core'
 import type { ComponentRecord } from '~/types/component'
 
+/**
+ * A source card on the graph. Collapsed it stands in for its assets (folded
+ * cards under it hint at them) and carries their corner badges; expanded it
+ * is the header of a container whose assets render as nested canvas nodes.
+ */
 const props = withDefaults(defineProps<{
     source: ComponentRecord
     /** Source is expanded (its assets render as nested canvas nodes). */
     open?: boolean
-    /** Derived node status — reflected on the card border. */
+    /** Derived node status: the dot, and the border for the states that tint it. */
     status?: NodeStatus
-    /** VueFlow selection state — drives the blue selection ring. */
-    selected?: boolean
     /** Rendered inside an expanded type group: an inset card rather than a top-level one. */
     nested?: boolean
     /** Folded cards drawn under the collapsed card. */
@@ -19,7 +22,6 @@ const props = withDefaults(defineProps<{
 }>(), {
     open: false,
     status: undefined,
-    selected: false,
     nested: false,
     layers: 1,
 })
@@ -74,9 +76,9 @@ const isValidSource = computed(() => {
 const isCompatible = computed(() => isValidTarget.value || isValidSource.value)
 const shouldFade = computed(() => !container.value && isDragging.value && !isCompatible.value)
 
-const { confirm } = useConfirm()
-const componentsStore = useComponentsStore()
+const confirmDeleteSource = useConfirmDeleteSource()
 const catalogStore = useCatalogStore()
+const appConfig = useAppConfig()
 const { getWarnings } = useAssetWarnings()
 const { getBadgeForSource } = useDestinationBadge()
 const { sourceDrift, statusBadge } = useDrift()
@@ -92,31 +94,25 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => [
     [
         {
             label: 'Edit',
-            icon: 'i-lucide-pencil',
+            icon: appConfig.icons.edit,
             onSelect: () => emit('edit', props.source.id),
         },
     ],
     [
         {
             label: 'Delete',
-            icon: 'i-lucide-trash',
+            icon: appConfig.icons.delete,
             color: 'error' as const,
             onSelect: async () => {
-                const { blocking, detaching } = await componentsStore.deleteImpact(props.source.id).catch(() => ({ blocking: [], detaching: [] }))
-                const confirmed = await confirm({
-                    title: 'Delete source',
-                    description: 'This will permanently delete {subject} and all its assets. This action cannot be undone.',
-                    subject: { name: props.source.name ?? props.source.key, icon: componentIcon(props.source.key) },
-                    blocking,
-                    detaching,
-                })
+                const confirmed = await confirmDeleteSource({ id: props.source.id, name: props.source.name ?? props.source.key, icon: icon.value })
                 if (confirmed) emit('delete', props.source.id)
             },
         },
     ],
 ])
 
-const icon = computed(() => componentIcon(props.source.key))
+const icon = computed(() => componentIcon(props.source.key, appConfig.icons.source))
+const state = computed<GraphNodeState>(() => props.status?.state ?? 'idle')
 
 const assetCount = computed(() => props.source.children?.length ?? 0)
 const destinationBadge = computed(() => getBadgeForSource(props.source))
@@ -124,7 +120,6 @@ const isMaterializing = computed(() =>
     props.source.children?.some(a => materializingAssetIds?.value?.has(a.id)) ?? false,
 )
 
-const headHeight = computed(() => props.nested ? 64 : 84)
 const showChip = computed(() => !!props.source.discriminator && props.source.discriminator !== props.source.name)
 const typeName = computed(() => catalogStore.typeName(props.source.key))
 // A top-level source leads with its type like a group card does; a nested one sits
@@ -136,15 +131,15 @@ const frameClass = computed(() => [
     // With layers folded under it the card is no longer what the stack casts from.
     collapsed.value && props.layers === 0 && 'graph-stack-floor',
     props.nested
-        ? 'rounded-[14px] border border-[var(--graph-nested-line)] bg-[var(--graph-nested-bg)]'
-        : ['graph-card rounded-2xl border border-[var(--graph-card-line)] bg-[var(--graph-node-bg)]', props.selected && 'outline-2 outline-primary outline-offset-4'],
+        ? ['rounded-xl border bg-(--graph-nested-bg)', statusBorderClass(state.value) || 'border-(--graph-nested-line)']
+        : ['graph-card rounded-2xl border bg-(--graph-node-bg)', statusBorderClass(state.value) || 'border-(--graph-card-line)'],
 ])
 </script>
 
 <template>
     <UContextMenu :items="graphReadonly ? [] : contextMenuItems">
         <div class="graph-node relative h-full w-full transition-opacity duration-200"
-             :class="shouldFade && 'opacity-25'">
+             :style="shouldFade ? { opacity: GRAPH_DIM_OPACITY } : undefined">
             <Handle id="source-target"
                     type="target"
                     :position="Position.Left"
@@ -154,29 +149,29 @@ const frameClass = computed(() => [
                     :class="[
                         'transition-all duration-150',
                         !hasUpstream && !isValidTarget && 'opacity-0',
-                        isValidTarget && '!size-3 !bg-transparent !border-2 !border-warning animate-pulse-grow',
+                        isValidTarget && '!size-3 !bg-transparent !border-2 !border-primary animate-pulse-grow',
                     ]" />
 
             <GraphCornerBadge v-if="isMaterializing && collapsed"
-                              icon="i-lucide-loader-2"
+                              :icon="appConfig.ui.icons.loading"
                               corner="top-left"
                               spin>
-                <div class="text-xs">Materializing</div>
+                Materializing
             </GraphCornerBadge>
 
             <!-- Drift outranks warnings: the source or one of its assets no longer resolves against the catalog. -->
             <GraphCornerBadge v-if="isDrift && collapsed"
-                              :icon="driftBadge?.icon ?? 'i-lucide-unplug'"
+                              :icon="driftBadge?.icon ?? appConfig.icons.drift"
                               corner="top-right"
                               :tone="driftStatus === 'missing' ? 'error' : 'warning'">
-                <div class="text-xs">{{ driftBadge?.label }}</div>
+                {{ driftBadge?.label }}
             </GraphCornerBadge>
 
             <GraphCornerBadge v-if="issueCount > 0 && !isDrift && collapsed"
-                              icon="i-lucide-triangle-alert"
+                              :icon="appConfig.ui.icons.warning"
                               corner="top-right"
                               tone="warning">
-                <div class="text-xs">{{ issueCount }} {{ issueCount === 1 ? 'asset' : 'assets' }} with configuration issues</div>
+                {{ issueCount }} {{ issueCount === 1 ? 'asset' : 'assets' }} with configuration issues
             </GraphCornerBadge>
 
             <GraphCornerBadge v-if="destinationBadge && collapsed && !nested"
@@ -184,52 +179,55 @@ const frameClass = computed(() => [
                               corner="bottom-right"
                               tone="primary"
                               :count="destinationBadge.count">
-                <div class="text-xs">{{ destinationBadge.label }}</div>
+                {{ destinationBadge.label }}
             </GraphCornerBadge>
 
             <div class="relative isolate w-full"
-                 :style="{ height: collapsed ? `${headHeight}px` : '100%' }">
+                 :class="collapsed ? (nested ? 'h-16' : 'h-19') : 'h-full'">
                 <GraphCardStack v-if="collapsed && layers > 0"
                                 :layers="layers"
                                 :nested="nested" />
-                <div class="relative z-[1] flex h-full w-full flex-col"
+                <div class="relative z-1 flex h-full w-full flex-col"
                      :class="frameClass">
-                    <div class="flex shrink-0 items-center"
-                         :class="nested ? 'h-16 gap-2.5 px-5' : 'h-[84px] gap-3.5 px-5'">
-                        <div class="flex shrink-0 items-center justify-center"
-                             :class="nested ? 'size-7 rounded-lg bg-[var(--graph-node-bg)]' : 'size-9 rounded-[10px] bg-elevated'">
+                    <div class="flex shrink-0 items-center gap-3 px-4"
+                         :class="nested ? 'h-16' : 'h-19'">
+                        <div class="flex shrink-0 items-center justify-center rounded-lg"
+                             :class="nested ? 'size-8 bg-(--graph-node-bg)' : 'size-10 bg-elevated'">
                             <UIcon :name="icon"
-                                   :class="nested ? 'size-4' : 'size-5'" />
+                                   :class="nested ? 'size-5' : 'size-6'" />
                         </div>
-                        <div class="flex min-w-0 flex-1 flex-col items-start"
-                             :class="nested ? 'gap-[5px]' : 'gap-[7px]'">
-                            <div class="flex max-w-full items-center gap-[7px]">
-                                <span class="truncate font-semibold tracking-tight text-highlighted"
-                                      :class="nested ? 'text-[13px]' : 'text-sm'">{{ title }}</span>
-                                <span class="shrink-0 rounded-full"
-                                      :class="[nested ? 'size-1.5' : 'size-[7px]', statusDotClass(status?.state ?? 'idle')]" />
+                        <div class="flex min-w-0 flex-1 flex-col items-start gap-1">
+                            <div class="flex max-w-full items-center gap-2">
+                                <span class="truncate text-sm font-semibold text-highlighted">{{ title }}</span>
+                                <StatusDot :color="nodeStateColor(state)"
+                                           :pulse="nodeStateExecuting(state)" />
                             </div>
                             <div v-if="showName || showChip"
                                  class="flex max-w-full items-center gap-1.5">
                                 <span v-if="showName"
                                       class="min-w-0 truncate text-xs text-muted"
-                                      :class="showChip && 'max-w-[60%] shrink-0'">{{ source.name }}</span>
-                                <span v-if="showChip"
-                                      class="id-chip min-w-0 truncate">{{ source.discriminator }}</span>
+                                      :class="showChip && 'max-w-3/5 shrink-0'">{{ source.name }}</span>
+                                <UBadge v-if="showChip"
+                                        color="neutral"
+                                        size="sm"
+                                        class="min-w-0">
+                                    <span class="truncate tabular-nums slashed-zero">{{ source.discriminator }}</span>
+                                </UBadge>
                             </div>
                         </div>
                         <UTooltip v-if="isDrift && !collapsed"
+                                  :text="driftBadge?.label"
                                   :delay-duration="0"
-                                  :content="{ side: 'top', sideOffset: 6 }">
-                            <UIcon :name="driftBadge?.icon ?? 'i-lucide-unplug'"
+                                  :content="{ side: 'top', sideOffset: 8 }">
+                            <UIcon :name="driftBadge?.icon ?? appConfig.icons.drift"
                                    class="size-4 shrink-0"
                                    :class="driftStatus === 'missing' ? 'text-error' : 'text-warning'" />
-                            <template #content>
-                                <div class="text-xs">{{ driftBadge?.label }}</div>
-                            </template>
                         </UTooltip>
-                        <GraphCountBadge :count="assetCount"
-                                         :emphasis="!nested" />
+                        <UBadge color="neutral"
+                                :size="nested ? 'sm' : 'md'"
+                                class="shrink-0">
+                            <span class="tabular-nums">{{ assetCount }}</span>
+                        </UBadge>
                     </div>
                 </div>
             </div>
@@ -243,7 +241,7 @@ const frameClass = computed(() => [
                     :class="[
                         'transition-all duration-150',
                         !hasDownstream && !isValidSource && 'opacity-0',
-                        isValidSource && '!size-3 !bg-transparent !border-2 !border-warning animate-pulse-grow',
+                        isValidSource && '!size-3 !bg-transparent !border-2 !border-primary animate-pulse-grow',
                     ]" />
         </div>
     </UContextMenu>

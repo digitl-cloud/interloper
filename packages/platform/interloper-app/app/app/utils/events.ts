@@ -1,70 +1,39 @@
 import type { EventType } from '~/types/event'
 
-type BadgeColor = 'error' | 'success' | 'info' | 'warning' | 'neutral'
-
-const iconMap: Record<EventType, string> = {
-    operation_queued: 'i-lucide-clock',
-    operation_skipped: 'i-lucide-skip-forward',
-    operation_started: 'i-lucide-play-circle',
-    operation_completed: 'i-lucide-check-circle',
-    operation_failed: 'i-lucide-alert-circle',
-    operation_retried: 'i-lucide-rotate-ccw',
-    operation_canceled: 'i-lucide-x-circle',
-    asset_data_started: 'i-lucide-play-circle',
-    asset_data_completed: 'i-lucide-check-circle',
-    asset_data_failed: 'i-lucide-alert-circle',
-    dest_read_started: 'i-lucide-download',
-    dest_read_completed: 'i-lucide-download-cloud',
-    dest_read_failed: 'i-lucide-x-circle',
-    dest_write_started: 'i-lucide-upload',
-    dest_write_completed: 'i-lucide-upload-cloud',
-    dest_write_failed: 'i-lucide-x-circle',
-    run_dispatched: 'i-lucide-send',
-    run_started: 'i-lucide-rocket',
-    run_completed: 'i-lucide-flag',
-    run_failed: 'i-lucide-alert-circle',
-    backfill_started: 'i-lucide-rewind',
-    backfill_completed: 'i-lucide-flag',
-    backfill_failed: 'i-lucide-alert-circle',
-    hook_fired: 'i-lucide-webhook',
-    hook_failed: 'i-lucide-alert-circle',
-    log: 'i-lucide-align-left',
-}
-
 const labelMap: Record<EventType, string> = {
-    operation_queued: 'Operation Queued',
-    operation_skipped: 'Operation Skipped',
-    operation_started: 'Operation Started',
-    operation_completed: 'Operation Completed',
-    operation_failed: 'Operation Failed',
-    operation_retried: 'Operation Retried',
-    operation_canceled: 'Operation Canceled',
-    asset_data_started: 'Asset Data Started',
-    asset_data_completed: 'Asset Data Completed',
-    asset_data_failed: 'Asset Data Failed',
-    dest_read_started: 'Destination Read Started',
-    dest_read_completed: 'Destination Read Completed',
-    dest_read_failed: 'Destination Read Failed',
-    dest_write_started: 'Destination Write Started',
-    dest_write_completed: 'Destination Write Completed',
-    dest_write_failed: 'Destination Write Failed',
-    run_dispatched: 'Run Dispatched',
-    run_started: 'Run Started',
-    run_completed: 'Run Completed',
-    run_failed: 'Run Failed',
-    backfill_started: 'Backfill Started',
-    backfill_completed: 'Backfill Completed',
-    backfill_failed: 'Backfill Failed',
-    hook_fired: 'Hook Fired',
-    hook_failed: 'Hook Failed',
+    operation_queued: 'Operation queued',
+    operation_skipped: 'Operation skipped',
+    operation_started: 'Operation started',
+    operation_completed: 'Operation completed',
+    operation_failed: 'Operation failed',
+    operation_retried: 'Operation retried',
+    operation_canceled: 'Operation canceled',
+    asset_data_started: 'Asset data started',
+    asset_data_completed: 'Asset data completed',
+    asset_data_failed: 'Asset data failed',
+    dest_read_started: 'Destination read started',
+    dest_read_completed: 'Destination read completed',
+    dest_read_failed: 'Destination read failed',
+    dest_write_started: 'Destination write started',
+    dest_write_completed: 'Destination write completed',
+    dest_write_failed: 'Destination write failed',
+    run_dispatched: 'Run dispatched',
+    run_started: 'Run started',
+    run_completed: 'Run completed',
+    run_failed: 'Run failed',
+    backfill_started: 'Backfill started',
+    backfill_completed: 'Backfill completed',
+    backfill_failed: 'Backfill failed',
+    hook_fired: 'Hook fired',
+    hook_failed: 'Hook failed',
     log: 'Log',
 }
 
 export const EVENT_CATEGORIES = ['all', 'lifecycle', 'errors', 'logs'] as const
 export type EventCategory = typeof EVENT_CATEGORIES[number]
 
-/** All known event types, derived from the icon map so this can't drift. */
-const ALL_EVENT_TYPES = Object.keys(iconMap) as EventType[]
+/** All known event types, derived from the label map so this can't drift. */
+const ALL_EVENT_TYPES = Object.keys(labelMap) as EventType[]
 
 /**
  * High-level orchestration milestones (run/operation/backfill state machine).
@@ -102,15 +71,50 @@ export function eventTypesForCategory(category: EventCategory): EventType[] | nu
     }
 }
 
+/** The status an event's outcome reads as, by its suffix; colours and icons come from the status table. */
+const OUTCOMES: [suffix: string, status: string][] = [
+    ['_completed', 'success'],
+    ['_failed', 'failed'],
+    ['_started', 'running'],
+    ['_dispatched', 'dispatched'],
+    ['_queued', 'queued'],
+    ['_skipped', 'skipped'],
+    ['_canceled', 'canceled'],
+]
+
+function eventStatus(eventType: EventType): string | null {
+    return OUTCOMES.find(([suffix]) => eventType.endsWith(suffix))?.[1] ?? null
+}
+
+const LOG_ICON = 'i-lucide-align-left'
+
+/**
+ * An event's icon. Outcomes take the status table's icon; a start shows what
+ * started (a run, a destination read or write, a backfill), since a spinner
+ * would claim the event is still going. Call it where `useAppConfig` is
+ * available (setup, render).
+ */
 export function eventTypeIcon(eventType: EventType): string {
-    return iconMap[eventType] ?? 'i-lucide-align-left'
+    const { ui, icons } = useAppConfig()
+    switch (eventType) {
+        case 'dest_read_started': return 'i-lucide-download'
+        case 'dest_write_started': return ui.icons.upload
+        case 'backfill_started': return icons.backfill
+        case 'run_dispatched': return 'i-lucide-send'
+        case 'operation_retried': return ui.icons.reload
+        case 'hook_fired': return icons.hook
+        case 'log': return LOG_ICON
+    }
+    const status = eventStatus(eventType)
+    if (status === 'running') return icons.run
+    return status ? statusIcon(status) : LOG_ICON
 }
 
 export function eventTypeLabel(eventType: EventType): string {
     return labelMap[eventType] ?? eventType
 }
 
-const levelColorMap: Record<string, BadgeColor> = {
+const levelColorMap: Record<string, StatusColor> = {
     DEBUG: 'neutral',
     INFO: 'info',
     WARNING: 'warning',
@@ -118,19 +122,13 @@ const levelColorMap: Record<string, BadgeColor> = {
     CRITICAL: 'error',
 }
 
-export function logLevelColor(level: string): BadgeColor {
+export function logLevelColor(level: string): StatusColor {
     return levelColorMap[level.toUpperCase()] ?? 'neutral'
 }
 
-export function eventTypeColor(eventType: EventType): BadgeColor {
-    if (eventType.includes('failed')) return 'error'
-    if (eventType.includes('completed')) return 'success'
-    if (eventType.includes('started')) return 'info'
-    if (eventType.includes('dispatched')) return 'info'
-    if (eventType.includes('retried')) return 'warning'
-    if (eventType.includes('skipped')) return 'warning'
-    if (eventType.includes('canceled')) return 'warning'
-    if (eventType.includes('queued')) return 'neutral'
-    return 'neutral'
+/** An event's colour: its outcome's status colour; a retry warns, anything else is neutral. */
+export function eventTypeColor(eventType: EventType): StatusColor {
+    const status = eventStatus(eventType)
+    if (status) return statusMeta(status).color
+    return eventType.endsWith('_retried') ? 'warning' : 'neutral'
 }
-

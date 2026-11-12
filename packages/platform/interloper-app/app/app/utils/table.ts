@@ -1,17 +1,20 @@
 import { h } from 'vue'
-import { UBadge, UButton, UIcon } from '#components'
+import { UBadge, UButton, UIcon, UTooltip } from '#components'
 import type { Column } from '@tanstack/vue-table'
 import type { TableColumn } from '@nuxt/ui'
 import { stateColumns, type ComponentDefinition } from '~/types/catalog'
 import type { ComponentRecord } from '~/types/component'
 import type { DriftBadge } from '~/composables/drift'
 import { componentIcon } from '~/utils/icons'
+import { shortId } from '~/utils/ids'
 import { formatDate } from '~/utils/time'
 
 /**
  * Builds a clickable column header that toggles sorting (none → asc → desc)
  * and reflects the current state with an arrow icon. Use as a column's
- * `header` to make it sortable.
+ * `header` to make it sortable. The button sits flush with the column (its
+ * padding is pulled out) and keeps the header row's type, so sortable and
+ * plain headers read alike.
  */
 export function sortableHeader<T>(label: string) {
     return ({ column }: { column: Column<T> }) => {
@@ -24,15 +27,25 @@ export function sortableHeader<T>(label: string) {
         return h(UButton, {
             color: 'neutral',
             variant: 'ghost',
-            size: 'sm',
+            size: 'md',
             label,
             icon,
             trailing: true,
-            class: '-mx-2.5 text-sm font-semibold text-highlighted data-[state=open]:bg-elevated',
+            class: '-mx-2.5 font-semibold text-highlighted',
             'aria-label': `Sort by ${label}`,
             onClick: () => column.toggleSorting(column.getIsSorted() === 'asc'),
         })
     }
+}
+
+/** The dash an empty cell shows. */
+export function emptyCell() {
+    return h('span', { class: 'text-dimmed' }, '—')
+}
+
+/** A UUID as its short form, the full id in a tooltip. */
+export function idCell(id: string) {
+    return h(UTooltip, { text: id }, () => h('span', { class: 'tabular-nums slashed-zero' }, shortId(id)))
 }
 
 /**
@@ -43,8 +56,10 @@ export function dateColumn<T>(key: keyof T & string, header: string): TableColum
     return {
         accessorKey: key,
         header,
-        cell: ({ row }: { row: { getValue: <V>(key: string) => V } }) =>
-            h('span', { class: 'text-muted' }, formatDate(row.getValue<string | null>(key)) || '—'),
+        cell: ({ row }: { row: { getValue: <V>(key: string) => V } }) => {
+            const value = formatDate(row.getValue<string | null>(key))
+            return value ? h('span', { class: 'text-muted tabular-nums' }, value) : emptyCell()
+        },
     } as TableColumn<T>
 }
 
@@ -69,7 +84,7 @@ export function nameColumn(
             const meta = badge?.(row.original)
             const children = [h('span', { class: 'truncate' }, name)]
             if (discriminator && discriminator !== name) {
-                children.push(h('span', { class: 'id-chip max-w-full truncate sm:shrink-0' }, discriminator))
+                children.push(h(UBadge, { color: 'neutral', size: 'sm', label: discriminator, class: 'max-w-full slashed-zero sm:shrink-0' }))
             }
             if (meta) {
                 children.push(h(UBadge, { color: meta.color, size: 'sm', icon: meta.icon }, () => meta.label))
@@ -87,7 +102,7 @@ export function typeColumn(icon: (key: string) => string = componentIcon): Table
         header: 'Type',
         accessorFn: (row: ComponentRecord) => typeName(row.key),
         cell: ({ row }: { row: { original: ComponentRecord } }) => h('span', { class: 'flex items-center gap-2 text-muted' }, [
-            h(UIcon, { name: icon(row.original.key), class: 'size-5 shrink-0' }),
+            h(UIcon, { name: icon(row.original.key), class: 'size-4 shrink-0' }),
             typeName(row.original.key),
         ]),
     } as TableColumn<ComponentRecord>
@@ -96,7 +111,7 @@ export function typeColumn(icon: (key: string) => string = componentIcon): Table
 /**
  * Table columns for a component row's `state`, derived from its definition's
  * `state_schema`. Datetime values render via `formatDate`; `_id` values as a
- * short monospace id.
+ * short id with the full one in a tooltip.
  */
 export function stateSchemaColumns(defn: ComponentDefinition | undefined): TableColumn<ComponentRecord>[] {
     if (!defn) return []
@@ -106,7 +121,10 @@ export function stateSchemaColumns(defn: ComponentDefinition | undefined): Table
                 id: col.key,
                 header: col.label,
                 accessorFn: (row: ComponentRecord) => row.state?.[col.key] ?? '',
-                cell: ({ row }: { row: { original: ComponentRecord } }) => formatDate(row.original.state?.[col.key]) || '—',
+                cell: ({ row }: { row: { original: ComponentRecord } }) => {
+                    const value = formatDate(row.original.state?.[col.key])
+                    return value ? h('span', { class: 'tabular-nums' }, value) : emptyCell()
+                },
             } as TableColumn<ComponentRecord>
         }
         return {
@@ -115,9 +133,9 @@ export function stateSchemaColumns(defn: ComponentDefinition | undefined): Table
             accessorFn: (row: ComponentRecord) => row.state?.[col.key] ?? '',
             cell: ({ row }: { row: { original: ComponentRecord } }) => {
                 const value = row.original.state?.[col.key]
-                if (value == null || value === '') return '—'
+                if (value == null || value === '') return emptyCell()
                 const text = String(value)
-                if (col.key.endsWith('_id')) return h('span', { class: 'font-mono text-xs' }, text.substring(0, 8))
+                if (col.key.endsWith('_id')) return idCell(text)
                 return text
             },
         } as TableColumn<ComponentRecord>

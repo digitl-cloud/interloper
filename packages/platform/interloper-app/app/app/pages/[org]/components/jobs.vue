@@ -6,6 +6,7 @@ import { jobCron, jobEnabled, jobTimezone, relationRefs } from '~/types/componen
 
 const USwitch = resolveComponent('USwitch')
 const UBadge = resolveComponent('UBadge')
+const UTooltip = resolveComponent('UTooltip')
 const EntityBadge = resolveComponent('EntityBadge')
 
 const componentsStore = useComponentsStore()
@@ -13,6 +14,7 @@ const views = useComponentViews()
 const { statusBadge } = useDrift()
 const catalogStore = useCatalogStore()
 const toast = useToast()
+const appConfig = useAppConfig()
 
 const jobs = computed(() => componentsStore.byKind('job'))
 
@@ -34,10 +36,16 @@ function openRun(job: ComponentRecord) {
     runModalOpen.value = true
 }
 
-// Deep link (command palette): /jobs?run=<id> opens the run modal for that
-// job as soon as it lands in the store.
+// Deep links: /jobs?new opens the create wizard (the empty overview and
+// timeline point here); /jobs?run=<id> opens the run modal for that job as
+// soon as it lands in the store.
 const route = useRoute()
 const router = useRouter()
+watchEffect(() => {
+    if (route.query.new === undefined) return
+    handleCreate()
+    router.replace({ query: { ...route.query, new: undefined } })
+})
 watchEffect(() => {
     const id = route.query.run
     if (typeof id !== 'string') return
@@ -64,7 +72,7 @@ async function setEnabled(job: ComponentRecord, enabled: boolean) {
         })
     }
     catch (e) {
-        toast.add(errorToast(e, `Failed to ${enabled ? 'enable' : 'disable'} job`))
+        toast.add(errorToast(e, `Couldn't ${enabled ? 'enable' : 'disable'} the job`))
     }
     finally {
         const pending = new Set(toggling.value)
@@ -88,8 +96,12 @@ function lastRunColumn(): TableColumn<ComponentRecord> {
             const state = row.original.state ?? {}
             if (!state.last_run_at) return h('span', { class: 'text-dimmed' }, '—')
             const status = state.last_run_status as string | undefined
-            return h(UBadge, { color: statusColor(status), icon: statusIcon(status) }, () =>
-                `${timeSince(new Date(state.last_run_at))} ago`)
+            const meta = statusMeta(status)
+            return h(UBadge, {
+                color: meta.color,
+                icon: statusIcon(status),
+                ui: { leadingIcon: meta.executing ? 'animate-spin' : undefined },
+            }, () => h('span', { class: 'tabular-nums' }, relativeTime(new Date(state.last_run_at))))
         },
     }
 }
@@ -100,10 +112,8 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
         id: 'schedule',
         header: 'Schedule',
         accessorFn: (row: ComponentRecord) => scheduleSummary(jobCron(row), jobTimezone(row)),
-        cell: ({ row }) => h('span', {
-            class: 'text-muted',
-            title: jobCron(row.original),
-        }, scheduleSummary(jobCron(row.original), jobTimezone(row.original))),
+        cell: ({ row }) => h(UTooltip, { text: jobCron(row.original) }, () =>
+            h('span', { class: 'text-muted' }, scheduleSummary(jobCron(row.original), jobTimezone(row.original)))),
     },
     {
         id: 'targets',
@@ -144,8 +154,8 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
 function rowActions(job: ComponentRecord): DropdownMenuItem[][] {
     return [[
         {
-            label: 'Run',
-            icon: 'i-lucide-play',
+            label: 'Run now',
+            icon: appConfig.icons.run,
             onSelect: () => openRun(job),
         },
     ]]
@@ -162,7 +172,7 @@ async function handleDelete(ids: string[]) {
         toast.add({ title: `${ids.length} job${ids.length > 1 ? 's' : ''} deleted`, color: 'success' })
     }
     catch (e) {
-        toast.add(inUseToast(e, 'Job') ?? errorToast(e, 'Failed to delete job'))
+        toast.add(inUseToast(e, 'Job') ?? errorToast(e, "Couldn't delete the job"))
     }
 }
 
@@ -189,7 +199,7 @@ const enabled = useQueryParam<boolean | null>('enabled', null, booleanQuery)
                        :error="componentsStore.error"
                        :row-actions="rowActions"
                        :delete-impact="componentsStore.deleteImpact"
-                       search-placeholder="Search jobs..."
+                       search-placeholder="Search jobs…"
                        @delete="handleDelete"
                        @edit="handleEdit"
                        @retry="componentsStore.fetchAll(['job'])">
@@ -197,26 +207,21 @@ const enabled = useQueryParam<boolean | null>('enabled', null, booleanQuery)
                     <EnabledFilter v-model="enabled" />
                 </template>
 
+                <template #empty>
+                    <UEmpty :icon="appConfig.icons.job"
+                            title="No jobs yet"
+                            description="A job is a scheduled pipeline. It runs your sources on a cron schedule and materializes the results into your destination — automatically, with no manual triggering. Every run is recorded under Executions."
+                            :actions="[{ label: 'New job', icon: appConfig.ui.icons.plus, onClick: handleCreate }]" />
+                </template>
                 <template #actions>
-                    <UButton icon="i-lucide-plus"
+                    <UButton :icon="appConfig.ui.icons.plus"
                              label="New job"
                              @click="handleCreate" />
-                </template>
-
-                <template #empty>
-                    <EmptyState icon="i-lucide-calendar-clock"
-                                title="No jobs yet"
-                                description="A job is a scheduled pipeline. It runs your sources on a cron schedule and materializes the results into your destination — automatically, with no manual triggering. Every run is recorded under Executions.">
-                        <UButton icon="i-lucide-plus"
-                                 label="New job"
-                                 class="mt-5"
-                                 @click="handleCreate" />
-                    </EmptyState>
                 </template>
             </DataTable>
 
             <WizardDrawer v-model:open="drawerOpen"
-                          :default-title="editingJob ? 'Edit Job' : 'New Job'"
+                          :default-title="editingJob ? 'Edit job' : 'New job'"
                           description="Configure job"
                           :stepper="stepperRef">
                 <WizardDefinitionStepper v-if="drawerOpen"
