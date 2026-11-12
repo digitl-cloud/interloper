@@ -13,6 +13,7 @@ def _email(promoted_name: str = "Ada Lovelace", promoted_by: str = "Grace Hopper
         promoted_email="ada@example.com",
         promoted_by=promoted_by,
         admin_url="https://app.example.com/admin/users",
+        logo_url="https://app.example.com/logo-email.png",
     )
 
 

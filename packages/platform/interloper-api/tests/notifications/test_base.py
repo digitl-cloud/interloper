@@ -20,11 +20,9 @@ class NoticeEmail(Email):
 
     Attributes:
         topic: What the notice is about.
-        logo_url: Absolute URL of the header logo image, or None.
     """
 
     topic: str
-    logo_url: str | None = None
 
     @property
     def subject(self) -> str:
@@ -60,19 +58,18 @@ class TestHtml:
     """Every email shares one frame: header, content cell, footer."""
 
     def test_the_frame_wraps_the_emails_own_content(self) -> None:
-        body = NoticeEmail("Acme").html()
+        body = NoticeEmail("Acme", logo_url="https://x/logo-email.png").html()
         assert body.startswith("<!DOCTYPE html>")
         assert "Interloper" in body
         assert "Something happened to" in body
 
     def test_the_footer_is_escaped(self) -> None:
-        body = NoticeEmail("Acme").html()
+        body = NoticeEmail("Acme", logo_url="https://x/logo-email.png").html()
         assert html.escape("Sent about <Acme>.") in body
         assert "<Acme>" not in body
 
-    def test_the_logo_is_optional(self) -> None:
+    def test_the_header_carries_the_logo(self) -> None:
         assert '<img src="https://x/logo-email.png"' in NoticeEmail("Acme", logo_url="https://x/logo-email.png").html()
-        assert "<img" not in NoticeEmail("Acme").html()
 
     def test_the_button_escapes_its_url_and_offers_a_fallback_link(self) -> None:
         button = Email._button_html("Open", 'https://x/?a=1&b="2"')
@@ -165,14 +162,14 @@ class TestSend:
     """Delivery picks the transport from the port and carries both bodies."""
 
     def test_an_unconfigured_mailer_is_refused(self) -> None:
-        email = NoticeEmail("Acme")
+        email = NoticeEmail("Acme", logo_url="https://x/logo-email.png")
 
         with pytest.raises(RuntimeError, match="SMTP is not configured"):
             email.send(SimpleNamespace(enabled=False), "new@example.com")
 
     def test_port_587_negotiates_starttls(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(smtplib, "SMTP", FakeSmtpServer)
-        email = NoticeEmail("Acme")
+        email = NoticeEmail("Acme", logo_url="https://x/logo-email.png")
 
         email.send(_smtp_config(port=587), "new@example.com")
 
@@ -183,7 +180,7 @@ class TestSend:
 
     def test_port_465_uses_implicit_tls_without_starttls(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(smtplib, "SMTP_SSL", FakeSmtpServer)
-        email = NoticeEmail("Acme")
+        email = NoticeEmail("Acme", logo_url="https://x/logo-email.png")
 
         email.send(_smtp_config(port=465), "new@example.com")
 
@@ -194,7 +191,7 @@ class TestSend:
     def test_the_message_carries_both_a_text_and_an_html_body(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # A plain-text alternative keeps the email readable in any client.
         monkeypatch.setattr(smtplib, "SMTP", FakeSmtpServer)
-        email = NoticeEmail("Acme")
+        email = NoticeEmail("Acme", logo_url="https://x/logo-email.png")
 
         email.send(_smtp_config(), "new@example.com")
 
@@ -209,7 +206,7 @@ class TestSend:
     def test_the_subject_is_the_emails_own(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(smtplib, "SMTP", FakeSmtpServer)
 
-        NoticeEmail("Acme").send(_smtp_config(), "new@example.com")
+        NoticeEmail("Acme", logo_url="https://x/logo-email.png").send(_smtp_config(), "new@example.com")
 
         sent = FakeSmtpServer.instances[0].sent
         assert sent is not None
@@ -224,14 +221,14 @@ class TestDeliver:
         self, smtp_config: SimpleNamespace | None, caplog: pytest.LogCaptureFixture
     ) -> None:
         with caplog.at_level("WARNING", logger="interloper_api.notifications.base"):
-            NoticeEmail("Acme").deliver(smtp_config, "new@example.com")
+            NoticeEmail("Acme", logo_url="https://x/logo-email.png").deliver(smtp_config, "new@example.com")
 
         assert "SMTP not configured; NoticeEmail to new@example.com not sent" in caplog.text
 
     def test_a_configured_mailer_sends(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(smtplib, "SMTP", FakeSmtpServer)
 
-        NoticeEmail("Acme").deliver(_smtp_config(), "new@example.com")
+        NoticeEmail("Acme", logo_url="https://x/logo-email.png").deliver(_smtp_config(), "new@example.com")
 
         sent = FakeSmtpServer.instances[0].sent
         assert sent is not None
@@ -246,6 +243,6 @@ class TestDeliver:
         monkeypatch.setattr(smtplib, "SMTP", unreachable)
 
         with caplog.at_level("ERROR", logger="interloper_api.notifications.base"):
-            NoticeEmail("Acme").deliver(_smtp_config(), "new@example.com")
+            NoticeEmail("Acme", logo_url="https://x/logo-email.png").deliver(_smtp_config(), "new@example.com")
 
         assert "Failed to send NoticeEmail to new@example.com" in caplog.text

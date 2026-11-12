@@ -20,14 +20,11 @@ class InvitationEmail(Email):
         org_name: Name of the organisation the recipient is invited to.
         inviter_name: Display name of the person who sent the invite.
         invite_url: Full URL to accept the invitation.
-        logo_url: Absolute URL of the header logo image; the logo is omitted
-            when None.
     """
 
     org_name: str
     inviter_name: str
     invite_url: str
-    logo_url: str | None = None  # ty: ignore[incompatible-attribute-override]
 
     @classmethod
     def from_invitation(

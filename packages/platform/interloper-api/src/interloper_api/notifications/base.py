@@ -6,6 +6,7 @@ import html
 import logging
 import smtplib
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any
@@ -18,15 +19,15 @@ logger = logging.getLogger(__name__)
 _FONT_STACK = "-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
 
 
+@dataclass(frozen=True)
 class Email(ABC):
     """An email the API sends: subclasses write the words, this class the layout and delivery.
 
     Attributes:
-        logo_url: Absolute URL of the header logo image; the logo is omitted
-            when None.
+        logo_url: Absolute URL of the header logo image, served by the app.
     """
 
-    logo_url: str | None
+    logo_url: str = field(kw_only=True)
 
     # -- Content ---------------------------------------------------------------
 
@@ -74,8 +75,6 @@ class Email(ABC):
         logo = (
             f'<img src="{html.escape(self.logo_url, quote=True)}" width="26" height="26" alt=""'
             ' style="vertical-align: middle; margin-right: 10px;">'
-            if self.logo_url
-            else ""
         )
         footer = html.escape(self._footer_text(), quote=False)
 

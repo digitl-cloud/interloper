@@ -8,17 +8,20 @@ from interloper_db.store.invitations import INVITATION_EXPIRY_DAYS
 
 from interloper_api.notifications import InvitationEmail
 
+_LOGO_URL = "https://app.example.com/logo-email.png"
+
 
 def test_render_invite_html_contains_content():
-    body = InvitationEmail("Acme", "Ada Lovelace", "https://app.example.com/invite/tok").html()
+    body = InvitationEmail("Acme", "Ada Lovelace", "https://app.example.com/invite/tok", logo_url=_LOGO_URL).html()
     assert "Acme" in body
     assert "Ada Lovelace" in body
     assert 'href="https://app.example.com/invite/tok"' in body
     assert f"expires in {INVITATION_EXPIRY_DAYS} days" in body
+    assert f'<img src="{_LOGO_URL}"' in body
 
 
 def test_render_invite_html_escapes_interpolated_values():
-    body = InvitationEmail("<b>Org</b>", "Eve <script>alert(1)</script>", "https://x").html()
+    body = InvitationEmail("<b>Org</b>", "Eve <script>alert(1)</script>", "https://x", logo_url=_LOGO_URL).html()
     assert "<b>Org</b>" not in body
     assert "&lt;b&gt;Org&lt;/b&gt;" in body
     assert "<script>" not in body
@@ -54,15 +57,18 @@ def test_a_nameless_inviter_is_named_by_email():
 
 
 def test_render_invite_text_contains_link_and_expiry():
-    text = InvitationEmail("Acme", "Ada", "https://x/invite/t").text()
+    text = InvitationEmail("Acme", "Ada", "https://x/invite/t", logo_url=_LOGO_URL).text()
     assert "https://x/invite/t" in text
     assert f"{INVITATION_EXPIRY_DAYS} days" in text
 
 
 def test_the_subject_names_the_organisation():
-    assert InvitationEmail("Acme", "Ada", "https://x").subject == "You've been invited to join Acme on Interloper"
+    assert (
+        InvitationEmail("Acme", "Ada", "https://x", logo_url=_LOGO_URL).subject
+        == "You've been invited to join Acme on Interloper"
+    )
 
 
 def test_render_invite_html_carries_the_expiry_in_the_footer():
-    body = InvitationEmail("Acme", "Ada", "https://x").html()
+    body = InvitationEmail("Acme", "Ada", "https://x", logo_url=_LOGO_URL).html()
     assert "you can safely ignore this email" in body
