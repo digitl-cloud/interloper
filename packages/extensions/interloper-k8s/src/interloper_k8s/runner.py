@@ -116,7 +116,7 @@ class KubernetesRun(Run):
         """
         pods = self.core.list_namespaced_pod(namespace=self.runner.namespace, label_selector=f"job-name={name}").items
         for pod in pods:
-            for status in (pod.status and pod.status.container_statuses) or []:
+            for status in (pod.status.container_statuses if pod.status else None) or []:
                 if status.state and status.state.terminated and status.state.terminated.message:
                     return status.state.terminated.message
         return None

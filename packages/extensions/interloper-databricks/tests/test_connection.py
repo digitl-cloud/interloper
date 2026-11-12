@@ -1,6 +1,7 @@
 """Tests for ``interloper_databricks.connection``."""
 
 import base64
+from types import SimpleNamespace
 
 import httpx2
 import pytest
@@ -97,7 +98,7 @@ class TestToken:
     def test_token_near_expiry_is_replaced(self, workspace, monkeypatch):
         conn = _m2m()
         clock = [1000.0]
-        monkeypatch.setattr(connection_module.time, "monotonic", lambda: clock[0])
+        monkeypatch.setattr(connection_module, "time", SimpleNamespace(monotonic=lambda: clock[0]))
 
         assert conn.token() == "token-1"
         clock[0] += 3600 - 299

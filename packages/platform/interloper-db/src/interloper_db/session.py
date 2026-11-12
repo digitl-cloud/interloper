@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
@@ -62,7 +62,7 @@ def save(session: Session, row: Any, *loads: str) -> None:
 
 
 @contextmanager
-def transaction(engine: Engine) -> Iterator[Session]:
+def transaction(engine: Engine) -> Generator[Session, None, None]:
     """Run several store calls as one atomic unit of work.
 
     Store methods normally own a session each, which makes them individually
@@ -105,7 +105,7 @@ def transaction(engine: Engine) -> Iterator[Session]:
 
 
 @contextmanager
-def session_scope(engine: Engine) -> Iterator[Session]:
+def session_scope(engine: Engine) -> Generator[Session, None, None]:
     """Work in a session on *engine*.
 
     Joins the session already in scope — an enclosing :func:`transaction`, or

@@ -97,7 +97,7 @@ def test_union_stamps_a_column_per_upstream():
     class StampedReporting(il.Source):
         @ibis_view(schema=Stamped, relations={"orders": il.Relation("asset", "shop.orders", many=True)})
         def totals(self, orders: list[il.Upstream]) -> ibis.Table:
-            return union(orders, account_id=lambda upstream: upstream.asset.source.discriminator)  # ty: ignore[unresolved-attribute]
+            return union(orders, account_id=lambda upstream: upstream.asset.source.discriminator)  # ty: ignore[missing-union-attribute]
 
     warehouse = RecordingWarehouse(id="warehouse")
     sql = _run(

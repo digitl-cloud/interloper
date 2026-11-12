@@ -50,7 +50,7 @@ def store() -> Iterator[Store]:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
     for model in (Component, Backfill, Run, Event, Execution, Quota, Usage):
-        model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
+        model.__table__.create(engine)  # ty: ignore[missing-attribute]
     try:
         yield Store(catalog=il.Catalog(components={}), engine=engine)
     finally:

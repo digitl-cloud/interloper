@@ -80,7 +80,7 @@ def store() -> Iterator[Store]:
 
     tenant = (Organisation, Profile, UserOrganisation, Invitation, Token)
     for model in (*tenant, Component, ComponentRelation, Backfill, Run, Event, Execution, Quota, Usage):
-        model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
+        model.__table__.create(engine)  # ty: ignore[missing-attribute]
     try:
         yield Store(catalog=il.Catalog.from_assets([DemoSource, SnapshotSource]))
     finally:

@@ -7,7 +7,7 @@ import json
 import math
 import threading
 import warnings
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
@@ -111,7 +111,7 @@ class FabricWarehouseDestination(DatabaseDestination):
         )
 
     @contextmanager
-    def _session(self) -> Iterator[mssql_python.Connection]:
+    def _session(self) -> Generator[mssql_python.Connection, None, None]:
         """Yield the session an operation runs on.
 
         Inside :meth:`transaction` that is the thread's transaction session,
@@ -239,7 +239,7 @@ class FabricWarehouseDestination(DatabaseDestination):
     # -- DatabaseDestination hooks ---------------------------------------------
 
     @contextmanager
-    def transaction(self) -> Iterator[None]:
+    def transaction(self) -> Generator[None, None, None]:
         """Run one write, a delete followed by an insert, as ``BEGIN ... COMMIT``.
 
         The transaction lives on one session held for the calling thread,

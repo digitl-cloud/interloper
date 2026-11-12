@@ -68,7 +68,7 @@ class QuotaStore:
         with session_scope(self._engine) as session:
             QUOTAS[key]  # loud failure on unregistered keys
             if lock:
-                table = Quota.__table__  # ty: ignore[unresolved-attribute]
+                table = Quota.__table__  # ty: ignore[missing-attribute]
                 statement = (
                     dialect_insert(session)(table)
                     .values(org_id=org_id, key=key)
@@ -136,7 +136,7 @@ class QuotaStore:
                 raise ConfigError(f"Unknown quota limit(s): {sorted(unknown)}")
             if negative := {key for key, value in limits.items() if value is not None and value < 0}:
                 raise ConfigError(f"Quota limit(s) must be >= 0: {sorted(negative)}")
-            table = Quota.__table__  # ty: ignore[unresolved-attribute]
+            table = Quota.__table__  # ty: ignore[missing-attribute]
             for key, value in limits.items():
                 statement = (
                     dialect_insert(session)(table)

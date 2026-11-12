@@ -243,7 +243,7 @@ def listener_harness(monkeypatch: pytest.MonkeyPatch) -> Any:
         monkeypatch.setattr(websocket_module.psycopg2, "connect", lambda dsn: connection)
         monkeypatch.setattr(websocket_module._select, "select", fake_select)
         monkeypatch.setattr(websocket_module.asyncio, "run_coroutine_threadsafe", fake_schedule)
-        monkeypatch.setattr("time.sleep", fake_sleep)
+        monkeypatch.setattr(websocket_module, "time", SimpleNamespace(sleep=fake_sleep))
 
         with pytest.raises(StopListener):
             websocket_module._start_notify_listener("postgresql://x", object())  # ty: ignore[invalid-argument-type]
@@ -318,7 +318,7 @@ class TestNotifyListener:
             raise StopListener("retry")
 
         monkeypatch.setattr(websocket_module.psycopg2, "connect", failing_connect)
-        monkeypatch.setattr("time.sleep", fake_sleep)
+        monkeypatch.setattr(websocket_module, "time", SimpleNamespace(sleep=fake_sleep))
 
         with caplog.at_level("ERROR", logger="interloper_api.routes.websocket"), pytest.raises(StopListener):
             websocket_module._start_notify_listener("postgresql://x", object())  # ty: ignore[invalid-argument-type]

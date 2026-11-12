@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import threading
 import warnings
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, ClassVar
@@ -82,7 +82,7 @@ class DuckDBDestination(DatabaseDestination):
         return dataset or self.default_dataset or DEFAULT_SCHEMA
 
     @contextmanager
-    def _cursor(self) -> Iterator[duckdb.DuckDBPyConnection]:
+    def _cursor(self) -> Generator[duckdb.DuckDBPyConnection, None, None]:
         """Yield the cursor an operation runs on.
 
         Inside :meth:`transaction` that is the thread's transaction cursor, so
@@ -231,10 +231,10 @@ class DuckDBDestination(DatabaseDestination):
                 return
             self._begin()
             cursor.register(_BATCH, frame)
-            try:
-                cursor.execute(f"INSERT INTO {ref} ({present}) SELECT {present} FROM {_BATCH}")
-            finally:
-                cursor.unregister(_BATCH)
+            # Not in a finally: after a failed INSERT DuckDB refuses every statement until ROLLBACK, which would
+            # mask the real error. The rollback, or closing the cursor, drops the registration instead.
+            cursor.execute(f"INSERT INTO {ref} ({present}) SELECT {present} FROM {_BATCH}")
+            cursor.unregister(_BATCH)
 
     def delete(self, table: str, dataset: str | None, where: PartitionFilter | None) -> None:
         """Delete the rows a filter selects, or every row.
@@ -310,7 +310,7 @@ class DuckDBDestination(DatabaseDestination):
         return dict(rows)
 
     @contextmanager
-    def transaction(self) -> Iterator[None]:
+    def transaction(self) -> Generator[None, None, None]:
         """Run one write, a delete followed by an insert, as one DuckDB transaction.
 
         The transaction lives on one cursor held for the calling thread, which

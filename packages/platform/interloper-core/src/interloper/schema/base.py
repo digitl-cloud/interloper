@@ -273,7 +273,7 @@ class Schema(Serializable):
 
         specs = cls.field_specs()
         fields = {spec.name: cls.model_fields[spec.name] for spec in specs}
-        adapters = {name: TypeAdapter(field.annotation) for name, field in fields.items()}
+        adapters = {name: TypeAdapter(field.annotation) for name, field in fields.items()}  # ty: ignore[invalid-argument-type]
         coercers = {
             spec.name: _RECONCILERS[spec.type]
             for spec in specs

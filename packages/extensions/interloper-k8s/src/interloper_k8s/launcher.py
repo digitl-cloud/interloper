@@ -157,11 +157,16 @@ class KubernetesLauncher(Launcher):
         Args:
             run: The dispatched run.
             token: The run's token, written into the Secret.
+
+        Raises:
+            RuntimeError: If the API server returns the created Job without a uid.
         """
         name = f"interloper-run-{str(run.id)[:8]}"
         labels = {"interloper.run_id": str(run.id)}
         created = self._batch_v1.create_namespaced_job(namespace=self._namespace, body=self._job(run, name, labels))
         try:
+            if created.metadata is None or created.metadata.uid is None:
+                raise RuntimeError(f"Kubernetes returned Job {name} without a uid.")
             owner = client.V1OwnerReference(api_version="batch/v1", kind="Job", name=name, uid=created.metadata.uid)
             secret = client.V1Secret(
                 metadata=client.V1ObjectMeta(
@@ -237,16 +242,9 @@ class KubernetesLauncher(Launcher):
             exit code and message, or ``None`` when its pod is still running,
             already deleted, or unreadable.
         """
-        from typing import cast
-
-        from kubernetes.client import V1PodList
-
         job_name = f"interloper-run-{str(run_id)[:8]}"
         try:
-            pods = cast(
-                V1PodList,
-                self._core_v1.list_namespaced_pod(namespace=self._namespace, label_selector=f"job-name={job_name}"),
-            )
+            pods = self._core_v1.list_namespaced_pod(namespace=self._namespace, label_selector=f"job-name={job_name}")
         except Exception:  # noqa: BLE001 - a diagnosis is best-effort detail on a run already found dead
             return None
         if not pods.items or pods.items[0].status is None:

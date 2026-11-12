@@ -26,7 +26,7 @@ from interloper_mcp.server import create_mcp_server
 def _result_dict(result: CallToolResult) -> dict[str, Any]:
     payload = result.structured_content
     if payload is None:
-        payload = json.loads(result.content[0].text)  # ty: ignore[unresolved-attribute]
+        payload = json.loads(result.content[0].text)  # ty: ignore[missing-union-attribute]
     # Union-typed returns are wrapped in a "result" envelope by MCPServer.
     return payload["result"] if set(payload) == {"result"} else payload
 

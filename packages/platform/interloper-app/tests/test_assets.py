@@ -7,6 +7,7 @@ checkout happens to have run ``make build-app``.
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -142,7 +143,8 @@ class TestSpaFallback:
             reached.append(scope["path"])
 
         async def receive() -> dict[str, Any]:
-            return {"type": "http.request", "body": b""}
+            await asyncio.Event().wait()
+            return {"type": "http.disconnect"}
 
         async def send(message: dict[str, Any]) -> None:
             sent.append(message)

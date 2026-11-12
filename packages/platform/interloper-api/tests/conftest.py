@@ -112,7 +112,7 @@ def oauth_store() -> Iterator[Store]:
         RefreshToken,
         Conversation,
     ):
-        model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
+        model.__table__.create(engine)  # ty: ignore[missing-attribute]
     try:
         yield Store(catalog=il.Catalog(components={}))
     finally:

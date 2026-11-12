@@ -41,7 +41,7 @@ class TestBareForm:
 
             clicks: int = 0
 
-        assert Row().clicks == 0  # ty: ignore[unresolved-attribute]
+        assert Row().clicks == 0  # ty: ignore[missing-attribute]
 
     def test_the_built_schema_can_describe_its_fields(self) -> None:
         @schema

@@ -105,10 +105,12 @@ class TestMetadata:
 
     def test_warehouse_is_the_discriminator(self):
         extra = FabricWarehouseDestination.model_fields["warehouse"].json_schema_extra
+        assert isinstance(extra, dict)
         assert extra["x-discriminator"] is True
 
     def test_server_is_picked_from_the_connections_workspaces(self):
         extra = FabricWarehouseDestination.model_fields["server"].json_schema_extra
+        assert isinstance(extra, dict)
         assert extra["x-fetch"] == {"provider": "connection.workspaces", "label_key": "name", "value_key": "server"}
 
 

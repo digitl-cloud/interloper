@@ -27,7 +27,7 @@ class InvitationEmail(Email):
     org_name: str
     inviter_name: str
     invite_url: str
-    logo_url: str | None = None
+    logo_url: str | None = None  # ty: ignore[incompatible-attribute-override]
 
     @classmethod
     def from_invitation(

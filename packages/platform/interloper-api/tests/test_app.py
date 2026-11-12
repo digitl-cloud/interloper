@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
@@ -262,7 +262,7 @@ class TestStartup:
         started: list[FastAPI] = []
 
         @asynccontextmanager
-        async def realtime_lifespan(app: FastAPI) -> AsyncIterator[None]:
+        async def realtime_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             started.append(app)
             yield
 

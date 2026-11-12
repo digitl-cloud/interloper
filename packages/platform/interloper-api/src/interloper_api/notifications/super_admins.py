@@ -29,7 +29,7 @@ class SuperAdminPromotionEmail(Email):
     promoted_email: str
     promoted_by: str
     admin_url: str
-    logo_url: str | None = None
+    logo_url: str | None = None  # ty: ignore[incompatible-attribute-override]
 
     @classmethod
     def from_promotion(cls, promoted: Profile, *, promoted_by: Profile, base_url: str) -> SuperAdminPromotionEmail:

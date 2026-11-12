@@ -124,7 +124,7 @@ class EventStore:
             return []
         values = [{name: getattr(row, name) for name in Event.model_fields} for row in rows]
         with session_scope(self._engine) as session:
-            table = Event.__table__  # ty: ignore[unresolved-attribute]
+            table = Event.__table__  # ty: ignore[missing-attribute]
             statement = (
                 dialect_insert(session)(table)
                 .values(values)

@@ -90,7 +90,7 @@ def agent_db() -> Iterator[Engine]:
         Usage,
     )
     for model in (*models, Conversation):
-        model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
+        model.__table__.create(eng)  # ty: ignore[missing-attribute]
     try:
         yield eng
     finally:

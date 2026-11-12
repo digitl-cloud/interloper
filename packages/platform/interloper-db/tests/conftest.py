@@ -56,7 +56,7 @@ def component_db() -> Iterator[Engine]:
         dbapi_connection.execute("PRAGMA foreign_keys=ON")
 
     for model in (Component, ComponentRelation, Quota, Usage):
-        model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
+        model.__table__.create(eng)  # ty: ignore[missing-attribute]
     try:
         yield eng
     finally:
@@ -88,7 +88,7 @@ def auth_db() -> Iterator[Engine]:
     oauth_models = (OAuthClient, AuthorizationCode, RefreshToken)
     org_data_models = (Component, ComponentRelation, Backfill, Run, Event, Quota, Usage, Conversation)
     for model in auth_models + oauth_models + org_data_models:
-        model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
+        model.__table__.create(eng)  # ty: ignore[missing-attribute]
     try:
         yield eng
     finally:

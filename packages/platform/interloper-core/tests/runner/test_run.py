@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any, ClassVar
 
@@ -322,7 +322,7 @@ class _Asset(il.Asset):
 
 
 @contextmanager
-def _capture() -> Iterator[list[Event]]:
+def _capture() -> Generator[list[Event], None, None]:
     """Collect every event delivered on the global bus within the block.
 
     Yields:

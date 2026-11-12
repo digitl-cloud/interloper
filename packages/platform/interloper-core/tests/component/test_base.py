@@ -245,7 +245,7 @@ class TestDefinition:
         with pytest.raises(TypeError, match=r"FakeTypoComponent\.maturity: Input should be"):
 
             class FakeTypoComponent(Component):
-                maturity = "gamma"
+                maturity = "gamma"  # ty: ignore[invalid-assignment]
 
     def test_definition_description_from_docstring(self):
         class FakeDocumentedComponent(Component):
@@ -366,7 +366,7 @@ class TestValidateClassvars:
     def test_valid_settings_pass_and_are_kept_as_declared(self):
         class FakeSettings(Component):
             icon = "carbon:data"
-            maturity = "beta"
+            maturity = "beta"  # ty: ignore[invalid-assignment]
 
         assert FakeSettings.maturity == "beta"
         assert type(FakeSettings.maturity) is str
@@ -375,7 +375,7 @@ class TestValidateClassvars:
         with pytest.raises(TypeError, match=r"FakeWrongIcon\.icon: Input should be a valid string"):
 
             class FakeWrongIcon(Component):
-                icon = 1
+                icon = 1  # ty: ignore[invalid-assignment]
 
     def test_a_field_named_after_a_setting_is_refused(self):
         with pytest.raises(TypeError, match=r"FakeShadowing\.icon is a field named after the 'icon' setting"):
@@ -391,7 +391,7 @@ class TestValidateClassvars:
 
     def test_inherited_values_are_not_revalidated(self):
         class FakeParent(Component):
-            maturity = "alpha"
+            maturity = "alpha"  # ty: ignore[invalid-assignment]
 
         class FakeChild(FakeParent):
             pass
@@ -497,7 +497,7 @@ class TestBind:
 
     def test_wrong_kind_rejected(self):
         with pytest.raises(ConfigError, match="connection"):
-            Widget(connection=Cfg())
+            Widget(connection=Cfg())  # ty: ignore[invalid-argument-type]
 
     def test_a_relation_refuses_the_component_itself(self):
         peer = Peer()

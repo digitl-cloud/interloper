@@ -336,5 +336,5 @@ class TestInstrumentation:
 
         setup.instrument_fastapi(app)
 
-        assert app._is_instrumented_by_opentelemetry is True  # ty: ignore[unresolved-attribute]
+        assert app._is_instrumented_by_opentelemetry is True  # ty: ignore[missing-attribute]
         FastAPIInstrumentor.uninstrument_app(app)
