@@ -21,15 +21,12 @@ class SuperAdminPromotionEmail(Email):
         promoted_by: Display name of the super-admin who granted the access.
         admin_url: Full URL of the admin portal's user list, where the access
             can be reviewed and revoked.
-        logo_url: Absolute URL of the header logo image; the logo is omitted
-            when None.
     """
 
     promoted_name: str
     promoted_email: str
     promoted_by: str
     admin_url: str
-    logo_url: str | None = None  # ty: ignore[incompatible-attribute-override]
 
     @classmethod
     def from_promotion(cls, promoted: Profile, *, promoted_by: Profile, base_url: str) -> SuperAdminPromotionEmail:
