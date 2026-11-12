@@ -29,14 +29,15 @@ def launcher_factory(monkeypatch: pytest.MonkeyPatch) -> Callable[..., Kubernete
 
 
 class _CapturingBatchV1:
-    def __init__(self) -> None:
+    def __init__(self, *, uid: str | None = "job-uid") -> None:
         self.jobs: list[client.V1Job] = []
         self.patches: list[tuple[str, dict[str, Any]]] = []
         self.deleted: list[str] = []
+        self._uid = uid
 
     def create_namespaced_job(self, namespace: str, body: client.V1Job) -> client.V1Job:
         self.jobs.append(body)
-        _metadata(body).uid = "job-uid"
+        _metadata(body).uid = self._uid
         return body
 
     def patch_namespaced_job(self, name: str, namespace: str, body: dict[str, Any]) -> None:
@@ -133,6 +134,22 @@ def test_a_job_whose_secret_cannot_be_created_is_deleted_unstarted(
         launcher.launch(Run(id=uuid4(), org_id=uuid4(), status=RunStatus.DISPATCHED), "ilr_x")
 
     assert batch.deleted == [_metadata(batch.jobs[0]).name]
+    assert batch.patches == []
+
+
+def test_a_job_returned_without_a_uid_is_deleted_unstarted(
+    launcher_factory: Callable[..., KubernetesLauncher],
+) -> None:
+    launcher = launcher_factory()
+    batch, core = _CapturingBatchV1(uid=None), _CapturingCoreV1()
+    launcher._batch_v1 = cast(client.BatchV1Api, batch)
+    launcher._core_v1 = cast(client.CoreV1Api, core)
+
+    with pytest.raises(RuntimeError, match="without a uid"):
+        launcher.launch(Run(id=uuid4(), org_id=uuid4(), status=RunStatus.DISPATCHED), "ilr_x")
+
+    assert batch.deleted == [_metadata(batch.jobs[0]).name]
+    assert core.secrets == []
     assert batch.patches == []
 
 
