@@ -385,13 +385,13 @@ class TestValidateClassvars:
         with pytest.raises(TypeError, match=r"FakeShadowing\.icon is a field named after the 'icon' setting"):
 
             class FakeShadowing(Component):
-                icon: int = 1
+                icon: int = 1  # ty: ignore[incompatible-attribute-override]
 
     def test_a_field_named_key_is_refused_rather_than_erasing_the_class_key(self):
         with pytest.raises(TypeError, match=r"FakeKeyed\.key is a field named after the 'key' setting"):
 
             class FakeKeyed(il.Connection):
-                key: str
+                key: str  # ty: ignore[incompatible-attribute-override]
 
     def test_inherited_values_are_not_revalidated(self):
         class FakeParent(Component):
@@ -460,7 +460,7 @@ class TestCollect:
 
     def test_subclass_replaces_same_name(self):
         class Narrow(Widget):
-            connection: Conn | None = il.Relation(Conn, optional=True)
+            connection: Conn | None = il.Relation(Conn, optional=True)  # ty: ignore[incompatible-attribute-override]
 
         assert Narrow.relations["connection"].optional is True
         assert Widget.relations["connection"].optional is False
