@@ -23,7 +23,8 @@ and the per-instance `id` are never routable.
 Every ClassVar value is checked against the type its annotation declares (`tags` against
 `list[str]`, `maturity` against `il.Maturity`, ...), whether the decorator passes it or the class
 body sets it, so a wrong one is a `TypeError` naming the class and the setting, raised where it is
-written. Values are checked, not converted: the class keeps what was declared.
+written. The class stores the validated value, so `maturity="alpha"` reads back as
+`il.Maturity.ALPHA`.
 
 ```py
 @il.asset(

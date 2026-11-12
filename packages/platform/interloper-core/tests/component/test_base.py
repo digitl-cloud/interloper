@@ -363,13 +363,17 @@ class Peer(il.Source):
 class TestValidateClassvars:
     """A class's own settings are checked against their declared ClassVar types."""
 
-    def test_valid_settings_pass_and_are_kept_as_declared(self):
+    def test_valid_settings_are_stored_as_their_declared_type(self):
         class FakeSettings(Component):
             icon = "carbon:data"
-            maturity = "beta"  # ty: ignore[invalid-assignment]
+            maturity = il.Maturity.BETA
 
-        assert FakeSettings.maturity == "beta"
-        assert type(FakeSettings.maturity) is str
+        @il.connection(maturity="alpha")
+        class FakeDecorated(il.Connection):
+            """A connection whose maturity the decorator sets as a string."""
+
+        assert FakeSettings.maturity is il.Maturity.BETA
+        assert FakeDecorated.maturity is il.Maturity.ALPHA
 
     def test_a_wrong_type_raises_naming_the_class_and_setting(self):
         with pytest.raises(TypeError, match=r"FakeWrongIcon\.icon: Input should be a valid string"):
@@ -391,12 +395,13 @@ class TestValidateClassvars:
 
     def test_inherited_values_are_not_revalidated(self):
         class FakeParent(Component):
-            maturity = "alpha"  # ty: ignore[invalid-assignment]
+            maturity = il.Maturity.ALPHA
 
         class FakeChild(FakeParent):
             pass
 
-        assert FakeChild.maturity == "alpha"
+        assert FakeChild.maturity is il.Maturity.ALPHA
+        assert "maturity" not in FakeChild.__dict__
 
     def test_settings_lists_every_public_classvar_with_its_type(self):
         settings = Component._classvars()
