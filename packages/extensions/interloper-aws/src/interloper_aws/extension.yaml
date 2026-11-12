@@ -1,0 +1,5 @@
+manifest_version: 1
+key: aws
+name: AWS
+description: "AWS connection and Amazon S3 destination."
+components: interloper_aws

@@ -1,0 +1,5 @@
+manifest_version: 1
+key: azure
+name: Microsoft Azure
+description: "Entra connection and Microsoft Fabric Warehouse destination."
+components: interloper_azure

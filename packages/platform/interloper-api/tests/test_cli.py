@@ -37,8 +37,8 @@ def _parse(*argv: str) -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(prog="interloper")
     subparsers = parser.add_subparsers(dest="command")
-    cli.register(subparsers)
-    cli.register_oauth(subparsers)
+    cli.ApiCommand().attach(subparsers, "api")
+    cli.OAuthCommand().attach(subparsers, "oauth")
     return parser.parse_args(argv)
 
 
@@ -73,7 +73,7 @@ def wiring(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
 def test_serves_one_api_on_the_port_and_host_flags(wiring: dict[str, Any]) -> None:
     """``--port`` picks the bind port and ``--host`` the bind host."""
-    cli._cmd_api(_parse("api", "--port", "3101", "--host", "127.0.0.1"))
+    cli.ApiCommand().run(_parse("api", "--port", "3101", "--host", "127.0.0.1"))
 
     settings, kwargs = wiring["server"]
     assert kwargs["port"] == 3101
@@ -83,7 +83,7 @@ def test_serves_one_api_on_the_port_and_host_flags(wiring: dict[str, Any]) -> No
 
 def test_the_port_defaults_to_the_settings(wiring: dict[str, Any]) -> None:
     """Without ``--port`` the API binds ``server.port``."""
-    cli._cmd_api(_parse("api"))
+    cli.ApiCommand().run(_parse("api"))
 
     settings, kwargs = wiring["server"]
     assert kwargs["port"] == settings.server.port
@@ -91,7 +91,7 @@ def test_the_port_defaults_to_the_settings(wiring: dict[str, Any]) -> None:
 
 def test_no_create_tables_reaches_the_bootstrap(wiring: dict[str, Any]) -> None:
     """``--no-create-tables`` skips the table bootstrap."""
-    cli._cmd_api(_parse("api", "--no-create-tables"))
+    cli.ApiCommand().run(_parse("api", "--no-create-tables"))
 
     assert wiring["bootstrap"]["create_tables"] is False
 
@@ -101,7 +101,7 @@ def test_the_api_serves_through_a_store_issuing_tokens_for_the_configured_lifeti
     auth = AuthSettings(session_expiry_days=2, access_token_expiry_minutes=15, refresh_token_expiry_days=7)
     AppSettings.activate(AppSettings(auth=auth))
 
-    cli._cmd_api(_parse("api"))
+    cli.ApiCommand().run(_parse("api"))
 
     assert wiring["lifetimes"] == {
         "session_expiry": timedelta(days=2),

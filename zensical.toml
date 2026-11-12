@@ -59,7 +59,7 @@ nav = [
         { "Representations & conformers" = "extending/representations.md" },
         { "Runners" = "extending/runners.md" },
         { "Operations & workloads" = "extending/operations.md" },
-        { "Entry points & registries" = "extending/entry-points.md" },
+        { "Extensions & registries" = "extending/extensions.md" },
     ] },
     { "Reference" = [
         { "Settings" = "reference/settings.md" },

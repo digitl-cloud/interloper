@@ -1,0 +1,7 @@
+manifest_version: 1
+key: api
+name: API
+description: "The HTTP API and its OAuth client commands."
+cli:
+  api: interloper_api.cli:ApiCommand
+  oauth: interloper_api.cli:OAuthCommand

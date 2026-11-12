@@ -1,0 +1,6 @@
+manifest_version: 1
+key: db
+name: Database
+description: "Database persistence, platform errors and the database commands."
+cli:
+  db: interloper_db.cli:DatabaseCommand

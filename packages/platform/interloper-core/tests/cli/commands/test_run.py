@@ -8,7 +8,7 @@ from typing import Any, ClassVar
 import pytest
 
 import interloper as il
-from interloper.cli.commands.run import _cmd_run, register
+from interloper.cli.commands.run import RunCommand
 from interloper.operation import OperationResult
 
 
@@ -89,7 +89,7 @@ class TestRunSpecFileMode:
                 - path: {SOURCE_PATH}
             """,
         )
-        _cmd_run(_args(file=str(spec), dry_run=True))
+        RunCommand().run(_args(file=str(spec), dry_run=True))
 
         out = capsys.readouterr().out
         assert "Window:    (none)" in out
@@ -98,38 +98,38 @@ class TestRunSpecFileMode:
 
     def test_source_spec_is_runnable_directly(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         spec = _write_spec(tmp_path, f"path: {SOURCE_PATH}\n")
-        _cmd_run(_args(file=str(spec), dry_run=True))
+        RunCommand().run(_args(file=str(spec), dry_run=True))
 
         assert "1. fake_run_source.one" in capsys.readouterr().out
 
     def test_non_runnable_spec_rejected(self, tmp_path: Path) -> None:
         spec = _write_spec(tmp_path, "path: interloper.destination.memory.MemoryDestination\n")
         with pytest.raises(SystemExit, match="not runnable"):
-            _cmd_run(_args(file=str(spec)))
+            RunCommand().run(_args(file=str(spec)))
 
     def test_file_with_targets_rejected(self, tmp_path: Path) -> None:
         spec = _write_spec(tmp_path, f"path: {SOURCE_PATH}\n")
         with pytest.raises(SystemExit, match="cannot be combined"):
-            _cmd_run(_args(file=str(spec), target=["some.path"]))
+            RunCommand().run(_args(file=str(spec), target=["some.path"]))
 
     def test_no_input_rejected(self) -> None:
         with pytest.raises(SystemExit, match="provide one or more import paths"):
-            _cmd_run(_args())
+            RunCommand().run(_args())
 
     def test_invalid_spec_rejected(self, tmp_path: Path) -> None:
         spec = _write_spec(tmp_path, "nonsense: true")
         with pytest.raises(SystemExit, match="Invalid spec file"):
-            _cmd_run(_args(file=str(spec)))
+            RunCommand().run(_args(file=str(spec)))
 
     def test_spec_run_materializes(self, tmp_path: Path) -> None:
         spec = self._materializing_spec(tmp_path)
-        _cmd_run(_args(file=str(spec)))
+        RunCommand().run(_args(file=str(spec)))
 
         assert (tmp_path / "data" / "fake_run_source" / "one" / "data.pkl").exists()
 
     def test_run_prints_lifecycle_events(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         spec = self._materializing_spec(tmp_path)
-        _cmd_run(_args(file=str(spec)))
+        RunCommand().run(_args(file=str(spec)))
 
         err = capsys.readouterr().err
         assert "RUN_STARTED" in err
@@ -140,19 +140,19 @@ class TestRunSpecFileMode:
 
     def test_verbose_includes_io_events(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         spec = self._materializing_spec(tmp_path)
-        _cmd_run(_args(file=str(spec), verbose=True))
+        RunCommand().run(_args(file=str(spec), verbose=True))
 
         assert "DEST_WRITE_STARTED" in capsys.readouterr().err
 
     def test_quiet_suppresses_events(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         spec = self._materializing_spec(tmp_path)
-        _cmd_run(_args(file=str(spec), quiet=True))
+        RunCommand().run(_args(file=str(spec), quiet=True))
 
         assert "OPERATION_COMPLETED" not in capsys.readouterr().err
 
     def test_events_json_streams_to_stdout(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         spec = self._materializing_spec(tmp_path)
-        _cmd_run(_args(file=str(spec), events="json"))
+        RunCommand().run(_args(file=str(spec), events="json"))
 
         lines = [line for line in capsys.readouterr().out.splitlines() if line]
         types = {json.loads(line)["type"] for line in lines}
@@ -181,12 +181,12 @@ class TestRunPreflightErrors:
 
     def test_window_without_allow_window_is_a_clean_error(self) -> None:
         with pytest.raises(SystemExit, match="Error: The run's window is not valid") as exc_info:
-            _cmd_run(_args(target=[PARTITIONED_SOURCE_PATH], start_date="2026-01-01", end_date="2026-01-07"))
+            RunCommand().run(_args(target=[PARTITIONED_SOURCE_PATH], start_date="2026-01-01", end_date="2026-01-07"))
         assert "does not allow windows" in str(exc_info.value)
 
     def test_missing_partition_is_a_clean_error(self) -> None:
         with pytest.raises(SystemExit, match="given no window"):
-            _cmd_run(_args(target=[PARTITIONED_SOURCE_PATH]))
+            RunCommand().run(_args(target=[PARTITIONED_SOURCE_PATH]))
 
 
 class TestRunJobSpecMode:
@@ -199,7 +199,7 @@ class TestRunJobSpecMode:
         spec_file = tmp_path / "job.yaml"
         spec_file.write_text(yaml.safe_dump(job.to_spec().model_dump(mode="json", exclude_none=True)))
 
-        _cmd_run(_args(file=str(spec_file), dry_run=True))
+        RunCommand().run(_args(file=str(spec_file), dry_run=True))
 
         out = capsys.readouterr().out
         assert "1 enabled / 1 total" in out
@@ -213,7 +213,7 @@ class TestRunJobSpecMode:
         spec_file = tmp_path / "job.yaml"
         spec_file.write_text(yaml.safe_dump(job.to_spec().model_dump(mode="json", exclude_none=True)))
 
-        _cmd_run(_args(file=str(spec_file)))
+        RunCommand().run(_args(file=str(spec_file)))
 
 
 class TestResolveWindow:
@@ -273,12 +273,12 @@ class TestResolveWindow:
             _resolve_window(arguments, il.DAG(FakePartitionedSource()))
 
 
-class TestRegister:
+class TestArguments:
     """Parser wiring for the ``run`` command."""
 
     def test_defaults(self) -> None:
         parser = argparse.ArgumentParser(prog="interloper")
-        register(parser.add_subparsers(dest="command"))
+        RunCommand().attach(parser.add_subparsers(dest="command"), "run")
 
         args = parser.parse_args(["run", "pkg.mod.Source"])
 
@@ -288,11 +288,11 @@ class TestRegister:
         assert args.events == "pretty"
         assert (args.dry_run, args.quiet, args.verbose) == (False, False, False)
         assert (args.date, args.start_date, args.end_date, args.operation_id) == (None, None, None, None)
-        assert args.handler is _cmd_run
+        assert isinstance(args.handler.__self__, RunCommand)
 
     def test_flags_are_parsed(self) -> None:
         parser = argparse.ArgumentParser(prog="interloper")
-        register(parser.add_subparsers(dest="command"))
+        RunCommand().attach(parser.add_subparsers(dest="command"), "run")
 
         args = parser.parse_args(
             [
@@ -325,15 +325,15 @@ class TestRunInlineMode:
     def test_runs_the_serialized_dag(self) -> None:
         dag = il.DAG(FakeRunSource(destinations=[il.MemoryDestination()]))
 
-        _cmd_run(_args(format="inline", target=[dag.to_spec().model_dump_json()]))
+        RunCommand().run(_args(format="inline", target=[dag.to_spec().model_dump_json()]))
 
     def test_exactly_one_positional_is_required(self) -> None:
         with pytest.raises(SystemExit, match="exactly one positional argument"):
-            _cmd_run(_args(format="inline", target=[]))
+            RunCommand().run(_args(format="inline", target=[]))
 
     def test_malformed_json_is_a_clean_error(self) -> None:
         with pytest.raises(SystemExit, match="failed to parse inline DAGSpec"):
-            _cmd_run(_args(format="inline", target=["{not json"]))
+            RunCommand().run(_args(format="inline", target=["{not json"]))
 
 
 class TestRunPathsMode:
@@ -341,19 +341,19 @@ class TestRunPathsMode:
 
     def test_an_unimportable_path_is_a_clean_error(self) -> None:
         with pytest.raises(SystemExit, match=r"failed to import 'nope\.NotAModule'"):
-            _cmd_run(_args(target=["nope.NotAModule"]))
+            RunCommand().run(_args(target=["nope.NotAModule"]))
 
     def test_a_missing_attribute_is_a_clean_error(self) -> None:
         with pytest.raises(SystemExit, match="failed to import"):
-            _cmd_run(_args(target=[f"{FakeRunSource.__module__}.NotDefinedHere"]))
+            RunCommand().run(_args(target=[f"{FakeRunSource.__module__}.NotDefinedHere"]))
 
     def test_a_non_class_target_is_rejected(self) -> None:
         with pytest.raises(SystemExit, match="is not a Source or Asset class"):
-            _cmd_run(_args(target=[f"{FakeRunSource.__module__}.SOURCE_PATH"]))
+            RunCommand().run(_args(target=[f"{FakeRunSource.__module__}.SOURCE_PATH"]))
 
     def test_an_unrelated_class_is_rejected(self) -> None:
         with pytest.raises(SystemExit, match="is not a Source or Asset class"):
-            _cmd_run(_args(target=f"{argparse.__name__}.Namespace".split(",")))
+            RunCommand().run(_args(target=f"{argparse.__name__}.Namespace".split(",")))
 
 
 class TestRunOutcome:
@@ -361,7 +361,7 @@ class TestRunOutcome:
 
     def test_a_failed_run_exits_nonzero(self) -> None:
         with pytest.raises(SystemExit) as excinfo:
-            _cmd_run(_args(target=[f"{FailingSource.__module__}.FailingSource"]))
+            RunCommand().run(_args(target=[f"{FailingSource.__module__}.FailingSource"]))
 
         assert excinfo.value.code == 1
 
@@ -369,7 +369,7 @@ class TestRunOutcome:
         path = tmp_path / "spec.json"
         path.write_text(il.DAG(FakeRunSource(destinations=[il.MemoryDestination()])).to_spec().model_dump_json())
 
-        _cmd_run(_args(format="inline", target=[f"@{path}"], dry_run=True))
+        RunCommand().run(_args(format="inline", target=[f"@{path}"], dry_run=True))
 
         assert "1. fake_run_source.one" in capsys.readouterr().out
 
@@ -398,7 +398,9 @@ class TestOperation:
         operation.retry = il.RetryPolicy(max_attempts=3, delay=0)
 
         with pytest.raises(SystemExit):
-            _cmd_run(_args(format="inline", target=[dag.to_spec().model_dump_json()], operation_id=operation.id))
+            RunCommand().run(
+                _args(format="inline", target=[dag.to_spec().model_dump_json()], operation_id=operation.id)
+            )
 
         assert OperationResult.from_termination_message(message.read_text(), "exited") == OperationResult(
             error="RuntimeError: asset blew up"
@@ -406,7 +408,7 @@ class TestOperation:
 
     def test_one_that_cannot_start_leaves_a_final_verdict(self, message: Path) -> None:
         with pytest.raises(SystemExit):
-            _cmd_run(_args(format="inline", target=["{not json"], operation_id="op-1"))
+            RunCommand().run(_args(format="inline", target=["{not json"], operation_id="op-1"))
 
         left = OperationResult.from_termination_message(message.read_text(), "exited")
         assert (left.error or "").startswith("Error: failed to parse inline DAGSpec")
@@ -414,7 +416,7 @@ class TestOperation:
 
     def test_an_operation_not_in_the_dag_is_a_clean_error(self, message: Path) -> None:
         with pytest.raises(SystemExit, match="not found"):
-            _cmd_run(_args(target=[SOURCE_PATH], operation_id="op-unknown"))
+            RunCommand().run(_args(target=[SOURCE_PATH], operation_id="op-unknown"))
 
 
 class TestPrintPlan:
@@ -444,13 +446,13 @@ def test_an_unexpected_spec_failure_is_reported_cleanly(tmp_path: Path, monkeypa
     )
 
     with pytest.raises(SystemExit, match="failed to reconstruct spec"):
-        _cmd_run(_args(file=str(spec)))
+        RunCommand().run(_args(file=str(spec)))
 
 
 def test_file_and_format_are_exclusive(capsys: pytest.CaptureFixture[str]) -> None:
     """``-f`` with ``--format`` is refused by the parser instead of ignoring ``--format``."""
     parser = argparse.ArgumentParser()
-    register(parser.add_subparsers(dest="command"))
+    RunCommand().attach(parser.add_subparsers(dest="command"), "run")
 
     with pytest.raises(SystemExit):
         parser.parse_args(["run", "-f", "spec.yaml", "--format", "inline"])

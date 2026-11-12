@@ -14,7 +14,7 @@ dependencies = [
     "mssql-python>=1.15",
 ]
 
-[project.entry-points."interloper.components"]
+[project.entry-points."interloper.extensions"]
 azure = "interloper_azure"
 
 [build-system]

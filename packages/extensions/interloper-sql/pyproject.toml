@@ -16,7 +16,7 @@ dependencies = [
 [project.optional-dependencies]
 postgres = ["psycopg[binary]>=3.1", "sqlalchemy>=2.0"]
 
-[project.entry-points."interloper.components"]
+[project.entry-points."interloper.extensions"]
 sql = "interloper_sql"
 
 [build-system]

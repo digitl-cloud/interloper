@@ -1,0 +1,5 @@
+manifest_version: 1
+key: duckdb
+name: DuckDB
+description: "DuckDB and MotherDuck connection and destination."
+components: interloper_duckdb

@@ -1,12 +1,19 @@
-"""``interloper api`` serves the HTTP API; ``interloper oauth`` registers its OAuth clients."""
+"""``interloper api`` serves the HTTP API; ``interloper oauth`` registers its OAuth clients.
+
+``oauth`` is a command of its own rather than a group under ``api``: ``api``
+serves, with serving flags, while these act on the database and exit.
+"""
 
 from __future__ import annotations
 
 import argparse
 import logging
+from collections.abc import Mapping
+from typing import ClassVar
 
 from authlib.oauth2.rfc7591 import InvalidRedirectURIError
 from interloper.catalog import Catalog
+from interloper.cli import Command
 from interloper.cli.console import configure_console_logging
 from interloper.settings import AppSettings
 from interloper.utils import Supervisor
@@ -17,145 +24,148 @@ from interloper_api.authorization import Client
 from interloper_api.server import ApiServer
 
 
-def register(subparsers: argparse._SubParsersAction) -> None:
-    """Register the ``api`` command.
+class ApiCommand(Command):
+    """Serve the HTTP API.
 
-    Args:
-        subparsers: The root subparsers action to attach to.
+    The frontend is served separately: by nginx in containers, by `interloper app` locally.
     """
-    parser = subparsers.add_parser(
-        "api",
-        help="Serve the HTTP API",
-        description="Serve the HTTP API. The frontend is served separately: by nginx in containers, by "
-        "`interloper app` locally.",
-    )
-    parser.add_argument("--host", default=None, help="Bind host (default: server.host, 0.0.0.0)")
-    parser.add_argument("--port", type=int, default=None, help="Bind port (default: server.port, 3000)")
-    parser.add_argument(
-        "--no-create-tables",
-        action="store_true",
-        default=False,
-        help="Skip CREATE TABLE bootstrap on startup (production: run `interloper db init` once instead)",
-    )
-    parser.set_defaults(handler=_cmd_api)
+
+    def add_arguments(self, parser: argparse.ArgumentParser) -> None:
+        """Declare where to bind and whether to bootstrap the tables.
+
+        Args:
+            parser: The command's own parser.
+        """
+        parser.add_argument("--host", default=None, help="Bind host (default: server.host, 0.0.0.0)")
+        parser.add_argument("--port", type=int, default=None, help="Bind port (default: server.port, 3000)")
+        parser.add_argument(
+            "--no-create-tables",
+            action="store_true",
+            default=False,
+            help="Skip CREATE TABLE bootstrap on startup (production: run `interloper db init` once instead)",
+        )
+
+    def run(self, args: argparse.Namespace) -> None:
+        """Serve the API until a signal or its death.
+
+        Args:
+            args: The parsed command line: ``host``, ``port`` and ``no_create_tables``.
+        """
+        settings = AppSettings.get()
+        if args.host is not None:
+            settings = settings.model_copy(update={"server": settings.server.model_copy(update={"host": args.host})})
+            AppSettings.activate(settings)
+        configure_console_logging(
+            logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s", log_format=settings.log.format
+        )
+        bootstrap(
+            settings.postgres.dsn,
+            statement_timeout=settings.postgres.statement_timeout,
+            create_tables=not args.no_create_tables,
+        )
+        catalog = Catalog.from_settings()
+        store = Store.from_settings(
+            catalog=catalog,
+            session_expiry=settings.auth.session_expiry,
+            access_token_expiry=settings.auth.access_token_expiry,
+            refresh_token_expiry=settings.auth.refresh_token_expiry,
+        )
+        port = settings.server.port if args.port is None else args.port
+        Supervisor({"api": ApiServer.from_settings(settings, store=store, catalog=catalog, port=port)}).run()
 
 
-def _cmd_api(args: argparse.Namespace) -> None:
-    """Serve the API until a signal or its death.
+class OAuthCreateCommand(Command):
+    """Register a confidential client and print its id and secret.
 
-    Args:
-        args: Parsed CLI arguments: ``host``, ``port`` and ``no_create_tables``.
+    The secret is printed once and cannot be recovered.
     """
-    settings = AppSettings.get()
-    if args.host is not None:
-        settings = settings.model_copy(update={"server": settings.server.model_copy(update={"host": args.host})})
-        AppSettings.activate(settings)
-    configure_console_logging(
-        logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s", log_format=settings.log.format
-    )
-    bootstrap(
-        settings.postgres.dsn,
-        statement_timeout=settings.postgres.statement_timeout,
-        create_tables=not args.no_create_tables,
-    )
-    catalog = Catalog.from_settings()
-    store = Store.from_settings(
-        catalog=catalog,
-        session_expiry=settings.auth.session_expiry,
-        access_token_expiry=settings.auth.access_token_expiry,
-        refresh_token_expiry=settings.auth.refresh_token_expiry,
-    )
-    port = settings.server.port if args.port is None else args.port
-    Supervisor({"api": ApiServer.from_settings(settings, store=store, catalog=catalog, port=port)}).run()
+
+    def add_arguments(self, parser: argparse.ArgumentParser) -> None:
+        """Declare the client's name and redirect URIs.
+
+        Args:
+            parser: The command's own parser.
+        """
+        parser.add_argument("--name", required=True, help="Name shown on the consent page and in Authorised apps")
+        parser.add_argument(
+            "--redirect-uri",
+            action="append",
+            required=True,
+            metavar="URI",
+            help="Exact URI a code may be sent to; repeat for several",
+        )
+
+    def run(self, args: argparse.Namespace) -> None:
+        """Register an operator client and print its credentials.
+
+        Args:
+            args: The parsed command line: ``name`` and ``redirect_uri`` (a list).
+
+        Raises:
+            SystemExit: When a redirect URI is one dynamic registration would refuse.
+        """
+        try:
+            Client.check_redirect_uris(args.redirect_uri)
+        except InvalidRedirectURIError as error:
+            raise SystemExit(error.description) from error
+        client, secret = Store.from_settings(catalog=Catalog()).oauth.register_client(
+            args.name, args.redirect_uri, registered_by="operator", confidential=True
+        )
+        print(f"Registered {client.name}.")
+        print(f"client_id:     {client.client_id}")
+        print(f"client_secret: {secret}")
+        print("Store the secret now: it is not stored and cannot be shown again.")
 
 
-def register_oauth(subparsers: argparse._SubParsersAction) -> None:
-    """Register the ``oauth`` command group.
+class OAuthListCommand(Command):
+    """List operator-registered clients."""
 
-    A group of its own rather than subcommands of ``api``: ``api`` is a serve
-    command with serving flags, and these act on the database and exit.
+    def run(self, args: argparse.Namespace) -> None:
+        """Print the operator clients, one per line.
 
-    Args:
-        subparsers: The root subparsers action to attach to.
+        Args:
+            args: The parsed command line; this command takes no arguments.
+        """
+        for client in Store.from_settings(catalog=Catalog()).oauth.list_clients(registered_by="operator"):
+            print(f"{client.client_id}  {client.name}  {' '.join(client.redirect_uris)}")
+
+
+class OAuthDeleteCommand(Command):
+    """Delete a client and revoke every token it holds."""
+
+    def add_arguments(self, parser: argparse.ArgumentParser) -> None:
+        """Declare the client to delete.
+
+        Args:
+            parser: The command's own parser.
+        """
+        parser.add_argument("client_id", help="The client id `oauth list` shows")
+
+    def run(self, args: argparse.Namespace) -> None:
+        """Delete an operator client.
+
+        Args:
+            args: The parsed command line: ``client_id``.
+
+        Raises:
+            SystemExit: When no operator client has that id.
+        """
+        client = Store.from_settings(catalog=Catalog()).oauth.delete_client(args.client_id, registered_by="operator")
+        if client is None:
+            raise SystemExit(f"No operator client {args.client_id}.")
+        print(f"Deleted {client.name} ({client.client_id}) and revoked its tokens.")
+
+
+class OAuthCommand(Command):
+    """Manage operator-registered OAuth clients.
+
+    These are the clients an operator registers for apps that cannot register themselves (a Slack app, a shared
+    connector), as the admin portal's OAuth clients page does. Clients that register dynamically are not listed or
+    deleted here.
     """
-    parser = subparsers.add_parser(
-        "oauth",
-        help="Manage operator-registered OAuth clients",
-        description="Manage the OAuth clients an operator registers for apps that cannot register themselves "
-        "(a Slack app, a shared connector), as the admin portal's OAuth clients page does. Clients that register "
-        "dynamically are not listed or deleted here.",
-    )
-    commands = parser.add_subparsers(dest="oauth_command")
 
-    create = commands.add_parser(
-        "create",
-        help="Register a confidential client and print its id and secret",
-        description="Register a confidential client. The secret is printed once and cannot be recovered.",
-    )
-    create.add_argument("--name", required=True, help="Name shown on the consent page and in Authorised apps")
-    create.add_argument(
-        "--redirect-uri",
-        action="append",
-        required=True,
-        metavar="URI",
-        help="Exact URI a code may be sent to; repeat for several",
-    )
-    create.set_defaults(handler=_cmd_oauth_create)
-
-    list_parser = commands.add_parser("list", help="List operator-registered clients")
-    list_parser.set_defaults(handler=_cmd_oauth_list)
-
-    delete = commands.add_parser(
-        "delete", help="Delete a client and revoke every token it holds", description="Delete a client by id."
-    )
-    delete.add_argument("client_id", help="The client id `oauth list` shows")
-    delete.set_defaults(handler=_cmd_oauth_delete)
-
-    parser.set_defaults(handler=lambda args: parser.print_help())
-
-
-def _cmd_oauth_create(args: argparse.Namespace) -> None:
-    """Register an operator client and print its credentials.
-
-    Args:
-        args: Parsed CLI arguments: ``name`` and ``redirect_uri`` (a list).
-
-    Raises:
-        SystemExit: When a redirect URI is one dynamic registration would refuse.
-    """
-    try:
-        Client.check_redirect_uris(args.redirect_uri)
-    except InvalidRedirectURIError as error:
-        raise SystemExit(error.description) from error
-    client, secret = Store.from_settings(catalog=Catalog()).oauth.register_client(
-        args.name, args.redirect_uri, registered_by="operator", confidential=True
-    )
-    print(f"Registered {client.name}.")
-    print(f"client_id:     {client.client_id}")
-    print(f"client_secret: {secret}")
-    print("Store the secret now: it is not stored and cannot be shown again.")
-
-
-def _cmd_oauth_list(args: argparse.Namespace) -> None:
-    """Print the operator clients, one per line.
-
-    Args:
-        args: Parsed CLI arguments; this subcommand takes none of its own.
-    """
-    for client in Store.from_settings(catalog=Catalog()).oauth.list_clients(registered_by="operator"):
-        print(f"{client.client_id}  {client.name}  {' '.join(client.redirect_uris)}")
-
-
-def _cmd_oauth_delete(args: argparse.Namespace) -> None:
-    """Delete an operator client.
-
-    Args:
-        args: Parsed CLI arguments: ``client_id``.
-
-    Raises:
-        SystemExit: When no operator client has that id.
-    """
-    client = Store.from_settings(catalog=Catalog()).oauth.delete_client(args.client_id, registered_by="operator")
-    if client is None:
-        raise SystemExit(f"No operator client {args.client_id}.")
-    print(f"Deleted {client.name} ({client.client_id}) and revoked its tokens.")
+    commands: ClassVar[Mapping[str, type[Command]]] = {
+        "create": OAuthCreateCommand,
+        "list": OAuthListCommand,
+        "delete": OAuthDeleteCommand,
+    }

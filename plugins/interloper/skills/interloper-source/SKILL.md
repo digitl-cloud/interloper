@@ -110,9 +110,11 @@ Reference: https://docs.interloper.dev/guide/sources/ and https://docs.interlope
    dest.read(il.IOContext(asset=shop.order_stats, window=il.TimePartition(dt.date(2026, 1, 15)).window, schema=OrderStats))
    ```
 
-5. **Register** (packages only, not a bare module): `[project.entry-points."interloper.components"]`
-   with `shop = "shop"` in `pyproject.toml`, so the catalog, CLI `key:` references and the UI
-   find the class. A single module is referenced by `path: shop.Shop` instead.
+5. **Register** (packages only, not a bare module): ship `shop/extension.yaml` with
+   `manifest_version: 1`, `key: shop` and `components: shop`, and name the package in
+   `pyproject.toml` under `[project.entry-points."interloper.extensions"]` with `shop = "shop"`,
+   so the catalog, CLI `key:` references and the UI find the class. `interloper extensions check`
+   confirms it loads. A single module is referenced by `path: shop.Shop` instead.
 
 6. To run from the CLI or a spec file, use the interloper-run skill.
 

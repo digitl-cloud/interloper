@@ -1,0 +1,5 @@
+manifest_version: 1
+key: clickhouse
+name: ClickHouse
+description: "ClickHouse connection and destination."
+components: interloper_clickhouse

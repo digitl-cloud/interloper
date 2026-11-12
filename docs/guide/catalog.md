@@ -16,9 +16,11 @@ il.Catalog.from_paths(["my_package.sources.Shop", "my_package.sources.Finance"])
 il.Catalog.from_assets([Shop, Finance])
 ```
 
-**Discovery** reads the `interloper.components` entry-point group of every installed package.
-Each entry names a component class, or a module whose public attributes are scanned for
-component classes. The scan is cached for the process.
+**Discovery** reads the `components` section of every installed package's
+[extension manifest](../extending/extensions.md). Each entry names a component class, or a
+module whose public attributes are scanned for component classes. An entry that fails to import
+is skipped with a warning and recorded, never failing the catalog. The scan is cached for the
+process.
 
 **Settings** narrow the universe: when `catalog.include` in `interloper.yaml` (or
 `INTERLOPER_CATALOG_INCLUDE`, comma-separated) lists import paths, the catalog holds those
@@ -31,18 +33,20 @@ relation whose target class it cannot resolve. Framework components (`cron_job`,
 `webhook_hook`) are present in every catalog.
 
 Paths that fail to import are skipped with a warning. A component whose kind has no registered
-anchor raises `ConfigError`; see [Entry points](../extending/entry-points.md).
+anchor raises `ConfigError`; see [Extensions & registries](../extending/extensions.md).
 
 ## Registering components
 
-Declare your components in your package's `pyproject.toml`:
+Declare your components in your package's `extension.yaml`:
 
-```toml
-[project.entry-points."interloper.components"]
-my_package = "my_package.sources"          # a module: every component class in it
+```yaml
+components:
+  - my_package.sources          # a module: every component class in it
+  - my_package.views:Revenue    # one class
 ```
 
-or one entry per class. Nothing else is needed: installation is registration.
+and name the package under the `interloper.extensions` entry point. Nothing else is needed:
+installation is registration.
 
 ## Reading a catalog
 

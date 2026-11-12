@@ -1,0 +1,8 @@
+manifest_version: 1
+key: docker
+name: Docker
+description: "Runs and operations in Docker containers."
+runners:
+  docker: interloper_docker.runner:DockerRunner
+launchers:
+  docker: interloper_docker.launcher:DockerLauncher

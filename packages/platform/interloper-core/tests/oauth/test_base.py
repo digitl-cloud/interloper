@@ -16,12 +16,12 @@ from interloper.settings import ServerSettings
 
 
 class TestRegistry:
-    """Registry loading: entry points from installed packages."""
+    """Registry loading: the oauth_providers sections of the installed packages' manifests."""
 
-    def test_entry_points_are_discovered(self):
-        # interloper-core declares the built-in providers as entry points —
-        # this asserts the discovery mechanism end to end, without any
-        # explicit import or registration call.
+    def test_the_providers_core_declares_are_discovered(self):
+        # interloper-core declares the built-in providers in its manifest: this
+        # asserts the discovery mechanism end to end, without any explicit
+        # import or registration call.
         assert {
             "amazon",
             "criteo",

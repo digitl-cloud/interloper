@@ -8,18 +8,18 @@ concrete dataframe library anywhere. ``TableData.from_data(data)``
 binds the matching representation to the data, whose
 ``to(key)`` converts between registered representations through rows.
 
-Every representation — the rows built-in (``list[dict]``) included — is
-declared as a package entry point under the ``interloper.representations``
-group (core declares rows in its own ``pyproject.toml``):
+Every representation, the rows built-in (``list[dict]``) included, is
+declared in the ``representations`` section of its package's
+``extension.yaml`` (core declares rows in its own):
 
-```py
-[project.entry-points."interloper.representations"]
-dataframe = "interloper_pandas.representation:DATAFRAME_REPRESENTATION"
+```yaml
+representations:
+  - interloper_pandas.representation:DATAFRAME_REPRESENTATION
 ```
 
-The registry is loaded lazily from installed-package metadata, so discovery
-works in any process where the integration is installed — no import-order
-dependence, no explicit registration calls.
+The registry is loaded lazily from the installed packages' manifests, so
+discovery works in any process where the integration is installed: no
+import-order dependence, no explicit registration calls.
 """
 
 from __future__ import annotations
@@ -38,9 +38,9 @@ def _adopt_representation(_name: str, loaded: Any) -> tuple[str, Representation]
     """Instantiate a loaded representation entry and key it by its own ``key``.
 
     Args:
-        _name: The entry-point name, ignored: a representation is keyed by its own ``key``, never by
-            the name the entry point happens to be declared under.
-        loaded: The loaded entry-point object: either a ``Representation`` class to instantiate or an
+        _name: The entry's name, ignored: a representation is keyed by its own ``key``, never by
+            the name its entry happens to be declared under.
+        loaded: The loaded entry: either a ``Representation`` class to instantiate or an
             already-built instance.
 
     Returns:
@@ -50,7 +50,7 @@ def _adopt_representation(_name: str, loaded: Any) -> tuple[str, Representation]
     return instance.key, instance
 
 
-REPRESENTATIONS: Registry[Representation] = Registry("interloper.representations", adopt=_adopt_representation)
+REPRESENTATIONS: Registry[Representation] = Registry("representations", adopt=_adopt_representation)
 
 
 def iso_label(value: Any) -> str:

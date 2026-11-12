@@ -62,11 +62,11 @@ virtualenv at `/interloper/.venv`, which was built by uv and therefore has no `p
 a bare `pip install` would resolve to the base image's interpreter instead and land the package
 somewhere the app never looks, with no error to show for it.
 
-Anything installed this way registers itself: a package declaring components under the
-`interloper.components` entry point joins the catalog on the next start, with no change to the
-image's command. List what you want enabled under `catalog.include` and the deployment sees exactly
-that, as described in [Catalog](../guide/catalog.md) and
-[Entry points & registries](../extending/entry-points.md).
+Anything installed this way registers itself: a package declaring components in its manifest's
+`components` section joins the catalog on the next start, with no change to the image's command.
+List what you want enabled under `catalog.include` and the deployment sees exactly that, as
+described in [Catalog](../guide/catalog.md) and
+[Extensions & registries](../extending/extensions.md).
 
 The same recipe works on a loaded image when you want everything it ships plus your own
 components.

@@ -1,0 +1,36 @@
+manifest_version: 1
+key: core
+name: Interloper
+description: "The framework: component kinds, the built-in jobs and hooks, runners, representations, OAuth providers and the run commands."
+kinds:
+  - interloper.source.base:Source
+  - interloper.asset.base:Asset
+  - interloper.destination.base:Destination
+  - interloper.resource.base:Resource
+  - interloper.connection.base:Connection
+  - interloper.config.base:Config
+  - interloper.job.base:Job
+  - interloper.hook.base:Hook
+components:
+  - interloper.job.cron:CronJob
+  - interloper.hook.trigger:TriggerHook
+  - interloper.hook.webhook:WebhookHook
+representations:
+  - interloper.representation.base:RowsRepresentation
+runners:
+  async: interloper.runner.async_runner:AsyncRunner
+  serial: interloper.runner.serial:SerialRunner
+oauth_providers:
+  - interloper.oauth.providers:AMAZON
+  - interloper.oauth.providers:CRITEO
+  - interloper.oauth.providers:FACEBOOK
+  - interloper.oauth.providers:GOOGLE
+  - interloper.oauth.providers:LINKEDIN
+  - interloper.oauth.providers:MICROSOFT
+  - interloper.oauth.providers:PINTEREST
+  - interloper.oauth.providers:SNAPCHAT
+  - interloper.oauth.providers:TIKTOK
+cli:
+  extensions: interloper.cli.commands.extensions:ExtensionsCommand
+  launch: interloper.cli.commands.launch:LaunchCommand
+  run: interloper.cli.commands.run:RunCommand

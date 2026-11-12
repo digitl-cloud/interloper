@@ -13,17 +13,17 @@ metadata (auth_url, label, icon) from the registry; the API's sign-in
 exchange and connection renewal both send whatever request the provider
 builds.
 
-Every provider — including the built-ins shipped by interloper-core —
-registers through the ``interloper.oauth_providers`` entry-point group:
+Every provider, the built-ins shipped by interloper-core included, registers
+in the ``oauth_providers`` section of its package's ``extension.yaml``:
 
-```py
-[project.entry-points."interloper.oauth_providers"]
-acme = "my_pkg.oauth:ACME_PROVIDER"
+```yaml
+oauth_providers:
+  - my_pkg.oauth:ACME_PROVIDER
 ```
 
-The registry is loaded lazily from installed-package metadata, so discovery
-works in any process where the package is installed — no import-order
-dependence, no explicit registration calls.
+The registry is loaded lazily from the installed packages' manifests, so
+discovery works in any process where the package is installed: no
+import-order dependence, no explicit registration calls.
 """
 
 from __future__ import annotations
@@ -219,8 +219,8 @@ def _adopt_provider(_name: str, loaded: Any) -> tuple[str, OAuthProvider]:
     """Instantiate a loaded provider entry and key it by its own ``key``.
 
     Args:
-        _name: The entry-point name, ignored — the provider's own ``key`` wins.
-        loaded: The loaded entry point: an ``OAuthProvider`` or a class
+        _name: The entry's name, ignored: the provider's own ``key`` wins.
+        loaded: The loaded entry: an ``OAuthProvider`` or a class
             constructing one.
 
     Returns:
@@ -230,7 +230,7 @@ def _adopt_provider(_name: str, loaded: Any) -> tuple[str, OAuthProvider]:
     return instance.key, instance
 
 
-PROVIDERS: Registry[OAuthProvider] = Registry("interloper.oauth_providers", adopt=_adopt_provider)
+PROVIDERS: Registry[OAuthProvider] = Registry("oauth_providers", adopt=_adopt_provider)
 
 
 # -- In-house app credentials (environment) ------------------------------------

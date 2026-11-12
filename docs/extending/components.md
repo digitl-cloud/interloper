@@ -61,9 +61,10 @@ beyond the base, so `Destination.definition()` returns a plain `ComponentDefinit
 
 Each kind has an **anchor**: the base-most class declaring it (`Connection` for every
 connection). `Component.anchor()` resolves it, and the `KINDS` registry maps kind names to
-anchors. Anchors are declared through the `interloper.kinds` entry-point group; the core
-declares `source`, `asset`, `destination`, `resource`, `connection`, `config`, `job` and
-`hook`. A new kind is a new anchor class and one entry-point line:
+anchors. Anchors are declared in the `kinds` section of a package's
+[extension manifest](extensions.md); the core declares `source`, `asset`, `destination`,
+`resource`, `connection`, `config`, `job` and `hook`. A new kind is a new anchor class and one
+manifest line:
 
 ```py
 class Report(il.Component):
@@ -72,9 +73,9 @@ class Report(il.Component):
     inputs: list[il.Asset] = il.Relation("asset", many=True, optional=True)
 ```
 
-```toml
-[project.entry-points."interloper.kinds"]
-report = "my_package.report:Report"
+```yaml
+kinds:
+  - my_package.report:Report
 ```
 
 A catalog containing a component of an unregistered kind raises `ConfigError`.
@@ -165,7 +166,7 @@ instance; sources use it for per-instance table names. Two marked fields raise `
 
 ## Writing a kind
 
-A kind is an anchor class plus one entry-point line. Everything above applies to it; this is the
+A kind is an anchor class plus one manifest line. Everything above applies to it; this is the
 order in which it comes up.
 
 1. **Subclass the anchor you extend, or `il.Component` for a new kind.** `kind` derives from the
@@ -196,12 +197,12 @@ order in which it comes up.
         storage: il.Destination
     ```
 
-4. **Register the anchor.** One line in `pyproject.toml`; the catalog raises `ConfigError` for a
-   component whose kind it does not know.
+4. **Register the anchor.** One line in your package's `extension.yaml`; the catalog raises
+   `ConfigError` for a component whose kind it does not know.
 
-    ```toml
-    [project.entry-points."interloper.kinds"]
-    report = "my_package.report:Report"
+    ```yaml
+    kinds:
+      - my_package.report:Report
     ```
 
 5. **Check `definition()`.** It is what the catalog, the API and the app read: `config_schema`
@@ -234,7 +235,7 @@ becomes.
 
 ## Definitions in the catalog
 
-Every class reachable through the `interloper.components` entry point becomes a catalog entry
-through its `definition()`. Nothing is inferred or registered at import time: installation is
+Every class reachable through a manifest's `components` section becomes a catalog entry through
+its `definition()`. Nothing is inferred or registered at import time: installation is
 registration, and the catalog contains exactly what was declared. See
-[Catalog](../guide/catalog.md) and [Entry points](entry-points.md).
+[Catalog](../guide/catalog.md) and [Extensions & registries](extensions.md).

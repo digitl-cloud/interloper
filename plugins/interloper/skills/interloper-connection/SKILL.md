@@ -105,7 +105,7 @@ https://docs.interloper.dev/guide/oauth/
 | Dropdown with fixed options | `il.SelectField(options=[...])` |
 | Name instances by a field | `discriminator=True` |
 | Read a picker from Python | `await connection.accounts()` |
-| Custom OAuth provider | `il.OAuthProvider` subclass registered under the `interloper.oauth_providers` entry point |
+| Custom OAuth provider | `il.OAuthProvider` subclass declared in the `oauth_providers` section of its package's `extension.yaml` |
 | Errors | `from interloper.errors import ConnectionCheckError` (not exported on `il`) |
 
 ## Common mistakes

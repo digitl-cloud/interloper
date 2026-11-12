@@ -1,0 +1,5 @@
+manifest_version: 1
+key: assets
+name: Assets
+description: "Pre-built sources for advertising, analytics and commerce platforms."
+components: interloper_assets

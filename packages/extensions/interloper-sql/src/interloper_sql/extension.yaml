@@ -1,0 +1,5 @@
+manifest_version: 1
+key: sql
+name: SQL
+description: "Portable views over SQL warehouses, and a SQLAlchemy destination for PostgreSQL and other SQL databases."
+components: interloper_sql

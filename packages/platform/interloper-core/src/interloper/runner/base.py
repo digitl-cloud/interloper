@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from interloper.dag.base import DAG
     from interloper.settings import RunnerSettings
 
-RUNNERS: Registry[type[Runner]] = Registry("interloper.runners")
+RUNNERS: Registry[type[Runner]] = Registry("runners")
 
 
 class Runner(Serializable):

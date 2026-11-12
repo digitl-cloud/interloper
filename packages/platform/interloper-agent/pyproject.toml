@@ -15,6 +15,9 @@ dependencies = [
     "pydantic-ai-slim[google,anthropic,openai]>=2.51.0",
 ]
 
+[project.entry-points."interloper.extensions"]
+agent = "interloper_agent"
+
 [build-system]
 requires = ["uv_build>=0.12.9,<0.13"]
 build-backend = "uv_build"

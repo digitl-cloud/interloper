@@ -1,0 +1,5 @@
+manifest_version: 1
+key: google_cloud
+name: Google Cloud
+description: "Google Cloud connection; BigQuery, Cloud Storage and Google Sheets destinations."
+components: interloper_google_cloud

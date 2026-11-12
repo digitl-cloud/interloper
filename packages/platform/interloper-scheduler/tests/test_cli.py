@@ -38,7 +38,7 @@ def _parse(*argv: str) -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(prog="interloper")
     subparsers = parser.add_subparsers(dest="command")
-    cli.register_scheduler(subparsers)
+    cli.SchedulerCommand().attach(subparsers, "scheduler")
     return parser.parse_args(argv)
 
 
@@ -73,7 +73,7 @@ class TestScheduler:
     """``interloper scheduler``."""
 
     def test_flags_override_the_settings(self, services: dict[str, Any]) -> None:
-        cli._cmd_scheduler(_parse("scheduler", "--no-worker"))
+        cli.SchedulerCommand().run(_parse("scheduler", "--no-worker"))
 
         assert services["services"]["cron"] is True
         assert services["services"]["worker"] is False
@@ -86,12 +86,12 @@ class TestScheduler:
         monkeypatch.setattr(AppSettings, "_active", settings)
 
         with pytest.raises(SystemExit, match="No scheduler service enabled"):
-            cli._cmd_scheduler(_parse("scheduler"))
+            cli.SchedulerCommand().run(_parse("scheduler"))
 
         assert "ran" not in services
 
     def test_no_create_tables_reaches_the_bootstrap(self, services: dict[str, Any]) -> None:
-        cli._cmd_scheduler(_parse("scheduler", "--no-create-tables"))
+        cli.SchedulerCommand().run(_parse("scheduler", "--no-create-tables"))
 
         assert services["bootstrap"]["create_tables"] is False
 

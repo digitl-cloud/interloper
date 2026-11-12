@@ -2,8 +2,8 @@
 
 Providers come from the core registry (``interloper.oauth``): each
 ``OAuthProvider`` builds its own token requests (its dialect included), so
-the exchange is performed generically — adding a provider is an
-``interloper.oauth_providers`` entry point, not a new route.
+the exchange is performed generically — adding a provider is an entry in
+a package manifest's ``oauth_providers`` section, not a new route.
 
 The in-house *OAuth* credentials (``client_id`` / ``client_secret``) are read
 from provider-scoped environment variables (``INTERLOPER_<PROVIDER>_CLIENT_ID``, …)

@@ -35,7 +35,7 @@ def _parse(*argv: str) -> argparse.Namespace:
         The parsed namespace.
     """
     parser = argparse.ArgumentParser(prog="interloper")
-    cli.register(parser.add_subparsers(dest="command"))
+    cli.AppCommand().attach(parser.add_subparsers(dest="command"), "app")
     return parser.parse_args(argv)
 
 
@@ -72,7 +72,7 @@ def wiring(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     return recorded
 
 
-class TestRegister:
+class TestArguments:
     """Parser wiring for the ``app`` command."""
 
     def test_service_toggles_default_to_unset(self) -> None:
@@ -129,7 +129,7 @@ class TestWithOverrides:
         assert settings.server.port == original_port
 
 
-class TestCmdApp:
+class TestRun:
     """``interloper app``."""
 
     def test_the_configured_statement_timeout_reaches_the_bootstrap(
@@ -137,12 +137,12 @@ class TestCmdApp:
     ) -> None:
         monkeypatch.setenv("INTERLOPER_POSTGRES_STATEMENT_TIMEOUT", "12.5")
 
-        cli._cmd_app(_parse("app", "--api"))
+        cli.AppCommand().run(_parse("app", "--api"))
 
         assert wiring["bootstrap"][1]["statement_timeout"] == 12.5
 
     def test_bootstraps_the_database_and_runs_the_composition(self, wiring: dict[str, Any]) -> None:
-        cli._cmd_app(_parse("app", "--api", "--no-cron", "--no-worker", "--no-reaper"))
+        cli.AppCommand().run(_parse("app", "--api", "--no-cron", "--no-worker", "--no-reaper"))
 
         expected = {"statement_timeout": None, "create_tables": True}
         assert wiring["bootstrap"] == (wiring["settings"].postgres.dsn, expected)
@@ -156,19 +156,19 @@ class TestCmdApp:
         assert (wiring["app"]["dev"], wiring["app"]["port"]) == (False, None)
 
     def test_no_create_tables_skips_the_table_bootstrap(self, wiring: dict[str, Any]) -> None:
-        cli._cmd_app(_parse("app", "--no-create-tables", "--worker"))
+        cli.AppCommand().run(_parse("app", "--no-create-tables", "--worker"))
 
         assert wiring["bootstrap"][1]["create_tables"] is False
         assert wiring["app"]["worker"] is True
 
     def test_the_flags_are_activated_for_the_command(self, wiring: dict[str, Any]) -> None:
-        cli._cmd_app(_parse("app", "--port", "4321"))
+        cli.AppCommand().run(_parse("app", "--port", "4321"))
 
         assert AppSettings.get().server.port == 4321
         assert wiring["app"]["port"] == 4321
 
     def test_dev_and_an_explicit_port_reach_the_composition(self, wiring: dict[str, Any]) -> None:
-        cli._cmd_app(_parse("app", "--dev", "--port", "9876", "--api"))
+        cli.AppCommand().run(_parse("app", "--dev", "--port", "9876", "--api"))
 
         assert (wiring["app"]["dev"], wiring["app"]["port"]) == (True, 9876)
 
@@ -178,7 +178,7 @@ class TestCmdApp:
         auth = AuthSettings(session_expiry_days=2, access_token_expiry_minutes=15, refresh_token_expiry_days=7)
         AppSettings.activate(AppSettings(auth=auth))
 
-        cli._cmd_app(_parse("app"))
+        cli.AppCommand().run(_parse("app"))
 
         assert wiring["lifetimes"] == {
             "session_expiry": timedelta(days=2),
@@ -188,6 +188,6 @@ class TestCmdApp:
         assert wiring["app"]["store"] is wiring["store"]
 
     def test_scheduler_only_run_needs_no_api(self, wiring: dict[str, Any]) -> None:
-        cli._cmd_app(_parse("app", "--no-api", "--cron", "--reaper"))
+        cli.AppCommand().run(_parse("app", "--no-api", "--cron", "--reaper"))
 
         assert (wiring["app"]["api"], wiring["app"]["cron"], wiring["app"]["reaper"]) == (False, True, True)

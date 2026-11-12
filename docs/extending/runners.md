@@ -94,9 +94,11 @@ never from a thread an `execute` hands work to.
 
 ## Registering
 
-```toml
-[project.entry-points."interloper.runners"]
-deadline = "my_package.runner:DeadlineRunner"
+In your package's [extension manifest](extensions.md):
+
+```yaml
+runners:
+  deadline: my_package.runner:DeadlineRunner
 ```
 
 `il.Runner.from_settings(settings.runner)` resolves `runner.type` in the `RUNNERS` registry and
@@ -114,9 +116,9 @@ with the run's token in `INTERLOPER_RUN_TOKEN`, the reaper's heartbeat interval 
 `server.internal_url` in `INTERLOPER_SERVER_INTERNAL_URL`. That process holds no database
 credentials: it loads what the
 run executes from the API (`RunSpec`: the DAG, connections resolved, its partition and its event
-metadata) and reports its events back there. Register a launcher in the `interloper.launchers`
-entry-point group and give it a `from_settings` classmethod, as the Docker and Kubernetes
-launchers do.
+metadata) and reports its events back there. Register a launcher in the `launchers` section of
+your manifest and give it a `from_settings` classmethod, as the Docker and Kubernetes launchers
+do.
 
 ## Events from children
 

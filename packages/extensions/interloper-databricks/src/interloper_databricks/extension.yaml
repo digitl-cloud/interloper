@@ -1,0 +1,5 @@
+manifest_version: 1
+key: databricks
+name: Databricks
+description: "Databricks connection and Delta destination."
+components: interloper_databricks

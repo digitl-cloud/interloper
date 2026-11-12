@@ -16,14 +16,8 @@ dependencies = [
     "interloper-scheduler",
 ]
 
-[project.entry-points."interloper.runners"]
-kubernetes = "interloper_k8s.runner:KubernetesRunner"
-# Deprecated alias — pre-existing configs use runner.type=k8s; the canonical
-# key matches the launcher ("kubernetes").
-k8s = "interloper_k8s.runner:KubernetesRunner"
-
-[project.entry-points."interloper.launchers"]
-kubernetes = "interloper_k8s.launcher:KubernetesLauncher"
+[project.entry-points."interloper.extensions"]
+k8s = "interloper_k8s"
 
 [build-system]
 requires = ["uv_build>=0.12.9,<0.13"]

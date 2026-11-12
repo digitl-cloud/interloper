@@ -13,6 +13,7 @@ import argparse
 import logging
 
 from interloper.catalog import Catalog
+from interloper.cli import Command
 from interloper.cli.console import configure_console_logging
 from interloper.settings import AppSettings
 from interloper_db import Store
@@ -21,82 +22,82 @@ from interloper_db.provision import bootstrap
 from interloper_app.services import App
 
 
-def register(subparsers: argparse._SubParsersAction) -> None:
-    """Register the ``app`` command.
+class AppCommand(Command):
+    """Run the interloper application services.
 
-    Args:
-        subparsers: The root subparsers action to attach to.
+    Flags left unset fall back to the server, cron, worker and reaper settings; at least one service must be
+    enabled.
     """
-    app_parser = subparsers.add_parser(
-        "app",
-        help="Run the interloper application services",
-        description="Run the interloper application services. Flags left unset fall back to the server, cron, "
-        "worker and reaper settings; at least one service must be enabled.",
-    )
-    app_parser.add_argument("--host", default=None, help="Server bind host (default: 0.0.0.0)")
-    app_parser.add_argument("--port", type=int, default=None, help="Server bind port (default: 3000)")
-    app_parser.add_argument("--api", action=argparse.BooleanOptionalAction, default=None, help="Run the API server")
-    app_parser.add_argument(
-        "--cron", action=argparse.BooleanOptionalAction, default=None, help="Run the cron controller"
-    )
-    app_parser.add_argument(
-        "--worker", action=argparse.BooleanOptionalAction, default=None, help="Run the queue worker"
-    )
-    app_parser.add_argument(
-        "--reaper",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="Run the reaper (timed-out run cleanup; singleton)",
-    )
-    app_parser.add_argument(
-        "--dev",
-        action="store_true",
-        default=False,
-        help="Run Nuxt dev server instead of serving built static assets",
-    )
-    app_parser.add_argument(
-        "--no-create-tables",
-        action="store_true",
-        default=False,
-        help="Skip CREATE TABLE bootstrap on startup (production: run `interloper db init` once instead)",
-    )
-    app_parser.set_defaults(handler=_cmd_app)
 
+    def add_arguments(self, parser: argparse.ArgumentParser) -> None:
+        """Declare where to bind, which services to run and how.
 
-def _cmd_app(args: argparse.Namespace) -> None:
-    """Run the application services together until a signal or a service's death.
+        Args:
+            parser: The command's own parser.
+        """
+        parser.add_argument("--host", default=None, help="Server bind host (default: 0.0.0.0)")
+        parser.add_argument("--port", type=int, default=None, help="Server bind port (default: 3000)")
+        parser.add_argument("--api", action=argparse.BooleanOptionalAction, default=None, help="Run the API server")
+        parser.add_argument(
+            "--cron", action=argparse.BooleanOptionalAction, default=None, help="Run the cron controller"
+        )
+        parser.add_argument(
+            "--worker", action=argparse.BooleanOptionalAction, default=None, help="Run the queue worker"
+        )
+        parser.add_argument(
+            "--reaper",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help="Run the reaper (timed-out run cleanup; singleton)",
+        )
+        parser.add_argument(
+            "--dev",
+            action="store_true",
+            default=False,
+            help="Run Nuxt dev server instead of serving built static assets",
+        )
+        parser.add_argument(
+            "--no-create-tables",
+            action="store_true",
+            default=False,
+            help="Skip CREATE TABLE bootstrap on startup (production: run `interloper db init` once instead)",
+        )
 
-    Args:
-        args: Parsed CLI arguments: the service toggles, ``host``, ``port``, ``dev`` and ``no_create_tables``.
-    """
-    settings = _with_overrides(args, AppSettings.get())
-    AppSettings.activate(settings)
-    configure_console_logging(
-        logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s", log_format=settings.log.format
-    )
-    bootstrap(
-        settings.postgres.dsn,
-        statement_timeout=settings.postgres.statement_timeout,
-        create_tables=not args.no_create_tables,
-    )
-    catalog = Catalog.from_settings()
-    store = Store.from_settings(
-        catalog=catalog,
-        session_expiry=settings.auth.session_expiry,
-        access_token_expiry=settings.auth.access_token_expiry,
-        refresh_token_expiry=settings.auth.refresh_token_expiry,
-    )
-    App.from_settings(
-        settings,
-        store=store,
-        catalog=catalog,
-        api=settings.server.enabled,
-        cron=settings.cron.enabled,
-        worker=settings.worker.enabled,
-        reaper=settings.reaper.enabled,
-        dev=args.dev,
-        port=args.port,
-    ).run()
+    def run(self, args: argparse.Namespace) -> None:
+        """Run the application services together until a signal or a service's death.
+
+        Args:
+            args: The parsed command line: the service toggles, ``host``, ``port``, ``dev`` and
+                ``no_create_tables``.
+        """
+        settings = _with_overrides(args, AppSettings.get())
+        AppSettings.activate(settings)
+        configure_console_logging(
+            logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s", log_format=settings.log.format
+        )
+        bootstrap(
+            settings.postgres.dsn,
+            statement_timeout=settings.postgres.statement_timeout,
+            create_tables=not args.no_create_tables,
+        )
+        catalog = Catalog.from_settings()
+        store = Store.from_settings(
+            catalog=catalog,
+            session_expiry=settings.auth.session_expiry,
+            access_token_expiry=settings.auth.access_token_expiry,
+            refresh_token_expiry=settings.auth.refresh_token_expiry,
+        )
+        App.from_settings(
+            settings,
+            store=store,
+            catalog=catalog,
+            api=settings.server.enabled,
+            cron=settings.cron.enabled,
+            worker=settings.worker.enabled,
+            reaper=settings.reaper.enabled,
+            dev=args.dev,
+            port=args.port,
+        ).run()
 
 
 def _with_overrides(args: argparse.Namespace, settings: AppSettings) -> AppSettings:

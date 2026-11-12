@@ -1,0 +1,8 @@
+manifest_version: 1
+key: scheduler
+name: Scheduler
+description: "Cron, queue worker, reaper and the in-process launcher."
+cli:
+  scheduler: interloper_scheduler.cli:SchedulerCommand
+launchers:
+  in_process: interloper_scheduler.launcher:InProcessLauncher

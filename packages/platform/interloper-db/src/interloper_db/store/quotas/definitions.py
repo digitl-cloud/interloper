@@ -4,7 +4,7 @@ A quota is one :class:`QuotaDefinition` per key, registered in :data:`QUOTAS`.
 The definition owns how usage is measured and compared; resolving the
 effective limit and calling the gate is :class:`~interloper_db.store.quotas.base.QuotaStore`'s job.
 
-Quotas are code-registered rather than an entry-point group: enforcement is
+Quotas are code-registered rather than a manifest section: enforcement is
 welded into the store, so they are not a plugin surface. Limits are stored one
 row per key, so adding a quota is a registration plus its enforcement site,
 never a schema change. Instance defaults live as same-named optional fields on

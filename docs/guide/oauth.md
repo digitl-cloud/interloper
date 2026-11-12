@@ -71,17 +71,18 @@ objects; the caller owns the client and error handling.
 
 ## Registering a provider
 
-Providers register through the `interloper.oauth_providers` entry-point group. The entry may
-point at an instance or at a class that constructs one:
+Providers register in the `oauth_providers` section of their package's
+[extension manifest](../extending/extensions.md). An entry may point at an instance or at a
+class that constructs one:
 
-```toml
-[project.entry-points."interloper.oauth_providers"]
-acme = "my_package.oauth:ACME"
+```yaml
+oauth_providers:
+  - my_package.oauth:ACME
 ```
 
-The registry keys the provider by its own `key`, not by the entry-point name. It loads lazily
-from installed-package metadata, so no import-order dependence exists. An `OAuthConfig`
-naming an unregistered provider without an explicit `auth_url` raises `ConfigError`.
+The registry keys the provider by its own `key`. It loads lazily from the installed packages'
+manifests, so no import-order dependence exists. An `OAuthConfig` naming an unregistered
+provider without an explicit `auth_url` raises `ConfigError`.
 
 ## In-house app credentials
 

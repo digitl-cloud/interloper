@@ -92,7 +92,7 @@ A module-level function is the exception and must be one of:
 - the module's **public entry point** where the concept genuinely is a function: decorators (`@asset`, `@source`), field factories (`InputField`), CLI command wiring, procedural init over global state (`init_telemetry`)
 - a **pure, type-agnostic utility** — which lives in `utils/`, never at the bottom of a domain module
 - a **dispatch-table entry or callback** passed by contract (`RECONCILERS`, registry adopt hooks)
-- **forced to module level by the runtime**: pickled by a process pool, referenced by an entry point
+- **forced to module level by the runtime**: pickled by a process pool, referenced by an entry point or an extension manifest
 
 Never park logic in a `*Utils`/`*Helper` class or a bag of staticmethods — that's the junk drawer wearing a class.
 

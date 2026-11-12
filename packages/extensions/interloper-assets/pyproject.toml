@@ -15,7 +15,7 @@ bing = ["bingads>=13.0.24.1"]
 google = ["google-api-python-client>=2.167.0", "google-ads>=29.2.0"]
 facebook = ["facebook-business>=20.0.0"]
 
-[project.entry-points."interloper.components"]
+[project.entry-points."interloper.extensions"]
 assets = "interloper_assets"
 
 [build-system]

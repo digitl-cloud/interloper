@@ -6,11 +6,12 @@ import argparse
 import sys
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
 
 import pytest
 
+from interloper.cli import Command
 from interloper.cli import main as cli_main
+from interloper.cli.commands.run import RunCommand
 from interloper.registry import Registry
 from interloper.settings import AppSettings
 
@@ -87,10 +88,7 @@ class TestMain:
     def test_dispatches_to_the_command_handler(self, monkeypatch: pytest.MonkeyPatch) -> None:
         seen: list[argparse.Namespace] = []
         monkeypatch.setattr(sys, "argv", ["interloper", "run", "pkg.Asset"])
-        monkeypatch.setattr(
-            "interloper.cli.commands.run._cmd_run",
-            seen.append,
-        )
+        monkeypatch.setattr(RunCommand, "run", lambda self, args: seen.append(args))
 
         cli_main.main()
 
@@ -100,10 +98,7 @@ class TestMain:
     def test_activates_settings_for_the_duration_of_the_command(self, monkeypatch: pytest.MonkeyPatch) -> None:
         active: list[AppSettings | None] = []
         monkeypatch.setattr(sys, "argv", ["interloper", "run", "pkg.Asset"])
-        monkeypatch.setattr(
-            "interloper.cli.commands.run._cmd_run",
-            lambda args: active.append(AppSettings._active),
-        )
+        monkeypatch.setattr(RunCommand, "run", lambda self, args: active.append(AppSettings._active))
 
         cli_main.main()
 
@@ -115,10 +110,7 @@ class TestMain:
         self, monkeypatch: pytest.MonkeyPatch, isolated_process_state: dict[str, list[bool]]
     ) -> None:
         monkeypatch.setattr(sys, "argv", ["interloper", "run", "pkg.Asset"])
-        monkeypatch.setattr(
-            "interloper.cli.commands.run._cmd_run",
-            lambda args: (_ for _ in ()).throw(RuntimeError("boom")),
-        )
+        monkeypatch.setattr(RunCommand, "run", lambda self, args: (_ for _ in ()).throw(RuntimeError("boom")))
 
         with pytest.raises(RuntimeError, match="boom"):
             cli_main.main()
@@ -136,15 +128,21 @@ class TestBuildParser:
         subparsers = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
 
         assert list(subparsers.choices) == sorted(subparsers.choices)
-        assert {"app", "db", "launch", "run", "scheduler"} <= set(subparsers.choices)
+        assert {"app", "db", "extensions", "launch", "run", "scheduler"} <= set(subparsers.choices)
 
     def test_naming_a_command_builds_that_command_alone(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        def unrelated(_subparsers: Any) -> None:
-            raise AssertionError("an unrelated command was built")
+        class Named(Command):
+            """Run."""
 
-        commands: Registry[Any] = Registry()
-        commands.register("run", lambda subparsers: subparsers.add_parser("run", description="Run."))
-        commands.register("api", unrelated)
+        class Unrelated(Command):
+            """Serve."""
+
+            def add_arguments(self, parser: argparse.ArgumentParser) -> None:
+                raise AssertionError("an unrelated command was built")
+
+        commands: Registry[type[Command]] = Registry()
+        commands.register("run", Named)
+        commands.register("api", Unrelated)
         monkeypatch.setattr(cli_main, "COMMANDS", commands)
 
         parser = cli_main.build_parser("run")

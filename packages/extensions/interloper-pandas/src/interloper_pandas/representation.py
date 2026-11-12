@@ -1,7 +1,7 @@
 """DataFrame representation: table views and vectorized schema operations for pandas DataFrames.
 
-Registered with core through the ``interloper.representations`` entry point
-declared in this package's ``pyproject.toml``.
+Registered with core through the ``representations`` section of this
+package's ``extension.yaml``.
 """
 
 from __future__ import annotations

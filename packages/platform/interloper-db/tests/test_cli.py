@@ -59,18 +59,18 @@ def _parse(*argv: str) -> argparse.Namespace:
         The parsed namespace, carrying the handler.
     """
     parser = argparse.ArgumentParser(prog="interloper")
-    db_command.register(parser.add_subparsers(dest="command"))
+    db_command.DatabaseCommand().attach(parser.add_subparsers(dest="command"), "db")
     return parser.parse_args(argv)
 
 
-class TestRegister:
+class TestCommands:
     """Parser wiring for the ``db`` command group."""
 
     def test_subcommands_bind_their_handlers(self) -> None:
-        assert _parse("db", "init").handler is db_command._cmd_init
-        assert _parse("db", "reset").handler is db_command._cmd_reset
-        assert _parse("db", "upgrade").handler is db_command._cmd_upgrade
-        assert _parse("db", "downgrade").handler is db_command._cmd_downgrade
+        assert isinstance(_parse("db", "init").handler.__self__, db_command.DatabaseInitCommand)
+        assert isinstance(_parse("db", "reset").handler.__self__, db_command.DatabaseResetCommand)
+        assert isinstance(_parse("db", "upgrade").handler.__self__, db_command.DatabaseUpgradeCommand)
+        assert isinstance(_parse("db", "downgrade").handler.__self__, db_command.DatabaseDowngradeCommand)
 
     def test_bare_db_prints_its_help(self, capsys: pytest.CaptureFixture[str]) -> None:
         args = _parse("db")
@@ -98,7 +98,7 @@ class TestInit:
     """``interloper db init``."""
 
     def test_bootstraps_the_database(self, calls: dict[str, list[Any]], capsys: pytest.CaptureFixture[str]) -> None:
-        db_command._cmd_init(_parse("db", "init"))
+        db_command.DatabaseInitCommand().run(_parse("db", "init"))
 
         assert calls["bootstrap"] == [(AppSettings.get().postgres.dsn, {})]
         assert "Done." in capsys.readouterr().out
@@ -110,7 +110,7 @@ class TestInit:
         postgres = PostgresSettings(host="db", database="x")
         monkeypatch.setattr(AppSettings, "_active", SimpleNamespace(postgres=postgres))
 
-        db_command._cmd_init(_parse("db", "init"))
+        db_command.DatabaseInitCommand().run(_parse("db", "init"))
 
         assert calls["bootstrap"] == [(postgres.dsn, {})]
 
@@ -123,7 +123,7 @@ class TestInit:
         settings = AppSettings(postgres=PostgresSettings(user="me", password="s3cret-pw", host="db", database="x"))
         monkeypatch.setattr(AppSettings, "_active", settings)
 
-        db_command._cmd_init(_parse("db", "init"))
+        db_command.DatabaseInitCommand().run(_parse("db", "init"))
 
         out = capsys.readouterr().out
         assert "s3cret-pw" not in out
@@ -136,7 +136,7 @@ class TestReset:
     def test_drops_and_bootstraps_when_confirmed_by_flag(
         self, calls: dict[str, list[Any]], capsys: pytest.CaptureFixture[str]
     ) -> None:
-        db_command._cmd_reset(_parse("db", "reset", "--yes"))
+        db_command.DatabaseResetCommand().run(_parse("db", "reset", "--yes"))
 
         assert len(calls["drop_database"]) == 1
         assert len(calls["bootstrap"]) == 1
@@ -153,7 +153,7 @@ class TestReset:
         prompts: list[str] = []
         monkeypatch.setattr("builtins.input", lambda prompt: prompts.append(prompt) or "y")
 
-        db_command._cmd_reset(_parse("db", "reset"))
+        db_command.DatabaseResetCommand().run(_parse("db", "reset"))
 
         assert "s3cret-pw" not in prompts[0] + capsys.readouterr().out
         assert "db:5432/x" in prompts[0]
@@ -164,7 +164,7 @@ class TestReset:
     ) -> None:
         monkeypatch.setattr("builtins.input", lambda _prompt: answer)
 
-        db_command._cmd_reset(_parse("db", "reset"))
+        db_command.DatabaseResetCommand().run(_parse("db", "reset"))
 
         assert len(calls["drop_database"]) == 1
 
@@ -179,7 +179,7 @@ class TestReset:
         monkeypatch.setattr("builtins.input", lambda _prompt: answer)
 
         with pytest.raises(SystemExit) as excinfo:
-            db_command._cmd_reset(_parse("db", "reset"))
+            db_command.DatabaseResetCommand().run(_parse("db", "reset"))
 
         assert excinfo.value.code == 0
         assert calls["drop_database"] == []
@@ -190,22 +190,22 @@ class TestUpgradeDowngrade:
     """``interloper db upgrade`` / ``downgrade``."""
 
     def test_upgrade_targets_head_by_default(self, calls: dict[str, list[Any]]) -> None:
-        db_command._cmd_upgrade(_parse("db", "upgrade"))
+        db_command.DatabaseUpgradeCommand().run(_parse("db", "upgrade"))
 
         assert calls["upgrade"] == ["head"]
         assert len(calls["init_engine"]) == 1
 
     def test_upgrade_targets_an_explicit_revision(self, calls: dict[str, list[Any]]) -> None:
-        db_command._cmd_upgrade(_parse("db", "upgrade", "0007"))
+        db_command.DatabaseUpgradeCommand().run(_parse("db", "upgrade", "0007"))
 
         assert calls["upgrade"] == ["0007"]
 
     def test_downgrade_steps_back_one_by_default(self, calls: dict[str, list[Any]]) -> None:
-        db_command._cmd_downgrade(_parse("db", "downgrade"))
+        db_command.DatabaseDowngradeCommand().run(_parse("db", "downgrade"))
 
         assert calls["downgrade"] == ["-1"]
 
     def test_downgrade_targets_an_explicit_revision(self, calls: dict[str, list[Any]]) -> None:
-        db_command._cmd_downgrade(_parse("db", "downgrade", "base"))
+        db_command.DatabaseDowngradeCommand().run(_parse("db", "downgrade", "base"))
 
         assert calls["downgrade"] == ["base"]
