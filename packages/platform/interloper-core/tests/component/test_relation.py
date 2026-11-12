@@ -149,8 +149,8 @@ class TestDescriptor:
         assert isinstance(Owner.conn, Relation)
         assert Owner.conn.name == ""
 
-    def test_instance_access_returns_what_is_bound(self) -> None:
-        """An instance reads through to its own bindings."""
+    def test_instance_access_returns_what_the_relation_resolves_to(self) -> None:
+        """An instance reads its own binding, else the relation's fallback."""
         connection = Conn()
 
         class Owner(il.Source):
@@ -159,4 +159,6 @@ class TestDescriptor:
             conn: Conn = Relation(Conn)
 
         assert Owner(conn=connection).conn is connection
-        assert Owner().conn is None
+        unbound = Owner()
+        assert unbound.bound("conn") is None
+        assert isinstance(unbound.conn, Conn)

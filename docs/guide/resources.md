@@ -90,9 +90,9 @@ Nothing is resolved at construction. When `data()` (or any reader) asks for a si
 relation that holds no binding, `resolve(name)` falls back, in order:
 
 1. `default()`, when the relation declares one.
-2. A fresh instance of the target class, when it is a `Resource`: its required fields come from
+2. An instance of the target class, when it is a `Resource`: its required fields come from
    the environment, so a credential nobody bound is still constructible where it is read.
-3. A fresh instance of the target class, when every one of its fields is defaulted.
+3. An instance of the target class, when every one of its fields is defaulted.
 4. `None`.
 
 A `many` relation never falls back: `resolve(name)` on it is exactly `bound(name)`, an empty list
@@ -100,11 +100,12 @@ when nothing is bound.
 
 A fallback is never bound, so an explicit binding, or one read through the owning source,
 always wins over it, and `to_spec()` never carries an auto-instantiated component. Attribute
-access reads bindings only, the asset's own or its source's: `asset.connection` is `None` while
-neither holds one, where the same relation injected into `data()` goes through `resolve()` and
-receives the fallback. Because a resource is built at the
-moment it is read, a credential that is neither bound nor in the environment surfaces as a
-pydantic validation error from the read that needed it, not at build time.
+access is the same read as `resolve()`: `self.connection` in a method asset gets the fallback
+while nothing is bound, exactly as a `connection` parameter of `data()` does. Each such read
+builds its own instance, so a method reading an unbound connection several times reads it once
+into a local. Because a resource is built at the moment it is read, a credential that is neither
+bound nor in the environment surfaces as a pydantic validation error from the read that needed
+it, not at build time.
 
 ## Relations on sources and destinations
 

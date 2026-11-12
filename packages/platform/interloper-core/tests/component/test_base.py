@@ -469,15 +469,19 @@ class TestBind:
         assert widget.connection is connection
         assert widget.bound("connection") is connection
 
-    def test_unbound_single_is_none_and_many_is_empty(self):
-        widget = Widget(connection=Conn(api_secret="s"))
-        assert widget.config is None
-        assert widget.destinations == []
+    def test_unbound_single_without_a_fallback_is_none_and_many_is_empty(self):
+        assert Gadget().store is None
+        assert Widget(connection=Conn(api_secret="s")).destinations == []
 
-    def test_a_fallback_is_not_bound_but_resolves(self):
+    def test_a_fallback_is_not_bound_but_the_attribute_reads_it(self):
         widget = Widget(connection=Conn(api_secret="s"))
-        assert widget.fallback is None
-        assert isinstance(widget.resolve("fallback"), Cfg)
+        assert widget.bound("fallback") is None
+        assert isinstance(widget.fallback, Cfg)
+
+    def test_a_fallback_is_built_by_each_read_and_never_bound(self):
+        widget = Widget(connection=Conn(api_secret="s"))
+        assert widget.fallback is not widget.fallback
+        assert widget.bound("fallback") is None
 
     def test_missing_required_is_a_build_error(self):
         gadget = Gadget()
@@ -494,6 +498,8 @@ class TestBind:
         assert widget.bound("connection") is None
         with pytest.raises(ValidationError):
             widget.resolve("connection")
+        with pytest.raises(ValidationError):
+            _ = widget.connection
 
     def test_wrong_kind_rejected(self):
         with pytest.raises(ConfigError, match="connection"):
@@ -537,7 +543,7 @@ class TestBind:
         config = Cfg()
         widget = Widget(connection=Conn(api_secret="s"), config=config)
         widget.unbind("config", config)
-        assert widget.config is None
+        assert widget.bound("config") is None
 
     def test_unbind_refuses_to_empty_required(self):
         connection = Conn(api_secret="s")
@@ -571,7 +577,7 @@ class TestSetAttrRelations:
     def test_assigning_none_clears_an_optional_relation(self):
         widget = Widget(connection=Conn(api_secret="s"), config=Cfg())
         widget.config = None
-        assert widget.config is None
+        assert widget.bound("config") is None
 
     def test_assigning_none_to_a_non_optional_relation_raises(self):
         connection = Conn(api_secret="s")

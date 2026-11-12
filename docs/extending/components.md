@@ -132,7 +132,7 @@ definition rather than a component silently missing a relation.
 | `bind(name, *targets)` | Writes bindings, together with `unbind` and attribute assignment (which routes through the same checks, see below). Checks `accepts` for each target; `many` accumulates and collapses duplicates, single-valued replaces what it holds and refuses more than one target at a time. |
 | `unbind(name, *targets)` | Detaches. Refused when it would empty a non-optional relation. |
 | `bound(name)` | What the component holds itself: a list for `many`, the single component or `None`. |
-| `resolve(name)` | What a reader gets: the own binding, else what the owner holds under the same name and this relation accepts, else the relation's fallback for a single-valued relation and an empty list for a `many` one. Attribute access reads the same, without the fallback. Fallbacks are never bound. |
+| `resolve(name)` | What a reader gets: the own binding, else what the owner holds under the same name and this relation accepts, else the relation's fallback for a single-valued relation and an empty list for a `many` one. Attribute access reads the same. A fallback is built by each read that needs it and never bound. |
 | `validate_relations(nodes=None)` | Unbound non-optional without a fallback, several targets on a single-valued relation, a target the relation does not accept, and (with `nodes`) a non-optional asset target absent from the run. |
 
 **Inherited settings**: a field declared with `inherit=True` on a field factory (or

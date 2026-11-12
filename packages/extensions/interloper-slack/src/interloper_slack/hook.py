@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
-from interloper.errors import ConfigError
 from interloper.hook import Hook, HookContext
 from interloper.resource import FetchField, InputField
 
@@ -68,13 +67,9 @@ class SlackHook(Hook):
             context: The hook context carrying the event and its run.
 
         Raises:
-            ConfigError: If no Slack connection is attached.
             RuntimeError: If Slack rejects the message — it answers a refusal
                 with 200 and ``ok: false``, so the status alone is not enough.
         """
-        if self.connection is None:
-            raise ConfigError(f"SlackHook '{self.id}' fired without a Slack connection")
-
         response = self.connection.client.post(
             "/chat.postMessage",
             json=self._message(context),

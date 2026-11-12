@@ -31,7 +31,8 @@ from interloper_assets.facebook_ads.connector.source import PIVOT_COLUMNS, Faceb
 
 
 def _source() -> Any:
-    return FacebookAds(id="src-1", account_id="123")  # ty: ignore[missing-argument]
+    connection = FacebookAdsConnection(id="fb", access_token="x", app_id="1", app_secret="x")
+    return FacebookAds(id="src-1", account_id="123", connection=connection)
 
 
 class TestSourceNormalizer:

@@ -509,15 +509,20 @@ class Component(Serializable):
         Unlike `bound`, this reads through the owner (see `_targets`) and then
         falls back to what the relation can fill itself with, so a relation
         with a fallback (a config whose every field is defaulted, say) works
-        without a binding.
+        without a binding. Reading the relation's attribute is the same read.
+
+        A fallback is built by the read that needs it and never bound, so
+        each such read builds its own, and one that cannot build (a
+        connection whose credentials are neither bound nor in the
+        environment) fails the read.
 
         Args:
             name: The relation name as declared on the class.
 
         Returns:
             What the relation holds or reads through its owner, otherwise the
-            relation's fallback for a single-valued relation and an empty list
-            for a ``many`` one.
+            relation's fallback (``None`` when it has none) for a
+            single-valued relation and an empty list for a ``many`` one.
         """
         relation = self._relation(name)
         targets = self._targets(name)

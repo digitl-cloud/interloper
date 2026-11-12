@@ -146,8 +146,8 @@ class Relation(BaseModel):
 
     A relation is also its own descriptor: `Component._collect` installs
     the stamped copy under the relation's name, so the class attribute reads
-    as the declaration and the instance attribute as what is bound to it, and
-    assignment rebinds it.
+    as the declaration and the instance attribute as what the relation
+    resolves to, and assignment rebinds it.
 
     The declaration form the framework writes pairs the relation with the
     annotation of what fills it
@@ -386,7 +386,7 @@ class Relation(BaseModel):
 
         A relation is its own descriptor: `Component._collect` installs
         the stamped copy under the relation's name, so ``Widget.connection`` is
-        the declaration and ``widget.connection`` what is bound to it.
+        the declaration and ``widget.connection`` what it resolves to.
 
         Args:
             instance: The component the attribute is accessed on, or ``None``
@@ -395,16 +395,14 @@ class Relation(BaseModel):
                 relation already carries its name.
 
         Returns:
-            This relation on class access; otherwise what the instance holds
-            or reads through its owner (see `Component._targets`), a list for a
-            ``many`` relation and a single component or ``None`` otherwise.
+            This relation on class access; otherwise what the relation
+            resolves to on the instance (see `Component.resolve`): a list for a
+            ``many`` relation, and for a single-valued one what is bound or
+            read through the owner, else the fallback, else ``None``.
         """
         if instance is None:
             return self
-        targets = instance._targets(self.name)
-        if self.many:
-            return targets
-        return targets[0] if targets else None
+        return instance.resolve(self.name)
 
     def __set__(self, instance: Component, value: Any) -> None:
         """Replace what is bound to this relation on *instance*, atomically.
