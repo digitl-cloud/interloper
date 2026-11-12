@@ -31,24 +31,25 @@ def main() -> None:
 
     logging.basicConfig(level=logging.INFO, stream=sys.stderr)
 
-    settings = AppSettings.get().mcp
+    settings = AppSettings.get()
+    mcp_settings = settings.mcp
     if args.host is not None:
-        settings.host = args.host
+        mcp_settings.host = args.host
     if args.port is not None:
-        settings.port = args.port
+        mcp_settings.port = args.port
 
     catalog = Catalog.from_settings()
     store = Store.from_settings(catalog=catalog)
     init_context(store, catalog)
 
     if args.transport == "stdio":
-        set_static_user(_resolve_stdio_user(store, settings.token))
-        mcp = create_mcp_server(settings, store=None)
+        set_static_user(_resolve_stdio_user(store, mcp_settings.token))
+        mcp = create_mcp_server(settings.server.public_url, store=None)
         mcp.run(transport="stdio")
     else:
-        mcp = create_mcp_server(settings, store=store)
-        logger.info("Serving streamable HTTP on %s:%s/mcp", settings.host, settings.port)
-        mcp.run(transport="streamable-http", port=settings.port, **http_options(settings))
+        mcp = create_mcp_server(settings.server.public_url, store=store)
+        logger.info("Serving streamable HTTP on %s:%s/mcp", mcp_settings.host, mcp_settings.port)
+        mcp.run(transport="streamable-http", port=mcp_settings.port, **http_options(mcp_settings))
 
 
 def _resolve_stdio_user(store: Store, token: str) -> Profile:

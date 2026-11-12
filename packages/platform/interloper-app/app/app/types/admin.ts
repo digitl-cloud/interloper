@@ -50,7 +50,6 @@ export interface AdminConfig {
         }
         smtp: { enabled: boolean, host: string, from_addr: string }
         app_external_url: string
-        mcp_external_url: string
     }
     data: {
         encryption_configured: boolean

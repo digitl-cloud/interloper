@@ -13,7 +13,6 @@ import json
 from typing import Any
 
 import interloper as il
-from interloper.settings import McpSettings
 from interloper_db.store import Store
 from interloper_toolkit import TOOLS as TOOLKIT_TOOLS
 from mcp import Client
@@ -36,7 +35,7 @@ def _server(store: Store, catalog: il.Catalog, seeded: dict, role: str = "editor
     store.members.update(seeded["org"].id, seeded["profile"].id, role)
     init_context(store, catalog)
     set_static_user(store.profiles.get(seeded["profile"].id))
-    return create_mcp_server(McpSettings(), store=None)
+    return create_mcp_server("https://app.example.com", store=None)
 
 
 WRITES = {

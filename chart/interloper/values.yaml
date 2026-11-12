@@ -146,8 +146,8 @@ frontend:
 # Serves the streamable-HTTP MCP endpoint (/mcp) for external AI agents,
 # authenticated per request with personal access tokens minted in the app
 # (Settings → Authentication) or OAuth access tokens the API's authorization
-# server issues (the issuer is the root-level `externalUrl`); the holder's role in the
-# organisation a tool call names gates the write tools. Off by
+# server issues for /mcp on the root-level `externalUrl` (the issuer); the
+# holder's role in the organisation a tool call names gates the write tools. Off by
 # default — it is an optional, separate surface from the API. When enabled,
 # the chart's HTTPRoute forwards /mcp and /.well-known/oauth-protected-resource
 # on the app hostnames to it.
@@ -168,12 +168,6 @@ mcp:
   image:
     repository: ""  # defaults to {image.registry}/interloper-mcp
     tag: ""
-  # Public URL of the MCP endpoint, the OAuth resource clients sign in to.
-  # Empty means /mcp on the root-level `externalUrl`, where the HTTPRoute
-  # serves it; set it only when the endpoint lives elsewhere. Ignored when
-  # extraConfig carries an `mcp` section (the YAML block then owns the whole
-  # submodel).
-  externalUrl: ""
   resources:
     requests:
       cpu: 50m

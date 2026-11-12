@@ -5,8 +5,8 @@ from __future__ import annotations
 from importlib.metadata import version
 from typing import Any
 
-from interloper.settings import AppSettings, McpSettings
-from interloper_db import Store
+from interloper.settings import McpSettings
+from interloper_db import Audience, Store
 from mcp.server.auth.settings import AuthSettings as McpAuthSettings
 from mcp.server.mcpserver import MCPServer
 from mcp.types import Icon
@@ -47,17 +47,18 @@ def http_options(settings: McpSettings) -> dict[str, Any]:
     return {"host": settings.host, "stateless_http": True}
 
 
-def create_mcp_server(settings: McpSettings, store: Store | None = None) -> MCPServer:
+def create_mcp_server(public_url: str, store: Store | None = None) -> MCPServer:
     """Build the MCP server.
 
     The server introduces itself to clients with its title, version, the app's
-    URL and the app's icon, all from the app's public URL
-    (``server.public_url``). The protected-resource metadata names the
-    interloper authorization server, served at that same URL, as the issuer of
-    the tokens the server accepts.
+    URL and the app's icon, all from the app's public URL. The
+    protected-resource metadata names the interloper authorization server,
+    served at that same URL, as the issuer of the tokens the server accepts,
+    and the MCP endpoint under it as the resource they are issued for, which
+    the authorization server derives the same way.
 
     Args:
-        settings: The MCP settings (host, port, external URL).
+        public_url: The app's public base URL (``server.public_url``).
         store: When provided, requests authenticate with bearer tokens
             against this store (the streamable HTTP mode). ``None`` builds an
             unauthenticated server for the stdio transport, whose user is
@@ -66,7 +67,6 @@ def create_mcp_server(settings: McpSettings, store: Store | None = None) -> MCPS
     Returns:
         The configured server with the tools registered.
     """
-    server = AppSettings.get().server
     auth_kwargs: dict = {}
     if store is not None:
         # The endpoint's URL (https://host/mcp) is the RFC 9728 resource, which puts the
@@ -78,8 +78,8 @@ def create_mcp_server(settings: McpSettings, store: Store | None = None) -> MCPS
             "token_verifier": PatVerifier(store),
             "auth": McpAuthSettings.model_validate(
                 {
-                    "issuer_url": server.public_url,
-                    "resource_server_url": settings.public_url(server),
+                    "issuer_url": public_url,
+                    "resource_server_url": Audience.MCP.resource_url(public_url),
                     "validate_token_resource": False,
                 }
             ),
@@ -89,8 +89,8 @@ def create_mcp_server(settings: McpSettings, store: Store | None = None) -> MCPS
         SERVER_NAME,
         title=SERVER_TITLE,
         instructions=INSTRUCTIONS,
-        website_url=server.public_url,
-        icons=[Icon(src=f"{server.public_url}/icon.svg", mime_type="image/svg+xml", sizes=["any"])],
+        website_url=public_url,
+        icons=[Icon(src=f"{public_url}/icon.svg", mime_type="image/svg+xml", sizes=["any"])],
         version=version("interloper-mcp"),
         **auth_kwargs,
     )

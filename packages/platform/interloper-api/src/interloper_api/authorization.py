@@ -878,7 +878,6 @@ class AuthorizationServer(rfc6749.AuthorizationServer):
         store: Store,
         *,
         issuer: str,
-        mcp_url: str,
         encryption_key: str,
         access_token_expiry: timedelta,
     ) -> None:
@@ -886,8 +885,8 @@ class AuthorizationServer(rfc6749.AuthorizationServer):
 
         Args:
             store: The store every hook reads and writes through.
-            issuer: The public base URL of the app, the server's identifier.
-            mcp_url: The MCP endpoint's public URL, the resource naming it.
+            issuer: The public base URL of the app: the server's identifier,
+                and the base of the API and MCP resources it issues tokens for.
             encryption_key: The instance's encryption secret, which seals the
                 authorization request while the user decides.
             access_token_expiry: How long an access token stays valid.
@@ -895,7 +894,7 @@ class AuthorizationServer(rfc6749.AuthorizationServer):
         super().__init__()
         self.store = store
         self.issuer = issuer.rstrip("/")
-        self.resources = {f"{self.issuer}/api": Audience.API, mcp_url.rstrip("/"): Audience.MCP}
+        self.resources = {audience.resource_url(self.issuer): audience for audience in (Audience.API, Audience.MCP)}
         self.access_token_expires_in = int(access_token_expiry.total_seconds())
         self._fernet = Fernet(derive_fernet_key(encryption_key))
         self.metadata = self._build_metadata()
@@ -910,7 +909,7 @@ class AuthorizationServer(rfc6749.AuthorizationServer):
         """Build the server from the application settings.
 
         The issuer is the app's public URL (``server.public_url``); the MCP
-        resource is the one the MCP server advertises (``mcp.public_url``).
+        server derives the resource it advertises from the same setting.
 
         Args:
             store: The store every hook reads and writes through.
@@ -919,11 +918,9 @@ class AuthorizationServer(rfc6749.AuthorizationServer):
         Returns:
             The server.
         """
-        issuer = settings.server.public_url
         return cls(
             store,
-            issuer=issuer,
-            mcp_url=settings.mcp.public_url(settings.server),
+            issuer=settings.server.public_url,
             encryption_key=settings.secrets.encryption_key,
             access_token_expiry=settings.auth.access_token_expiry,
         )
