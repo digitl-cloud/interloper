@@ -45,7 +45,7 @@ connected account. It is the `start` setting of a source (the form's *History st
 assets read until one overrides it, like `enabled` and `retry`:
 
 ```python
-shop = ShopSource(start=dt.date(2026, 1, 1), assets={"refunds": {"start": "2026-03-01"}})
+shop = ShopSource(start=dt.date(2026, 1, 1), assets=[ShopSource.orders(), ShopSource.refunds(start=dt.date(2026, 3, 1))])
 shop.orders.start    # 2026-01-01, the source's
 shop.refunds.start   # 2026-03-01, its own
 ```
@@ -151,7 +151,7 @@ period since too, and one that ended with no observation at all is missed as wel
 An asset partitioned by a declared list of values, such as regions or markets:
 
 ```py
-@il.asset(partitioning=il.ListPartitionConfig(column="region", values=["eu", "us", "apac"]))
+@il.asset(partitioning=il.ListPartitionConfig(column="region", values=("eu", "us", "apac")))
 def sales(self, context: il.ExecutionContext) -> list[dict]:
     region = context.partition.value
     return [{"region": region, **row} for row in fetch_sales(region)]

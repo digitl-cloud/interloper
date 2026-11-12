@@ -86,13 +86,15 @@ class form is preferred for anything configurable.
 
 ```py
 source = FacebookAds(account_id="act_123")
-source = FacebookAds(account_id="act_123", destinations=BigQueryDestination(...))
+source = FacebookAds(account_id="act_123", destinations=[BigQueryDestination(...)])
 source = FacebookAds(account_id="act_123", connection=FacebookAdsConnection(...))
 ```
 
-Every declared relation is a constructor keyword under its own name; a list binds several
-targets, `None` binds nothing. Attribute access reads what is bound (`source.connection`), and
-`bind`, `unbind` and assignment change it afterwards.
+Every declared relation is a constructor keyword under its own name: a many-valued relation
+(`destinations`) takes a list, a single-valued one (`connection`) a component, and `None` binds
+nothing. A single component given to a many-valued relation is a `TypeError` naming the list
+form. Attribute access reads what the relation resolves to (`source.connection`, its fallback
+while nothing is bound), and `bind`, `unbind` and assignment change it afterwards.
 
 Assets are attributes, under their key:
 
@@ -113,7 +115,7 @@ checker cannot see it. An asset class belongs to one source: listing it in a sec
 Calling an instance returns a copy with the named changes applied; the original is untouched:
 
 ```py
-staging = source(destinations=il.CSVDestination(base_path="./staging"))
+staging = source(destinations=[il.CSVDestination(base_path="./staging")])
 read_only = source(enabled=False)
 ```
 
@@ -127,11 +129,14 @@ destinations they read are shared.
 A source built with `enabled=False` makes every one of its assets read-only: they stay in a run
 as dependencies, so wiring still validates and their stored output is still readable. An asset
 can also be disabled alone (`source.campaigns(enabled=False)`). To build a source with only some
-of its assets, pass the `assets` override map, which is what the platform persists:
+of its assets, give it those assets, each built from its class:
 
 ```py
-source = FacebookAds(account_id="act_123", assets={"campaigns": {}, "ads_stats": {}})
+source = FacebookAds(account_id="act_123", assets=[FacebookAds.campaigns(), FacebookAds.ads_stats()])
 ```
+
+What the platform persists is the same choice as an override map keyed by asset key
+(`{"campaigns": {}, "ads_stats": {}}`), which a source rebuilt from its spec reads back.
 
 ## What assets read through their source
 

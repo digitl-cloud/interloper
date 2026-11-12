@@ -97,7 +97,7 @@ Reference: https://docs.interloper.dev/guide/sources/ and https://docs.interlope
 4. **Verify with one partition before anything else:**
 
    ```py
-   shop = Shop(account="acme", connection=ShopConnection(api_key="..."), destinations=il.CSVDestination(base_path="./data"))
+   shop = Shop(account="acme", connection=ShopConnection(api_key="..."), destinations=[il.CSVDestination(base_path="./data")])
    print(il.DAG(shop).materialize(il.TimePartition(dt.date(2026, 1, 15))))
    # RunResult(status=completed, ..., completed=2, failed=0, ...)
    ```

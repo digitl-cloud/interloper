@@ -149,7 +149,7 @@ afterwards. See [Dependencies](dependencies.md#how-wiring-works).
 Set them at construction, or derive a reconfigured copy by calling an existing instance:
 
 ```py
-asset = users(destinations=il.CSVDestination(base_path="./data"), dataset="shop")
+asset = users(destinations=[il.CSVDestination(base_path="./data")], dataset="shop")
 
 read_only = asset(enabled=False)
 strict = asset(materialization_strategy=il.MaterializationStrategy.STRICT)

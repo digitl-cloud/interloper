@@ -5,7 +5,13 @@ from __future__ import annotations
 import pytest
 
 from interloper.errors import PartitionError
-from interloper.partitioning import ListPartition, ListPartitionConfig, ListPartitionWindow, PartitionFilter
+from interloper.partitioning import (
+    ListPartition,
+    ListPartitionConfig,
+    ListPartitionWindow,
+    PartitionConfig,
+    PartitionFilter,
+)
 
 REGIONS = ("eu", "us", "apac")
 
@@ -52,7 +58,10 @@ class TestListPartitionWindow:
 
 class TestListPartitionConfig:
     def test_values_are_normalised_and_validated(self):
-        assert ListPartitionConfig(column="region", values=["eu", "us"]).values == ("eu", "us")  # ty: ignore[invalid-argument-type]
+        definition = {"kind": "list", "column": "region", "values": ["eu", "us"]}
+        config = PartitionConfig.from_definition(definition)
+        assert isinstance(config, ListPartitionConfig)
+        assert config.values == ("eu", "us")
         with pytest.raises(ValueError, match="at least one"):
             ListPartitionConfig(column="region", values=())
         with pytest.raises(ValueError, match="duplicate"):

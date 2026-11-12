@@ -176,8 +176,15 @@ class TestInheritance:
         assert source.plain.dataset == "other"
 
     def test_the_history_start_reaches_the_assets_unless_one_sets_its_own(self):
+        assets = [Cascade.plain(), Cascade.explicit(start=dt.date(2026, 3, 1))]
+        source = Cascade(start=dt.date(2026, 1, 1), assets=assets)
+        assert (source.plain.start, source.explicit.start) == (dt.date(2026, 1, 1), dt.date(2026, 3, 1))
+
+    def test_a_persisted_override_map_builds_the_assets_it_names(self):
         overrides = {"plain": {}, "explicit": {"start": "2026-03-01"}}
-        source = Cascade(start=dt.date(2026, 1, 1), assets=overrides)  # ty: ignore[invalid-argument-type]
+        source = Spec(path=Cascade.classpath(), init={"start": "2026-01-01", "assets": overrides}).reconstruct()
+        assert isinstance(source, Cascade)
+        assert {asset.key for asset in source.assets} == {"plain", "explicit"}
         assert (source.plain.start, source.explicit.start) == (dt.date(2026, 1, 1), dt.date(2026, 3, 1))
 
     def test_a_spec_carries_the_assets_own_values_only(self):
@@ -195,7 +202,8 @@ class TestInheritance:
 
     def test_a_blank_persisted_value_inherits(self):
         overrides = {"plain": {"dataset": "", "materialization_strategy": None}}
-        source = Cascade(dataset="raw", assets=overrides)  # ty: ignore[invalid-argument-type]
+        source = Spec(path=Cascade.classpath(), init={"dataset": "raw", "assets": overrides}).reconstruct()
+        assert isinstance(source, Cascade)
         assert source.plain.dataset == "raw"
         assert source.plain.materialization_strategy is MaterializationStrategy.RECONCILE
 
@@ -285,9 +293,10 @@ class TestSourceRelations:
         destination = FakeDestination()
         assert FakeSource(destinations=[destination]).destinations == [destination]
 
-    def test_a_single_destination_is_accepted(self):
+    def test_a_single_destination_is_refused_naming_the_list_form(self):
         destination = FakeDestination()
-        assert FakeSource(destinations=destination).destinations == [destination]  # ty: ignore[invalid-argument-type]
+        with pytest.raises(TypeError, match=r"'destinations' is many-valued: pass a list"):
+            FakeSource(destinations=destination)  # ty: ignore[invalid-argument-type]
 
     def test_annotation_declares_a_relation(self):
         relation = Shop.relations["connection"]
@@ -555,7 +564,7 @@ class TestAssets:
     def test_the_refusal_says_how_to_give_a_source_an_asset(self):
         other = FakeSourceWithAssets()
 
-        with pytest.raises(ValidationError, match=r"assets=\{'fake_first': \{\.\.\.\}\}"):
+        with pytest.raises(ValidationError, match=r"assets=\[FakeSourceWithAssets\.fake_first\(\.\.\.\)\]"):
             FakeSourceWithAssets(assets=[other.assets[0]])
 
     def test_reconfiguring_the_assets_is_refused(self):

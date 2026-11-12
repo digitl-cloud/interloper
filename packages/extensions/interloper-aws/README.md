@@ -27,7 +27,7 @@ destination = S3Destination(
     format="parquet",
 )
 
-source = Shop(destinations=destination)
+source = Shop(destinations=[destination])
 ```
 
 ## Credentials

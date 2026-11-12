@@ -208,7 +208,8 @@ class Component(Serializable):
 
         A kwarg named after a declared relation binds that relation instead of
         reaching Pydantic, which knows nothing about relations: a list or tuple
-        binds every element, ``None`` binds nothing. Each binding is checked
+        binds every element, a component binds a single-valued relation,
+        ``None`` binds nothing (see `Relation.targets_from`). Each binding is checked
         as it is made (see `bind`); whether every relation that must be
         bound is bound is a question for whoever assembles the graph, since
         components are wired piecewise (a source's assets read its bindings
@@ -234,9 +235,7 @@ class Component(Serializable):
             raise TypeError(f"{cls.__name__} got unexpected keyword argument(s): {', '.join(sorted(unknown))}")
         super().__init__(**data)
         for name, value in targets.items():
-            if value is None:
-                continue
-            self.bind(name, *(value if isinstance(value, (list, tuple)) else [value]))
+            self.bind(name, *cls.relations[name].targets_from(value))
 
     def model_post_init(self, context: Any) -> None:
         """Default ``id`` to a generated UUID if not provided.
@@ -619,11 +618,11 @@ class Component(Serializable):
 
         A field name sets the field, validated as an assignment would be; on
         an inherited field ``None`` means "inherit again". A relation name
-        rebinds through the write path: one component, a list, or ``None`` to
-        clear. The copy keeps its own bindings (a new dict, the same targets)
-        and its owner; the components it owns are copied and owned by the
-        copy, still bound to each other, while every outside target they bind
-        is shared, not duplicated.
+        rebinds through the write path: a list, a component for a
+        single-valued relation, or ``None`` to clear. The copy keeps its own
+        bindings (a new dict, the same targets) and its owner; the components
+        it owns are copied and owned by the copy, still bound to each other,
+        while every outside target they bind is shared, not duplicated.
 
         Args:
             **changes: Field and relation names to their new values.

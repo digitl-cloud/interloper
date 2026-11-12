@@ -9,13 +9,13 @@ double without changing.
 On a source, so every asset without its own inherits it:
 
 ```py
-source = Shop(destinations=il.CSVDestination(base_path="./data"))
+source = Shop(destinations=[il.CSVDestination(base_path="./data")])
 ```
 
 On an asset:
 
 ```py
-asset = source.orders(destinations=il.CSVDestination(base_path="./exports"))
+asset = source.orders(destinations=[il.CSVDestination(base_path="./exports")])
 ```
 
 A single destination or a list is accepted. With several, every write goes to all of them:
