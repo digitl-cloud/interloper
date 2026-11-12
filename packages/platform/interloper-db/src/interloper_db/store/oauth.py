@@ -28,7 +28,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from sqlalchemy import Engine, delete, exists, update
+from sqlalchemy import Engine, delete, exists, func, update
 from sqlalchemy.orm import aliased
 from sqlmodel import Session, col, select
 
@@ -174,6 +174,48 @@ class OAuthStore:
             session.delete(client)
             commit(session)
         return client
+
+    def prune_clients(self, *, unused_for: timedelta, ended_for: timedelta) -> list[OAuthClient]:
+        """Delete the dynamically registered clients nobody uses any more.
+
+        A client goes when it holds no live refresh token and no code still
+        to exchange, registered more than ``unused_for`` ago, and its newest
+        refresh token, if it ever had one, expired more than ``ended_for``
+        ago. That catches the clients abandoned after one registration and
+        those whose grants all ended long ago. Each goes as
+        :meth:`delete_client` deletes one, with its grants and conversations.
+        Operator clients are never touched.
+
+        Args:
+            unused_for: How long a client may go without obtaining a grant.
+            ended_for: How long a client is kept after its last refresh token expired.
+
+        Returns:
+            The deleted clients.
+        """
+        now = datetime.now(timezone.utc)
+        live_refresh = exists().where(col(RefreshToken.client_id) == col(OAuthClient.client_id), *self._live(now))
+        pending_code = exists().where(
+            col(AuthorizationCode.client_id) == col(OAuthClient.client_id),
+            col(AuthorizationCode.used_at).is_(None),
+            col(AuthorizationCode.expires_at) > now,
+        )
+        last_expiry = (
+            select(func.max(RefreshToken.expires_at))
+            .where(col(RefreshToken.client_id) == col(OAuthClient.client_id))
+            .scalar_subquery()
+        )
+        statement = select(OAuthClient.client_id).where(
+            col(OAuthClient.registered_by) == "dynamic",
+            col(OAuthClient.created_at) < now - unused_for,
+            ~live_refresh,
+            ~pending_code,
+            (last_expiry.is_(None)) | (last_expiry < now - ended_for),
+        )
+        with session_scope(self._engine) as session:
+            client_ids = list(session.exec(statement).all())
+        deleted = [self.delete_client(client_id, registered_by="dynamic") for client_id in client_ids]
+        return [client for client in deleted if client is not None]
 
     def authorised_clients(self, user_id: UUID) -> list[OAuthClient]:
         """List the clients a user has authorised: those holding a live refresh token.

@@ -21,6 +21,7 @@ stops.
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -88,6 +89,8 @@ class Reaper(Controller):
         heartbeat_timeout: int = 90,
         run_timeout: int | None = 43200,
         poll_interval: int = 15,
+        oauth_client_unused_for: timedelta = timedelta(hours=24),
+        oauth_client_ended_for: timedelta = timedelta(days=30),
     ) -> None:
         """Initialize the reaper.
 
@@ -100,6 +103,10 @@ class Reaper(Controller):
             run_timeout: Seconds a run may take when its job declares no
                 ``timeout``; ``None`` sets no deadline for those runs.
             poll_interval: Seconds between reaper scans.
+            oauth_client_unused_for: How long a dynamically registered OAuth
+                client may go without obtaining a grant before it is deleted.
+            oauth_client_ended_for: How long such a client is kept after its
+                last refresh token expired.
         """
         super().__init__(poll_interval=poll_interval)
         self._store = store
@@ -111,8 +118,10 @@ class Reaper(Controller):
         self._startup_timeout = startup_timeout
         self._heartbeat_timeout = heartbeat_timeout
         self._run_timeout = run_timeout
-        # Usage reconciliation rides the reaper's loop (the singleton
-        # housekeeping process) roughly hourly.
+        self._oauth_client_unused_for = oauth_client_unused_for
+        self._oauth_client_ended_for = oauth_client_ended_for
+        # Usage reconciliation and OAuth client pruning ride the reaper's
+        # loop (the singleton housekeeping process) roughly hourly.
         self._reconcile_every = max(1, 3600 // max(1, poll_interval))
         self._ticks_since_reconcile = self._reconcile_every  # reconcile on first tick
 
@@ -126,6 +135,7 @@ class Reaper(Controller):
         if self._ticks_since_reconcile >= self._reconcile_every:
             self._ticks_since_reconcile = 0
             self._reconcile_usage()
+            self._prune_oauth_clients()
 
     # -- Internals -------------------------------------------------------------
 
@@ -151,6 +161,22 @@ class Reaper(Controller):
                 drift.ledger,
                 drift.recomputed,
             )
+
+    def _prune_oauth_clients(self) -> None:
+        """Delete the dynamically registered OAuth clients nobody uses any more.
+
+        Registration is open to anyone, so without this every abandoned
+        registration would stay forever.
+        """
+        try:
+            deleted = self._store.oauth.prune_clients(
+                unused_for=self._oauth_client_unused_for, ended_for=self._oauth_client_ended_for
+            )
+        except Exception:
+            logger.exception("Pruning OAuth clients failed")
+            return
+        if deleted:
+            logger.info("Deleted %d unused OAuth client(s)", len(deleted))
 
     def _reap(self) -> int:
         """Fail every overdue run that has not moved since it was read.
