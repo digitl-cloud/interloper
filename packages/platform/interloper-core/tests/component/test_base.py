@@ -341,9 +341,9 @@ class NeedyDest(il.MemoryDestination):
 
 
 class Widget(il.Source):
-    """Source with an annotated connection, an explicit optional config, and a config that fills itself."""
+    """Source with a connection it may be built without, an explicit optional config, and a config that fills itself."""
 
-    connection: Conn
+    connection: Conn = il.Relation()
     config: Cfg | None = il.Relation(Cfg, optional=True)
     fallback: Cfg = il.Relation(Cfg)
 
@@ -422,9 +422,29 @@ class TestValidateClassvars:
 
 class TestCollect:
     def test_annotation_becomes_relation(self):
-        assert Widget.relations["connection"].kind == "connection"
-        assert Widget.relations["connection"].key == "conn"
+        assert Dest.relations["connection"].kind == "connection"
+        assert Dest.relations["connection"].key == "conn"
+        assert "connection" not in Dest.model_fields
+
+    def test_an_empty_relation_takes_its_target_from_the_annotation(self):
+        relation = Widget.relations["connection"]
+        assert (relation.kind, relation.key, relation.target, relation.optional) == ("connection", "conn", Conn, False)
         assert "connection" not in Widget.model_fields
+
+    def test_an_empty_relation_keeps_the_flags_it_is_given(self):
+        class FakeFlagged(il.Source):
+            config: Cfg | None = il.Relation(on_delete="detach")
+            connection: Conn = il.Relation(optional=True)
+
+        config, connection = FakeFlagged.relations["config"], FakeFlagged.relations["connection"]
+        assert (config.target, config.optional, config.on_delete) == (Cfg, True, "detach")
+        assert (connection.target, connection.optional) == (Conn, True)
+
+    def test_an_empty_relation_without_a_component_annotation_is_a_definition_error(self):
+        with pytest.raises(TypeError, match=r"FakeUntargeted\.limit = Relation\(\) names no target"):
+
+            class FakeUntargeted(il.Source):
+                limit: int = il.Relation()
 
     def test_relation_attribute_keeps_flags(self):
         assert Widget.relations["config"].optional is True
@@ -493,7 +513,7 @@ class TestBind:
         # unbound one builds and only the read can fail.
         monkeypatch.delenv("api_secret", raising=False)
         monkeypatch.delenv("API_SECRET", raising=False)
-        widget = Widget()  # ty: ignore[missing-argument]
+        widget = Widget()
 
         assert widget.bound("connection") is None
         with pytest.raises(ValidationError):

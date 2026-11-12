@@ -79,7 +79,7 @@ class FakeDiscriminatedSource(il.Source):
 class Shop(il.Source):
     """Source whose assets take its connection and wire to each other."""
 
-    connection: FakeConnection
+    connection: FakeConnection = il.Relation()
 
     class Orders(il.Asset):
         """Upstream asset filled with the source's connection."""
@@ -303,7 +303,7 @@ class TestSourceRelations:
         # unbound one is a read-time failure, not a build-time one.
         monkeypatch.delenv("token", raising=False)
         monkeypatch.delenv("TOKEN", raising=False)
-        shop = Shop()  # ty: ignore[missing-argument]
+        shop = Shop()
 
         assert shop.bound("connection") is None
         with pytest.raises(ValidationError):
@@ -317,14 +317,14 @@ class TestSourceRelations:
 
         @il.source
         class FakeEnvSource(il.Source):
-            connection: FakeConnection
+            connection: FakeConnection = il.Relation()
 
             @il.asset
             def rows(self) -> list[dict[str, Any]]:
                 seen.append(self.connection)
                 return [{"a": 1}]
 
-        result = il.DAG(FakeEnvSource()).materialize()  # ty: ignore[missing-argument]
+        result = il.DAG(FakeEnvSource()).materialize()
 
         assert result.status == "completed"
         assert [connection.token for connection in seen] == ["from-env"]

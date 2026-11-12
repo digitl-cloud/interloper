@@ -60,7 +60,11 @@ Some Future Ad,Active,3,9,,
 
 
 def _source() -> Any:
-    return BingAds(id="src-1", account_id="123")  # ty: ignore[missing-argument]
+    return BingAds(
+        id="src-1",
+        account_id="123",
+        connection=BingAdsConnection(client_id="x", client_secret="x", refresh_token="x", developer_token="x"),
+    )
 
 
 def _connected_source() -> Any:

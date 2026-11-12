@@ -44,7 +44,7 @@ _ROW = {
 
 
 def _source() -> Any:
-    return TheTradeDesk(id="src-1", partner_id="qz94j5z")  # ty: ignore[missing-argument]
+    return TheTradeDesk(id="src-1", partner_id="qz94j5z", connection=TheTradeDeskConnection(api_key="x"))
 
 
 def _normalizer() -> TheTradeDeskNormalizer:

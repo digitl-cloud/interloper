@@ -106,20 +106,31 @@ declaration, and `ComponentIdentity.satisfies` the one place a declared key is c
 concrete component. An asset's key is source-local, so a bare key is scoped to the owner's
 source; every other kind is keyed globally by its catalog key.
 
-**Three declaration forms**, in increasing precedence, all merged at class creation:
+**Declaration forms**, all merged at class creation (for one name, a `relations` entry wins over
+the class body):
 
 ```py
 class Widget(il.Component):
-    connection: PostgresConnection                                   # an annotation naming a class
-    config: WidgetConfig = il.Relation(WidgetConfig, optional=True)  # a typed Relation attribute
-    relations = {"cache": il.Relation(Cache)}                        # what the decorators emit
+    connection: PostgresConnection                                    # an annotation naming a class
+    config: WidgetConfig | None = il.Relation()                       # a Relation taking its target from the annotation
+    cache: Cache = il.Relation(Cache, on_delete="detach")             # a Relation naming its target
+    relations = {"store": il.Relation("destination", "warehouse")}    # what the decorators emit
 ```
+
+A bare annotation is the shorthand: it says only what fills the relation, and `X | None` makes
+it optional. An empty `il.Relation()` declares the same relation and carries anything else
+(`optional`, `on_delete`, `default`); an `il.Relation(...)` naming its target or its kind and key
+needs no annotation at all, though one types the constructor keyword and the attribute.
+
+A type checker reads a bare annotation as a required constructor keyword, since it knows nothing
+of the relations collected here. Give a relation a component is built without, one left to its
+fallback, a default (`= il.Relation()`) so the type checker agrees.
 
 The map merges over every base's, so a subclass entry replaces the inherited one of the same
 name and nothing an ancestor declared is lost. Each entry is copied, stamped with its name and
 installed under it: a `Relation` is its own descriptor, so `Widget.connection` is the
-declaration and `widget.connection` what is bound to it. An annotated relation is dropped from
-the class's annotations before pydantic collects its fields, so a relation is never also a
+declaration and `widget.connection` what it resolves to. A relation's annotation is dropped
+from the class's annotations before pydantic collects its fields, so a relation is never also a
 field. The two collectors read the annotations against different namespaces (the declaring
 module here, the full defining scope in pydantic), so an annotation naming a component class
 that ends up a plain field, and one that resolves nowhere at all, are both `TypeError` at class
@@ -185,7 +196,7 @@ order in which it comes up.
 
 3. **Declare relations for what fills the component.** An annotation naming a component class is
    the shorthand; an `il.Relation` value is where anything else is said (a key filter, `many`,
-   `optional`, `on_delete`). The relation name is the constructor keyword, the attribute, and
+   `optional`, `on_delete`), taking its target from the annotation when it names none. The relation name is the constructor keyword, the attribute, and
    what persistence and the UI call the link.
 
     ```py
@@ -194,7 +205,7 @@ order in which it comes up.
 
         title: str = il.InputField()
         inputs: list[il.Asset] = il.Relation("asset", many=True, optional=True)
-        storage: il.Destination
+        storage: il.Destination = il.Relation("destination")
     ```
 
 4. **Register the anchor.** One line in your package's `extension.yaml`; the catalog raises

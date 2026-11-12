@@ -32,7 +32,7 @@ from interloper_assets.tiktok_ads.connector.source import TiktokAds, TiktokStats
 
 
 def _source() -> Any:
-    return TiktokAds(id="src-1", advertiser_id="123")  # ty: ignore[missing-argument]
+    return TiktokAds(id="src-1", advertiser_id="123", connection=TiktokAdsConnection(access_token="x"))
 
 
 class TestSourceNormalizer:

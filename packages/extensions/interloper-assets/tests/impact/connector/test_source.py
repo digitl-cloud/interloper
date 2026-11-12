@@ -17,12 +17,13 @@ from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
+from interloper_assets.impact.connection import ImpactConnection
 from interloper_assets.impact.connector import schemas
 from interloper_assets.impact.connector.source import Impact, _to_df
 
 
 def _source() -> Any:
-    return Impact(id="src-1", program_id="123")  # ty: ignore[missing-argument]
+    return Impact(id="src-1", program_id="123", connection=ImpactConnection(account_sid="x", auth_token="x"))
 
 
 class TestSource:

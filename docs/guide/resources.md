@@ -57,6 +57,11 @@ does not hold; declaring `connection: ShopConnection` on the asset as well is le
 asset [reads the source's instance](#reading-through-the-source), but it says twice what the
 source says once.
 
+A type checker reads that bare annotation as a required constructor keyword, since it knows
+nothing of relations. When a source is meant to be built without one, its connection left to the
+environment, give the relation a default: `connection: ShopConnection = il.Relation()` declares
+the same relation, its target taken from the annotation.
+
 ## Explicit relations
 
 `il.Relation` is what says anything beyond "a resource of this class fills this name". Use it on

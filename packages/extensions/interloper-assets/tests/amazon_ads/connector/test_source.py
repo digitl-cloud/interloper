@@ -38,7 +38,11 @@ from interloper_assets.amazon_ads.connector.source import AmazonAds
 
 
 def _source() -> Any:
-    return AmazonAds(id="src-1", profile_id="123")  # ty: ignore[missing-argument]
+    return AmazonAds(
+        id="src-1",
+        profile_id="123",
+        connection=AmazonAdsConnection(client_id="x", client_secret="x", refresh_token="x", location="EU"),
+    )
 
 
 class TestSourceNormalizer:

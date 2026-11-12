@@ -955,12 +955,12 @@ class Component(Serializable):
           (``connection: PostgresConnection``), the shorthand for a relation
           that needs nothing said beyond what fills it;
         - a `Relation` value, which is where anything else the relation
-          declares is written. Annotate it with what fills it
-          (``destinations: list[Destination] = Relation("destination", many=True)``)
-          so both the constructor kwarg and the attribute are typed; the
-          annotation is then for the type checker only, since the relation
-          itself says what it accepts. A bare ``config = Relation(BigQueryConfig)``
-          declares the same relation untyped;
+          declares is written. An empty ``Relation()`` takes its kind, key and
+          target from the annotation it is paired with
+          (``config: Cfg | None = Relation(on_delete="detach")``, see
+          `Relation.with_target_of`); one naming its target or kind needs no
+          annotation, though one types the constructor kwarg and the attribute
+          (``destinations: list[Destination] = Relation("destination", many=True)``);
         - a ``relations`` dict written on the class body, which is what the
           decorators emit.
 
@@ -971,11 +971,15 @@ class Component(Serializable):
         Each entry is copied, stamped with its name and installed under that
         name: a `Relation` is its own
         descriptor, so the class attribute reads as the declaration and the
-        instance attribute as what is bound to it. The copy is what keeps a
+        instance attribute as what it resolves to. The copy is what keeps a
         subclass's redeclaration off its parent's map.
 
-        Annotated relations are dropped from the class's own annotations before
-        Pydantic collects its fields, so a relation is never also a field.
+        A relation's annotation is dropped from the class's own annotations
+        before Pydantic collects its fields, so a relation is never also a field.
+
+        Raises:
+            TypeError: If an empty ``Relation()`` has no annotation naming a
+                component class to take its target from.
         """
         inherited: dict[str, Relation] = {}
         for base in reversed(cls.__mro__[1:]):
@@ -992,7 +996,18 @@ class Component(Serializable):
             annotated = Relation.from_annotation(hint, namespace)
             if annotated is not None:
                 own[name] = annotated
-        own.update({name: value for name, value in cls.__dict__.items() if isinstance(value, Relation)})
+        for name, value in cls.__dict__.items():
+            if not isinstance(value, Relation):
+                continue
+            if value.kind:
+                own[name] = value
+            elif name in own:
+                own[name] = value.with_target_of(own[name])
+            else:
+                raise TypeError(
+                    f"{cls.__name__}.{name} = Relation() names no target, and no annotation names a component "
+                    f"class to take it from"
+                )
         declared = cls.__dict__.get("relations")
         if isinstance(declared, dict):
             own.update(declared)

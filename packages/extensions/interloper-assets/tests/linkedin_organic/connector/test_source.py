@@ -32,7 +32,11 @@ DAY_END_MILLIS = 1789516800000
 
 def _source(connection: LinkedinOrganicConnection | None = None) -> Any:
     if connection is None:
-        return LinkedinOrganic(id="src-1", organization_id="2414183")  # ty: ignore[missing-argument]
+        return LinkedinOrganic(
+            id="src-1",
+            organization_id="2414183",
+            connection=LinkedinOrganicConnection(client_id="x", client_secret="x", refresh_token="x"),
+        )
     return LinkedinOrganic(id="src-1", organization_id="2414183", connection=connection)
 
 
