@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 
 from interloper.events import Event, EventBus, EventType
@@ -9,11 +11,11 @@ from interloper.events.step import Step, StepKind
 from interloper.telemetry import attributes
 
 
-def _capture(body: object) -> list[Event]:
+def _capture(body: Callable[[], object]) -> list[Event]:
     captured: list[Event] = []
     EventBus.subscribe(captured.append)
     try:
-        body()  # ty: ignore[call-non-callable]
+        body()
     finally:
         EventBus.flush(timeout=5.0)
         EventBus.unsubscribe(captured.append)

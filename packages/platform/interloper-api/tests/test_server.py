@@ -5,12 +5,18 @@ from __future__ import annotations
 import socket
 import threading
 
+import sqlalchemy
 from interloper.catalog import Catalog
 from interloper.settings import ServerSettings
 from interloper.utils import Supervisor
+from interloper_db import Store
 
 from interloper_api import ApiServer
 from interloper_api.settings import ApiSettings
+
+
+def _store() -> Store:
+    return Store(Catalog(), engine=sqlalchemy.create_engine("sqlite://"))
 
 
 def test_binds_the_settings_host_and_the_given_port():
@@ -18,14 +24,14 @@ def test_binds_the_settings_host_and_the_given_port():
     ServerSettings.activate(ServerSettings(host="127.0.0.1", port=3000))
     settings = ApiSettings.get()
 
-    server = ApiServer.from_settings(settings, store=None, catalog=Catalog(), port=3101)  # ty: ignore[invalid-argument-type]
+    server = ApiServer.from_settings(settings, store=_store(), catalog=Catalog(), port=3101)
 
     assert (server._server.config.host, server._server.config.port) == ("127.0.0.1", 3101)
 
 
 def test_stop_asks_uvicorn_to_exit():
     """``stop`` lets uvicorn finish its requests and return from ``start``."""
-    server = ApiServer.from_settings(ApiSettings.get(), store=None, catalog=Catalog(), port=3101)  # ty: ignore[invalid-argument-type]
+    server = ApiServer.from_settings(ApiSettings.get(), store=_store(), catalog=Catalog(), port=3101)
 
     server.stop()
 
@@ -40,7 +46,7 @@ def test_a_bound_port_fails_the_process_instead_of_hanging():
         port = occupant.getsockname()[1]
         ServerSettings.activate(ServerSettings(host="127.0.0.1", port=port))
         settings = ApiSettings.get()
-        server = ApiServer.from_settings(settings, store=None, catalog=Catalog(), port=port)  # ty: ignore[invalid-argument-type]
+        server = ApiServer.from_settings(settings, store=_store(), catalog=Catalog(), port=port)
         outcome: list[object] = []
 
         def run() -> None:

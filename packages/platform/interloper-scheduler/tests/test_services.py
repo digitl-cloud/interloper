@@ -6,7 +6,9 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
+import sqlalchemy
 from interloper.catalog import Catalog
+from interloper_db import Store
 
 import interloper_scheduler.services as services_module
 from interloper_scheduler import scheduler_services
@@ -20,7 +22,7 @@ def _no_launcher(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _build(**toggles: bool) -> dict[str, Any]:
-    """Build the services over the active settings, with a stand-in store.
+    """Build the services over the active settings and a store whose database is never connected to.
 
     Args:
         **toggles: The ``cron``, ``worker`` and ``reaper`` flags.
@@ -28,7 +30,9 @@ def _build(**toggles: bool) -> dict[str, Any]:
     Returns:
         The built services, by name.
     """
-    return scheduler_services(SchedulerSettings.get(), store=object(), catalog=Catalog(), **toggles)  # ty: ignore[invalid-argument-type]
+    catalog = Catalog()
+    store = Store(catalog, engine=sqlalchemy.create_engine("sqlite://"))
+    return scheduler_services(SchedulerSettings.get(), store=store, catalog=catalog, **toggles)
 
 
 def test_cron_brings_hooks_and_renewal():

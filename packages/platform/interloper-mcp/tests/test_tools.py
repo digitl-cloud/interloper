@@ -17,7 +17,7 @@ from interloper_db.store import Store
 from interloper_toolkit import TOOLS as TOOLKIT_TOOLS
 from mcp import Client
 from mcp.server.mcpserver import MCPServer
-from mcp.types import CallToolResult
+from mcp.types import CallToolResult, TextContent
 
 from interloper_mcp.context import init_context, set_static_user
 from interloper_mcp.server import create_mcp_server
@@ -26,7 +26,9 @@ from interloper_mcp.server import create_mcp_server
 def _result_dict(result: CallToolResult) -> dict[str, Any]:
     payload = result.structured_content
     if payload is None:
-        payload = json.loads(result.content[0].text)  # ty: ignore[missing-union-attribute]
+        content = result.content[0]
+        assert isinstance(content, TextContent)
+        payload = json.loads(content.text)
     # Union-typed returns are wrapped in a "result" envelope by MCPServer.
     return payload["result"] if set(payload) == {"result"} else payload
 

@@ -262,10 +262,10 @@ class TestProviderConstruction:
 class TestForceFlush:
     """Flushing without tearing the SDK down, for reused worker processes."""
 
-    def test_flushes_both_providers(self, restore_module_state):
+    def test_flushes_both_providers(self, restore_module_state, monkeypatch):
         tracer, meter = FakeProvider(), FakeProvider()
-        setup._tracer_provider = tracer  # ty: ignore[invalid-assignment]
-        setup._meter_provider = meter  # ty: ignore[invalid-assignment]
+        monkeypatch.setattr(setup, "_tracer_provider", tracer)
+        monkeypatch.setattr(setup, "_meter_provider", meter)
 
         setup.force_flush()
 
@@ -281,10 +281,10 @@ class TestForceFlush:
 class TestShutdown:
     """Teardown flushes, unsubscribes, and drops every handle."""
 
-    def test_shuts_down_both_providers(self, restore_module_state):
+    def test_shuts_down_both_providers(self, restore_module_state, monkeypatch):
         tracer, meter = FakeProvider(), FakeProvider()
-        setup._tracer_provider = tracer  # ty: ignore[invalid-assignment]
-        setup._meter_provider = meter  # ty: ignore[invalid-assignment]
+        monkeypatch.setattr(setup, "_tracer_provider", tracer)
+        monkeypatch.setattr(setup, "_meter_provider", meter)
         setup._initialized = True
 
         shutdown_telemetry()
@@ -294,11 +294,11 @@ class TestShutdown:
         assert setup._meter_provider is None
         assert setup._initialized is False
 
-    def test_the_metrics_handler_is_unsubscribed(self, restore_module_state):
+    def test_the_metrics_handler_is_unsubscribed(self, restore_module_state, monkeypatch):
         from interloper.events import EventBus
 
         received: list[object] = []
-        setup._metrics_handler = received.append  # ty: ignore[invalid-assignment]
+        monkeypatch.setattr(setup, "_metrics_handler", received.append)
         setup._initialized = True
         EventBus.subscribe(received.append)
 

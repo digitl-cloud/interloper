@@ -5,6 +5,7 @@ from __future__ import annotations
 from uuid import UUID
 
 import pytest
+from sqlmodel import Session
 
 from interloper_db.store import Store
 from interloper_db.store.quotas import (
@@ -52,9 +53,9 @@ class TestRegistry:
     def test_bound_quota_rejects_a_declarative_check_without_used(self, org_id: UUID):
         definition = QUOTAS[QUOTA_MAX_BACKFILL_PARTITIONS]
         with pytest.raises(ValueError, match="pass used="):
-            definition.check(None, org_id, 5)  # ty: ignore[invalid-argument-type]
+            definition.check(Session(), org_id, 5)
 
     def test_kindless_capacity_quota_rejects_a_measured_check(self, org_id: UUID):
         definition = QUOTAS[QUOTA_MAX_ASSETS_PER_SOURCE]
         with pytest.raises(ValueError, match="counts no component kind"):
-            definition.check(None, org_id, 5)  # ty: ignore[invalid-argument-type]
+            definition.check(Session(), org_id, 5)
