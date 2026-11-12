@@ -13,7 +13,7 @@ settings.runner.type
 `AppSettings.activate(settings)` pins an instance for the current process (the CLI does this);
 `clear_active()` releases it.
 
-In `interloper.yaml` a section is a mapping under its key; in the environment every field is the section's prefix followed by the field name in upper case (`INTERLOPER_RUNNER_TYPE`). The framework reads `runner`, `otel`, `catalog` and `secrets`; the other sections configure the platform packages. Every section and field is listed in [Settings](../reference/settings.md).
+Every top-level key is a section. In `interloper.yaml` a section is a mapping under its key; in the environment every field is `INTERLOPER_<SECTION>_<FIELD>` in upper case (`INTERLOPER_RUNNER_TYPE`), and a list takes comma-separated values (`INTERLOPER_CATALOG_INCLUDE=my_package.sources.Shop,my_package.sources.Finance`). The framework reads `runner`, `otel`, `log`, `catalog`, `run` and `server`; the other sections configure the platform packages. Every section and field is listed in [Settings](../reference/settings.md).
 
 ## YAML example
 
@@ -29,8 +29,9 @@ otel:
   endpoint: http://localhost:4317
 
 catalog:
-  - my_package.sources.Shop
-  - my_package.sources.Finance
+  include:
+    - my_package.sources.Shop
+    - my_package.sources.Finance
 ```
 
 Within a section, a field present in the YAML wins over its environment variable, and the

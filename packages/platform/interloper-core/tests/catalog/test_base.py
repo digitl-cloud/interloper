@@ -11,7 +11,7 @@ from interloper.asset.base import AssetDefinition
 from interloper.catalog import Catalog
 from interloper.catalog import base as catalog_base
 from interloper.component import Relation
-from interloper.settings import AppSettings
+from interloper.settings import AppSettings, CatalogSettings
 
 _FRAMEWORK = {"cron_job", "trigger_hook", "webhook_hook"}
 _DAILY = il.TimePartitionConfig(column="date", allow_window=False)
@@ -88,12 +88,12 @@ class TestFromSettings:
     """Configured paths are the enablement list; discovery is the fallback."""
 
     def test_empty_settings_fall_back_to_discovery(self, monkeypatch):
-        stub = AppSettings.model_construct(catalog=[])
+        stub = AppSettings.model_construct(catalog=CatalogSettings(include=[]))
         monkeypatch.setattr(AppSettings, "get", classmethod(lambda cls: stub))
         assert Catalog.from_settings().components.keys() == Catalog.discover().components.keys()
 
     def test_configured_paths_narrow(self, monkeypatch):
-        stub = AppSettings.model_construct(catalog=[DemoSource.definition().path])
+        stub = AppSettings.model_construct(catalog=CatalogSettings(include=[DemoSource.definition().path]))
         monkeypatch.setattr(AppSettings, "get", classmethod(lambda cls: stub))
         assert set(Catalog.from_settings().components) == {"demo_source", *_FRAMEWORK}
 

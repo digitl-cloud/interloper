@@ -354,7 +354,7 @@ def _google_login(settings: Any | None) -> GoogleLogin | None:
     if settings is None:
         return None
     google_login = GoogleLogin.from_settings(settings)
-    if google_login is None and settings.auth.google_client_id and not settings.secrets.encryption_key:
+    if google_login is None and settings.auth.google_client_id and not settings.encryption.key:
         logger.warning("Google login unavailable: INTERLOPER_ENCRYPTION_KEY is not configured.")
     return google_login
 
@@ -373,7 +373,7 @@ def _authorization_server(store: Store | None, settings: Any) -> AuthorizationSe
     """
     if store is None:
         return None
-    if not settings.secrets.encryption_key:
+    if not settings.encryption.key:
         logger.warning("OAuth authorization server not mounted: INTERLOPER_ENCRYPTION_KEY is not configured.")
         return None
     try:

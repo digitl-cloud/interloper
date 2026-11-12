@@ -37,9 +37,10 @@ and https://docs.interloper.dev/ui/running/
    launcher:
      type: in_process              # runs execute inside the worker; docker / kubernetes launch a container per run
 
-   catalog:                        # import paths; empty means everything installed
-     - interloper_assets.facebook_ads.connector.source.FacebookAds
-     - interloper_assets.google_ads.connector.source.GoogleAds
+   catalog:
+     include:                      # import paths; empty means everything installed
+       - interloper_assets.facebook_ads.connector.source.FacebookAds
+       - interloper_assets.google_ads.connector.source.GoogleAds
 
    otel:
      enabled: true
@@ -87,8 +88,8 @@ and https://docs.interloper.dev/ui/running/
    from interloper.settings import AppSettings
    import interloper as il
    s = AppSettings()
-   print(s.postgres.host, s.auth.allowed_domains, s.catalog, s.otel.endpoint, s.launcher.type)
-   print(bool(s.secrets.encryption_key))                    # encryption at rest enabled
+   print(s.postgres.host, s.auth.allowed_domains, s.catalog.include, s.otel.endpoint, s.launcher.type)
+   print(bool(s.encryption.key))                            # encryption at rest enabled
    print(sorted(il.Catalog.from_settings().components))     # dict keyed by component key; the provider key is `facebook`, the component key `facebook_ads`
    ```
 
@@ -101,14 +102,14 @@ and https://docs.interloper.dev/ui/running/
 | Runner for in-process runs | `runner: {type: async, config: {max_workers: 8}}`; types `async`, `serial`, plus registered keys such as `k8s` |
 | Who can sign up | `auth.allowed_domains`; listed `super_admin_emails` addresses are promoted when the API starts and at login |
 | Local http | `INTERLOPER_AUTH_COOKIE_SECURE=false` |
-| Every section prefix | `INTERLOPER_POSTGRES_`, `_AUTH_`, `_SERVER_`, `_CRON_`, `_WORKER_`, `_REAPER_`, `_RENEWAL_`, `_LAUNCHER_`, `_RUNNER_`, `_OTEL_`, `_SMTP_`, `_AGENT_`, `_MCP_`, `_QUOTA_`; the encryption key is `INTERLOPER_ENCRYPTION_KEY` |
+| Every section prefix | `INTERLOPER_POSTGRES_`, `_AUTH_`, `_SERVER_`, `_CRON_`, `_WORKER_`, `_REAPER_`, `_RENEWAL_`, `_LAUNCHER_`, `_RUNNER_`, `_OTEL_`, `_LOG_`, `_CATALOG_`, `_ENCRYPTION_`, `_SMTP_`, `_AGENT_`, `_MCP_`, `_QUOTA_`, each followed by the field name (`INTERLOPER_ENCRYPTION_KEY`); a list takes comma-separated values |
 
 ## Common mistakes
 
 - `password: ${POSTGRES_PASSWORD}` in `interloper.yaml`: the literal string is used. Omit the
   key and set the variable; `${VAR}` only works in job spec files.
 - Setting a field in both places and expecting the environment to win: the YAML field wins.
-- Leaving `catalog` empty in production: every installed source and connection is offered.
+- Leaving `catalog.include` empty in production: every installed source and connection is offered.
 - Confusing `runner` (how assets execute inside a process) with `launcher` (how the scheduler
   starts a run); the launcher keys are `in_process`, `docker`, `kubernetes`.
 - Registering `/api/oauth/<provider>` or `/oauth/callback` as the provider redirect URI: the

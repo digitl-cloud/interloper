@@ -4,11 +4,13 @@ from datetime import timedelta
 
 import pytest
 from pydantic import ValidationError
+from pydantic_settings import BaseSettings
 
 from interloper.settings import (
     AgentSettings,
     AppSettings,
     AuthSettings,
+    CatalogSettings,
     PostgresSettings,
     ServerSettings,
     TelemetrySettings,
@@ -25,6 +27,48 @@ def _no_ambient_yaml(tmp_path, monkeypatch: pytest.MonkeyPatch):
     overrides the env vars under test.
     """
     monkeypatch.chdir(tmp_path)
+
+
+def test_every_top_level_key_is_a_section_read_from_its_own_prefix():
+    """Every top-level key is a block of fields whose env var is ``INTERLOPER_<SECTION>_<FIELD>``."""
+    for name, field in AppSettings.model_fields.items():
+        section = field.annotation
+        assert isinstance(section, type) and issubclass(section, BaseSettings), name
+        assert section.model_config.get("env_prefix") == f"INTERLOPER_{name.upper()}_", name
+
+
+def test_catalog_include_defaults_to_everything_installed():
+    """No import paths unless configured: the catalog is then everything installed."""
+    assert CatalogSettings().include == []
+
+
+def test_catalog_include_env(monkeypatch: pytest.MonkeyPatch):
+    """The env var takes a comma-separated list; entries are trimmed, their case kept."""
+    monkeypatch.setenv("INTERLOPER_CATALOG_INCLUDE", " pkg.sources.Shop ,pkg.sources.Finance,")
+
+    assert AppSettings().catalog.include == ["pkg.sources.Shop", "pkg.sources.Finance"]
+
+
+def test_catalog_include_yaml(tmp_path):
+    """The YAML ``catalog`` block lists the import paths under ``include``."""
+    (tmp_path / "interloper.yaml").write_text("catalog:\n  include:\n    - pkg.sources.Shop\n")
+
+    assert AppSettings().catalog.include == ["pkg.sources.Shop"]
+
+
+def test_a_catalog_written_as_a_list_is_refused(tmp_path):
+    """A catalog written as a bare list fails loudly rather than enabling everything installed."""
+    (tmp_path / "interloper.yaml").write_text("catalog:\n  - pkg.sources.Shop\n")
+
+    with pytest.raises(ValidationError, match="catalog"):
+        AppSettings()
+
+
+def test_encryption_key_env(monkeypatch: pytest.MonkeyPatch):
+    """``encryption.key`` reads ``INTERLOPER_ENCRYPTION_KEY``."""
+    monkeypatch.setenv("INTERLOPER_ENCRYPTION_KEY", "key-material")
+
+    assert AppSettings().encryption.key == "key-material"
 
 
 def test_postgres_statement_timeout_defaults_to_unset():

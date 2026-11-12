@@ -406,7 +406,7 @@ class AdminConfigResponse(BaseModel):
         settings fields default to *not exposed* and secrets only ever surface as
         "configured" booleans. The catalog is reported from the hydrated ``Catalog``
         (the enabled components, their dependencies and the framework's own), not
-        ``settings.catalog``, which only holds the explicitly configured import paths.
+        ``settings.catalog.include``, which only holds the explicitly configured import paths.
 
         Args:
             settings: The instance settings the snapshot reads from.
@@ -498,7 +498,7 @@ class AdminConfigResponse(BaseModel):
                 app_external_url=settings.server.external_url,
             ),
             data=AdminDataConfig(
-                encryption_configured=bool(settings.secrets.encryption_key),
+                encryption_configured=bool(settings.encryption.key),
                 catalog=_catalog_by_kind(catalog) if catalog is not None else {},
             ),
             quotas=_quota_limits(settings.quota),

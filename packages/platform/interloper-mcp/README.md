@@ -73,9 +73,9 @@ claude mcp add --transport http interloper http://localhost:3001/mcp \
 | `INTERLOPER_MCP_TOKEN` | (unset) | stdio only: PAT to authenticate as (required) |
 
 Database and catalog configuration is the standard interloper set
-(`INTERLOPER_POSTGRES_*`, `INTERLOPER_CATALOG`, ...). The endpoint's public
-URL, the OAuth resource clients sign in to, is `/mcp` on the app's public URL
-(`INTERLOPER_SERVER_EXTERNAL_URL`), derived the same way by the API's
+(`INTERLOPER_POSTGRES_*`, `INTERLOPER_CATALOG_INCLUDE`, ...). The endpoint's
+public URL, the OAuth resource clients sign in to, is `/mcp` on the app's public
+URL (`INTERLOPER_SERVER_EXTERNAL_URL`), derived the same way by the API's
 authorization server.
 
 ## Deployment

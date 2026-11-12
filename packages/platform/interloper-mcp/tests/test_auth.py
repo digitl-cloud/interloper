@@ -14,7 +14,7 @@ from typing import Any
 import httpx2
 import interloper as il
 import pytest
-from interloper.settings import AppSettings, McpSettings, SecretsSettings, ServerSettings
+from interloper.settings import AppSettings, EncryptionSettings, McpSettings, ServerSettings
 from interloper_api.authorization import AuthorizationServer
 from interloper_db import engine as engine_module
 from interloper_db.crypto import hash_token
@@ -107,7 +107,7 @@ async def test_a_client_signs_in_to_the_resource_the_server_advertises(
 ):
     settings = AppSettings(
         server=ServerSettings(external_url=external_url, port=3100),
-        secrets=SecretsSettings(encryption_key="key-material"),
+        encryption=EncryptionSettings(key="key-material"),
     )
     authorization_server = AuthorizationServer.from_settings(store, settings)
     app = _app(store, catalog, settings.server.public_url)

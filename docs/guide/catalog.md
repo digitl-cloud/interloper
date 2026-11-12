@@ -20,9 +20,10 @@ il.Catalog.from_assets([Shop, Finance])
 Each entry names a component class, or a module whose public attributes are scanned for
 component classes. The scan is cached for the process.
 
-**Settings** narrow the universe: when `catalog` in `interloper.yaml` (or
-`INTERLOPER_CATALOG`) lists import paths, the catalog holds those components, everything they
-depend on, and the framework's own components. An empty list means everything installed.
+**Settings** narrow the universe: when `catalog.include` in `interloper.yaml` (or
+`INTERLOPER_CATALOG_INCLUDE`, comma-separated) lists import paths, the catalog holds those
+components, everything they depend on, and the framework's own components. An empty list means
+everything installed.
 
 **Dependencies come along.** Enabling a source pulls in the target class of every relation it
 declares and, through its assets, theirs, transitively. A catalog therefore never carries a

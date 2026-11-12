@@ -38,16 +38,7 @@ def settings_reference() -> str:
     """
     from interloper.settings import AppSettings
 
-    prefix = AppSettings.model_config.get("env_prefix", "")
-    blocks: list[str] = []
-    for name, field in AppSettings.model_fields.items():
-        section = field.annotation
-        if isinstance(section, type) and issubclass(section, BaseSettings):
-            blocks.append(_section(name, section))
-        else:
-            variable = f"{prefix}{name.upper()}"
-            blocks.append(f"### `{name}`\n\n`{variable}`, {_type(field)}. {field.description}\n")
-    return "\n".join(blocks)
+    return "\n".join(_section(name, field.annotation) for name, field in AppSettings.model_fields.items())
 
 
 def _section(name: str, section: type[BaseSettings]) -> str:

@@ -155,13 +155,13 @@ class GoogleLogin:
             is configured.
         """
         auth = settings.auth
-        if not auth.google_client_id or not auth.google_client_secret or not settings.secrets.encryption_key:
+        if not auth.google_client_id or not auth.google_client_secret or not settings.encryption.key:
             return None
         return cls(
             client_id=auth.google_client_id,
             client_secret=auth.google_client_secret,
             redirect_uri=auth.google_redirect_uri,
-            encryption_key=settings.secrets.encryption_key,
+            encryption_key=settings.encryption.key,
             cookie_secure=auth.cookie_secure,
         )
 

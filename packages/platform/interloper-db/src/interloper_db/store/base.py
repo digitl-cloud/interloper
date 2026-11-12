@@ -174,7 +174,7 @@ class Store:
         catalog = catalog if catalog is not None else Catalog.from_settings()
         engine = engine_from_settings()
         settings = AppSettings.get()
-        key = settings.secrets.encryption_key
+        key = settings.encryption.key
         if not key:
             logger.warning(
                 "INTERLOPER_ENCRYPTION_KEY is not configured; resource persistence will "

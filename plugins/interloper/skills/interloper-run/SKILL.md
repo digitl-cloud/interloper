@@ -92,7 +92,7 @@ Partitioned assets always need a partition. `materialize()` on an asset with dep
 | Runner or concurrency | `interloper.yaml` `runner: {type: async, config: {max_workers: 8}}` or `INTERLOPER_RUNNER_TYPE` |
 | Only some assets | `assets: {orders: {}}` in the spec's `init` (only the listed assets exist); `enabled: false` there, or on the whole source, keeps one as a read-only dependency |
 | Several sources in one run | a `path: interloper.job.base.Job` spec with `targets:` and shared `destinations:` |
-| Reuse a registered class by name | `key: <component key>`; the catalog is `interloper.yaml`'s `catalog:` list or everything installed |
+| Reuse a registered class by name | `key: <component key>`; the catalog is `interloper.yaml`'s `catalog.include` list or everything installed |
 | Docs pages | `/guide/execution/`, `/guide/cli/`, `/guide/specs/`, `/guide/backfilling/`, `/reference/cli/` under https://docs.interloper.dev |
 
 ## Common mistakes

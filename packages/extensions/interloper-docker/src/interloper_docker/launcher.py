@@ -188,7 +188,7 @@ class DockerLauncher(Launcher):
             The environment the run container is started with.
         """
         environment: dict[str, str] = {
-            "INTERLOPER_CATALOG": json.dumps(self._catalog.to_paths()),
+            "INTERLOPER_CATALOG_INCLUDE": ",".join(self._catalog.to_paths()),
             "INTERLOPER_RUNNER_TYPE": self._runner_type,
             "INTERLOPER_RUNNER_CONFIG": json.dumps(self._runner_config),
             "INTERLOPER_RUN_HEARTBEAT_INTERVAL": str(self._heartbeat_interval),
