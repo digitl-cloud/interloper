@@ -2,13 +2,29 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
+import datetime as dt
+from uuid import uuid4
 
+from interloper_db.models import Invitation, Profile
 from interloper_db.store.invitations import INVITATION_EXPIRY_DAYS
 
 from interloper_api.notifications import InvitationEmail
 
 _LOGO_URL = "https://app.example.com/logo-email.png"
+
+
+def _profile(name: str | None) -> Profile:
+    return Profile(email="ada@example.com", name=name, google_id="g-ada")
+
+
+def _invitation() -> Invitation:
+    return Invitation(
+        organisation_id=uuid4(),
+        email="grace@example.com",
+        token="tok",
+        invited_by=uuid4(),
+        expires_at=dt.datetime(2026, 12, 1, tzinfo=dt.UTC),
+    )
 
 
 def test_render_invite_html_contains_content():
@@ -28,14 +44,8 @@ def test_render_invite_html_escapes_interpolated_values():
 
 
 def test_from_invitation_links_back_to_the_app_it_was_issued_from():
-    invitation = SimpleNamespace(token="tok")
-    inviter = SimpleNamespace(name="Ada", email="ada@example.com")
-
     email = InvitationEmail.from_invitation(
-        invitation,  # ty: ignore[invalid-argument-type]
-        org_name="Acme",
-        inviter=inviter,  # ty: ignore[invalid-argument-type]
-        base_url="https://app.example.com/",
+        _invitation(), org_name="Acme", inviter=_profile("Ada"), base_url="https://app.example.com/"
     )
 
     assert email.invite_url == "https://app.example.com/invite/tok"
@@ -44,13 +54,8 @@ def test_from_invitation_links_back_to_the_app_it_was_issued_from():
 
 
 def test_a_nameless_inviter_is_named_by_email():
-    inviter = SimpleNamespace(name=None, email="ada@example.com")
-
     email = InvitationEmail.from_invitation(
-        SimpleNamespace(token="tok"),  # ty: ignore[invalid-argument-type]
-        org_name="Acme",
-        inviter=inviter,  # ty: ignore[invalid-argument-type]
-        base_url="https://x",
+        _invitation(), org_name="Acme", inviter=_profile(None), base_url="https://x"
     )
 
     assert email.inviter_name == "ada@example.com"

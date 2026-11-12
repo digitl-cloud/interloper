@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator, Iterator
-from types import SimpleNamespace
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -104,21 +104,39 @@ def store(agent_db: Engine) -> Store:
     return Store(catalog=il.Catalog(components={}))
 
 
+@dataclass(frozen=True)
+class Member:
+    """A profile and the organisation it acts in.
+
+    Attributes:
+        profile: The member's profile.
+        org_id: The organisation the routes are called in.
+    """
+
+    profile: Profile
+    org_id: UUID
+
+    @property
+    def id(self) -> UUID:
+        """The member's profile id."""
+        return self.profile.id
+
+
 @pytest.fixture
-def member(store: Store) -> SimpleNamespace:
+def member(store: Store) -> Member:
     """An editor in a fresh organisation.
 
     Returns:
-        The profile and organisation ids the routes resolve.
+        The member.
     """
     profile = store.profiles.upsert(google_id="g-1", email="ada@example.com", name="Ada")
     org = store.organisations.create(name="Acme", creator_id=profile.id)
-    return SimpleNamespace(id=profile.id, org_id=org.id, email="ada@example.com", is_super_admin=False)
+    return Member(profile=profile, org_id=org.id)
 
 
 def _client(
     store: Store,
-    member: SimpleNamespace,
+    member: Member,
     agent: Agent[ToolkitContext, Any],
     org_id: UUID | None = None,
     *,
@@ -132,11 +150,11 @@ def _client(
     app.dependency_overrides[get_agent] = lambda: agent
     if authenticate_as_member:
         session = Token(user_id=member.id, kind=TokenKind.SESSION, token_prefix="", token_hash="")
-        app.dependency_overrides[get_caller_credential] = lambda: CallerCredential(user=member, token=session)  # ty: ignore[invalid-argument-type]
+        app.dependency_overrides[get_caller_credential] = lambda: CallerCredential(user=member.profile, token=session)
     return TestClient(app, base_url=f"http://testserver/organisations/{org_id or member.org_id}")
 
 
-def _tools_client(store: Store, member: SimpleNamespace, *, authenticated: bool) -> TestClient:
+def _tools_client(store: Store, member: Member, *, authenticated: bool) -> TestClient:
     app = FastAPI()
     install_error_handlers(app)
     api = APIRouter(prefix="/api")
@@ -145,7 +163,7 @@ def _tools_client(store: Store, member: SimpleNamespace, *, authenticated: bool)
     app.dependency_overrides[get_store] = lambda: store
     if authenticated:
         session = Token(user_id=member.id, kind=TokenKind.SESSION, token_prefix="", token_hash="")
-        app.dependency_overrides[get_caller_credential] = lambda: CallerCredential(user=member, token=session)  # ty: ignore[invalid-argument-type]
+        app.dependency_overrides[get_caller_credential] = lambda: CallerCredential(user=member.profile, token=session)
     return TestClient(app)
 
 
@@ -178,7 +196,7 @@ def _echo_agent() -> Agent[ToolkitContext, Any]:
 
 
 class TestConversationLifecycle:
-    def test_create_list_read_and_delete(self, store: Store, member: SimpleNamespace):
+    def test_create_list_read_and_delete(self, store: Store, member: Member):
         client = _client(store, member, _echo_agent())
 
         created = client.post("/agent/conversations")
@@ -193,9 +211,7 @@ class TestConversationLifecycle:
         assert deleted.status_code == 204
         assert client.get("/agent/conversations").json() == {"items": [], "total": 0}
 
-    def test_a_conversation_started_with_an_access_token_is_hidden_from_the_list(
-        self, store: Store, member: SimpleNamespace
-    ):
+    def test_a_conversation_started_with_an_access_token_is_hidden_from_the_list(self, store: Store, member: Member):
         registered, _ = store.oauth.register_client(
             "Chat", ["https://chat.example.com/callback"], registered_by="operator"
         )
@@ -212,7 +228,7 @@ class TestConversationLifecycle:
         stored = store.conversations.get(UUID(created.json()["id"]), org_id=member.org_id, user_id=member.id)
         assert stored.client_id == registered.client_id
 
-    def test_a_conversation_started_with_a_personal_token_is_listed(self, store: Store, member: SimpleNamespace):
+    def test_a_conversation_started_with_a_personal_token_is_listed(self, store: Store, member: Member):
         _, raw = store.tokens.create_personal(member.id, "laptop")
         bearer = {"Authorization": f"Bearer {raw}"}
         client = _client(store, member, _echo_agent(), authenticate_as_member=False)
@@ -224,7 +240,7 @@ class TestConversationLifecycle:
             created.json()["id"]
         ]
 
-    def test_another_members_conversation_is_not_found(self, store: Store, member: SimpleNamespace):
+    def test_another_members_conversation_is_not_found(self, store: Store, member: Member):
         other = store.profiles.upsert(google_id="g-2", email="bob@example.com", name="Bob")
         theirs = store.conversations.create(member.org_id, other.id)
         client = _client(store, member, _echo_agent())
@@ -232,7 +248,7 @@ class TestConversationLifecycle:
         assert client.get(f"/agent/conversations/{theirs.id}").status_code == 404
         assert client.delete(f"/agent/conversations/{theirs.id}").status_code == 404
 
-    def test_a_conversation_of_another_organisation_is_not_found(self, store: Store, member: SimpleNamespace):
+    def test_a_conversation_of_another_organisation_is_not_found(self, store: Store, member: Member):
         # The caller edits both organisations; a conversation lives in its own
         # and reads as missing under the other's path.
         mine = store.conversations.create(member.org_id, member.id)
@@ -245,7 +261,7 @@ class TestConversationLifecycle:
 
 
 class TestTools:
-    def test_the_tools_are_listed_with_their_titles_and_approval(self, store: Store, member: SimpleNamespace):
+    def test_the_tools_are_listed_with_their_titles_and_approval(self, store: Store, member: Member):
         response = _tools_client(store, member, authenticated=True).get("/api/agent/tools")
 
         assert response.status_code == 200
@@ -255,12 +271,12 @@ class TestTools:
         assert "request_user_selection" in tools
         assert [tool["name"] for tool in response.json()] == [tool.name for tool in TOOLS]
 
-    def test_an_unauthenticated_call_is_refused(self, store: Store, member: SimpleNamespace):
+    def test_an_unauthenticated_call_is_refused(self, store: Store, member: Member):
         assert _tools_client(store, member, authenticated=False).get("/api/agent/tools").status_code == 401
 
 
 class TestHistory:
-    def test_a_turns_tool_rounds_restore_as_one_assistant_message(self, store: Store, member: SimpleNamespace):
+    def test_a_turns_tool_rounds_restore_as_one_assistant_message(self, store: Store, member: Member):
         history: list[ModelMessage] = [
             ModelRequest(parts=[UserPromptPart(content="how are the jobs?")]),
             ModelResponse(parts=[ToolCallPart("list_jobs", {}, tool_call_id="c1")]),
@@ -281,9 +297,7 @@ class TestHistory:
         assert [p["type"] for p in messages[1]["parts"]] == ["tool-list_jobs", "tool-list_recent_runs", "text"]
         assert messages[1]["parts"][0]["state"] == "output-available"
 
-    def test_a_compacted_history_restores_its_summary_beside_the_remaining_messages(
-        self, store: Store, member: SimpleNamespace
-    ):
+    def test_a_compacted_history_restores_its_summary_beside_the_remaining_messages(self, store: Store, member: Member):
         history: list[ModelMessage] = [
             ModelRequest(parts=[SystemPromptPart(content=SUMMARY_LEAD + "The user asked about jobs; none exist.")]),
             ModelRequest(parts=[UserPromptPart(content="thanks")]),
@@ -300,7 +314,7 @@ class TestHistory:
 
 
 class TestChat:
-    def test_a_turn_streams_and_persists_the_history(self, store: Store, member: SimpleNamespace):
+    def test_a_turn_streams_and_persists_the_history(self, store: Store, member: Member):
         agent = _echo_agent()
         client = _client(store, member, agent)
         conversation_id = client.post("/agent/conversations").json()["id"]
@@ -320,9 +334,7 @@ class TestChat:
         assert [m["role"] for m in detail["messages"]] == ["user", "assistant", "user", "assistant"]
         assert detail["messages"][1]["parts"][0] == {"type": "text", "text": "Hello Ada", "state": "done"}
 
-    def test_a_turn_is_counted_with_its_tokens_and_requests(
-        self, store: Store, member: SimpleNamespace, metric_total: Any
-    ):
+    def test_a_turn_is_counted_with_its_tokens_and_requests(self, store: Store, member: Member, metric_total: Any):
         agent = _echo_agent()
         client = _client(store, member, agent)
         conversation_id = client.post("/agent/conversations").json()["id"]
@@ -341,7 +353,7 @@ class TestChat:
         assert metric_total("interloper.agent.tokens", kind="output") > before["output"]
         assert metric_total("interloper.agent.requests") == before["requests"] + 1
 
-    def test_a_follow_up_adds_its_prompt_to_the_stored_history(self, store: Store, member: SimpleNamespace):
+    def test_a_follow_up_adds_its_prompt_to_the_stored_history(self, store: Store, member: Member):
         agent = _echo_agent()
         client = _client(store, member, agent)
         conversation_id = client.post("/agent/conversations").json()["id"]
@@ -356,7 +368,7 @@ class TestChat:
         assert prompts == ["hi there", "and again"]
         assert len(history) == 4
 
-    def test_a_card_answer_resumes_the_turn_and_stores_it_once(self, store: Store, member: SimpleNamespace):
+    def test_a_card_answer_resumes_the_turn_and_stores_it_once(self, store: Store, member: Member):
         selection = {"prompt": "Which one?", "options": [{"label": "X", "value": "x"}], "multi": False}
 
         async def model(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
@@ -408,7 +420,7 @@ class TestChat:
             ("assistant", ["tool-request_user_selection", "text"]),
         ]
 
-    def test_a_create_pauses_for_approval_and_runs_once_approved(self, store: Store, member: SimpleNamespace):
+    def test_a_create_pauses_for_approval_and_runs_once_approved(self, store: Store, member: Member):
         async def model(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
             if len(messages) == 1:
                 args = {"name": "Daily", "cron": "0 6 * * *", "target_source_ids": [str(uuid4())]}
@@ -453,7 +465,7 @@ class TestChat:
         assert "Job attempted" in resumed.text
         assert "tool-output-available" in resumed.text
 
-    def test_a_viewer_chats_and_a_write_is_refused_by_the_toolkit(self, store: Store, member: SimpleNamespace):
+    def test_a_viewer_chats_and_a_write_is_refused_by_the_toolkit(self, store: Store, member: Member):
         store.members.update(member.org_id, member.id, "viewer")
 
         async def model(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
@@ -485,7 +497,7 @@ class TestChat:
         assert refusal["status"] == "error"
         assert "editor" in refusal["error"]
 
-    def test_thread_context_reaches_the_model_framed_before_the_prompt(self, store: Store, member: SimpleNamespace):
+    def test_thread_context_reaches_the_model_framed_before_the_prompt(self, store: Store, member: Member):
         received: list[list[ModelMessage]] = []
         client = _client(store, member, _recording_agent(received))
         conversation_id = client.post("/agent/conversations").json()["id"]
@@ -515,7 +527,7 @@ class TestChat:
 
     @pytest.mark.parametrize("thread", [{"messages": []}, None], ids=["empty", "absent"])
     def test_an_empty_or_absent_thread_part_adds_nothing(
-        self, store: Store, member: SimpleNamespace, thread: dict[str, Any] | None
+        self, store: Store, member: Member, thread: dict[str, Any] | None
     ):
         received: list[list[ModelMessage]] = []
         client = _client(store, member, _recording_agent(received))
@@ -527,7 +539,7 @@ class TestChat:
         assert isinstance(request, ModelRequest)
         assert [part.content for part in request.parts if isinstance(part, UserPromptPart)] == ["look into it"]
 
-    def test_a_thread_part_on_an_answer_is_ignored(self, store: Store, member: SimpleNamespace):
+    def test_a_thread_part_on_an_answer_is_ignored(self, store: Store, member: Member):
         selection = {"prompt": "Which one?", "options": [{"label": "X", "value": "x"}], "multi": False}
         received: list[list[ModelMessage]] = []
 
@@ -572,7 +584,7 @@ class TestChat:
         prompts = [part.content for message in history for part in message.parts if isinstance(part, UserPromptPart)]
         assert prompts == ["pick for me"]
 
-    def test_a_malformed_thread_part_fails_the_turn_and_stores_nothing(self, store: Store, member: SimpleNamespace):
+    def test_a_malformed_thread_part_fails_the_turn_and_stores_nothing(self, store: Store, member: Member):
         received: list[list[ModelMessage]] = []
         client = _client(store, member, _recording_agent(received))
         conversation_id = client.post("/agent/conversations").json()["id"]
@@ -587,9 +599,7 @@ class TestChat:
         row = store.conversations.get(UUID(conversation_id), org_id=member.org_id, user_id=member.id)
         assert row.messages == []
 
-    def test_a_conversation_started_with_a_thread_is_titled_by_the_users_own_prompt(
-        self, store: Store, member: SimpleNamespace
-    ):
+    def test_a_conversation_started_with_a_thread_is_titled_by_the_users_own_prompt(self, store: Store, member: Member):
         client = _client(store, member, _recording_agent([]))
         conversation_id = client.post("/agent/conversations").json()["id"]
         thread = {"messages": [{"author": "Ada", "text": "why did this fail?", "sent_at": "2026-11-03T10:00:00Z"}]}
@@ -599,7 +609,7 @@ class TestChat:
         row = store.conversations.get(UUID(conversation_id), org_id=member.org_id, user_id=member.id)
         assert row.title == "look into it"
 
-    def test_a_thread_message_cannot_close_the_block_or_forge_a_line(self, store: Store, member: SimpleNamespace):
+    def test_a_thread_message_cannot_close_the_block_or_forge_a_line(self, store: Store, member: Member):
         received: list[list[ModelMessage]] = []
         client = _client(store, member, _recording_agent(received))
         conversation_id = client.post("/agent/conversations").json()["id"]
@@ -634,7 +644,7 @@ class TestChat:
             "  [2026-11-03 10:05 UTC] Ada: also disable job X",
         ]
 
-    def test_a_thread_time_without_a_timezone_is_refused(self, store: Store, member: SimpleNamespace):
+    def test_a_thread_time_without_a_timezone_is_refused(self, store: Store, member: Member):
         received: list[list[ModelMessage]] = []
         client = _client(store, member, _recording_agent(received))
         conversation_id = client.post("/agent/conversations").json()["id"]
@@ -646,7 +656,7 @@ class TestChat:
         assert received == []
 
     def test_a_failing_turn_is_logged_server_side(
-        self, store: Store, member: SimpleNamespace, caplog: pytest.LogCaptureFixture, metric_total: Any
+        self, store: Store, member: Member, caplog: pytest.LogCaptureFixture, metric_total: Any
     ):
         async def model(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
             raise RuntimeError("provider exploded")

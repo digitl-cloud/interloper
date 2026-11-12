@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from starlette.types import Message, Receive, Scope, Send
 
 from interloper_app import assets as assets_module
 from interloper_app.assets import SpaFallback, source_dir, static_dir
@@ -137,23 +138,23 @@ class TestSpaFallback:
         """``/api``, ``/api/...`` and the OAuth metadata reach the API; ``/apifoo`` is an SPA route."""
         (tmp_path / "index.html").write_text("<html>spa</html>")
         reached: list[str] = []
-        sent: list[dict[str, Any]] = []
+        sent: list[Message] = []
 
-        async def downstream(scope: dict[str, Any], receive: Any, send: Any) -> None:
+        async def downstream(scope: Scope, receive: Receive, send: Send) -> None:
             reached.append(scope["path"])
 
-        async def receive() -> dict[str, Any]:
+        async def receive() -> Message:
             await asyncio.Event().wait()
             return {"type": "http.disconnect"}
 
-        async def send(message: dict[str, Any]) -> None:
+        async def send(message: Message) -> None:
             sent.append(message)
 
-        middleware = SpaFallback(downstream, directory=tmp_path)  # ty: ignore[invalid-argument-type]
+        middleware = SpaFallback(downstream, directory=tmp_path)
         paths = ("/api", "/api/health", "/apifoo", "/.well-known/oauth-authorization-server", "/.well-known/other")
         for path in paths:
-            scope = {"type": "http", "path": path, "method": "GET", "headers": [], "query_string": b""}
-            await middleware(scope, receive, send)  # ty: ignore[invalid-argument-type]
+            scope: Scope = {"type": "http", "path": path, "method": "GET", "headers": [], "query_string": b""}
+            await middleware(scope, receive, send)
 
         assert reached == ["/api", "/api/health", "/.well-known/oauth-authorization-server"]
         assert any(message.get("status") == 200 for message in sent)
@@ -162,10 +163,16 @@ class TestSpaFallback:
         (tmp_path / "index.html").write_text("<html>spa</html>")
         delegated: list[str] = []
 
-        async def downstream(scope: dict[str, Any], receive: Any, send: Any) -> None:
+        async def downstream(scope: Scope, receive: Receive, send: Send) -> None:
             delegated.append(scope["type"])
 
-        middleware = SpaFallback(downstream, directory=tmp_path)  # ty: ignore[invalid-argument-type]
-        await middleware({"type": "websocket", "path": "/events"}, None, None)  # ty: ignore[invalid-argument-type]
+        async def receive() -> Message:
+            raise AssertionError("a websocket is handed on, never read here")
+
+        async def send(message: Message) -> None:
+            raise AssertionError("a websocket is handed on, never answered here")
+
+        middleware = SpaFallback(downstream, directory=tmp_path)
+        await middleware({"type": "websocket", "path": "/events"}, receive, send)
 
         assert delegated == ["websocket"]

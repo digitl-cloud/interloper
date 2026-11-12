@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from collections.abc import Callable
 
 import interloper as il
 from interloper.events import Event, EventBus, EventType
@@ -15,11 +16,11 @@ def orders(context: il.ExecutionContext) -> list:  # noqa: D103
     return []
 
 
-def _capture(emit: object) -> list[Event]:
+def _capture(emit: Callable[[], object]) -> list[Event]:
     captured: list[Event] = []
     EventBus.subscribe(captured.append)
     try:
-        emit()  # ty: ignore[call-non-callable]
+        emit()
         EventBus.flush(timeout=5.0)
     finally:
         EventBus.unsubscribe(captured.append)

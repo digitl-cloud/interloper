@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
+from interloper_db.models import Profile
 
 from interloper_api.notifications import SuperAdminPromotionEmail
+
+
+def _profile(name: str | None, email: str) -> Profile:
+    return Profile(email=email, name=name, google_id=f"g-{email}")
 
 
 def _email(promoted_name: str = "Ada Lovelace", promoted_by: str = "Grace Hopper") -> SuperAdminPromotionEmail:
@@ -18,12 +22,9 @@ def _email(promoted_name: str = "Ada Lovelace", promoted_by: str = "Grace Hopper
 
 
 def test_from_promotion_links_back_to_the_admin_portal():
-    promoted = SimpleNamespace(name="Ada", email="ada@example.com")
-    promoted_by = SimpleNamespace(name="Grace", email="grace@example.com")
-
     email = SuperAdminPromotionEmail.from_promotion(
-        promoted,  # ty: ignore[invalid-argument-type]
-        promoted_by=promoted_by,  # ty: ignore[invalid-argument-type]
+        _profile("Ada", "ada@example.com"),
+        promoted_by=_profile("Grace", "grace@example.com"),
         base_url="https://app.example.com/",
     )
 
@@ -34,8 +35,8 @@ def test_from_promotion_links_back_to_the_admin_portal():
 
 def test_nameless_profiles_are_named_by_email():
     email = SuperAdminPromotionEmail.from_promotion(
-        SimpleNamespace(name=None, email="ada@example.com"),  # ty: ignore[invalid-argument-type]
-        promoted_by=SimpleNamespace(name=None, email="grace@example.com"),  # ty: ignore[invalid-argument-type]
+        _profile(None, "ada@example.com"),
+        promoted_by=_profile(None, "grace@example.com"),
         base_url="https://x",
     )
 

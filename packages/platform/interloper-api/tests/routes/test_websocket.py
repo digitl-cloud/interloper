@@ -10,14 +10,16 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import Iterator
 from types import SimpleNamespace
 from typing import Any, Self
 from uuid import uuid4
 
 import pytest
-from fastapi import FastAPI, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.testclient import TestClient
 from interloper_db import Audience
+from starlette.types import Message
 
 from interloper_api.app import ORG_PREFIX, install_error_handlers
 from interloper_api.dependencies import get_store
@@ -27,31 +29,54 @@ from interloper_api.routes.websocket import ConnectionManager
 _ORG_ID = uuid4()
 
 
-class FakeWebSocket:
-    """Records what the manager sends it; can be made to fail mid-broadcast."""
+class FakeWebSocket(WebSocket):
+    """A socket that records what the manager sends it; can be made to fail mid-broadcast."""
 
     def __init__(self, fail: bool = False) -> None:
-        """Set up the fake.
+        """Set up the fake over a websocket scope nothing is ever received from.
 
         Args:
             fail: Whether ``send_json`` raises, standing in for a peer that
                 vanished between the snapshot and the send.
         """
+        super().__init__({"type": "websocket"}, self._nothing_received, self._nothing_sent)
         self.sent: list[dict[str, object]] = []
         self._fail = fail
 
-    async def send_json(self, message: dict[str, object]) -> None:
+    async def send_json(self, data: Any, mode: str = "text") -> None:
         """Record or refuse the message.
 
         Args:
-            message: The payload being broadcast.
+            data: The payload being broadcast.
+            mode: The frame type, unused.
 
         Raises:
             RuntimeError: When this fake is configured to fail.
         """
         if self._fail:
             raise RuntimeError("peer is gone")
-        self.sent.append(message)
+        self.sent.append(data)
+
+    @staticmethod
+    async def _nothing_received() -> Message:
+        """Refuse a receive: the manager only ever sends.
+
+        Raises:
+            AssertionError: Always.
+        """
+        raise AssertionError("the manager never receives")
+
+    @staticmethod
+    async def _nothing_sent(message: Message) -> None:
+        """Refuse a raw send: the manager sends JSON, which this fake records.
+
+        Args:
+            message: The ASGI message.
+
+        Raises:
+            AssertionError: Always.
+        """
+        raise AssertionError("the manager sends through send_json")
 
 
 class TestConnectionManager:
@@ -60,8 +85,8 @@ class TestConnectionManager:
     async def test_a_broadcast_reaches_every_connection_of_the_org(self) -> None:
         manager = ConnectionManager()
         first, second = FakeWebSocket(), FakeWebSocket()
-        await manager.connect(first, "org-1")  # ty: ignore[invalid-argument-type]
-        await manager.connect(second, "org-1")  # ty: ignore[invalid-argument-type]
+        await manager.connect(first, "org-1")
+        await manager.connect(second, "org-1")
 
         await manager.broadcast("org-1", {"table": "runs"})
 
@@ -71,8 +96,8 @@ class TestConnectionManager:
     async def test_organisations_are_isolated(self) -> None:
         manager = ConnectionManager()
         mine, theirs = FakeWebSocket(), FakeWebSocket()
-        await manager.connect(mine, "org-1")  # ty: ignore[invalid-argument-type]
-        await manager.connect(theirs, "org-2")  # ty: ignore[invalid-argument-type]
+        await manager.connect(mine, "org-1")
+        await manager.connect(theirs, "org-2")
 
         await manager.broadcast("org-1", {"table": "runs"})
 
@@ -85,9 +110,9 @@ class TestConnectionManager:
     async def test_a_disconnected_socket_stops_receiving(self) -> None:
         manager = ConnectionManager()
         socket = FakeWebSocket()
-        await manager.connect(socket, "org-1")  # ty: ignore[invalid-argument-type]
+        await manager.connect(socket, "org-1")
 
-        await manager.disconnect(socket, "org-1")  # ty: ignore[invalid-argument-type]
+        await manager.disconnect(socket, "org-1")
         await manager.broadcast("org-1", {"table": "runs"})
 
         assert socket.sent == []
@@ -95,24 +120,24 @@ class TestConnectionManager:
     async def test_the_last_disconnect_drops_the_org_entry(self) -> None:
         manager = ConnectionManager()
         socket = FakeWebSocket()
-        await manager.connect(socket, "org-1")  # ty: ignore[invalid-argument-type]
+        await manager.connect(socket, "org-1")
 
-        await manager.disconnect(socket, "org-1")  # ty: ignore[invalid-argument-type]
+        await manager.disconnect(socket, "org-1")
 
         assert manager._connections == {}
 
     async def test_disconnecting_an_unregistered_socket_is_a_no_op(self) -> None:
         manager = ConnectionManager()
 
-        await manager.disconnect(FakeWebSocket(), "org-nobody")  # ty: ignore[invalid-argument-type]
+        await manager.disconnect(FakeWebSocket(), "org-nobody")
 
     async def test_one_dead_peer_does_not_stop_the_others(self) -> None:
         # The dead socket's own disconnect handler unregisters it; a failed
         # send must not abort the rest of the broadcast.
         manager = ConnectionManager()
         dead, alive = FakeWebSocket(fail=True), FakeWebSocket()
-        await manager.connect(dead, "org-1")  # ty: ignore[invalid-argument-type]
-        await manager.connect(alive, "org-1")  # ty: ignore[invalid-argument-type]
+        await manager.connect(dead, "org-1")
+        await manager.connect(alive, "org-1")
 
         await manager.broadcast("org-1", {"table": "runs"})
 
@@ -122,8 +147,8 @@ class TestConnectionManager:
         manager = ConnectionManager()
         socket = FakeWebSocket()
 
-        await manager.connect(socket, "org-1")  # ty: ignore[invalid-argument-type]
-        await manager.connect(socket, "org-1")  # ty: ignore[invalid-argument-type]
+        await manager.connect(socket, "org-1")
+        await manager.connect(socket, "org-1")
         await manager.broadcast("org-1", {"table": "runs"})
 
         assert socket.sent == [{"table": "runs"}]
@@ -203,7 +228,19 @@ class FakeConnection:
 
 
 @pytest.fixture
-def listener_harness(monkeypatch: pytest.MonkeyPatch) -> Any:
+def listener_loop() -> Iterator[asyncio.AbstractEventLoop]:
+    """The loop the listener is handed; it never runs, since scheduling onto it is faked.
+
+    Yields:
+        A new event loop, closed once the test finishes.
+    """
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
+
+
+@pytest.fixture
+def listener_harness(monkeypatch: pytest.MonkeyPatch, listener_loop: asyncio.AbstractEventLoop) -> Any:
     """Drive ``_start_notify_listener`` through exactly one pass, then stop it.
 
     ``select`` succeeds once and raises on the second call, so the notify
@@ -212,6 +249,7 @@ def listener_harness(monkeypatch: pytest.MonkeyPatch) -> Any:
 
     Args:
         monkeypatch: Fixture used to swap psycopg2, select and sleep.
+        listener_loop: The loop the listener is handed.
 
     Returns:
         A callable taking the notification payloads and returning the
@@ -246,7 +284,7 @@ def listener_harness(monkeypatch: pytest.MonkeyPatch) -> Any:
         monkeypatch.setattr(websocket_module, "time", SimpleNamespace(sleep=fake_sleep))
 
         with pytest.raises(StopListener):
-            websocket_module._start_notify_listener("postgresql://x", object())  # ty: ignore[invalid-argument-type]
+            websocket_module._start_notify_listener("postgresql://x", listener_loop)
 
         return {"connection": connection, "executed": executed, "scheduled": scheduled}
 
@@ -308,7 +346,10 @@ class TestNotifyListener:
         assert result["scheduled"] == [str(_ORG_ID)]
 
     def test_a_connection_failure_is_logged_and_retried(
-        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+        listener_loop: asyncio.AbstractEventLoop,
     ) -> None:
         # This thread is the only realtime path, so nothing may escape it.
         def failing_connect(dsn: str) -> None:
@@ -321,7 +362,7 @@ class TestNotifyListener:
         monkeypatch.setattr(websocket_module, "time", SimpleNamespace(sleep=fake_sleep))
 
         with caplog.at_level("ERROR", logger="interloper_api.routes.websocket"), pytest.raises(StopListener):
-            websocket_module._start_notify_listener("postgresql://x", object())  # ty: ignore[invalid-argument-type]
+            websocket_module._start_notify_listener("postgresql://x", listener_loop)
 
         assert "postgres is down" in caplog.text
         assert "reconnecting in 5s" in caplog.text

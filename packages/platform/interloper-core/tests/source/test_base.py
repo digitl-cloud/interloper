@@ -1027,11 +1027,11 @@ class TestSpecRule:
 
         rebuilt = il.CronJob.from_spec(job.to_spec())
         rebuilt_shop, rebuilt_finance = rebuilt.targets
-        assert rebuilt_finance.revenue.orders is rebuilt_shop.orders  # ty: ignore[missing-union-attribute]
+        assert isinstance(rebuilt_shop, Shop)
+        assert isinstance(rebuilt_finance, Finance)
+        assert rebuilt_finance.revenue.orders is rebuilt_shop.orders
         assert rebuilt_shop.destinations[0] is rebuilt_finance.destinations[0]
-        assert rebuilt_shop.orders.destinations == [  # ty: ignore[missing-union-attribute]
-            rebuilt_shop.destinations[0]
-        ]
+        assert rebuilt_shop.orders.destinations == [rebuilt_shop.destinations[0]]
 
     def test_resolve_supplies_a_reference_inside_an_asset_override(self):
         shop = Shop(connection=FakeConnection(token="t"))

@@ -13,10 +13,12 @@ from typing import Any
 
 import interloper_api.server
 import pytest
+import sqlalchemy
 from interloper.catalog import Catalog
 from interloper.settings import ServerSettings
 from interloper_api import ApiServer
 from interloper_api.settings import ApiSettings
+from interloper_db import Store
 from interloper_scheduler.settings import SchedulerSettings
 
 import interloper_app.services as services_module
@@ -76,13 +78,9 @@ def _app(**overrides: Any) -> App:
     toggles: dict[str, Any] = {"api": False, "cron": False, "worker": False, "reaper": False}
     toggles |= {"dev": False, "port": None}
     toggles.update(overrides)
-    return App.from_settings(
-        ApiSettings.get(),
-        SchedulerSettings.get(),
-        store=object(),  # ty: ignore[invalid-argument-type]
-        catalog=Catalog(),
-        **toggles,
-    )
+    catalog = Catalog()
+    store = Store(catalog, engine=sqlalchemy.create_engine("sqlite://"))
+    return App.from_settings(ApiSettings.get(), SchedulerSettings.get(), store=store, catalog=catalog, **toggles)
 
 
 class TestApiPort:
@@ -323,14 +321,18 @@ class TestDevServer:
 
         DevServer._kill_process_group(process, signal.SIGTERM)
 
-    def test_kill_process_group_tolerates_a_vanished_group(self) -> None:
-        class VanishedProcess:
-            pid = 2**31 - 1
+    def test_kill_process_group_tolerates_a_vanished_group(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # The group can exit between the poll and the signal.
+        def vanished(pid: int, signal_number: int) -> None:
+            raise ProcessLookupError(pid)
 
-            def poll(self) -> int | None:
-                return None
-
-        DevServer._kill_process_group(VanishedProcess(), signal.SIGTERM)  # ty: ignore[invalid-argument-type]
+        process = subprocess.Popen(["/bin/sh", "-c", "sleep 30"], start_new_session=True)
+        try:
+            monkeypatch.setattr(services_module.os, "killpg", vanished)
+            DevServer._kill_process_group(process, signal.SIGTERM)
+        finally:
+            process.kill()
+            process.wait(timeout=5)
 
     def test_port_in_use_detects_an_ipv4_listener(self) -> None:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
