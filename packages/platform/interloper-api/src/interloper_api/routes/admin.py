@@ -20,6 +20,7 @@ from uuid import UUID
 
 from authlib.oauth2.rfc7591 import InvalidRedirectURIError
 from fastapi import APIRouter, HTTPException, Query, Request, Response
+from interloper.catalog import Catalog
 from interloper.settings import SETTINGS, Settings
 from interloper_db import Organisation, OrganisationQuery, Page, PageQuery, Profile, ProfileQuery, UsageQuery
 from interloper_db.models import OAuthClient
@@ -365,7 +366,7 @@ class AdminConfigResponse(BaseModel):
     sections: list[AdminSettingsSection]
 
     @classmethod
-    def from_declared(cls, features: dict[str, bool], catalog: Any = None) -> AdminConfigResponse:
+    def from_declared(cls, features: dict[str, bool], catalog: Catalog) -> AdminConfigResponse:
         """Build the redacted snapshot served by ``GET /admin/config`` from every declared settings section.
 
         A section shows the values of the fields it lists as public and, for
@@ -378,8 +379,7 @@ class AdminConfigResponse(BaseModel):
 
         Args:
             features: Optional-feature flags keyed by feature name.
-            catalog: The hydrated catalog to report, or ``None`` to report an
-                empty one (the snapshot is then built without catalog access).
+            catalog: The hydrated catalog to report.
 
         Returns:
             The snapshot, ready to serve as-is.
@@ -396,7 +396,7 @@ class AdminConfigResponse(BaseModel):
         return cls(
             version=version,
             features=features,
-            catalog=_catalog_by_kind(catalog) if catalog is not None else {},
+            catalog=_catalog_by_kind(catalog),
             sections=sections,
         )
 
@@ -404,7 +404,7 @@ class AdminConfigResponse(BaseModel):
 # -- Config snapshot -----------------------------------------------------------
 
 
-def _catalog_by_kind(catalog: Any) -> dict[str, list[str]]:
+def _catalog_by_kind(catalog: Catalog) -> dict[str, list[str]]:
     """Group the hydrated catalog's component keys by kind, both sorted.
 
     Args:
@@ -481,12 +481,7 @@ def get_instance_config(user: SuperAdminDep, state: StateDep) -> AdminConfigResp
 
     Returns:
         The instance-config snapshot.
-
-    Raises:
-        HTTPException: 503 when no snapshot was built at startup.
     """
-    if state.admin_config is None:
-        raise HTTPException(status_code=503, detail="Instance configuration not available")
     return state.admin_config
 
 

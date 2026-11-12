@@ -29,7 +29,7 @@ from fastapi import APIRouter, Cookie, FastAPI, HTTPException, WebSocket, WebSoc
 from interloper_db import Store
 from starlette.concurrency import run_in_threadpool
 
-from interloper_api.dependencies import get_caller_credential, get_org_scope, get_state, get_store
+from interloper_api.dependencies import StoreDep, get_caller_credential, get_org_scope
 
 logger = logging.getLogger(__name__)
 org_router = APIRouter(tags=["websocket"])
@@ -264,6 +264,7 @@ class Subscription:
 async def websocket_endpoint(
     websocket: WebSocket,
     org_id: UUID,
+    store: StoreDep,
     session_token: str | None = Cookie(default=None),
 ) -> None:
     """Authenticate and authorise the caller in the path's organisation, then stream its table changes.
@@ -278,7 +279,7 @@ async def websocket_endpoint(
     Args:
         websocket: The incoming WebSocket connection.
         org_id: The organisation whose changes are streamed, from the path.
+        store: The store the caller is authenticated and authorised against.
         session_token: The session cookie value.
     """
-    store = get_store(get_state(websocket))
     await Subscription(websocket, org_id, store, session_token, websocket.headers.get("authorization")).serve()

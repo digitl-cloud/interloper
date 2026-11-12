@@ -56,7 +56,7 @@ class Launcher(ABC):
         runner: RunnerSettings,
         reaper: ReaperSettings,
         catalog: Catalog | None,
-        store: Any | None = None,
+        store: Store | None = None,
     ) -> Launcher:
         """Construct the launcher the settings describe.
 
@@ -194,7 +194,7 @@ class InProcessLauncher(Launcher):
         runner: RunnerSettings,
         reaper: ReaperSettings,
         catalog: Catalog | None,
-        store: Any | None = None,
+        store: Store | None = None,
     ) -> InProcessLauncher:
         """Construct from settings; uses the runner config, the liveness settings and the shared store.
 

@@ -12,6 +12,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from interloper.catalog import Catalog
 from interloper_agent.settings import AgentSettings
 from interloper_db import Audience, Profile, Store
 
@@ -26,7 +27,7 @@ METADATA_CLIENT_ID = "https://claude.ai/oauth/claude-code-client-metadata"
 @pytest.fixture
 def client(oauth_store: Store, fake_settings: ApiSettings) -> TestClient:
     AgentSettings.get().enabled = False
-    return TestClient(create_app(store=oauth_store, settings=fake_settings))
+    return TestClient(create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings))
 
 
 @pytest.fixture

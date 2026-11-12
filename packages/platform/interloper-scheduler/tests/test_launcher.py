@@ -7,7 +7,7 @@ import threading
 import time
 from collections.abc import Callable
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import interloper as il
@@ -16,7 +16,7 @@ from interloper.errors import ConfigError
 from interloper.events import EventRecorder
 from interloper.runner.spec import RunSpec
 from interloper.settings import RunnerSettings, ServerSettings
-from interloper_db import NotFoundError, RunStatus
+from interloper_db import NotFoundError, RunStatus, Store
 from interloper_db.models import Run
 
 from interloper_scheduler.launcher import LAUNCHERS, InProcessLauncher, Launcher
@@ -119,6 +119,15 @@ class _Store:
         """Every event delivered, in order."""
         return [event for _, batch in self.batches for event in batch]
 
+    @property
+    def as_store(self) -> Store:
+        """This fake, typed as the store whose ``runs.spec`` and ``runs.ingest`` it stands in for.
+
+        Returns:
+            This fake.
+        """
+        return cast("Store", self)
+
 
 class TestInProcessLauncher:
     """A run launched in this process loads its spec and reports straight through the store."""
@@ -126,7 +135,7 @@ class TestInProcessLauncher:
     def test_a_launched_run_loads_its_spec_and_reports_every_event_through_ingest(self) -> None:
         run = _dispatched_run()
         store = _Store(_spec(run.id))
-        launcher = InProcessLauncher(runner_type="serial", store=store)  # ty: ignore[invalid-argument-type]
+        launcher = InProcessLauncher(runner_type="serial", store=store.as_store)
 
         launcher.launch(run, "ilr_unused")
 
@@ -139,7 +148,7 @@ class TestInProcessLauncher:
     def test_a_run_that_cannot_be_built_fails_with_the_reason(self, served: Exception | None) -> None:
         run = _dispatched_run()
         store = _Store(served)
-        launcher = InProcessLauncher(runner_type="serial", store=store)  # ty: ignore[invalid-argument-type]
+        launcher = InProcessLauncher(runner_type="serial", store=store.as_store)
 
         launcher.launch(run, "ilr_unused")
 
@@ -165,7 +174,7 @@ class TestInProcessLauncher:
             runner=RunnerSettings(type="serial"),
             reaper=ReaperSettings(heartbeat_interval=5, heartbeat_timeout=45),
             catalog=None,
-            store=store,
+            store=store.as_store,
         )
 
         launcher.launch(run, "ilr_unused")
@@ -177,7 +186,7 @@ class TestInProcessLauncher:
         run = _dispatched_run()
         store = _Store(_spec(run.id))
         store.runs.ingest = lambda run_id, batch: store._ingest(run_id, batch) and False
-        launcher = InProcessLauncher(runner_type="serial", store=store)  # ty: ignore[invalid-argument-type]
+        launcher = InProcessLauncher(runner_type="serial", store=store.as_store)
 
         with caplog.at_level(logging.INFO, logger="interloper_scheduler.launcher"):
             launcher.launch(run, "ilr_unused")
@@ -205,7 +214,7 @@ class TestInProcessLauncher:
 
         monkeypatch.setattr(EventRecorder, "finish", finish)
         run = _dispatched_run()
-        launcher = InProcessLauncher(runner_type="serial", store=_Store(_spec(run.id)))  # ty: ignore[invalid-argument-type]
+        launcher = InProcessLauncher(runner_type="serial", store=_Store(_spec(run.id)).as_store)
 
         with caplog.at_level(logging.ERROR, logger="interloper_scheduler.launcher"):
             launcher.launch(run, "ilr_unused")
@@ -228,7 +237,7 @@ class TestInProcessLauncher:
 
         monkeypatch.setattr(EventRecorder, "finish", finish)
         run = _dispatched_run()
-        launcher = InProcessLauncher(store=_Store(_spec(run.id)))  # ty: ignore[invalid-argument-type]
+        launcher = InProcessLauncher(store=_Store(_spec(run.id)).as_store)
 
         with tracer().start_as_current_span("interloper.launcher.launch") as span:
             launcher.launch(run, "ilr_unused")

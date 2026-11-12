@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from contextlib import AbstractContextManager
 from datetime import timedelta
-from typing import Any
 
 from interloper.catalog import Catalog
 from sqlalchemy import Engine
@@ -13,6 +13,7 @@ from sqlmodel import Session
 
 from interloper_db.engine import engine_from_settings, get_engine
 from interloper_db.session import transaction
+from interloper_db.settings import QuotaSettings
 from interloper_db.store.backfills import BackfillStore
 from interloper_db.store.components import ComponentStore, Hydrator
 from interloper_db.store.conversations import ConversationStore
@@ -65,9 +66,9 @@ class Store:
         self,
         catalog: Catalog,
         engine: Engine | None = None,
-        encrypt: Any | None = None,
-        decrypt: Any | None = None,
-        quota_defaults: Any | None = None,
+        encrypt: Callable[[bytes], bytes] | None = None,
+        decrypt: Callable[[bytes], bytes] | None = None,
+        quota_defaults: QuotaSettings | None = None,
         session_expiry: timedelta = timedelta(days=30),
         access_token_expiry: timedelta = timedelta(minutes=60),
         refresh_token_expiry: timedelta = timedelta(days=30),
@@ -78,10 +79,11 @@ class Store:
             catalog: Catalog instance. Required for hydration.
             engine: Database engine the store operates on. Defaults to the
                 already-initialized process engine.
-            encrypt: Optional callable ``(data: bytes) -> bytes`` for resource encryption.
-            decrypt: Optional callable ``(data: bytes) -> bytes`` for resource decryption.
-            quota_defaults: QuotaSettings-shaped default limits enforced when
-                an organisation has no override. None = everything unlimited.
+            encrypt: Encrypts a serialised resource payload; ``None`` for no
+                cipher, which makes resource persistence fail closed.
+            decrypt: Decrypts a stored resource payload; ``None`` for no cipher.
+            quota_defaults: The default limits enforced when an organisation
+                has no override; ``None`` leaves everything unlimited.
             session_expiry: How long a login session stays valid, 30 days by default.
             access_token_expiry: How long an OAuth access token stays valid,
                 60 minutes by default.

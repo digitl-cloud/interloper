@@ -177,9 +177,9 @@ def install_error_handlers(app: FastAPI) -> None:
 
 
 def create_app(
-    store: Store | None = None,
-    catalog: Catalog | None = None,
-    settings: ApiSettings | None = None,
+    store: Store,
+    catalog: Catalog,
+    settings: ApiSettings,
     cors_origins: list[str] | None = None,
     **kwargs: Any,
 ) -> FastAPI:
@@ -191,9 +191,9 @@ def create_app(
     Args:
         store: The ``Store`` instance for persistence.
         catalog: Catalog instance.
-        settings: Every section the API reads; with them, the factory also
-            builds the secrets-redacted snapshot of every declared section
-            for the super-admin ``/admin/config`` view. The agent routes
+        settings: Every section the API reads; the factory also builds the
+            secrets-redacted snapshot of every declared section for the
+            super-admin ``/admin/config`` view. The agent routes
             mount only when they enable the agent and the ``agent`` extra
             is installed.
         cors_origins: Allowed CORS origins. Only needed in dev mode for direct
@@ -250,35 +250,33 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     Args:
         app: The application being started; its state carries the store and
-            the settings, and an app built without either promotes no one.
+            the settings.
 
     Yields:
         None, while the application serves.
     """
     state: State = app.state.interloper
-    if state.store is not None and state.settings is not None:
-        promoted = await run_in_threadpool(
-            state.store.profiles.promote_super_admins, state.settings.auth.super_admin_emails
-        )
-        for profile in promoted:
-            logger.info("Promoted profile %s to super-admin.", profile.id)
+    emails = state.settings.auth.super_admin_emails
+    promoted = await run_in_threadpool(state.store.profiles.promote_super_admins, emails)
+    for profile in promoted:
+        logger.info("Promoted profile %s to super-admin.", profile.id)
     async with websocket.realtime_lifespan(app):
         yield
 
 
-def _mount_agent(api: APIRouter, settings: ApiSettings | None) -> str | None:
+def _mount_agent(api: APIRouter, settings: ApiSettings) -> str | None:
     """Mount the optional agent routes when the settings enable the agent.
 
     The conversation routes go under the organisation prefix, the tool list outside it.
 
     Args:
         api: The ``/api`` router to mount onto.
-        settings: The API's settings, or ``None`` for an app without the agent.
+        settings: The API's settings; ``agent`` is ``None`` without the agent package.
 
     Returns:
         The model the mounted agent runs on, or ``None`` when the routes are not mounted.
     """
-    if settings is None or settings.agent is None or not settings.agent.enabled:
+    if settings.agent is None or not settings.agent.enabled:
         logger.info("Agent routes not mounted: the agent is not enabled (agent.enabled).")
         return None
 
@@ -297,9 +295,9 @@ def _mount_agent(api: APIRouter, settings: ApiSettings | None) -> str | None:
 
 
 def _state(
-    store: Store | None,
-    catalog: Catalog | None,
-    settings: ApiSettings | None,
+    store: Store,
+    catalog: Catalog,
+    settings: ApiSettings,
     *,
     agent_model: str | None,
     google_login: GoogleLogin | None,
@@ -307,10 +305,9 @@ def _state(
     """Build the state the request dependencies read back.
 
     Args:
-        store: The ``Store`` instance, or ``None``.
-        catalog: Catalog instance, or ``None``.
-        settings: The API's settings, or ``None`` for neither an
-            authorization server nor an admin config snapshot.
+        store: The ``Store`` instance.
+        catalog: Catalog instance.
+        settings: The API's settings.
         agent_model: The model the mounted agent runs on, or ``None`` when
             the agent routes are not mounted; recorded as a feature flag and
             in the admin config snapshot.
@@ -326,53 +323,47 @@ def _state(
         from interloper_agent import build_agent
 
         agent = build_agent(agent_model)
-    if settings is None:
-        return State(store=store, catalog=catalog, agent=agent, features=features)
     return State(
         store=store,
         catalog=catalog,
         settings=settings,
+        admin_config=admin.AdminConfigResponse.from_declared(features=features, catalog=catalog),
         agent=agent,
         features=features,
-        admin_config=admin.AdminConfigResponse.from_declared(features=features, catalog=catalog),
         authorization_server=_authorization_server(store, settings),
         google_login=google_login,
     )
 
 
-def _google_login(settings: ApiSettings | None) -> GoogleLogin | None:
+def _google_login(settings: ApiSettings) -> GoogleLogin | None:
     """Build the Google login, when the deployment can run one.
 
     Args:
-        settings: The API's settings, or ``None``.
+        settings: The API's settings.
 
     Returns:
-        The login, or ``None`` without settings, without a Google client, or
-        without an encryption key (which signs the cookie the login keeps
-        between Google's two legs).
+        The login, or ``None`` without a Google client or without an
+        encryption key (which signs the cookie the login keeps between
+        Google's two legs).
     """
-    if settings is None:
-        return None
     google_login = GoogleLogin.from_settings(settings)
     if google_login is None and settings.auth.google_client_id and not settings.encryption.key:
         logger.warning("Google login unavailable: INTERLOPER_ENCRYPTION_KEY is not configured.")
     return google_login
 
 
-def _authorization_server(store: Store | None, settings: ApiSettings) -> AuthorizationServer | None:
+def _authorization_server(store: Store, settings: ApiSettings) -> AuthorizationServer | None:
     """Build the OAuth authorization server, when the deployment can run one.
 
     Args:
-        store: The ``Store`` instance, or ``None``.
+        store: The ``Store`` instance.
         settings: The API's settings.
 
     Returns:
-        The server, or ``None`` without a store, without an encryption key
-        (which seals the authorization request while the user decides), or
-        when the issuer is refused (plain http on a non-loopback host).
+        The server, or ``None`` without an encryption key (which seals the
+        authorization request while the user decides), or when the issuer is
+        refused (plain http on a non-loopback host).
     """
-    if store is None:
-        return None
     if not settings.encryption.key:
         logger.warning("OAuth authorization server not mounted: INTERLOPER_ENCRYPTION_KEY is not configured.")
         return None

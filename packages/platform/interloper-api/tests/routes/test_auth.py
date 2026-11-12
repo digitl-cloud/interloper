@@ -23,7 +23,7 @@ from joserfc import jwt
 from joserfc.jwk import KeySet, RSAKey
 
 from interloper_api.app import install_error_handlers
-from interloper_api.dependencies import get_caller, get_google_login, get_settings, get_store
+from interloper_api.dependencies import State, get_caller, get_features, get_google_login, get_settings, get_store
 from interloper_api.login import SESSION_COOKIE, SESSION_MAX_AGE, SESSION_PATH, GoogleLogin
 from interloper_api.routes import auth as auth_module
 from interloper_api.settings import AuthSettings
@@ -355,6 +355,7 @@ def _me_client(store: FakeProfileStore) -> TestClient:
     app.include_router(auth_module.router)
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_caller] = lambda: store.profile
+    app.dependency_overrides[get_features] = lambda: {"agent": False}
     return TestClient(app)
 
 
@@ -453,8 +454,9 @@ class TestGoogleLogin:
         assert response.status_code == 302
         assert response.headers["location"] == "/login?error=login_failed"
 
-    def test_a_deployment_without_a_login_answers_503(self) -> None:
+    def test_a_deployment_without_a_login_answers_503(self, app_state: State) -> None:
         app = FastAPI()
+        app.state.interloper = app_state
         install_error_handlers(app)
         app.include_router(auth_module.router, prefix="/api")
 
@@ -682,6 +684,7 @@ def _session_client(store: CallerStore) -> TestClient:
     app.include_router(auth_module.router)
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_settings] = lambda: SimpleNamespace(auth=_auth_config([], []))
+    app.dependency_overrides[get_features] = lambda: {"agent": False}
     client = TestClient(app, follow_redirects=False)
     client.cookies.set("session_token", "tok")
     return client

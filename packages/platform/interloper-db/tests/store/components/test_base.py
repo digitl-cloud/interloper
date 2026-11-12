@@ -16,6 +16,7 @@ from sqlmodel import Session, select
 
 from interloper_db import ComponentDriftError, HydrationError, InUseError, NotFoundError
 from interloper_db.models import Component
+from interloper_db.settings import QuotaSettings
 from interloper_db.store import ComponentQuery, RelationQuery, Store
 from interloper_db.store.components import ComponentStatus
 
@@ -874,9 +875,8 @@ class TestQuotaGates:
     """Capacity quotas gate source creation and the child-asset set size."""
 
     def _store(self, **limits: int | None) -> Store:
-        from types import SimpleNamespace
 
-        return Store(catalog=il.Catalog.from_assets([DemoSource]), quota_defaults=SimpleNamespace(**limits))
+        return Store(catalog=il.Catalog.from_assets([DemoSource]), quota_defaults=QuotaSettings.model_validate(limits))
 
     def test_source_limit_blocks_creation(self, component_db: Engine):
         from interloper_db import QuotaExceededError

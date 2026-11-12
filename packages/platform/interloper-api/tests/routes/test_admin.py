@@ -7,6 +7,7 @@ store stands in for persistence so these stay pure unit tests.
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from typing import Any
@@ -15,6 +16,8 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from interloper.catalog import Catalog
+from interloper.component import ComponentDefinition
 from interloper.settings import SETTINGS, Settings
 from interloper_db import NotFoundError, OrganisationQuery, Page, PageQuery, ProfileQuery, Store, UsageQuery
 from interloper_db.crypto import hash_token
@@ -244,7 +247,7 @@ def _field(section: admin_module.AdminSettingsSection, name: str) -> admin_modul
 
 
 def test_config_snapshot_redacts_secrets(fake_settings: ApiSettings) -> None:
-    snapshot = admin_module.AdminConfigResponse.from_declared(features={"agent": True})
+    snapshot = admin_module.AdminConfigResponse.from_declared(features={"agent": True}, catalog=Catalog())
     payload = snapshot.model_dump_json()
     secrets = (
         "oauth-secret",
@@ -264,7 +267,7 @@ def test_config_snapshot_redacts_secrets(fake_settings: ApiSettings) -> None:
 
 
 def test_config_snapshot_shows_every_declared_section(fake_settings: ApiSettings) -> None:
-    snapshot = admin_module.AdminConfigResponse.from_declared(features={"agent": True})
+    snapshot = admin_module.AdminConfigResponse.from_declared(features={"agent": True}, catalog=Catalog())
 
     assert [section.name for section in snapshot.sections] == sorted(Settings.declared())
     assert (_section(snapshot, "auth").extension, _section(snapshot, "server").extension) == ("api", "core")
@@ -272,7 +275,7 @@ def test_config_snapshot_shows_every_declared_section(fake_settings: ApiSettings
 
 
 def test_config_snapshot_shows_the_values_of_public_fields(fake_settings: ApiSettings) -> None:
-    snapshot = admin_module.AdminConfigResponse.from_declared(features={"agent": True})
+    snapshot = admin_module.AdminConfigResponse.from_declared(features={"agent": True}, catalog=Catalog())
 
     assert _field(_section(snapshot, "auth"), "allowed_domains").value == ["digitlcloud.com"]
     assert _field(_section(snapshot, "quota"), "max_successful_runs_per_month").value == 25
@@ -280,7 +283,9 @@ def test_config_snapshot_shows_the_values_of_public_fields(fake_settings: ApiSet
 
 
 def test_config_snapshot_reaches_public_keys_of_a_mapping_and_hides_the_rest(fake_settings: ApiSettings) -> None:
-    runner = _section(admin_module.AdminConfigResponse.from_declared(features={"agent": True}), "runner")
+    runner = _section(
+        admin_module.AdminConfigResponse.from_declared(features={"agent": True}, catalog=Catalog()), "runner"
+    )
 
     assert _field(runner, "config.max_workers").value == 8
     config = _field(runner, "config")
@@ -289,7 +294,8 @@ def test_config_snapshot_reaches_public_keys_of_a_mapping_and_hides_the_rest(fak
 
 
 def test_config_snapshot_reports_whether_a_field_is_configured(fake_settings: ApiSettings) -> None:
-    smtp = _section(admin_module.AdminConfigResponse.from_declared(features={"agent": True}), "smtp")
+    snapshot = admin_module.AdminConfigResponse.from_declared(features={"agent": True}, catalog=Catalog())
+    smtp = _section(snapshot, "smtp")
 
     assert _field(smtp, "host").configured is True
     assert _field(smtp, "port").configured is False
@@ -300,17 +306,16 @@ def test_config_snapshot_leaves_out_a_section_whose_package_cannot_be_imported(
 ) -> None:
     monkeypatch.setattr(admin_module, "SETTINGS", {name: cls for name, cls in SETTINGS.items() if name != "smtp"})
 
-    snapshot = admin_module.AdminConfigResponse.from_declared(features={"agent": True})
+    snapshot = admin_module.AdminConfigResponse.from_declared(features={"agent": True}, catalog=Catalog())
 
     assert "smtp" not in {section.name for section in snapshot.sections}
 
 
 def test_config_snapshot_reports_hydrated_catalog_by_kind(fake_settings: ApiSettings) -> None:
-    catalog = SimpleNamespace(
+    catalog = Catalog(
         components={
-            "demo": SimpleNamespace(kind="source"),
-            "csv": SimpleNamespace(kind="destination"),
-            "bigquery": SimpleNamespace(kind="destination"),
+            key: ComponentDefinition(kind=kind, key=key, path=f"tests:{key}", name=key)
+            for key, kind in (("demo", "source"), ("csv", "destination"), ("bigquery", "destination"))
         }
     )
     snapshot = admin_module.AdminConfigResponse.from_declared(features={"agent": True}, catalog=catalog)
@@ -326,7 +331,7 @@ def test_config_snapshot_leaves_the_version_unknown_without_an_installed_package
 
     monkeypatch.setattr(admin_module.metadata, "version", missing)
 
-    assert admin_module.AdminConfigResponse.from_declared({"agent": True}).version is None
+    assert admin_module.AdminConfigResponse.from_declared({"agent": True}, Catalog()).version is None
 
 
 def test_non_super_admin_cannot_read_config(store: FakeStore) -> None:
@@ -334,20 +339,15 @@ def test_non_super_admin_cannot_read_config(store: FakeStore) -> None:
     assert resp.status_code == 403
 
 
-def test_super_admin_reads_config(store: FakeStore, fake_settings: ApiSettings) -> None:
+def test_super_admin_reads_config(store: FakeStore, fake_settings: ApiSettings, app_state: State) -> None:
     app = _app(store, is_super_admin=True)
-    snapshot = admin_module.AdminConfigResponse.from_declared(features={"agent": True})
-    app.state.interloper = State(admin_config=snapshot)
+    snapshot = admin_module.AdminConfigResponse.from_declared(features={"agent": True}, catalog=Catalog())
+    app.state.interloper = dataclasses.replace(app_state, admin_config=snapshot)
     client = TestClient(app)
     resp = client.get("/admin/config")
     assert resp.status_code == 200
     auth = next(section for section in resp.json()["sections"] if section["name"] == "auth")
     assert next(field for field in auth["fields"] if field["name"] == "allowed_domains")["value"] == ["digitlcloud.com"]
-
-
-def test_config_unavailable_returns_503(store: FakeStore) -> None:
-    resp = _client(store, is_super_admin=True).get("/admin/config")
-    assert resp.status_code == 503
 
 
 def test_non_super_admin_cannot_read_quotas(store: FakeStore) -> None:

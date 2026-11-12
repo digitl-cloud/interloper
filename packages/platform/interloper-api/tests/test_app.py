@@ -5,11 +5,11 @@ from __future__ import annotations
 import sys
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from interloper.catalog import Catalog
 from interloper.errors import CatalogKeyError, ConfigError
 from interloper_agent.settings import AgentSettings
 from interloper_db import (
@@ -23,7 +23,6 @@ from interloper_db import (
 )
 
 from interloper_api.app import create_app, install_error_handlers
-from interloper_api.dependencies import get_store
 from interloper_api.routes import websocket as websocket_module
 from interloper_api.settings import ApiSettings
 
@@ -37,24 +36,23 @@ def test_a_plain_http_external_url_mounts_no_authorization_server(
     fake_settings.server.external_url = "http://interloper.example.com"
 
     with caplog.at_level("WARNING", logger="interloper_api.app"):
-        app = create_app(store=oauth_store, settings=fake_settings)
+        app = create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings)
 
     assert TestClient(app).get("/.well-known/oauth-authorization-server").status_code == 503
     assert "OAuth authorization server not mounted" in caplog.text
 
 
-def test_agent_routes_absent_when_disabled(fake_settings: ApiSettings):
+def test_agent_routes_absent_when_disabled(fake_settings: ApiSettings, oauth_store: Store):
     AgentSettings.get().enabled = False
-    app = create_app(settings=fake_settings)
+    app = create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings)
     client = TestClient(app)
 
     assert client.post(f"/api/organisations/{_ORG}/agent/conversations").status_code == 404
     assert app.state.interloper.features == {"agent": False}
 
 
-def test_agent_routes_mounted_when_enabled(fake_settings: ApiSettings):
-    app = create_app(settings=fake_settings)
-    app.dependency_overrides[get_store] = lambda: None
+def test_agent_routes_mounted_when_enabled(fake_settings: ApiSettings, oauth_store: Store):
+    app = create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings)
     client = TestClient(app)
 
     # 401 (not 404): the router is mounted and the auth guard answers first.
@@ -80,9 +78,8 @@ def test_agent_routes_mounted_when_enabled(fake_settings: ApiSettings):
         ("GET", "/api/auth/me"),
     ],
 )
-def test_the_reorganised_routes_are_mounted(fake_settings: ApiSettings, method: str, path: str):
-    app = create_app(settings=fake_settings)
-    app.dependency_overrides[get_store] = lambda: None
+def test_the_reorganised_routes_are_mounted(fake_settings: ApiSettings, method: str, path: str, oauth_store: Store):
+    app = create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings)
 
     # 401 (not 404): the route is mounted and the auth guard answers first.
     assert TestClient(app).request(method, path, json={}).status_code == 401
@@ -91,9 +88,8 @@ def test_the_reorganised_routes_are_mounted(fake_settings: ApiSettings, method: 
 @pytest.mark.parametrize(
     "path", ["/api/runs", "/api/components", "/api/catalog", "/api/overview", "/api/agent/conversations"]
 )
-def test_organisation_routes_are_gone_from_the_top_level(fake_settings: ApiSettings, path: str):
-    app = create_app(settings=fake_settings)
-    app.dependency_overrides[get_store] = lambda: None
+def test_organisation_routes_are_gone_from_the_top_level(fake_settings: ApiSettings, path: str, oauth_store: Store):
+    app = create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings)
 
     assert TestClient(app).get(path).status_code == 404
 
@@ -178,18 +174,24 @@ class TestErrorHandlers:
 class TestCreateApp:
     """Wiring ``create_app`` does beyond mounting the routers."""
 
-    def test_cors_origins_are_installed_when_given(self, fake_settings: ApiSettings) -> None:
-        app = create_app(settings=fake_settings, cors_origins=["http://localhost:3000"])
+    def test_cors_origins_are_installed_when_given(self, fake_settings: ApiSettings, oauth_store: Store) -> None:
+        app = create_app(
+            store=oauth_store, catalog=Catalog(), settings=fake_settings, cors_origins=["http://localhost:3000"]
+        )
 
         assert any("CORSMiddleware" in getattr(m.cls, "__name__", "") for m in app.user_middleware)
 
-    def test_no_cors_middleware_without_origins(self, fake_settings: ApiSettings) -> None:
-        app = create_app(settings=fake_settings)
+    def test_no_cors_middleware_without_origins(self, fake_settings: ApiSettings, oauth_store: Store) -> None:
+        app = create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings)
 
         assert not any("CORSMiddleware" in getattr(m.cls, "__name__", "") for m in app.user_middleware)
 
     def test_a_missing_agent_extra_is_reported_and_survived(
-        self, fake_settings: ApiSettings, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+        self,
+        fake_settings: ApiSettings,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+        oauth_store: Store,
     ) -> None:
         # An API-only image is built without the extra on purpose. The
         # submodule is already imported, so the parent package's attribute has
@@ -200,50 +202,43 @@ class TestCreateApp:
         monkeypatch.setitem(sys.modules, "interloper_api.routes.agent", None)
 
         with caplog.at_level("WARNING", logger="interloper_api.app"):
-            app = create_app(settings=fake_settings)
+            app = create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings)
 
         assert "the 'agent' extra is not installed" in caplog.text
         assert TestClient(app).post("/api/agent/conversations").status_code == 404
 
-    def test_the_agent_feature_flag_follows_the_mount(self, fake_settings: ApiSettings) -> None:
-        app = create_app(settings=fake_settings)
+    def test_the_agent_feature_flag_follows_the_mount(self, fake_settings: ApiSettings, oauth_store: Store) -> None:
+        app = create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings)
 
         assert app.state.interloper.features == {"agent": True}
 
-    def test_an_app_built_without_settings_holds_none(self) -> None:
-        state = create_app().state.interloper
-
-        assert state.settings is None
-        assert state.admin_config is None
-        assert state.authorization_server is None
-        assert state.google_login is None
-
-    def test_a_configured_google_login_keeps_its_session(self, fake_settings: ApiSettings) -> None:
-        app = create_app(settings=fake_settings)
+    def test_a_configured_google_login_keeps_its_session(self, fake_settings: ApiSettings, oauth_store: Store) -> None:
+        app = create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings)
 
         assert app.state.interloper.google_login is not None
         assert any("SessionMiddleware" in getattr(m.cls, "__name__", "") for m in app.user_middleware)
 
     def test_without_an_encryption_key_google_login_is_unavailable(
-        self, fake_settings: ApiSettings, caplog: pytest.LogCaptureFixture
+        self,
+        fake_settings: ApiSettings,
+        caplog: pytest.LogCaptureFixture,
+        oauth_store: Store,
     ) -> None:
         fake_settings.encryption.key = ""
 
         with caplog.at_level("WARNING", logger="interloper_api.app"):
-            app = create_app(settings=fake_settings)
+            app = create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings)
 
         assert "Google login unavailable: INTERLOPER_ENCRYPTION_KEY is not configured" in caplog.text
         assert not any("SessionMiddleware" in getattr(m.cls, "__name__", "") for m in app.user_middleware)
         assert TestClient(app).get("/api/auth/google", follow_redirects=False).status_code == 503
 
-    def test_a_supplied_store_and_catalog_are_installed(self, fake_settings: ApiSettings) -> None:
-        import interloper as il
+    def test_the_store_catalog_and_settings_are_installed(self, fake_settings: ApiSettings, oauth_store: Store) -> None:
+        catalog = Catalog(components={})
 
-        store, catalog = SimpleNamespace(name="s"), il.Catalog(components={})
+        app = create_app(store=oauth_store, catalog=catalog, settings=fake_settings)
 
-        app = create_app(store=store, catalog=catalog, settings=fake_settings)  # ty: ignore[invalid-argument-type]
-
-        assert app.state.interloper.store is store
+        assert app.state.interloper.store is oauth_store
         assert app.state.interloper.catalog is catalog
         assert app.state.interloper.settings is fake_settings
 
@@ -281,7 +276,7 @@ class TestStartup:
         AgentSettings.get().enabled = False
         listed = oauth_store.profiles.upsert(google_id="g-boss", email="boss@example.com", name="Boss")
         unlisted = oauth_store.profiles.upsert(google_id="g-other", email="other@example.com", name="Other")
-        app = create_app(store=oauth_store, settings=fake_settings)
+        app = create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings)
 
         with caplog.at_level("INFO", logger="interloper_api.app"):
             async with app.router.lifespan_context(app):
@@ -292,11 +287,14 @@ class TestStartup:
         assert "boss@example.com" not in caplog.text
         assert listener == [app]
 
-    async def test_an_app_built_without_a_store_still_starts_the_listener(
-        self, fake_settings: ApiSettings, listener: list[FastAPI]
+    async def test_the_listener_starts_with_the_app(
+        self,
+        fake_settings: ApiSettings,
+        listener: list[FastAPI],
+        oauth_store: Store,
     ) -> None:
         AgentSettings.get().enabled = False
-        app = create_app(settings=fake_settings)
+        app = create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings)
 
         async with app.router.lifespan_context(app):
             pass

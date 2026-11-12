@@ -14,6 +14,7 @@ import pytest
 from authlib.oauth2.rfc7636 import create_s256_code_challenge
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from interloper.catalog import Catalog
 from interloper_agent.settings import AgentSettings
 from interloper_db import Audience, Profile, Store
 
@@ -33,7 +34,7 @@ METADATA_CLIENT_ID = "https://claude.ai/oauth/claude-code-client-metadata"
 def client(oauth_store: Store, fake_settings: ApiSettings) -> TestClient:
     AgentSettings.get().enabled = False
     fake_settings.server.external_url = ISSUER
-    return TestClient(create_app(store=oauth_store, settings=fake_settings), follow_redirects=False)
+    return TestClient(create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings), follow_redirects=False)
 
 
 @pytest.fixture
@@ -669,7 +670,7 @@ def test_revoke_leaves_personal_tokens_alone(client: TestClient, oauth_store: St
 def test_an_unconfigured_server_answers_503(fake_settings: ApiSettings, oauth_store: Store):
     AgentSettings.get().enabled = False
     fake_settings.encryption.key = ""
-    client = TestClient(create_app(store=oauth_store, settings=fake_settings))
+    client = TestClient(create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings))
 
     assert client.get("/.well-known/oauth-authorization-server").status_code == 503
     assert client.post(f"{PREFIX}/token", data={"grant_type": "refresh_token"}).status_code == 503
@@ -719,7 +720,9 @@ def test_the_browser_steps_stay_same_origin(client: TestClient, path: str):
 
 def test_the_app_cors_policy_does_not_refuse_a_client_facing_endpoint(oauth_store: Store, fake_settings: ApiSettings):
     AgentSettings.get().enabled = False
-    app = create_app(store=oauth_store, settings=fake_settings, cors_origins=["http://localhost:3000"])
+    app = create_app(
+        store=oauth_store, catalog=Catalog(), settings=fake_settings, cors_origins=["http://localhost:3000"]
+    )
 
     preflight = TestClient(app).options(
         f"{PREFIX}/token", headers={"Origin": "https://inspector.example", "Access-Control-Request-Method": "POST"}
