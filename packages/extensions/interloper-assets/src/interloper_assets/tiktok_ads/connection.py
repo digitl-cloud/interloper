@@ -2,6 +2,7 @@ import os
 from functools import cached_property
 
 import interloper as il
+from interloper.errors import ConnectionCheckError
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.tiktok_ads.constants import BASE_URL
@@ -47,11 +48,17 @@ class TiktokAdsConnection(il.OAuthConnection):
         — alongside the connection's access token. Talks to the v1.3 API over the
         lightweight ``AsyncRESTClient`` (not the SDK) so it runs in the API process.
 
+        TikTok rejects a request with HTTP 200 and a non-zero ``code``, so the
+        status alone proves nothing. Its ``message`` names the cause (a token
+        issued to another app, a revoked token) and carries neither the secret
+        nor the token, so the connection check reports it as is.
+
         Returns:
             The options for the field's dropdown.
 
         Raises:
-            RuntimeError: If TikTok answers with a non-zero API code.
+            ConnectionCheckError: If TikTok answers with a non-zero API code,
+                carrying that code and TikTok's message.
 
         """
         app_id = os.environ.get("INTERLOPER_TIKTOK_CLIENT_ID", "")
@@ -61,7 +68,7 @@ class TiktokAdsConnection(il.OAuthConnection):
         response.raise_for_status()
         body = response.json()
         if body.get("code") != 0:
-            raise RuntimeError(f"TikTok API error: {body.get('message')}")
+            raise ConnectionCheckError(f"TikTok API error {body.get('code')}: {body.get('message')}")
 
         advertisers = body.get("data", {}).get("list", [])
         results = [
@@ -74,7 +81,8 @@ class TiktokAdsConnection(il.OAuthConnection):
         """Prove the credentials work by running the ``advertisers`` lookup.
 
         Returns:
-            True — any credential failure raises out of the lookup.
+            True — any credential failure raises out of the lookup, TikTok's
+            own rejection as a `ConnectionCheckError`.
         """
         await self.advertisers()
         return True
