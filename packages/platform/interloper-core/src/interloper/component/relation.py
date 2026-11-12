@@ -203,7 +203,9 @@ class Relation(BaseModel):
             """
             ...
 
-    def __init__(self, kind_or_class: str | list[str] | type = "", key: str | list[str] = "", /, **data: Any) -> None:
+    def __init__(
+        self, kind_or_class: str | list[str] | type[Component] = "", key: str | list[str] = "", /, **data: Any
+    ) -> None:
         """Build a relation from either a component class or explicit kind/key values.
 
         Args:
@@ -223,10 +225,7 @@ class Relation(BaseModel):
         if "name" in data:
             raise TypeError("Relation.name is stamped from the attribute the relation is declared under")
         if isinstance(kind_or_class, type):
-            data.update(
-                kind=kind_or_class.kind,  # ty: ignore[missing-attribute]
-                key=kind_or_class.key,  # ty: ignore[missing-attribute]
-            )
+            data.update(kind=kind_or_class.kind, key=kind_or_class.key)
         else:
             data.setdefault("kind", kind_or_class)
             data.setdefault("key", key)

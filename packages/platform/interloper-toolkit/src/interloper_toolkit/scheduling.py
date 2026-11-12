@@ -515,12 +515,12 @@ def backfill_timeline(
         runs = ctx.store.backfills.attempts(bid)
         total = len(runs)
 
-        started = [r for r in runs if r.started_at is not None]
-        durations = [_seconds(r.started_at, r.completed_at) for r in started if r.completed_at is not None]
+        spans = [(r.started_at, r.completed_at) for r in runs if r.started_at is not None]
+        durations = [_seconds(start, end) for start, end in spans if end is not None]
         by_status: dict[str, int] = {}
         for r in runs:
             by_status[r.status] = by_status.get(r.status, 0) + 1
-        first_start = min((r.started_at for r in started), default=None)  # ty: ignore[invalid-argument-type]
+        first_start = min((start for start, _ in spans), default=None)
 
         page = [
             AttemptTiming(
@@ -537,7 +537,7 @@ def backfill_timeline(
         ]
         return BackfillTimeline(
             backfill=backfill,
-            max_concurrent_runs=max_concurrent((r.started_at, r.completed_at) for r in started),  # ty: ignore[invalid-argument-type]
+            max_concurrent_runs=max_concurrent(spans),
             first_start_lag_s=_seconds(backfill.created_at, first_start),
             duration_p50_s=percentile([d for d in durations if d is not None], 50),
             duration_p90_s=percentile([d for d in durations if d is not None], 90),
