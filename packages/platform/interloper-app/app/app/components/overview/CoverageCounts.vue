@@ -17,7 +17,6 @@ const items = computed(() => stateCounts(props.counts))
             <UBadge :icon="count.icon"
                     :label="count.value.toLocaleString()"
                     :color="count.badge"
-                    variant="soft"
                     size="sm" />
         </UTooltip>
     </span>

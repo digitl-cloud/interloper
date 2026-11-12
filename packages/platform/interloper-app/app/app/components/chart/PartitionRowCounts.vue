@@ -16,7 +16,7 @@ const props = defineProps<{
     data: PartitionData[]
 }>()
 
-const colorMode = useColorMode()
+const theme = useChartTheme()
 
 function formatNumber(value: number): string {
     if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
@@ -29,11 +29,11 @@ const chartHeight = computed(() =>
 )
 
 const option = computed(() => {
-    const isDark = colorMode.value === 'dark'
-    const axisColor = isDark ? CHART_AXIS_COLORS.axis.dark : CHART_AXIS_COLORS.axis.light
-    const barColor = isDark ? CHART_AXIS_COLORS.bar.dark : CHART_AXIS_COLORS.bar.light
+    const { text, line, primary, fontFamily, fontSize, tooltip, resolve } = theme.value
+    const label = { color: text, fontFamily, fontSize }
 
     return {
+        textStyle: { fontFamily, fontSize },
         grid: {
             left: 'auto',
             right: 16,
@@ -42,43 +42,34 @@ const option = computed(() => {
             containLabel: true,
         },
         tooltip: {
+            ...tooltip,
             trigger: 'axis',
-            axisPointer: { type: 'shadow' },
+            axisPointer: { type: 'shadow', shadowStyle: { color: resolve('var(--ui-bg-elevated)') } },
             formatter: (params: any) => {
                 const item = params[0]
                 if (!item) return ''
                 const value = item.value?.toLocaleString?.() ?? item.value
-                return `<b>${item.name}</b><br/>${value} rows`
+                return `${item.name}<br/>${value} rows`
             },
         },
         xAxis: {
             type: 'category',
             data: props.data.map(d => d.partition),
-            axisLabel: {
-                color: axisColor,
-                fontSize: 10,
-                rotate: props.data.length > 10 ? 45 : 0,
-            },
-            axisLine: { lineStyle: { color: axisColor } },
+            axisLabel: { ...label, rotate: props.data.length > 10 ? 45 : 0 },
+            axisLine: { lineStyle: { color: line } },
             axisTick: { show: false },
         },
         yAxis: {
             type: 'value',
-            axisLabel: {
-                color: axisColor,
-                fontSize: 10,
-                formatter: formatNumber,
-            },
-            splitLine: {
-                lineStyle: { color: isDark ? CHART_AXIS_COLORS.grid.dark : CHART_AXIS_COLORS.grid.light },
-            },
+            axisLabel: { ...label, formatter: formatNumber },
+            splitLine: { lineStyle: { color: line } },
         },
         series: [
             {
                 type: 'bar',
                 data: props.data.map(d => d.rowCount),
                 itemStyle: {
-                    color: barColor,
+                    color: primary,
                     borderRadius: [4, 4, 0, 0],
                 },
             },

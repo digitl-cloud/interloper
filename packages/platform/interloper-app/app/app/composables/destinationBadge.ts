@@ -17,13 +17,14 @@ export interface DestinationBadge {
 export function useDestinationBadge() {
     const componentsStore = useComponentsStore()
     const catalogStore = useCatalogStore()
+    const { icons } = useAppConfig()
 
     function getBadgeForDestinations(destinations: DestinationLike[]): DestinationBadge | null {
         if (destinations.length === 0) return null
 
         if (destinations.length > 1) {
             return {
-                icon: 'i-lucide-database',
+                icon: icons.destination,
                 label: `${destinations.length} destinations`,
                 count: destinations.length,
                 isMulti: true,
@@ -34,7 +35,7 @@ export function useDestinationBadge() {
         const defn = catalogStore.getDestinationDefinition(destination.key)
 
         return {
-            icon: defn?.icon ?? 'i-lucide-hard-drive',
+            icon: defn?.icon ?? icons.destination,
             label: destination.name ?? defn?.name ?? destination.key,
             count: 1,
             isMulti: false,

@@ -5,12 +5,18 @@ import type { Connection } from '@vue-flow/core'
 import type { ComponentRecord } from '~/types/component'
 import { requiredUpstreams } from '~/types/catalog'
 
+/**
+ * An asset card on the graph: name, status dot, description, tags and the
+ * latest status label, with corner badges for materializing, drift, warnings
+ * and destinations. Its target handle shows while the asset still needs an
+ * upstream, and both handles light up as drop targets during a connection drag.
+ */
 const props = defineProps<{
     asset: ComponentRecord
     assetDefn: AssetDefinition | undefined
-    /** Derived node status — reflected on the card border. */
+    /** Derived node status: the dot, and the border for the states that tint it. */
     status?: NodeStatus
-    /** VueFlow selection state — drives the blue selection ring. */
+    /** The open asset: drives the selection outline. */
     selected?: boolean
     /** Not owned by a source (a model over other assets): gets the function glyph. */
     standalone?: boolean
@@ -26,6 +32,7 @@ const { getBadgeForAssetId } = useDestinationBadge()
 const { statusBadge } = useDrift()
 const { confirm } = useConfirm()
 const toast = useToast()
+const appConfig = useAppConfig()
 
 const isMissing = computed(() => props.asset.status === 'missing')
 const driftBadge = computed(() => statusBadge(props.asset.status))
@@ -46,15 +53,11 @@ const isMaterializing = computed(() => materializingAssetIds?.value?.has(props.a
 const label = computed(() => props.asset.key)
 const description = computed(() => props.assetDefn?.description ?? '')
 const tags = computed(() => props.assetDefn?.tags ?? [])
+const state = computed<GraphNodeState>(() => props.status?.state ?? 'idle')
 const statusLabel = computed(() => props.status?.label ?? null)
-const statusTextClass = computed(() => {
-    switch (props.status?.state) {
-        case 'failed': return 'text-error'
-        case 'attention': return 'text-warning'
-        case 'running': return 'text-info'
-        default: return 'text-dimmed'
-    }
-})
+/** The status label takes its state's colour while the state is loud; otherwise it reads as meta. */
+const LOUD_TEXT: Partial<Record<StatusColor, string>> = { error: 'text-error', warning: 'text-warning', info: 'text-info' }
+const statusTextClass = computed(() => LOUD_TEXT[nodeStateColor(state.value)] ?? 'text-dimmed')
 const warnings = computed(() => getWarnings(props.asset.id, props.asset.key))
 const destinationBadge = computed(() => getBadgeForAssetId(props.asset.id))
 
@@ -106,14 +109,17 @@ const isRunnable = computed(() => {
 const showTargetHandle = computed(() => hasUpstream.value || !isRunnable.value || isValidTarget.value)
 const showSourceHandle = computed(() => hasDownstream.value || isValidSource.value)
 
-const frameClass = computed(() => ['border-[var(--graph-card-line)]', props.selected && 'outline-2 outline-primary outline-offset-4'])
+const frameClass = computed(() => [
+    statusBorderClass(state.value) || 'border-(--graph-card-line)',
+    props.selected && GRAPH_SELECTED_CLASS,
+])
 
 const contextMenuItems = computed<ContextMenuItem[][]>(() => {
     const items: ContextMenuItem[][] = [
         [
             {
                 label: 'View',
-                icon: 'i-lucide-eye',
+                icon: appConfig.ui.icons.eye,
                 onSelect: () => emit('view'),
             },
         ],
@@ -122,7 +128,7 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
         items.push([
             {
                 label: 'Disconnect upstream',
-                icon: 'i-lucide-unplug',
+                icon: 'i-lucide-unlink',
                 color: 'error' as const,
                 onSelect: async () => {
                     const confirmed = await confirm({
@@ -138,7 +144,7 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                             for (const d of deps) await componentsStore.removeRelation(d.src_id, d.name, d.dst_id)
                         }
                         catch (e) {
-                            toast.add(errorToast(e, 'Failed to disconnect upstream'))
+                            toast.add(errorToast(e, 'Couldn\'t disconnect upstream'))
                         }
                     }
                 },
@@ -151,8 +157,8 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
 
 <template>
     <UContextMenu :items="graphReadonly ? [] : contextMenuItems">
-        <div class="graph-node relative w-[256px] transition-opacity duration-200"
-             :class="shouldFade && 'opacity-25'">
+        <div class="graph-node relative w-64 transition-opacity duration-200"
+             :style="shouldFade ? { opacity: GRAPH_DIM_OPACITY } : undefined">
             <Handle v-if="showTargetHandle"
                     type="target"
                     :position="Position.Left"
@@ -161,47 +167,30 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                     :is-valid-connection="isValidConnection"
                     :class="[
                         'transition-all duration-150',
-                        isValidTarget && '!size-3 !bg-transparent !border-2 !border-warning animate-pulse-grow',
-                        !isRunnable && !isValidTarget && '!size-2.5 !bg-transparent !border-2 !border-warning animate-pulse-grow',
+                        isValidTarget && '!size-3 !bg-transparent !border-2 !border-primary animate-pulse-grow',
+                        !isRunnable && !isValidTarget && '!size-2.5 !bg-transparent !border-2 !border-warning',
                     ]" />
 
             <GraphCornerBadge v-if="isMaterializing"
-                              icon="i-lucide-loader-2"
+                              :icon="appConfig.ui.icons.loading"
                               corner="top-left"
                               spin>
-                <div class="text-xs">Materializing</div>
+                Materializing
             </GraphCornerBadge>
 
             <!-- Drift: the asset key no longer resolves against the catalog. -->
             <GraphCornerBadge v-if="isMissing"
-                              :icon="driftBadge?.icon ?? 'i-lucide-unplug'"
+                              :icon="driftBadge?.icon ?? appConfig.icons.drift"
                               corner="top-right"
                               tone="error">
-                <div class="text-xs">{{ driftBadge?.label }}</div>
+                {{ driftBadge?.label }}
             </GraphCornerBadge>
 
             <GraphCornerBadge v-if="warnings.length > 0 && !isMissing"
-                              icon="i-lucide-triangle-alert"
+                              :icon="appConfig.ui.icons.warning"
                               corner="top-right"
-                              tone="warning"
-                              :tooltip-ui="{ content: 'bg-transparent ring-0 shadow-none p-0 rounded-none' }">
-                <div class="rounded-lg border border-default bg-default shadow-lg overflow-hidden">
-                    <table class="text-xs w-full">
-                        <tbody>
-                            <tr v-for="(w, i) in warnings"
-                                :key="i"
-                                class="border-b border-default last:border-b-0">
-                                <td class="px-3 py-2">
-                                    <div class="flex items-center gap-2">
-                                        <UIcon name="i-lucide-circle-alert"
-                                               class="size-3.5 shrink-0 text-warning" />
-                                        <span>{{ w.message }}</span>
-                                    </div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                              tone="warning">
+                <CollectionWarnings :warnings="warnings" />
             </GraphCornerBadge>
 
             <GraphCornerBadge v-if="destinationBadge"
@@ -209,34 +198,31 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                               corner="bottom-right"
                               tone="primary"
                               :count="destinationBadge.count">
-                <div class="text-xs">{{ destinationBadge.label }}</div>
+                {{ destinationBadge.label }}
             </GraphCornerBadge>
 
-            <div class="graph-asset graph-raise graph-stack-floor overflow-hidden rounded-xl border bg-[var(--graph-node-bg)]"
+            <div class="graph-asset graph-raise graph-stack-floor flex h-32 flex-col overflow-hidden rounded-xl border bg-(--graph-node-bg)"
                  :class="frameClass">
-                <div class="flex h-10 items-center gap-[9px] border-b border-[var(--graph-head-line)] bg-elevated px-3.5">
-                    <span v-if="standalone"
-                          class="w-[15px] shrink-0 text-center font-serif text-[15px] italic leading-none text-[var(--graph-model)]">ƒ</span>
-                    <UIcon v-else
-                           name="i-lucide-box"
-                           class="size-[15px] shrink-0 text-primary" />
-                    <span class="min-w-0 truncate font-mono text-[12.5px] font-semibold text-highlighted">{{ label }}</span>
-                    <span class="size-[7px] shrink-0 rounded-full"
-                          :class="statusDotClass(status?.state ?? 'idle')" />
+                <div class="flex h-10 shrink-0 items-center gap-2 border-b border-(--graph-head-line) bg-elevated px-3">
+                    <UIcon :name="standalone ? 'i-lucide-square-function' : appConfig.icons.asset"
+                           class="size-4 shrink-0"
+                           :class="standalone ? 'text-(--graph-model)' : 'text-primary'" />
+                    <span class="min-w-0 truncate text-sm font-semibold text-highlighted">{{ label }}</span>
+                    <StatusDot :color="nodeStateColor(state)"
+                               :pulse="nodeStateExecuting(state)" />
                 </div>
-                <div class="flex flex-col gap-[9px] px-3.5 pb-3 pt-2.5">
-                    <p class="line-clamp-2 h-[35px] text-xs leading-[1.45] text-muted"
+                <div class="flex min-h-0 flex-1 flex-col justify-between p-3">
+                    <p class="line-clamp-2 h-8 text-xs text-muted"
                        :class="isMissing && 'italic text-dimmed'">{{ isMissing ? 'No catalog definition' : description }}</p>
-                    <div class="flex min-w-0 items-center gap-2">
+                    <div class="flex h-5 min-w-0 items-center gap-2">
                         <UBadge v-for="tag in tags"
                                 :key="tag"
-                                :color="tagColor(tag)"
-                                variant="soft"
+                                color="neutral"
                                 size="sm"
                                 class="shrink-0"
                                 :label="tag" />
                         <span v-if="statusLabel"
-                              class="min-w-0 truncate text-[10.5px]"
+                              class="min-w-0 truncate text-xs tabular-nums"
                               :class="statusTextClass">{{ statusLabel }}</span>
                     </div>
                 </div>
@@ -250,7 +236,7 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                     :is-valid-connection="isValidConnection"
                     :class="[
                         'transition-all duration-150',
-                        isValidSource && '!size-3 !bg-transparent !border-2 !border-warning animate-pulse-grow',
+                        isValidSource && '!size-3 !bg-transparent !border-2 !border-primary animate-pulse-grow',
                     ]" />
         </div>
     </UContextMenu>

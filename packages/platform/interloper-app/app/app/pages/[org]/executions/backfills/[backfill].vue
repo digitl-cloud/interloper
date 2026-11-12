@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
-import type { TableColumn } from '@nuxt/ui'
+import type { BreadcrumbItem, TableColumn } from '@nuxt/ui'
 import type { Page } from '~/composables/api'
 import type { Run } from '~/types/run'
 import type { Backfill } from '~/types/backfill'
 
 const PAGE_SIZE = 50
 
-const UBadge = resolveComponent('UBadge')
+const StatusBadge = resolveComponent('StatusBadge')
 
 const route = useRoute()
 const backfillId = route.params.backfill!.toString()
@@ -16,6 +16,7 @@ const { apiFetch } = useOrgApi()
 const backfillsStore = useBackfillsStore()
 const organisationStore = useOrganisationStore()
 const toast = useToast()
+const appConfig = useAppConfig()
 const { confirm } = useConfirm()
 
 const backfill = ref<Backfill | null>(null)
@@ -47,7 +48,7 @@ async function fetchRuns() {
 }
 
 function reloadRuns() {
-    fetchRuns().catch(e => toast.add(errorToast(e, 'Failed to load runs')))
+    fetchRuns().catch(e => toast.add(errorToast(e, "Couldn't load the runs")))
 }
 
 function onPageChange(page: number) {
@@ -70,8 +71,7 @@ async function onCancel() {
         title: 'Cancel backfill',
         description: 'Every run that has not finished is canceled. Runs already in flight stop within seconds.',
         confirmLabel: 'Cancel backfill',
-        confirmColor: 'error',
-        icon: 'i-lucide-ban',
+        icon: appConfig.icons.cancel,
     })
     if (!confirmed) return
 
@@ -82,7 +82,7 @@ async function onCancel() {
         toast.add({ title: 'Backfill canceled', color: 'success' })
     }
     catch (e) {
-        toast.add(errorToast(e, 'Failed to cancel backfill'))
+        toast.add(errorToast(e, "Couldn't cancel the backfill"))
     }
     finally {
         cancelling.value = false
@@ -94,7 +94,13 @@ const backfillTargetName = computed(() => backfill.value ? targetLabel(backfill.
 const fetchError = ref<unknown>(null)
 const notFound = computed(() => (fetchError.value as { statusCode?: number } | null)?.statusCode === 404)
 
-onMounted(async () => {
+const crumbs = computed<BreadcrumbItem[]>(() => [
+    { label: 'Backfills', to: organisationStore.path('/executions/backfills') },
+    { label: shortId(backfillId) },
+])
+
+async function load() {
+    fetchError.value = null
     try {
         const [fetchedBackfill] = await Promise.all([backfillsStore.fetchOne(backfillId), fetchRuns()])
         backfill.value = fetchedBackfill
@@ -102,43 +108,42 @@ onMounted(async () => {
     catch (e) {
         fetchError.value = e
     }
-})
+}
+
+onMounted(load)
 
 const columns: TableColumn<Run>[] = withSortableHeaders([
     {
         accessorKey: 'id',
         header: 'ID',
-        cell: ({ row }) => h('span', { class: 'font-mono text-xs' }, row.getValue<string>('id').substring(0, 8)),
+        cell: ({ row }) => idCell(row.getValue<string>('id')),
     },
     {
         accessorKey: 'partition_key',
         header: 'Partition',
-        cell: ({ row }) => h('span', { class: 'text-muted' }, row.getValue<string>('partition_key') || '—'),
+        cell: ({ row }) => h('span', { class: 'text-muted tabular-nums' }, row.getValue<string>('partition_key') || '—'),
     },
     {
         accessorKey: 'status',
         header: 'Status',
-        cell: ({ row }) => {
-            const status = row.getValue<string>('status')
-            return h(UBadge, { color: statusColor(status) }, () => statusLabel(status))
-        },
+        cell: ({ row }) => h(StatusBadge, { status: row.getValue<string>('status') }),
     },
     {
         accessorKey: 'created_at',
         header: 'Created',
-        cell: ({ row }) => h('span', { class: 'text-muted' }, formatDate(row.getValue<string>('created_at')) || '—'),
+        cell: ({ row }) => h('span', { class: 'text-muted tabular-nums' }, formatDate(row.getValue<string>('created_at')) || '—'),
     },
     {
         accessorKey: 'started_at',
         header: 'Started',
-        cell: ({ row }) => h('span', { class: 'text-muted' }, formatDate(row.getValue<string>('started_at')) || '—'),
+        cell: ({ row }) => h('span', { class: 'text-muted tabular-nums' }, formatDate(row.getValue<string>('started_at')) || '—'),
     },
     {
         id: 'elapsed',
         header: 'Elapsed',
         cell: ({ row }) => {
             const run = row.original as Run
-            return h('span', { class: 'text-muted' }, formatElapsed(run.started_at, run.completed_at) || '—')
+            return h('span', { class: 'text-muted tabular-nums' }, formatElapsed(run.started_at, run.completed_at) || '—')
         },
     },
 ])
@@ -149,87 +154,86 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
         <template #header>
             <AppNavbar>
                 <template #title>
-                    <ULink :to="organisationStore.path('/executions/backfills')"
-                           class="text-base font-medium text-muted hover:text-highlighted">Backfills</ULink>
-                    <span class="text-base text-dimmed">/</span>
-                    <span class="truncate font-mono text-base font-semibold">{{ backfillId.substring(0, 8) }}</span>
-                    <StatusPill v-if="backfill"
-                                :label="statusLabel(backfill.status)"
-                                :color="statusPillColor(backfill.status)" />
+                    <UBreadcrumb :items="crumbs">
+                        <template #item-label="{ item, active }">
+                            <UTooltip v-if="active"
+                                      :text="backfillId">
+                                <span class="tabular-nums slashed-zero">{{ item.label }}</span>
+                            </UTooltip>
+                            <template v-else>{{ item.label }}</template>
+                        </template>
+                    </UBreadcrumb>
+                    <StatusBadge v-if="backfill"
+                                 :status="backfill.status" />
                 </template>
             </AppNavbar>
             <UDashboardToolbar v-if="cancellable">
                 <template #right>
-                    <UButton color="error"
-                             variant="subtle"
-                             icon="i-lucide-ban"
+                    <UButton label="Cancel backfill"
+                             :icon="appConfig.icons.cancel"
+                             color="error"
+                             variant="soft"
                              :loading="cancelling"
-                             @click="onCancel">
-                        Cancel
-                    </UButton>
+                             @click="onCancel" />
                 </template>
             </UDashboardToolbar>
         </template>
         <template #body>
-            <EmptyState v-if="notFound"
-                        icon="i-lucide-search-x"
-                        title="Backfill not found"
-                        :description="`No backfill ${backfillId} in ${organisationStore.organisation?.name}.`">
-                <UButton :to="organisationStore.path('/executions/backfills')"
-                         class="mt-6"
-                         variant="outline"
-                         color="neutral"
-                         label="Back to backfills" />
-            </EmptyState>
+            <UEmpty v-if="notFound"
+                    :icon="appConfig.ui.icons.search"
+                    title="Backfill not found"
+                    :description="`No backfill ${shortId(backfillId)} in ${organisationStore.organisation?.name}.`"
+                    :actions="[{
+                        label: 'Back to backfills',
+                        color: 'neutral',
+                        variant: 'outline',
+                        to: organisationStore.path('/executions/backfills'),
+                    }]" />
+            <LoadError v-else-if="fetchError"
+                       title="Couldn't load the backfill"
+                       :error="fetchError"
+                       @retry="load" />
             <template v-else>
-                <div class="flex flex-1 min-h-0 flex-col gap-4 sm:gap-6">
-                    <UCard v-if="backfill"
-                           title="Backfill">
-                        <div class="flex flex-wrap items-center gap-4 text-sm text-muted">
-                            <div class="flex items-center gap-1.5">
-                                <UIcon name="i-lucide-briefcase"
-                                       class="size-4" />
-                                <span>{{ backfillTargetName }}</span>
-                            </div>
-                            <div class="flex items-center gap-1.5">
-                                <UIcon name="i-lucide-calendar-range"
-                                       class="size-4" />
-                                <span>{{ backfill.start_key }} → {{ backfill.end_key }}</span>
-                            </div>
-                            <div class="flex items-center gap-1.5">
-                                <UIcon name="i-lucide-layers"
-                                       class="size-4" />
-                                <span>{{ backfill.partitions }} partitions</span>
-                            </div>
-                            <div v-if="backfill.fail_fast"
-                                 class="flex items-center gap-1.5">
-                                <UIcon name="i-lucide-zap"
-                                       class="size-4" />
-                                <span>Fail fast</span>
-                            </div>
+                <UCard v-if="backfill"
+                       title="Backfill">
+                    <div class="flex flex-wrap items-center gap-4 text-sm text-muted">
+                        <EntityBadge :icon="targetIcon(backfill)"
+                                     :label="backfillTargetName" />
+                        <div class="flex items-center gap-1.5">
+                            <UIcon :name="appConfig.icons.window"
+                                   class="size-4" />
+                            <span class="tabular-nums">{{ backfill.start_key }} → {{ backfill.end_key }}</span>
                         </div>
-                    </UCard>
+                        <div class="flex items-center gap-1.5">
+                            <UIcon :name="appConfig.icons.partition"
+                                   class="size-4" />
+                            <span class="tabular-nums">{{ backfill.partitions }} {{ backfill.partitions === 1 ? 'partition' : 'partitions' }}</span>
+                        </div>
+                        <UBadge v-if="backfill.fail_fast"
+                                color="neutral"
+                                size="sm"
+                                label="Fail fast" />
+                    </div>
+                </UCard>
 
-                    <UCard :ui="FILL_CARD_UI">
-                        <UTable v-model:sorting="sorting"
-                                :data="backfillRuns"
-                                :columns="columns"
-                                :loading="runsLoading"
-                                :sorting-options="sortingOptions"
-                                sticky
-                                :ui="{ tr: 'cursor-pointer' }"
-                                class="flex-1 min-h-0"
-                                @select="(_e: Event, row: any) => navigateTo(organisationStore.path(`/executions/runs/${row.original.id}`))" />
-                        <template #footer>
-                            <TableFooter :page="runsPage + 1"
-                                         :total="runsTotal"
-                                         :page-size="PAGE_SIZE"
-                                         @update:page="onPageChange">
-                                {{ runsTotal }} run(s) total.
-                            </TableFooter>
-                        </template>
-                    </UCard>
-                </div>
+                <UCard :ui="FILL_CARD_UI">
+                    <UTable v-model:sorting="sorting"
+                            :data="backfillRuns"
+                            :columns="columns"
+                            :loading="runsLoading"
+                            :sorting-options="sortingOptions"
+                            sticky
+                            :ui="{ tr: 'cursor-pointer' }"
+                            class="min-h-0 flex-1"
+                            @select="(_e: Event, row: any) => navigateTo(organisationStore.path(`/executions/runs/${row.original.id}`))" />
+                    <template #footer>
+                        <TableFooter :page="runsPage + 1"
+                                     :total="runsTotal"
+                                     :page-size="PAGE_SIZE"
+                                     noun="run"
+                                     @update:page="onPageChange" />
+                    </template>
+                </UCard>
             </template>
         </template>
     </UDashboardPanel>

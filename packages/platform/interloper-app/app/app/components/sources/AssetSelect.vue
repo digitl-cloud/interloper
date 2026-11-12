@@ -29,6 +29,7 @@ const props = defineProps<{
 // ── Helpers ──────────────────────────────────────────────────────────
 
 const catalogStore = useCatalogStore()
+const appConfig = useAppConfig()
 
 interface DepCandidate {
     assetId: string
@@ -176,6 +177,10 @@ function depSelectionKey(assetKey: string, name: string): string {
     return `${assetKey}→${name}`
 }
 
+function dependencyCount(count: number): string {
+    return `${count} ${count === 1 ? 'dependency' : 'dependencies'}`
+}
+
 function depItems(dep: AssetDep) {
     return dep.candidates.map(c => ({ label: c.sourceName, value: c.assetId }))
 }
@@ -192,88 +197,89 @@ function setDep(assetKey: string, dep: AssetDep, value: string | string[]) {
             <UTabs v-if="tagTabs.length > 2"
                    v-model="tagFilter"
                    :items="tagTabs"
+                   variant="pill"
+                   size="xs"
                    :content="false"
-                   size="sm"
                    class="w-fit" />
             <UInput v-model="search"
-                    placeholder="Search assets..."
-                    icon="i-lucide-search"
+                    placeholder="Search assets…"
+                    :icon="appConfig.ui.icons.search"
                     class="min-w-0 flex-1" />
         </div>
 
         <div class="flex items-center justify-between">
-            <span class="text-sm text-muted">
+            <span class="text-sm text-muted tabular-nums">
                 {{ selectedKeys.length }} of {{ sourceDefn.assets.length }} assets selected
             </span>
             <div class="flex gap-2">
-                <UButton size="xs"
+                <UButton size="sm"
+                         color="neutral"
                          variant="ghost"
                          label="Select all"
                          @click="selectAll()" />
-                <UButton size="xs"
+                <UButton size="sm"
+                         color="neutral"
                          variant="ghost"
                          label="Deselect all"
                          @click="deselectAll()" />
             </div>
         </div>
 
-        <div v-if="filteredAssets.length === 0"
-             class="flex items-center justify-center rounded-md p-6 text-sm text-muted">
-            No assets match these filters.
-        </div>
+        <UEmpty v-if="filteredAssets.length === 0"
+                variant="naked"
+                size="sm"
+                :icon="appConfig.ui.icons.search"
+                title="No assets match these filters" />
 
         <div v-else
-             class="flex flex-col gap-2.5">
+             class="flex flex-col gap-2">
             <SelectionCard v-for="asset in filteredAssets"
                            :key="asset.key"
                            as="div"
                            :selected="selectedKeys.includes(asset.key)"
-                           class="flex flex-col">
-                <!-- Asset row -->
-                <div class="flex items-center gap-3 px-4 py-3 cursor-pointer"
-                     @click="toggle(asset.key)">
+                           :label="asset.name || asset.key"
+                           :description="asset.description"
+                           @select="toggle(asset.key)">
+                <template #leading>
                     <UCheckbox :model-value="selectedKeys.includes(asset.key)"
                                @click.stop
                                @update:model-value="toggle(asset.key)" />
-                    <div class="flex flex-col min-w-0">
-                        <span class="text-sm font-medium">{{ asset.name || asset.key }}</span>
-                        <span v-if="asset.description"
-                              class="text-xs text-muted truncate">{{ asset.description }}</span>
-                        <div v-if="asset.tags.length"
-                             class="flex flex-wrap gap-1 mt-1.5">
-                            <UBadge v-for="tag in asset.tags"
-                                    :key="tag"
-                                    :color="tagColor(tag)"
-                                    size="sm">
-                                {{ tag }}
-                            </UBadge>
-                        </div>
+                </template>
+                <template v-if="asset.tags.length"
+                          #details>
+                    <div class="mt-1.5 flex flex-wrap gap-1">
+                        <UBadge v-for="tag in asset.tags"
+                                :key="tag"
+                                color="neutral"
+                                size="sm"
+                                :label="tag" />
                     </div>
-                    <div class="ml-auto flex items-center gap-2">
-                        <UTooltip v-if="asset.partitioning"
-                                  text="This asset is partitioned"
-                                  :delay-duration="0">
-                            <UIcon name="i-lucide-layers"
-                                   class="size-4 text-muted shrink-0" />
-                        </UTooltip>
-                        <UBadge v-if="depsByAsset.get(asset.key)?.length"
-                                color="info"
-                                size="sm">
-                            {{ depsByAsset.get(asset.key)!.length }} dep{{ depsByAsset.get(asset.key)!.length > 1 ? 's' : '' }}
-                        </UBadge>
-                    </div>
-                </div>
+                </template>
+                <template v-if="asset.partitioning || depsByAsset.get(asset.key)?.length"
+                          #trailing>
+                    <UTooltip v-if="asset.partitioning"
+                              text="This asset is partitioned"
+                              :delay-duration="0">
+                        <UIcon name="i-lucide-layers"
+                               class="size-4 shrink-0 text-muted" />
+                    </UTooltip>
+                    <UBadge v-if="depsByAsset.get(asset.key)?.length"
+                            color="neutral"
+                            size="sm"
+                            :label="dependencyCount(depsByAsset.get(asset.key)!.length)" />
+                </template>
 
-                <!-- Cross-source dependency selectors (shown when asset is selected) -->
+                <!-- Cross-source dependency selectors (shown when asset is selected); clicks here don't toggle the asset -->
                 <div v-if="selectedKeys.includes(asset.key) && depsByAsset.get(asset.key)?.length"
-                     class="px-3 pb-3 pt-0 flex flex-col gap-2 border-t border-default/50 mt-0">
+                     class="flex cursor-default flex-col gap-2 border-t border-default px-4 py-3"
+                     @click.stop>
                     <div v-for="dep in depsByAsset.get(asset.key)"
                          :key="dep.name"
                          class="flex items-center gap-2 pl-8">
                         <UIcon name="i-lucide-git-merge"
                                class="size-3.5 shrink-0"
                                :class="dep.candidates.length === 0 ? 'text-warning' : 'text-muted'" />
-                        <span class="text-xs text-muted whitespace-nowrap">{{ dep.label }}</span>
+                        <span class="text-xs whitespace-nowrap text-muted">{{ dep.label }}</span>
 
                         <!-- No candidates -->
                         <span v-if="dep.candidates.length === 0"
@@ -283,7 +289,7 @@ function setDep(assetKey: string, dep: AssetDep, value: string | string[]) {
 
                         <!-- Single candidate: auto-resolved -->
                         <span v-else-if="dep.candidates.length === 1"
-                              class="text-xs text-muted italic">
+                              class="text-xs text-muted">
                             {{ dep.candidates[0]!.sourceName }}
                         </span>
 
@@ -295,7 +301,7 @@ function setDep(assetKey: string, dep: AssetDep, value: string | string[]) {
                                      placeholder="Select sources…"
                                      size="xs"
                                      value-key="value"
-                                     class="min-w-[180px]"
+                                     class="min-w-48"
                                      @update:model-value="setDep(asset.key, dep, $event)" />
 
                         <USelectMenu v-else
@@ -304,14 +310,13 @@ function setDep(assetKey: string, dep: AssetDep, value: string | string[]) {
                                      placeholder="Select source…"
                                      size="xs"
                                      value-key="value"
-                                     class="min-w-[180px]"
+                                     class="min-w-48"
                                      @update:model-value="setDep(asset.key, dep, $event)" />
 
                         <UBadge v-if="dep.isOptional"
                                 color="neutral"
-                                size="xs">
-                            optional
-                        </UBadge>
+                                size="xs"
+                                label="Optional" />
                     </div>
                 </div>
             </SelectionCard>

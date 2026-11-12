@@ -3,14 +3,6 @@ import type { Page } from '~/composables/api'
 import type { Run } from '~/types/run'
 import type { AdminOrganisation } from '~/types/admin'
 
-const RUN_STATUS_ICONS: Record<string, string> = {
-    success: 'i-lucide-circle-check',
-    failed: 'i-lucide-circle-x',
-    running: 'i-lucide-loader-circle',
-    dispatched: 'i-lucide-loader-circle',
-    canceled: 'i-lucide-circle-slash',
-}
-
 export function useCommandPalette() {
     const { apiFetch } = useOrgApi()
     const userStore = useUserStore()
@@ -19,6 +11,8 @@ export function useCommandPalette() {
     const orgStore = useOrganisationStore()
     const adminStore = useAdminStore()
     const colorMode = useColorMode()
+    const appConfig = useAppConfig()
+    const { icons } = appConfig
     const { open: agentOpen } = useAgentPanel()
     const destinations = useNavDestinations()
     const organizationViews = useOrganizationViews()
@@ -54,12 +48,12 @@ export function useCommandPalette() {
         const toItem = (page: NavPage): CommandPaletteItem => ({ ...page, onSelect: close })
 
         const actionItems: CommandPaletteItem[] = [
-            toItem({ label: 'New source…', icon: 'i-lucide-plus', to: `${orgStore.path(kindPath('source'))}?new=1` }),
+            toItem({ label: 'New source…', icon: appConfig.ui.icons.plus, to: `${orgStore.path(kindPath('source'))}?new=1` }),
             ...componentsStore.byKind('job').map(job =>
-                toItem({ label: `Run job: ${job.name ?? job.key}`, icon: 'i-lucide-play', to: `${orgStore.path(kindPath('job'))}?run=${job.id}` })),
+                toItem({ label: `Run job: ${job.name ?? job.key}`, icon: icons.run, to: `${orgStore.path(kindPath('job'))}?run=${job.id}` })),
             {
                 label: colorMode.value === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',
-                icon: colorMode.value === 'dark' ? 'i-lucide-sun' : 'i-lucide-moon',
+                icon: colorMode.value === 'dark' ? appConfig.ui.icons.light : appConfig.ui.icons.dark,
                 onSelect: () => {
                     colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
                     close()
@@ -69,7 +63,7 @@ export function useCommandPalette() {
         if (userStore.agentAvailable) {
             actionItems.push({
                 label: agentOpen.value ? 'Close agent panel' : 'Open agent panel',
-                icon: 'icon:agent',
+                icon: icons.agent,
                 onSelect: () => {
                     agentOpen.value = !agentOpen.value
                     close()
@@ -81,16 +75,16 @@ export function useCommandPalette() {
             ...organizationViews.value.map(view => toItem({ ...view, label: `Organization ${view.label.toLowerCase()}` })),
         ]
         if (userStore.isSuperAdmin)
-            settingsItems.push(toItem({ label: 'Platform admin', icon: 'i-lucide-shield', to: '/admin' }))
+            settingsItems.push(toItem({ label: 'Platform admin', icon: icons.admin, to: '/admin' }))
         for (const membership of userStore.user?.memberships ?? []) {
             if (membership.id === orgStore.organisation?.id) continue
-            settingsItems.push(toItem({ label: `Switch to ${membership.name}`, icon: 'i-lucide-building-2', to: `/${membership.key}` }))
+            settingsItems.push(toItem({ label: `Switch to ${membership.name}`, icon: icons.organisation, to: `/${membership.key}` }))
         }
 
         const runItems: CommandPaletteItem[] = recentRuns.value.map(run => ({
             label: targetLabel(run),
-            suffix: `${statusLabel(run.status)} · ${formatDate(run.created_at)}`,
-            icon: RUN_STATUS_ICONS[run.status] ?? 'i-lucide-circle-dashed',
+            suffix: `${statusMeta(run.status).label} · ${formatDate(run.created_at)}`,
+            icon: statusIcon(run.status),
             to: orgStore.path(`/executions/runs/${run.id}`),
             onSelect: close,
         }))
@@ -112,7 +106,7 @@ export function useCommandPalette() {
                     label: 'Administration',
                     items: adminOrgs.value.map(org => ({
                         label: `Admin: ${org.name}`,
-                        icon: 'i-lucide-shield',
+                        icon: icons.admin,
                         to: `/admin/organisations/${org.id}`,
                         onSelect: close,
                     })),
@@ -149,7 +143,7 @@ export function useCommandPalette() {
                     return {
                         label: names?.assetName ?? asset.name ?? asset.key,
                         suffix: names?.sourceName,
-                        icon: assetIcons.value.get(asset.id) ?? 'i-lucide-box',
+                        icon: assetIcons.value.get(asset.id) ?? icons.asset,
                         to: `${orgStore.path('/graph')}?select=${asset.id}`,
                         onSelect: close,
                     }
@@ -170,7 +164,7 @@ export function useCommandPalette() {
                 label: kindLabel(kind),
                 items: componentsStore.byKind(kind).map(resource => ({
                     label: resource.name ?? resource.key,
-                    icon: RESOURCE_KIND_ICONS[kind] ?? 'i-lucide-box',
+                    icon: resourceKindIcon(kind),
                     to: orgStore.path(kindPath(kind)),
                     onSelect: close,
                 })),
@@ -180,7 +174,7 @@ export function useCommandPalette() {
                 label: 'Jobs',
                 items: componentsStore.byKind('job').map(job => ({
                     label: job.name ?? job.key,
-                    icon: 'i-lucide-calendar-clock',
+                    icon: icons.job,
                     to: orgStore.path(kindPath('job')),
                     onSelect: close,
                 })),

@@ -44,6 +44,17 @@ interface UseGraphConnectionRulesOptions {
     getAssetDefinition: (qualifiedKey: string) => AssetDefinition | undefined
 }
 
+// ─── Node presentation shared by the canvas and its nodes ────────────
+
+/** How far each folded card peeks out under a collapsed container. */
+export const STACK_LAYER_H = 8
+
+/** Opacity of a node faded out, by the open asset's focus or by a connection drag it can't take. */
+export const GRAPH_DIM_OPACITY = 0.25
+
+/** The one selection treatment of a graph card: the open asset's outline. */
+export const GRAPH_SELECTED_CLASS = 'outline-2 outline-offset-4 outline-primary'
+
 // ─── Layout ──────────────────────────────────────────────────────────
 
 export function useGraphLayout() {

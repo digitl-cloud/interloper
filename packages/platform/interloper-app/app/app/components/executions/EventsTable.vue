@@ -20,6 +20,7 @@ const props = defineProps<{
 
 const eventInFocus = defineModel<RunEvent | null>('eventInFocus', { default: null })
 const assetDisplayName = useAssetDisplayName()
+const appConfig = useAppConfig()
 
 // UTable exposes its `<table>` element; its parent is the scrolling container
 // the sticky header sticks to. We attach infinite scroll to that element so
@@ -53,20 +54,11 @@ function showErrorDetail(event: RunEvent) {
     modal.open()
 }
 
-function formatTimestamp(value: string): string {
-    const date = new Date(value)
-    const hours = date.getHours().toString().padStart(2, '0')
-    const m = date.getMinutes().toString().padStart(2, '0')
-    const s = date.getSeconds().toString().padStart(2, '0')
-    const ms = date.getMilliseconds().toString().padStart(3, '0')
-    return `${hours}:${m}:${s}.${ms}`
-}
-
 const columns: TableColumn<RunEvent>[] = [
     {
         accessorKey: 'timestamp',
         header: 'Time',
-        cell: ({ row }) => h('span', { class: 'font-mono text-xs text-muted' }, formatTimestamp(row.getValue<string>('timestamp'))),
+        cell: ({ row }) => h('span', { class: 'text-xs tabular-nums text-muted' }, formatClockTime(new Date(row.getValue<string>('timestamp')), 'ms')),
     },
     {
         id: 'source',
@@ -74,7 +66,7 @@ const columns: TableColumn<RunEvent>[] = [
         cell: ({ row }) => {
             const event = row.original as RunEvent
             const names = event.component_id ? assetDisplayName.value.get(event.component_id) : null
-            if (!names) return h('span', { class: 'text-muted' }, '—')
+            if (!names) return emptyCell()
             return h(EntityBadge, { icon: names.sourceIcon, label: names.sourceName })
         },
     },
@@ -85,7 +77,7 @@ const columns: TableColumn<RunEvent>[] = [
             const event = row.original as RunEvent
             const names = event.component_id ? assetDisplayName.value.get(event.component_id) : null
             const label = names?.assetName ?? event.component_key
-            if (!label) return h('span', { class: 'text-muted' }, '—')
+            if (!label) return emptyCell()
             return h(EntityBadge, { label })
         },
     },
@@ -114,25 +106,23 @@ const columns: TableColumn<RunEvent>[] = [
             // Older events may carry a traceback with an empty error string
             // (message-less exceptions) — the detail modal must stay reachable.
             if (event.error || event.traceback) {
-                return h('div', { class: 'flex items-center gap-2 max-w-[400px]' }, [
-                    h('span', { class: 'truncate text-sm text-error' }, event.error || event.message || 'Error'),
+                return h('div', { class: 'flex max-w-md items-center gap-2' }, [
+                    h('span', { class: 'truncate font-mono text-xs text-error' }, event.error || event.message || 'Error'),
                     h(UButton, {
                         icon: 'i-lucide-expand',
-                        label: 'view',
-                        size: 'xs',
+                        label: 'View',
+                        size: 'sm',
                         color: 'neutral',
-                        variant: 'subtle',
+                        variant: 'ghost',
                         class: 'shrink-0',
                         onClick: (e: MouseEvent) => {
                             e.stopPropagation()
                             showErrorDetail(event)
                         },
                     }),
-
                 ])
             }
-            const text = event.message || ''
-            return h('span', { class: 'max-w-[400px] truncate text-sm text-muted' }, text)
+            return h('span', { class: 'block max-w-md truncate text-sm text-muted' }, event.message || '')
         },
     },
 ]
@@ -147,11 +137,18 @@ const columns: TableColumn<RunEvent>[] = [
             :ui="{ tr: 'h-10' }"
             class="h-full"
             :on-hover="onRowHover">
+        <template #empty>
+            <UEmpty :icon="appConfig.icons.executions"
+                    title="No events"
+                    description="A run's events show up here as it goes."
+                    variant="naked"
+                    size="sm" />
+        </template>
         <template #body-bottom>
             <div v-if="loadingMore"
                  class="flex items-center justify-center gap-2 py-3 text-xs text-muted">
-                <UIcon name="i-lucide-loader-circle"
-                       class="size-4 animate-spin" />
+                <UIcon :name="appConfig.ui.icons.loading"
+                       class="size-3.5 animate-spin" />
                 Loading more events…
             </div>
         </template>

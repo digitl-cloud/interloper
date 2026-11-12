@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
+import type { SplitterItem } from '@nuxt/ui'
 import type { ComponentRecord } from '~/types/component'
 import type { DependencyPair } from '~/composables/graph'
 import { qualifiedKey } from '~/types/catalog'
@@ -14,6 +14,7 @@ const {
 } = useWizardDrawer<ComponentRecord>()
 const componentsStore = useComponentsStore()
 const catalogStore = useCatalogStore()
+const appConfig = useAppConfig()
 const toast = useToast()
 
 // Canvas view controls (toolbar-owned)
@@ -52,7 +53,21 @@ function handleSaved() {
 }
 
 const assetPane = useSlidingPane('graph-asset-pane-size')
-const { pane: assetPaneRef, group: assetGroupRef, opened: panelOpen, mounted: panelMounted, animating: panelAnimating, contentStyle: assetPaneContentStyle, onLayout: onAssetPaneLayout } = assetPane
+const { group: splitterRef, opened: panelOpen, mounted: panelMounted, animating: panelAnimating, contentStyle: assetPaneContentStyle, onLayout: onAssetPaneLayout } = assetPane
+/** What USplitter exposes: its panels, the side one being the pane the sliding pane resizes. */
+type SplitterHandle = { panelsRef: NonNullable<typeof assetPane.pane.value>[] }
+// USplitter renders its panels itself, so the pane is read off the splitter rather than bound.
+watchEffect(() => {
+    assetPane.pane.value = (splitterRef.value as unknown as SplitterHandle | null)?.panelsRef[1] ?? null
+})
+
+// p-px keeps the cards' outer rings inside the panes, which clip overflow.
+const splitterItems: SplitterItem[] = [
+    { slot: 'main', defaultSize: 100, minSize: 30, class: 'p-px' },
+    { slot: 'asset', defaultSize: 0, class: 'relative overflow-hidden' },
+]
+/** The handle is the page's panel gap, less the 1px each pane pads its card with so the ring isn't clipped. */
+const handleClass = computed(() => `flex justify-center transition-all duration-200 ${panelOpen.value ? 'w-3.5 sm:w-5.5' : 'w-0'}`)
 const selectedAsset = ref<ComponentRecord | undefined>()
 const selectedAssetDefn = ref<AssetDefinition | undefined>()
 const selectedSource = ref<ComponentRecord | undefined>()
@@ -94,7 +109,7 @@ async function onDeleteSource(sourceId: string) {
         toast.add({ title: `Source "${source?.name ?? 'Source'}" deleted`, color: 'success' })
     }
     catch (e) {
-        toast.add(inUseToast(e, 'Source') ?? errorToast(e, 'Failed to delete source'))
+        toast.add(inUseToast(e, 'Source') ?? errorToast(e, "Couldn't delete the source"))
     }
 }
 
@@ -111,14 +126,14 @@ async function onCreateDependencies(pairs: DependencyPair[]) {
         )
     }
     catch (e) {
-        toast.add(errorToast(e, 'Failed to create dependency'))
+        toast.add(errorToast(e, "Couldn't create the dependency"))
     }
 }
 
 async function onDeleteDependency(payload: { upstreamAssetId: string; downstreamAssetId: string; name?: string }) {
     if (!payload.name) {
         toast.add({
-            title: 'Failed to delete dependency',
+            title: "Couldn't delete the dependency",
             description: 'The relation was not found. Reload the page and try again.',
             color: 'error',
         })
@@ -128,7 +143,7 @@ async function onDeleteDependency(payload: { upstreamAssetId: string; downstream
         await componentsStore.removeRelation(payload.downstreamAssetId, payload.name, payload.upstreamAssetId)
     }
     catch (e) {
-        toast.add(errorToast(e, 'Failed to delete dependency'))
+        toast.add(errorToast(e, "Couldn't delete the dependency"))
     }
 }
 </script>
@@ -143,25 +158,24 @@ async function onDeleteDependency(payload: { upstreamAssetId: string; downstream
                           v-model:status-filter="statusFilter"
                           :counts="statusCounts">
                 <template #actions>
-                    <UButton icon="i-lucide-plus"
+                    <UButton :icon="appConfig.ui.icons.plus"
                              label="New source"
                              @click="onCreateSource" />
                     <UButton v-if="panelOpen"
-                             icon="i-lucide-panel-right-close"
+                             :icon="appConfig.icons.closePanel"
                              aria-label="Hide panel"
                              color="neutral"
                              variant="ghost"
                              @click="onPanelClose" />
                 </template>
             </GraphToolbar>
-            <SplitterGroup ref="assetGroupRef"
-                           direction="horizontal"
-                           class="flex-1 min-h-0"
-                           @layout="onAssetPaneLayout">
-                <!-- p-px keeps the cards' outer rings inside the panes, which clip overflow -->
-                <SplitterPanel :default-size="100"
-                               :min-size="30"
-                               class="flex p-px">
+            <USplitter id="graph-asset-pane"
+                       ref="splitterRef"
+                       :items="splitterItems"
+                       :disabled="!panelOpen || panelAnimating"
+                       :ui="{ root: 'min-h-0 flex-1', handle: handleClass }"
+                       @layout="onAssetPaneLayout">
+                <template #main>
                     <UCard class="w-full"
                            :ui="CANVAS_CARD_UI">
                         <GraphAssetGraph :group-by="groupBy"
@@ -176,18 +190,13 @@ async function onDeleteDependency(payload: { upstreamAssetId: string; downstream
                                          @delete-dependency="onDeleteDependency"
                                          @pane-click="panelOpen && onPanelClose()" />
                     </UCard>
-                </SplitterPanel>
+                </template>
 
-                <!-- The page's panel gap, less the 1px each pane pads its card with so the ring isn't clipped. -->
-                <SplitterResizeHandle class="group flex justify-center transition-[width] duration-200"
-                                      :class="panelOpen ? 'w-3.5 sm:w-5.5' : 'w-0'"
-                                      :disabled="!panelOpen || panelAnimating">
+                <template #resize-handle>
                     <div class="h-full w-0.5 transition-colors group-data-[state=hover]:bg-accented group-data-[state=drag]:bg-accented" />
-                </SplitterResizeHandle>
+                </template>
 
-                <SplitterPanel ref="assetPaneRef"
-                               :default-size="0"
-                               class="relative overflow-hidden">
+                <template #asset>
                     <div v-if="panelMounted && selectedAsset && selectedSource"
                          class="absolute inset-y-0 right-0 p-px"
                          :style="assetPaneContentStyle">
@@ -196,19 +205,19 @@ async function onDeleteDependency(payload: { upstreamAssetId: string; downstream
                                          :asset-defn="selectedAssetDefn"
                                          :source="selectedSource" />
                     </div>
-                </SplitterPanel>
-            </SplitterGroup>
+                </template>
+            </USplitter>
 
             <WizardDrawer v-model:open="sourceDrawerOpen"
-                          default-title="New Source"
+                          default-title="New source"
                           description="Configure source"
                           :stepper="sourceStepperRef">
                 <SourcesWizard v-if="sourceDrawerOpen"
-                                :key="editingSource?.id ?? 'new'"
-                                ref="sourceStepperRef"
-                                :source="editingSource"
-                                @created="handleSaved"
-                                @updated="handleSaved" />
+                               :key="editingSource?.id ?? 'new'"
+                               ref="sourceStepperRef"
+                               :source="editingSource"
+                               @created="handleSaved"
+                               @updated="handleSaved" />
             </WizardDrawer>
         </template>
     </UDashboardPanel>

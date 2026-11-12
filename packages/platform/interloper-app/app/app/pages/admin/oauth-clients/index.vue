@@ -9,6 +9,7 @@ definePageMeta({
 })
 
 const adminStore = useAdminStore()
+const appConfig = useAppConfig()
 const toast = useToast()
 const { confirm } = useConfirm()
 
@@ -38,9 +39,8 @@ async function deleteClient(client: AdminOAuthClient) {
             + 'its access and refresh tokens are revoked, its grants end, and the conversations it started '
             + 'are deleted. The app it belongs to stops working until it is given a new client. '
             + 'This action cannot be undone.',
-        subject: { name: client.name, icon: 'i-lucide-key-round' },
+        subject: { name: client.name, icon: appConfig.icons.app },
         confirmLabel: 'Delete client',
-        confirmColor: 'error',
     })
     if (!confirmed) return
 
@@ -50,7 +50,7 @@ async function deleteClient(client: AdminOAuthClient) {
         await loadData()
     }
     catch (err) {
-        toast.add(errorToast(err, 'Failed to delete client'))
+        toast.add(errorToast(err, "Couldn't delete the client"))
     }
 }
 
@@ -59,7 +59,7 @@ function rowActions(client: AdminOAuthClient): DropdownMenuItem[][] {
         [
             {
                 label: 'Delete client',
-                icon: 'i-lucide-trash-2',
+                icon: appConfig.icons.delete,
                 color: 'error' as const,
                 onSelect: () => deleteClient(client),
             },
@@ -71,24 +71,24 @@ const columns: TableColumn<AdminOAuthClient>[] = [
     {
         accessorKey: 'name',
         header: 'Name',
-        cell: ({ row }) => h('span', { class: 'font-semibold text-highlighted' }, row.original.name),
+        cell: ({ row }) => h('span', { class: 'font-medium text-highlighted' }, row.original.name),
     },
     {
         accessorKey: 'id',
         header: 'Client ID',
-        cell: ({ row }) => h('span', { class: 'font-mono text-xs text-muted' }, row.original.id),
+        cell: ({ row }) => h('span', { class: 'text-muted tabular-nums slashed-zero' }, row.original.id),
     },
     {
         id: 'redirect_uris',
         header: 'Redirect URIs',
         accessorFn: row => row.redirect_uris.join(' '),
         cell: ({ row }) => h('div', { class: 'flex flex-col gap-0.5' },
-            row.original.redirect_uris.map(uri => h('span', { class: 'font-mono text-xs text-muted' }, uri))),
+            row.original.redirect_uris.map(uri => h('span', { class: 'text-muted' }, uri))),
     },
     {
         accessorKey: 'created_at',
         header: 'Created',
-        cell: ({ row }) => h('span', { class: 'text-muted' }, formatDay(row.original.created_at)),
+        cell: ({ row }) => h('span', { class: 'text-muted tabular-nums' }, formatDay(row.original.created_at)),
     },
 ]
 
@@ -109,10 +109,10 @@ onMounted(loadData)
                        :row-actions="rowActions"
                        no-actions
                        no-row-click
-                       search-placeholder="Search clients..."
+                       search-placeholder="Search clients…"
                        @retry="loadData">
                 <template #actions>
-                    <UButton icon="i-lucide-plus"
+                    <UButton :icon="appConfig.ui.icons.plus"
                              label="New client"
                              @click="createOpen = true" />
                 </template>

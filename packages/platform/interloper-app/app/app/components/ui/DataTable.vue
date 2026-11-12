@@ -37,9 +37,9 @@ const props = defineProps<{
      */
     deleteImpact?: (ids: string[]) => Promise<{ blocking: UsedByRef[], detaching: UsedByRef[] }>
     /**
-     * A failed fetch of this list (e.g. a store's `error`). Shown as an alert
-     * in place of the empty state, so a rejected request never reads as an
-     * empty collection.
+     * A failed fetch of this list (e.g. a store's `error`). Shown as a
+     * `LoadError` in place of the empty state, so a rejected request never
+     * reads as an empty collection.
      */
     error?: Error | null
 }>()
@@ -51,6 +51,7 @@ const emit = defineEmits<{
 }>()
 
 const { confirm } = useConfirm()
+const appConfig = useAppConfig()
 
 // The search rides the route query, so a filtered table is linkable.
 const globalFilter = useQueryParam('q', '')
@@ -80,7 +81,7 @@ const NO_IMPACT = { blocking: [], detaching: [] }
 /** Confirm (via the shared modal) and, when accepted, emit the delete. */
 async function requestDelete(ids: string[], description: string) {
     const { blocking, detaching } = await (props.deleteImpact?.(ids).catch(() => NO_IMPACT) ?? NO_IMPACT)
-    const confirmed = await confirm({ title: 'Confirm Deletion', description, blocking, detaching })
+    const confirmed = await confirm({ title: 'Confirm deletion', description, blocking, detaching })
     if (confirmed) emit('delete', ids)
     return confirmed
 }
@@ -103,12 +104,12 @@ function buildRowActions(item: TData): DropdownMenuItem[][] {
         [
             {
                 label: 'Edit',
-                icon: 'i-lucide-pencil',
+                icon: appConfig.icons.edit,
                 onSelect: () => emit('edit', item),
             },
             {
                 label: 'Delete',
-                icon: 'i-lucide-trash-2',
+                icon: appConfig.icons.delete,
                 color: 'error' as const,
                 onSelect: () => requestDelete([item.id], 'This will permanently delete this item. This action cannot be undone.'),
             },
@@ -173,21 +174,13 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
 <template>
     <div class="w-full flex flex-col gap-4"
          :class="fill && 'flex-1 min-h-0'">
-        <UAlert v-if="error"
-                color="error"
-                icon="i-lucide-triangle-alert"
-                title="Couldn't load this list"
-                :description="errorDetail(error) ?? GENERIC_ERROR"
-                :actions="[{
-                    label: 'Try again',
-                    icon: 'i-lucide-refresh-cw',
-                    color: 'neutral',
-                    variant: 'outline',
-                    onClick: () => emit('retry'),
-                }]" />
+        <LoadError v-if="error"
+                   title="Couldn't load this list"
+                   :error="error"
+                   @retry="emit('retry')" />
 
         <div v-if="showEmpty"
-             class="w-full max-w-[1040px] mx-auto">
+             class="w-full">
             <slot name="empty" />
         </div>
 
@@ -196,8 +189,8 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
             <template #header>
                 <div class="flex flex-wrap items-center gap-3">
                     <UInput v-model="globalFilter"
-                            :placeholder="searchPlaceholder ?? 'Search...'"
-                            icon="i-lucide-search"
+                            :placeholder="searchPlaceholder ?? 'Search…'"
+                            :icon="appConfig.ui.icons.search"
                             class="max-w-sm"
                             @update:model-value="tableRef?.tableApi?.setGlobalFilter($event)" />
                     <slot name="filters" />
@@ -205,7 +198,8 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
                     <div class="ml-auto flex items-center gap-2">
                         <UButton v-if="selectedCount > 0"
                                  color="error"
-                                 icon="i-lucide-trash-2"
+                                 variant="soft"
+                                 :icon="appConfig.icons.delete"
                                  :label="`Delete (${selectedCount})`"
                                  @click="requestBulkDelete" />
                         <slot name="actions" />
@@ -228,10 +222,11 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
                 <template #actions-cell="{ row }">
                     <div class="flex justify-end">
                         <UDropdownMenu v-if="buildRowActions(row.original).length" :items="buildRowActions(row.original)">
-                            <UButton icon="i-lucide-ellipsis-vertical"
+                            <UButton :icon="appConfig.ui.icons.ellipsis"
                                      color="neutral"
                                      variant="ghost"
-                                     size="sm" />
+                                     size="sm"
+                                     aria-label="Row actions" />
                         </UDropdownMenu>
                     </div>
                 </template>
@@ -241,14 +236,8 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
                 <TableFooter :page="pagination.pageIndex + 1"
                              :total="totalCount"
                              :page-size="PAGE_SIZE"
-                             @update:page="(p: number) => pagination = { ...pagination, pageIndex: p - 1 }">
-                    <template v-if="selectedCount > 0">
-                        {{ selectedCount }} of {{ totalCount }} row(s) selected.
-                    </template>
-                    <template v-else>
-                        {{ totalCount }} row(s) total.
-                    </template>
-                </TableFooter>
+                             :selected="selectedCount"
+                             @update:page="(p: number) => pagination = { ...pagination, pageIndex: p - 1 }" />
             </template>
         </UCard>
 

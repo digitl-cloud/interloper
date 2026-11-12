@@ -1,18 +1,26 @@
 <script setup lang="ts">
+import type { BreadcrumbItem } from '@nuxt/ui'
+
 definePageMeta({ layout: 'admin', middleware: 'super-admin' })
 
 const route = useRoute()
-const { orgId, org, members, loading, openWorkspace } = provideAdminOrganisation(computed(() => route.params.id as string))
+const appConfig = useAppConfig()
+const { orgId, org, members, loading, error, reload, openWorkspace } = provideAdminOrganisation(computed(() => route.params.id as string))
 
 const tabs = computed<PageTab[]>(() => {
     const base = `/admin/organisations/${orgId.value}`
     return [
-        { label: 'Usage & quotas', to: `${base}/usage` },
-        { label: 'Members', to: `${base}/members`, badge: loading.value ? undefined : members.value.length },
-        { label: 'Activity', to: `${base}/activity` },
-        { label: 'Settings', to: `${base}/settings` },
+        { label: 'Usage & quotas', icon: appConfig.icons.quota, to: `${base}/usage` },
+        { label: 'Members', icon: appConfig.icons.members, to: `${base}/members`, badge: loading.value ? undefined : members.value.length },
+        { label: 'Activity', icon: appConfig.icons.activity, to: `${base}/activity` },
+        { label: 'Settings', icon: appConfig.icons.settings, to: `${base}/settings` },
     ]
 })
+
+const crumbs = computed<BreadcrumbItem[]>(() => [
+    { label: 'Organisations', to: '/admin/organisations' },
+    { label: org.value?.name ?? '…' },
+])
 </script>
 
 <template>
@@ -20,10 +28,7 @@ const tabs = computed<PageTab[]>(() => {
         <template #header>
             <AppNavbar>
                 <template #title>
-                    <ULink to="/admin/organisations"
-                           class="text-base font-medium text-muted hover:text-highlighted">Organisations</ULink>
-                    <span class="text-base text-dimmed">/</span>
-                    <span class="truncate text-base font-semibold">{{ org?.name ?? '…' }}</span>
+                    <UBreadcrumb :items="crumbs" />
                 </template>
             </AppNavbar>
             <UDashboardToolbar>
@@ -32,7 +37,7 @@ const tabs = computed<PageTab[]>(() => {
                 </template>
                 <template #right>
                     <UButton v-if="org && !org.deleted_at"
-                             icon="i-lucide-external-link"
+                             :icon="appConfig.icons.organisation"
                              label="Open workspace"
                              color="neutral"
                              variant="outline"
@@ -41,9 +46,11 @@ const tabs = computed<PageTab[]>(() => {
             </UDashboardToolbar>
         </template>
         <template #body>
-            <div class="mx-auto w-full max-w-5xl">
-                <NuxtPage />
-            </div>
+            <LoadError v-if="error"
+                       title="Couldn't load the organisation"
+                       :error="error"
+                       @retry="reload" />
+            <NuxtPage />
         </template>
     </UDashboardPanel>
 </template>

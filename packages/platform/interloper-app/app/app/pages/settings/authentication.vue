@@ -10,15 +10,18 @@ const UBadge = resolveComponent('UBadge')
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const appConfig = useAppConfig()
 const toast = useToast()
 const { confirm } = useConfirm()
 const { apiFetch, fetchAll } = useApi()
 
 const tokens = ref<PersonalAccessToken[]>([])
 const loading = ref(false)
+const tokensError = ref<Error | null>(null)
 const createOpen = ref(false)
 const apps = ref<AuthorisedApp[]>([])
 const appsLoading = ref(false)
+const appsError = ref<Error | null>(null)
 
 type Tab = 'signin' | 'tokens' | 'apps'
 
@@ -37,17 +40,17 @@ onMounted(() => {
 })
 
 const tabs = computed<PageTab[]>(() => [
-    { label: 'Sign in', icon: 'i-lucide-log-in', to: { query: { tab: 'signin' } }, active: activeTab.value === 'signin' },
+    { label: 'Sign in', icon: appConfig.icons.signIn, to: { query: { tab: 'signin' } }, active: activeTab.value === 'signin' },
     {
-        label: 'Personal Access Tokens',
-        icon: 'i-lucide-key',
+        label: 'Personal access tokens',
+        icon: appConfig.icons.token,
         badge: loading.value ? undefined : tokens.value.length,
         to: { query: { tab: 'tokens' } },
         active: activeTab.value === 'tokens',
     },
     {
         label: 'Authorised apps',
-        icon: 'i-lucide-plug',
+        icon: appConfig.icons.app,
         badge: appsLoading.value ? undefined : apps.value.length,
         to: { query: { tab: 'apps' } },
         active: activeTab.value === 'apps',
@@ -56,11 +59,12 @@ const tabs = computed<PageTab[]>(() => [
 
 async function loadTokens() {
     loading.value = true
+    tokensError.value = null
     try {
         tokens.value = await fetchAll<PersonalAccessToken>('/tokens')
     }
     catch (err) {
-        console.error('[Settings] Failed to load tokens', err)
+        tokensError.value = err as Error
     }
     finally {
         loading.value = false
@@ -69,11 +73,12 @@ async function loadTokens() {
 
 async function loadApps() {
     appsLoading.value = true
+    appsError.value = null
     try {
         apps.value = await apiFetch<AuthorisedApp[]>('/auth/apps')
     }
     catch (err) {
-        console.error('[Settings] Failed to load authorised apps', err)
+        appsError.value = err as Error
     }
     finally {
         appsLoading.value = false
@@ -88,7 +93,7 @@ function tokenStatus(token: PersonalAccessToken): TokenStatus {
     return 'active'
 }
 
-const STATUS_BADGES: Record<TokenStatus, { label: string, color: string }> = {
+const STATUS_BADGES: Record<TokenStatus, { label: string, color: 'success' | 'neutral' }> = {
     active: { label: 'Active', color: 'success' },
     expired: { label: 'Expired', color: 'neutral' },
     revoked: { label: 'Revoked', color: 'neutral' },
@@ -99,9 +104,8 @@ async function revokeToken(token: PersonalAccessToken) {
         title: 'Revoke token',
         description: 'Clients authenticating with {subject} will immediately lose access. '
             + 'This action cannot be undone.',
-        subject: { name: token.name, icon: 'i-lucide-key' },
+        subject: { name: token.name, icon: appConfig.icons.token },
         confirmLabel: 'Revoke',
-        confirmColor: 'error',
     })
     if (!confirmed) return
 
@@ -111,7 +115,7 @@ async function revokeToken(token: PersonalAccessToken) {
         await loadTokens()
     }
     catch (err) {
-        toast.add(errorToast(err, 'Failed to revoke token'))
+        toast.add(errorToast(err, "Couldn't revoke the token"))
     }
 }
 
@@ -121,7 +125,7 @@ function rowActions(token: PersonalAccessToken): DropdownMenuItem[][] {
         [
             {
                 label: 'Revoke token',
-                icon: 'i-lucide-shield-off',
+                icon: appConfig.icons.cancel,
                 color: 'error' as const,
                 onSelect: () => revokeToken(token),
             },
@@ -134,9 +138,8 @@ async function revokeApp(app: AuthorisedApp) {
         title: 'Revoke access',
         description: '{subject} will immediately lose access to every organisation you belong to. '
             + 'To use it again, you will have to approve it again.',
-        subject: { name: app.name, icon: 'i-lucide-plug' },
+        subject: { name: app.name, icon: appConfig.icons.app },
         confirmLabel: 'Revoke',
-        confirmColor: 'error',
     })
     if (!confirmed) return
 
@@ -146,7 +149,7 @@ async function revokeApp(app: AuthorisedApp) {
         await loadApps()
     }
     catch (err) {
-        toast.add(errorToast(err, 'Failed to revoke access'))
+        toast.add(errorToast(err, "Couldn't revoke the access"))
     }
 }
 
@@ -155,7 +158,7 @@ function appActions(app: AuthorisedApp): DropdownMenuItem[][] {
         [
             {
                 label: 'Revoke access',
-                icon: 'i-lucide-shield-off',
+                icon: appConfig.icons.cancel,
                 color: 'error' as const,
                 onSelect: () => revokeApp(app),
             },
@@ -180,25 +183,19 @@ const appColumns: TableColumn<AuthorisedApp>[] = [
     {
         accessorKey: 'name',
         header: 'Name',
-        cell: ({ row }) => h('span', { class: 'font-semibold text-highlighted' }, row.original.name),
+        cell: ({ row }) => h('span', { class: 'font-medium text-highlighted' }, row.original.name),
     },
     {
         id: 'returns_to',
         header: 'Returns to',
         accessorFn: row => appHosts(row).join(' '),
         cell: ({ row }) => h('div', { class: 'flex flex-wrap gap-1' },
-            appHosts(row.original).map(host => h(UBadge, {
-                label: host,
-                color: 'neutral',
-                variant: 'soft',
-                class: 'font-mono',
-            })),
-        ),
+            appHosts(row.original).map(host => h(UBadge, { label: host, color: 'neutral' }))),
     },
     {
         accessorKey: 'created_at',
         header: 'Registered',
-        cell: ({ row }) => h('span', { class: 'text-muted' }, row.original.created_at
+        cell: ({ row }) => h('span', { class: 'text-muted tabular-nums' }, row.original.created_at
             ? formatDay(row.original.created_at)
             : 'Unknown'),
     },
@@ -210,31 +207,27 @@ const columns: TableColumn<PersonalAccessToken>[] = [
         header: 'Name',
         cell: ({ row }) => h('span', {
             class: tokenStatus(row.original) === 'active'
-                ? 'font-semibold text-highlighted'
-                : 'font-semibold text-dimmed line-through',
+                ? 'font-medium text-highlighted'
+                : 'font-medium text-dimmed line-through',
         }, row.original.name),
     },
     {
         accessorKey: 'token_prefix',
         header: 'Token',
-        cell: ({ row }) => h(UBadge, {
-            label: `${row.original.token_prefix}…`,
-            color: 'neutral',
-            variant: 'soft',
-            class: 'font-mono',
-        }),
+        cell: ({ row }) => h(UBadge, { color: 'neutral' }, () =>
+            h('span', { class: 'slashed-zero' }, `${row.original.token_prefix}…`)),
     },
     {
         accessorKey: 'last_used_at',
         header: 'Last used',
-        cell: ({ row }) => h('span', { class: 'text-muted' }, row.original.last_used_at
-            ? `${timeSince(new Date(row.original.last_used_at))} ago`
+        cell: ({ row }) => h('span', { class: 'text-muted tabular-nums' }, row.original.last_used_at
+            ? relativeTime(new Date(row.original.last_used_at))
             : 'Never'),
     },
     {
         accessorKey: 'expires_at',
         header: 'Expires',
-        cell: ({ row }) => h('span', { class: 'text-muted' }, row.original.expires_at
+        cell: ({ row }) => h('span', { class: 'text-muted tabular-nums' }, row.original.expires_at
             ? formatDay(row.original.expires_at)
             : 'Never'),
     },
@@ -244,7 +237,7 @@ const columns: TableColumn<PersonalAccessToken>[] = [
         accessorFn: row => tokenStatus(row),
         cell: ({ row }) => {
             const badge = STATUS_BADGES[tokenStatus(row.original)]
-            return h(UBadge, { label: badge.label, color: badge.color, variant: 'subtle' })
+            return h(UBadge, { label: badge.label, color: badge.color })
         },
     },
 ]
@@ -261,35 +254,41 @@ const columns: TableColumn<PersonalAccessToken>[] = [
             </UDashboardToolbar>
         </template>
         <template #body>
-            <UCard v-if="activeTab === 'signin'"
-                   title="Sign in"
-                   class="mx-auto w-full max-w-3xl">
-                <div class="flex items-center gap-3">
-                    <div class="flex size-7 shrink-0 items-center justify-center rounded-md bg-elevated">
-                        <UIcon name="i-devicon-google"
-                               class="size-3.5" />
-                    </div>
-                    <div class="min-w-0 flex-1">
-                        <div class="text-sm font-medium text-highlighted">Google</div>
-                        <div class="mt-0.5 text-sm text-muted">{{ userStore.user?.email }}</div>
-                    </div>
-                    <UBadge label="Connected"
-                            color="success"
-                            variant="subtle"
-                            class="shrink-0" />
-                </div>
-            </UCard>
+            <div v-if="activeTab === 'signin'"
+                 class="mx-auto flex w-full max-w-2xl flex-col gap-4">
+                <UPageCard variant="naked"
+                           orientation="horizontal"
+                           title="Sign in"
+                           description="The accounts you sign in to Interloper with." />
+                <UCard>
+                    <UFormField label="Google"
+                                :description="userStore.user?.email"
+                                orientation="horizontal">
+                        <template #label>
+                            <span class="flex items-center gap-2">
+                                <UIcon :name="appConfig.icons.google"
+                                       class="size-4" />
+                                Google
+                            </span>
+                        </template>
+                        <UBadge label="Connected"
+                                color="success" />
+                    </UFormField>
+                </UCard>
+            </div>
 
             <DataTable v-else-if="activeTab === 'tokens'"
                        :columns="columns"
                        :data="tokens"
                        :loading="loading"
+                       :error="tokensError"
                        :row-actions="rowActions"
                        no-actions
                        no-row-click
-                       search-placeholder="Search tokens...">
+                       search-placeholder="Search tokens…"
+                       @retry="loadTokens">
                 <template #actions>
-                    <UButton icon="i-lucide-plus"
+                    <UButton :icon="appConfig.ui.icons.plus"
                              label="New token"
                              @click="createOpen = true" />
                 </template>
@@ -299,10 +298,12 @@ const columns: TableColumn<PersonalAccessToken>[] = [
                        :columns="appColumns"
                        :data="apps"
                        :loading="appsLoading"
+                       :error="appsError"
                        :row-actions="appActions"
                        no-actions
                        no-row-click
-                       search-placeholder="Search apps..." />
+                       search-placeholder="Search apps…"
+                       @retry="loadApps" />
 
             <SettingsTokenCreateModal v-model:open="createOpen"
                                       @created="loadTokens" />

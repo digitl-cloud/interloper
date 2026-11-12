@@ -9,7 +9,6 @@ definePageMeta({
     validate: route => RESOURCE_KINDS.map(kindSlug).includes(route.params.kind as string),
 })
 
-const UIcon = resolveComponent('UIcon')
 const UBadge = resolveComponent('UBadge')
 const UTooltip = resolveComponent('UTooltip')
 
@@ -18,6 +17,7 @@ const catalogStore = useCatalogStore()
 const organisationStore = useOrganisationStore()
 const componentsStore = useComponentsStore()
 const views = useComponentViews()
+const appConfig = useAppConfig()
 const { statusBadge } = useDrift()
 
 const kind = computed(() => kindFromSlug(route.params.kind as string))
@@ -58,7 +58,7 @@ watchEffect(() => {
     if (typeof edit === 'string' && edit) {
         componentsStore.fetchOne(edit)
             .then(handleEdit)
-            .catch(e => toast.add(errorToast(e, 'Could not open the connection')))
+            .catch(e => toast.add(errorToast(e, "Couldn't open the connection")))
     }
     else if (edit === undefined) {
         const name = typeof route.query.name === 'string' ? route.query.name : undefined
@@ -86,12 +86,12 @@ function autoRenewColumn(): TableColumn<ComponentRecord> {
             if (!catalogStore.catalog[row.original.key]?.renewable) return h('span', { class: 'text-dimmed' }, '—')
             if (row.original.status === 'unreadable') {
                 return h(UTooltip, { text: 'The stored config could not be read' }, () =>
-                    h(UBadge, { color: 'warning', icon: 'i-lucide-circle-help' }, () => 'Unknown'))
+                    h(UBadge, { color: 'warning', icon: appConfig.ui.icons.warning }, () => 'Unknown'))
             }
             const enabled = row.original.config?.auto_renew !== false
             return h(UBadge, {
                 color: enabled ? 'success' : 'neutral',
-                icon: enabled ? 'i-lucide-refresh-cw' : 'i-lucide-pause',
+                icon: enabled ? appConfig.icons.refresh : undefined,
             }, () => enabled ? 'On' : 'Off')
         },
     }
@@ -107,11 +107,11 @@ function lastRenewedColumn(): TableColumn<ComponentRecord> {
             const state = row.original.state ?? {}
             if (state.last_renewal_error) {
                 return h(UTooltip, { text: state.last_renewal_error }, () =>
-                    h(UBadge, { color: 'error', icon: 'i-lucide-x' }, () => 'Failed'))
+                    h(UBadge, { color: 'error', icon: appConfig.ui.icons.error }, () => 'Failed'))
             }
             if (!state.last_renewed_at) return h('span', { class: 'text-dimmed' }, '—')
-            return h(UBadge, { color: 'success', icon: 'i-lucide-check' }, () =>
-                `${timeSince(new Date(state.last_renewed_at))} ago`)
+            return h(UBadge, { color: 'success', icon: appConfig.ui.icons.success }, () =>
+                h('span', { class: 'tabular-nums' }, relativeTime(new Date(state.last_renewed_at))))
         },
     }
 }
@@ -144,7 +144,7 @@ function rowActions(item: ComponentRecord): DropdownMenuItem[][] {
     if (kind.value !== 'connection' || !catalogStore.catalog[item.key]?.renewable) return []
     return [[{
         label: 'Renew now',
-        icon: 'i-lucide-refresh-cw',
+        icon: appConfig.icons.refresh,
         onSelect: () => renewNow(item),
     }]]
 }
@@ -155,7 +155,7 @@ async function renewNow(item: ComponentRecord) {
         toast.add({ title: `Renewal queued for ${item.name ?? catalogStore.typeName(item.key)}`, color: 'success' })
     }
     catch (e) {
-        toast.add(errorToast(e, 'Failed to queue renewal'))
+        toast.add(errorToast(e, "Couldn't queue the renewal"))
     }
 }
 
@@ -165,10 +165,10 @@ const runsStore = useRunsStore()
 async function handleDelete(ids: string[]) {
     try {
         await componentsStore.remove(ids)
-        toast.add({ title: `${ids.length} resource(s) deleted`, color: 'success' })
+        toast.add({ title: `${ids.length} ${ids.length === 1 ? kind.value : kindSlug(kind.value)} deleted`, color: 'success' })
     }
     catch (e) {
-        toast.add(inUseToast(e, pageTitle.value.slice(0, -1)) ?? errorToast(e, 'Failed to delete resource'))
+        toast.add(inUseToast(e, pageTitle.value.slice(0, -1)) ?? errorToast(e, `Couldn't delete the ${kind.value}`))
     }
 }
 
@@ -179,17 +179,12 @@ function handleSaved() {
 
 // ── Empty state ──
 
-const KIND_ICONS: Record<string, string> = {
-    connection: 'i-lucide-key-round',
-    config: 'i-lucide-settings',
-}
-
 const EMPTY_COPY: Record<string, { hero: string, catalogTitle: string, catalogDesc: string }> = {
     connection: {
         hero: 'A connection is a securely-stored credential — an OAuth token, API key or service account — that '
             + 'Interloper uses to authenticate with a platform. Create one, and every source from that provider '
             + 'can reuse it. Credentials are encrypted at rest and never leave your cloud.',
-        catalogTitle: 'Connections Catalog',
+        catalogTitle: 'Connection catalog',
         catalogDesc: 'Pick a platform to store a reusable credential — every source from that provider can share it.',
     },
 }
@@ -223,7 +218,7 @@ const typeKey = useQueryParam('type', null)
                        :error="componentsStore.error"
                        :delete-impact="componentsStore.deleteImpact"
                        :row-actions="rowActions"
-                       :search-placeholder="`Search ${pageTitle.toLowerCase()}...`"
+                       :search-placeholder="`Search ${pageTitle.toLowerCase()}…`"
                        @delete="handleDelete"
                        @edit="handleEdit"
                        @retry="componentsStore.fetchAll([kind])">
@@ -232,49 +227,46 @@ const typeKey = useQueryParam('type', null)
                                 :components="resources" />
                 </template>
 
+                <template #empty>
+                    <div class="flex flex-col gap-4 sm:gap-6">
+                        <UEmpty :icon="resourceKindIcon(kind)"
+                                :title="`No ${pageTitle.toLowerCase()} yet`"
+                                :description="emptyCopy.hero"
+                                :actions="[{ label: `New ${kind}`, icon: appConfig.ui.icons.plus, onClick: handleCreate }]" />
+
+                        <UPageCard variant="naked"
+                                   orientation="horizontal"
+                                   :title="emptyCopy.catalogTitle"
+                                   :description="emptyCopy.catalogDesc" />
+                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                            <CatalogCard v-for="def in definitions"
+                                         :key="def.key"
+                                         variant="compact"
+                                         :icon="componentIcon(def.key)"
+                                         :title="def.name"
+                                         :maturity="def.maturity"
+                                         :caption="def.provider"
+                                         @click="handleCreateFromCatalog(def.key)" />
+                        </div>
+
+                        <UAlert v-if="kind === 'connection'"
+                                color="neutral"
+                                :icon="appConfig.ui.icons.info"
+                                description="You can also create a connection inline while adding a source, whichever you reach first."
+                                orientation="horizontal"
+                                :actions="[{
+                                    label: 'Browse sources',
+                                    color: 'neutral',
+                                    variant: 'link',
+                                    trailingIcon: appConfig.ui.icons.arrowRight,
+                                    to: organisationStore.path(kindPath('source')),
+                                }]" />
+                    </div>
+                </template>
                 <template #actions>
-                    <UButton icon="i-lucide-plus"
+                    <UButton :icon="appConfig.ui.icons.plus"
                              :label="`New ${kind}`"
                              @click="handleCreate" />
-                </template>
-                <template #empty>
-                    <EmptyState :icon="KIND_ICONS[kind] ?? 'i-lucide-box'"
-                                :title="`No ${pageTitle.toLowerCase()} yet`"
-                                :description="emptyCopy.hero">
-                        <UButton icon="i-lucide-plus"
-                                 :label="`New ${kind}`"
-                                 class="mt-5"
-                                 @click="handleCreate" />
-                    </EmptyState>
-
-                    <div class="mt-9 mb-3.5">
-                        <h2 class="text-lg font-semibold text-highlighted">
-                            {{ emptyCopy.catalogTitle }}
-                        </h2>
-                        <p class="text-sm text-muted mt-1.5">{{ emptyCopy.catalogDesc }}</p>
-                    </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        <CatalogCard v-for="def in definitions"
-                                     :key="def.key"
-                                     variant="compact"
-                                     :icon="componentIcon(def.key)"
-                                     :title="def.name"
-                                     :maturity="def.maturity"
-                                     :caption="def.provider"
-                                     @click="handleCreateFromCatalog(def.key)" />
-                    </div>
-
-                    <div v-if="kind === 'connection'"
-                         class="flex items-center gap-3 border border-default rounded-lg px-5 py-4 bg-elevated/50 mt-6">
-                        <UIcon name="i-lucide-info"
-                               class="size-5 text-primary shrink-0" />
-                        <div class="flex-1 text-sm text-toned leading-normal">
-                            You can also create a connection inline while adding a source — whichever you reach first.
-                            Ready to connect data?
-                            <NuxtLink :to="organisationStore.path(kindPath('source'))"
-                                      class="text-primary font-semibold">Browse sources →</NuxtLink>
-                        </div>
-                    </div>
                 </template>
             </DataTable>
 

@@ -14,6 +14,7 @@ export interface NavPage {
 export interface PageTab {
     label: string
     to: RouteLocationRaw
+    icon?: string
     active?: boolean
     badge?: string | number
 }
@@ -23,10 +24,10 @@ export interface NavDestination extends NavPage {
     views?: NavPage[]
 }
 
-/** Icons for resource kinds — fallback to generic box. */
-export const RESOURCE_KIND_ICONS: Record<string, string> = {
-    connection: 'i-lucide-key-round',
-    config: 'i-lucide-settings',
+/** The icon of a resource kind, from the app's concept icons; an unknown kind is a generic asset box. */
+export function resourceKindIcon(kind: string): string {
+    const { icons } = useAppConfig()
+    return (icons as Record<string, string>)[kind] ?? icons.asset
 }
 
 /** Capitalize and pluralize a kind string: "connection" → "Connections". */
@@ -51,41 +52,44 @@ export function kindPath(kind: string): string {
 
 /** Views of the Executions hub, in toolbar order. */
 export function useExecutionViews() {
+    const { icons } = useAppConfig()
     const organisationStore = useOrganisationStore()
 
     return computed<NavPage[]>(() => [
-        { label: 'Runs', icon: 'i-lucide-activity', to: organisationStore.path('/executions/runs'), keywords: ['executions', 'history'] },
-        { label: 'Backfills', icon: 'i-lucide-history', to: organisationStore.path('/executions/backfills'), keywords: ['executions'] },
+        { label: 'Runs', icon: icons.run, to: organisationStore.path('/executions/runs'), keywords: ['executions', 'history'] },
+        { label: 'Backfills', icon: icons.backfill, to: organisationStore.path('/executions/backfills'), keywords: ['executions'] },
     ])
 }
 
-/** Views of the Organization hub; its settings only for the organisation's admins. */
+/** Views of the Organisation hub; its settings only for the organisation's admins. */
 export function useOrganizationViews() {
+    const { icons } = useAppConfig()
     const organisationStore = useOrganisationStore()
 
     return computed<NavPage[]>(() => [
-        { label: 'Members', icon: 'i-lucide-users', to: organisationStore.path('/organization/members'), keywords: ['team', 'invite'] },
+        { label: 'Members', icon: icons.members, to: organisationStore.path('/organization/members'), keywords: ['team', 'invite'] },
         ...(organisationStore.role === 'admin'
-            ? [{ label: 'Settings', icon: 'i-lucide-sliders-horizontal', to: organisationStore.path('/organization/settings'), keywords: ['name', 'key'] }]
+            ? [{ label: 'Settings', icon: icons.settings, to: organisationStore.path('/organization/settings'), keywords: ['name', 'key'] }]
             : []),
     ])
 }
 
 /** Views of the Components hub, one per kind, in lifecycle order. */
 export function useComponentViews() {
+    const { icons } = useAppConfig()
     const catalogStore = useCatalogStore()
     const organisationStore = useOrganisationStore()
 
     return computed<NavPage[]>(() => [
-        { label: 'Sources', icon: 'i-lucide-plug', to: organisationStore.path(kindPath('source')), keywords: ['components', 'connectors', 'integrations'] },
-        { label: 'Destinations', icon: 'i-lucide-database', to: organisationStore.path(kindPath('destination')), keywords: ['warehouse', 'export'] },
+        { label: 'Sources', icon: icons.source, to: organisationStore.path(kindPath('source')), keywords: ['components', 'connectors', 'integrations'] },
+        { label: 'Destinations', icon: icons.destination, to: organisationStore.path(kindPath('destination')), keywords: ['warehouse', 'export'] },
         ...catalogStore.resourceKinds.map(kind => ({
             label: kindLabel(kind),
-            icon: RESOURCE_KIND_ICONS[kind] ?? 'i-lucide-box',
+            icon: resourceKindIcon(kind),
             to: organisationStore.path(kindPath(kind)),
         })),
-        { label: 'Jobs', icon: 'i-lucide-calendar-clock', to: organisationStore.path(kindPath('job')), keywords: ['cron', 'schedule'] },
-        { label: 'Hooks', icon: 'i-carbon-lightning', to: organisationStore.path(kindPath('hook')), keywords: ['triggers', 'automation'] },
+        { label: 'Jobs', icon: icons.job, to: organisationStore.path(kindPath('job')), keywords: ['cron', 'schedule'] },
+        { label: 'Hooks', icon: icons.hook, to: organisationStore.path(kindPath('hook')), keywords: ['triggers', 'automation'] },
     ])
 }
 
@@ -96,17 +100,18 @@ export function useComponentViews() {
  * them can drift apart.
  */
 export function useNavDestinations() {
+    const { icons } = useAppConfig()
     const organisationStore = useOrganisationStore()
     const componentViews = useComponentViews()
     const executionViews = useExecutionViews()
 
     return computed<NavDestination[]>(() => [
-        { label: 'Overview', icon: 'i-lucide-layout-dashboard', to: organisationStore.path('/'), exact: true, keywords: ['home', 'dashboard', 'health'] },
-        { label: 'Timeline', icon: 'i-lucide-gantt-chart', to: organisationStore.path('/timeline'), keywords: ['gantt', 'schedule', 'runs', 'history'] },
-        { label: 'Graph', icon: 'i-lucide-workflow', to: organisationStore.path('/graph'), keywords: ['dag', 'pipeline', 'lineage'] },
-        { label: 'Collection', icon: 'i-lucide-library', to: organisationStore.path('/collection'), keywords: ['catalog', 'library'] },
-        { label: 'Components', icon: 'i-lucide-boxes', to: organisationStore.path(kindPath('source')), views: componentViews.value },
-        { label: 'Executions', icon: 'i-lucide-activity', to: organisationStore.path('/executions/runs'), views: executionViews.value },
+        { label: 'Overview', icon: icons.overview, to: organisationStore.path('/'), exact: true, keywords: ['home', 'dashboard', 'health'] },
+        { label: 'Timeline', icon: icons.timeline, to: organisationStore.path('/timeline'), keywords: ['gantt', 'schedule', 'runs', 'history'] },
+        { label: 'Graph', icon: icons.graph, to: organisationStore.path('/graph'), keywords: ['dag', 'pipeline', 'lineage'] },
+        { label: 'Collection', icon: icons.collection, to: organisationStore.path('/collection'), keywords: ['catalog', 'library'] },
+        { label: 'Components', icon: icons.components, to: organisationStore.path(kindPath('source')), views: componentViews.value },
+        { label: 'Executions', icon: icons.executions, to: organisationStore.path('/executions/runs'), views: executionViews.value },
     ])
 }
 

@@ -21,11 +21,14 @@ export function usedByNames(refs: UsedByRef[]): string {
     return refs.map(r => r.name ?? r.key).join(', ')
 }
 
+/** What to do about referrers that block an action; the toast and the confirm dialog say it the same way. */
+export const IN_USE_HINT = 'Rebind or delete those first.'
+
 /** Toast payload naming an entity's referrers (pre-flight checks and 409 handling share the copy). */
 export function inUseToastPayload(entity: string, refs: UsedByRef[]): { title: string, description: string, color: 'error' } {
     return {
         title: `${entity} is in use`,
-        description: `Used by: ${usedByNames(refs)}. Rebind or delete those first.`,
+        description: `Used by: ${usedByNames(refs)}. ${IN_USE_HINT}`,
         color: 'error',
     }
 }

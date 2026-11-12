@@ -6,6 +6,7 @@ defineProps<{
 }>()
 
 const route = useRoute()
+const appConfig = useAppConfig()
 const userStore = useUserStore()
 const orgStore = useOrganisationStore()
 
@@ -18,14 +19,14 @@ const orgItems = computed<DropdownMenuItem[]>(() => {
         if (membership.id === orgStore.organisation?.id) {
             return {
                 label: membership.name,
-                icon: 'i-lucide-building-2',
+                icon: appConfig.icons.organisation,
                 type: 'checkbox' as const,
                 checked: true,
             }
         }
         return {
             label: membership.name,
-            icon: 'i-lucide-building-2',
+            icon: appConfig.icons.organisation,
             to: `/${membership.key}`,
         }
     })
@@ -35,28 +36,33 @@ const items = computed<DropdownMenuItem[][]>(() => [
     orgItems.value,
     [{
         label: 'Manage',
-        icon: 'i-lucide-users',
+        icon: appConfig.icons.members,
         to: orgStore.path('/organization'),
     }],
 ])
+
+/** The organisation's own pages light the switcher up, as the sidebar does its destinations. */
+const onOrganisationPages = computed(() => route.path.startsWith(orgStore.path('/organization')))
 </script>
 
 <template>
     <UDropdownMenu :items="items"
                    :content="{ align: 'start', side: 'top' }"
                    :ui="{ content: 'w-(--reka-dropdown-menu-trigger-width)' }">
-        <UButton :avatar="{ icon: 'i-lucide-building-2' }"
-                 :label="collapsed ? undefined : (orgStore.organisation?.name || 'Organization')"
-                 class="w-full justify-start data-[state=open]:bg-elevated"
+        <UButton :avatar="{ icon: appConfig.icons.organisation }"
+                 :label="collapsed ? undefined : (orgStore.organisation?.name || 'Organisation')"
+                 :aria-label="collapsed ? (orgStore.organisation?.name || 'Organisation') : undefined"
+                 class="w-full justify-start"
                  variant="ghost"
                  color="neutral"
+                 :active="onOrganisationPages"
+                 active-variant="soft"
                  :square="collapsed"
-                 :class="{ 'text-highlighted': route.path.startsWith(orgStore.path('/organization')) }"
                  truncate>
             <template v-if="!collapsed"
                       #trailing>
-                <UIcon name="i-lucide-chevrons-up-down"
-                       class="size-4 ms-auto text-dimmed" />
+                <UIcon :name="appConfig.icons.switcher"
+                       class="ms-auto size-4 text-dimmed" />
             </template>
         </UButton>
     </UDropdownMenu>

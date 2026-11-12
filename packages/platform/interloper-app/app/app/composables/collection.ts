@@ -76,6 +76,7 @@ interface UseCollectionRowsOptions {
 export function useCollectionRows(options: UseCollectionRowsOptions) {
     const catalogStore = useCatalogStore()
     const { sourceDrift } = useDrift()
+    const { icons } = useAppConfig()
 
     /** Look up an asset definition by qualified key ("source_key.asset_key"). */
     function getAssetDefinition(qk: string): AssetDefinition | undefined {
@@ -107,7 +108,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
             if (!map.has(dep.src_id)) map.set(dep.src_id, [])
             const upstreamQk = qkById.get(dep.dst_id)
             let name = upstreamQk ?? dep.dst_id
-            let icon = 'i-lucide-box'
+            let icon = icons.asset
             if (upstreamQk) {
                 const defn = getAssetDefinition(upstreamQk)
                 if (defn) {
@@ -210,7 +211,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
             at,
             runId: newest.run_id,
             share: `${carrying.length}/${total}`,
-            note: `${statusLabel(state)}: ${carrying.length} of ${total} assets`,
+            note: `${statusMeta(state).label}: ${carrying.length} of ${total} assets`,
         }
     }
 
@@ -226,7 +227,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
                 if (!resourceKey) continue
                 map.set(source.id, {
                     name: catalogStore.catalog[resourceKey]?.name ?? resourceKey,
-                    icon: componentIcon(resourceKey, 'i-lucide-plug'),
+                    icon: componentIcon(resourceKey, icons.connection),
                 })
                 break
             }
@@ -242,7 +243,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
                 const defn = dest ? catalogStore.catalog[dest.key] : undefined
                 return {
                     name: dest?.name ?? defn?.name ?? dest?.key ?? destId,
-                    icon: componentIcon(dest?.key ?? '', 'i-lucide-hard-drive'),
+                    icon: componentIcon(dest?.key ?? '', icons.destination),
                 }
             })
 
@@ -304,7 +305,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
                     sourceId: source.id,
                     assetId: source.id,
                     name: '(no assets)',
-                    icon: 'i-lucide-box',
+                    icon: icons.asset,
                     sourceKey: source.key,
                     groupKey: catalogStore.groupOf(source.key),
                     assetStatus: 'ok',
@@ -352,7 +353,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
             map.set(source.id, {
                 name: source.name ?? sourceDefn?.name ?? source.key,
                 discriminator: source.discriminator !== source.name ? source.discriminator : null,
-                icon: componentIcon(source.key, 'i-lucide-database'),
+                icon: componentIcon(source.key, icons.source),
                 assetCount: source.children.length,
                 warnings,
                 drift: sourceDrift(source),
@@ -383,11 +384,11 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
             const carrying = states.filter(s => s === state).length
             map.set(groupKey, {
                 name: catalogStore.getSourceDefinition(groupKey)?.name ?? groupKey,
-                icon: componentIcon(groupKey, 'i-lucide-database'),
+                icon: componentIcon(groupKey, icons.source),
                 maturity: catalogStore.getSourceDefinition(groupKey)?.maturity ?? 'stable',
                 sourceCount: states.length,
                 state,
-                note: state === 'pending' ? null : `${statusLabel(state)}: ${carrying} of ${states.length} ${states.length === 1 ? 'source' : 'sources'}`,
+                note: state === 'pending' ? null : `${statusMeta(state).label}: ${carrying} of ${states.length} ${states.length === 1 ? 'source' : 'sources'}`,
             })
         }
         return map
@@ -398,4 +399,25 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
     )
 
     return { data, sourceInfoById, typeInfoByKey, assetCount }
+}
+
+/**
+ * Asks to confirm deleting a source, with what blocks the delete or gets
+ * detached by it: the one confirmation every surface that deletes a source
+ * shows. Resolves to whether the user confirmed.
+ */
+export function useConfirmDeleteSource() {
+    const componentsStore = useComponentsStore()
+    const { confirm } = useConfirm()
+
+    return async function confirmDeleteSource(source: { id: string, name: string, icon?: string }): Promise<boolean> {
+        const { blocking, detaching } = await componentsStore.deleteImpact(source.id).catch(() => ({ blocking: [], detaching: [] }))
+        return confirm({
+            title: 'Delete source',
+            description: 'This will permanently delete {subject} and all its assets. This action cannot be undone.',
+            subject: { name: source.name, icon: source.icon },
+            blocking,
+            detaching,
+        })
+    }
 }

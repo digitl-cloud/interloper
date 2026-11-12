@@ -3,6 +3,9 @@ import type { RouteLocationRaw } from 'vue-router'
 import type { AttentionItem } from '~/types/overview'
 
 const organisationStore = useOrganisationStore()
+const overviewStore = useOverviewStore()
+const { error } = storeToRefs(overviewStore)
+const { ui, icons } = useAppConfig()
 
 defineProps<{
     items: AttentionItem[] | null
@@ -13,12 +16,12 @@ const SKELETON_ROWS = 3
 
 const editor = useCanEdit()
 
-const KIND_META: Record<AttentionItem['kind'], { label: string, icon: string, rowIcon: string }> = {
-    error_group: { label: 'Error group', icon: 'i-lucide-circle-alert', rowIcon: 'i-lucide-x' },
-    connection: { label: 'Connection', icon: 'i-lucide-key-round', rowIcon: 'i-lucide-key-round' },
-    run_stack: { label: 'Run stack', icon: 'i-lucide-activity', rowIcon: 'i-lucide-repeat' },
-    drift: { label: 'Catalog drift', icon: 'i-lucide-library', rowIcon: 'i-lucide-circle-help' },
-    overdue: { label: 'Overdue job', icon: 'i-lucide-calendar-clock', rowIcon: 'i-lucide-clock' },
+const KIND_META: Record<AttentionItem['kind'], { label: string, icon: string }> = {
+    error_group: { label: 'Error group', icon: ui.icons.error },
+    connection: { label: 'Connection', icon: icons.connection },
+    run_stack: { label: 'Run stack', icon: ui.icons.reload },
+    drift: { label: 'Catalog drift', icon: icons.drift },
+    overdue: { label: 'Overdue job', icon: icons.job },
 }
 
 /** Where an item opens: the run on its errors, or the list searched down to the component. */
@@ -41,33 +44,37 @@ function openTarget(item: AttentionItem): { label: string, to: RouteLocationRaw 
 function fix(item: AttentionItem): { label: string, icon: string, to: string } | null {
     if (!editor.value) return null
     if (item.kind === 'connection' && item.component_id) {
-        return { label: 'Reconnect', icon: 'i-lucide-plug-zap', to: `${organisationStore.path(kindPath('connection'))}?edit=${item.component_id}` }
+        return { label: 'Reconnect', icon: icons.connection, to: `${organisationStore.path(kindPath('connection'))}?edit=${item.component_id}` }
     }
     return null
 }
 
 function when(item: AttentionItem): string {
     if (!item.since) return ''
-    if (item.kind === 'overdue') return `due ${formatDate(item.since)}`
-    if (item.kind === 'error_group') return `last seen ${timeSince(new Date(item.since))} ago`
-    return `${timeSince(new Date(item.since))} ago`
+    if (item.kind === 'overdue') return `Due ${formatDayTime(item.since)}`
+    const ago = relativeTime(new Date(item.since))
+    return item.kind === 'error_group' ? `Last seen ${ago}` : ago
 }
 </script>
 
 <template>
-    <UCard :ui="{ body: 'p-0 sm:p-0' }">
+    <UCard>
         <template #header>
             <CardHeader title="Needs attention"
                         :description="items?.length ? `${items.length} item${items.length === 1 ? '' : 's'}` : undefined"
-                        :loading="!items" />
+                        :loading="!items && !error" />
         </template>
-        <div v-if="!items"
-             class="divide-y divide-default border-t border-default">
+        <LoadError v-if="!items && error"
+                   title="Couldn't load what needs attention"
+                   :error="error"
+                   @retry="overviewStore.fetchOverview()" />
+        <div v-else-if="!items"
+             class="divide-y divide-default">
             <div v-for="i in SKELETON_ROWS"
                  :key="i"
-                 class="flex items-center gap-3.5 px-4 py-3 sm:px-6">
-                <USkeleton class="size-8 shrink-0 rounded-full" />
-                <div class="flex min-w-0 flex-1 flex-col gap-1.5 py-0.5">
+                 class="flex items-center gap-3 py-3">
+                <USkeleton class="size-5 shrink-0 rounded-full" />
+                <div class="flex min-w-0 flex-1 flex-col gap-1.5">
                     <USkeleton class="h-4 w-2/3" />
                     <USkeleton class="h-3.5 w-1/3" />
                 </div>
@@ -75,29 +82,24 @@ function when(item: AttentionItem): string {
             </div>
         </div>
         <div v-else-if="items.length"
-             class="divide-y divide-default border-t border-default">
+             class="divide-y divide-default">
             <div v-for="item in items"
                  :key="`${item.kind}:${item.run_id ?? item.component_id ?? ''}:${item.title}`"
-                 class="flex items-center gap-3.5 px-4 py-3 transition-colors hover:bg-elevated/50 sm:px-6">
-                <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-full"
-                      :class="item.severity === 'error' ? 'bg-error/10 text-error' : 'bg-warning/15 text-warning'">
-                    <UIcon :name="KIND_META[item.kind].rowIcon"
-                           class="size-4" />
-                </span>
+                 class="flex items-center gap-3 py-3">
+                <UIcon :name="KIND_META[item.kind].icon"
+                       class="size-5 shrink-0"
+                       :class="item.severity === 'error' ? 'text-error' : 'text-warning'" />
                 <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <div class="text-sm font-medium leading-snug text-highlighted">{{ item.title }}</div>
+                    <div class="text-sm font-medium text-highlighted">{{ item.title }}</div>
                     <div class="flex flex-wrap items-center gap-2 text-xs text-dimmed">
-                        <span class="inline-flex items-center gap-1.5 text-muted">
-                            <UIcon :name="KIND_META[item.kind].icon"
-                                   class="size-3.5" />{{ KIND_META[item.kind].label }}
-                        </span>
+                        <span class="text-muted">{{ KIND_META[item.kind].label }}</span>
                         <template v-if="item.target">
                             <span>·</span>
-                            <span class="font-mono text-xs">{{ item.target }}</span>
+                            <span>{{ item.target }}</span>
                         </template>
                         <template v-if="when(item)">
                             <span>·</span>
-                            <span>{{ when(item) }}</span>
+                            <span class="tabular-nums">{{ when(item) }}</span>
                         </template>
                     </div>
                 </div>
@@ -115,16 +117,11 @@ function when(item: AttentionItem): string {
                 </div>
             </div>
         </div>
-        <div v-else
-             class="flex items-center gap-3.5 p-4 sm:p-6">
-            <span class="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-success/10 text-success">
-                <UIcon name="i-lucide-check"
-                       class="size-4" />
-            </span>
-            <div class="flex flex-col gap-0.5">
-                <div class="text-sm font-semibold text-highlighted">All clear</div>
-                <div class="text-sm text-muted">No failures, drift or overdue jobs. Last checked {{ formatClockTime(new Date(generatedAt ?? Date.now())) }}.</div>
-            </div>
-        </div>
+        <UEmpty v-else
+                :icon="ui.icons.success"
+                title="All clear"
+                :description="`No failures, drift or overdue jobs. Last checked ${formatClockTime(new Date(generatedAt ?? Date.now()))}.`"
+                variant="naked"
+                size="sm" />
     </UCard>
 </template>

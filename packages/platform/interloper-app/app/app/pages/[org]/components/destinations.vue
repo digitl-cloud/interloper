@@ -15,6 +15,7 @@ const destinations = computed(() => componentsStore.byKind('destination'))
 
 const stepperRef = ref<any>(null)
 const toast = useToast()
+const appConfig = useAppConfig()
 
 const {
     open: drawerOpen,
@@ -28,7 +29,7 @@ const {
 componentsStore.fetchAll(['destination'])
 
 function typeIcon(key: string): string {
-    return componentIcon(key, 'i-lucide-hard-drive')
+    return componentIcon(key, appConfig.icons.destination)
 }
 
 /** The connection a destination is bound to, if any, as its binding names it. */
@@ -47,7 +48,7 @@ const columns: TableColumn<ComponentRecord>[] = [
             const resource = connectionOf(row.original)
             if (!resource) return h('span', { class: 'text-muted' }, '—')
             return h(EntityBadge, {
-                icon: componentIcon(resource.dst_key, 'i-lucide-key-round'),
+                icon: componentIcon(resource.dst_key, appConfig.icons.connection),
                 label: resource.dst_name ?? resource.dst_key,
             })
         },
@@ -61,7 +62,7 @@ async function handleDelete(ids: string[]) {
         toast.add({ title: `${ids.length} destination${ids.length > 1 ? 's' : ''} deleted`, color: 'success' })
     }
     catch (e) {
-        toast.add(inUseToast(e, 'Destination') ?? errorToast(e, 'Failed to delete destination'))
+        toast.add(inUseToast(e, 'Destination') ?? errorToast(e, "Couldn't delete the destination"))
     }
 }
 
@@ -92,7 +93,7 @@ const typeKey = useQueryParam('type', null)
                        :loading="componentsStore.loading"
                        :error="componentsStore.error"
                        :delete-impact="componentsStore.deleteImpact"
-                       search-placeholder="Search destinations..."
+                       search-placeholder="Search destinations…"
                        @delete="handleDelete"
                        @edit="handleEdit"
                        @retry="componentsStore.fetchAll(['destination'])">
@@ -101,47 +102,40 @@ const typeKey = useQueryParam('type', null)
                                 :components="destinations" />
                 </template>
 
+                <template #empty>
+                    <div class="flex flex-col gap-4 sm:gap-6">
+                        <UEmpty :icon="appConfig.icons.destination"
+                                title="No destinations yet"
+                                description="A destination is wherever Interloper materializes your typed assets — a warehouse, a database, or plain files, all running on infrastructure you control. Pick one from the catalog below to start landing data."
+                                :actions="[{ label: 'New destination', icon: appConfig.ui.icons.plus, onClick: handleCreate }]" />
+
+                        <UPageCard variant="naked"
+                                   orientation="horizontal"
+                                   title="Destination catalog"
+                                   description="Production-ready IO backends that ship with Interloper now." />
+                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                            <CatalogCard v-for="def in catalogStore.destinationDefinitions"
+                                         :key="def.key"
+                                         variant="rich"
+                                         :icon="typeIcon(def.key)"
+                                         :title="def.name"
+                                         :maturity="def.maturity"
+                                         :caption="def.provider"
+                                         :description="def.description"
+                                         :chips="(def.tags ?? []).map(t => ({ label: t }))"
+                                         @click="handleCreateFromCatalog(def.key)" />
+                        </div>
+                    </div>
+                </template>
                 <template #actions>
-                    <UButton icon="i-lucide-plus"
+                    <UButton :icon="appConfig.ui.icons.plus"
                              label="New destination"
                              @click="handleCreate" />
-                </template>
-
-                <template #empty>
-                    <EmptyState icon="i-lucide-hard-drive"
-                                title="No destinations yet"
-                                description="A destination is wherever Interloper materializes your typed assets — a warehouse, a database, or plain files, all running on infrastructure you control. Pick one from the catalog below to start landing data.">
-                        <UButton icon="i-lucide-plus"
-                                 label="New destination"
-                                 class="mt-5"
-                                 @click="handleCreate" />
-                    </EmptyState>
-
-                    <div class="mt-9 mb-3.5">
-                        <h2 class="text-lg font-semibold text-highlighted">
-                            Destinations Catalog
-                        </h2>
-                        <p class="text-sm text-muted mt-1.5">
-                            Production-ready IO backends that ship with Interloper now.
-                        </p>
-                    </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        <CatalogCard v-for="def in catalogStore.destinationDefinitions"
-                                     :key="def.key"
-                                     variant="rich"
-                                     :icon="typeIcon(def.key)"
-                                     :title="def.name"
-                                     :maturity="def.maturity"
-                                     :caption="def.provider"
-                                     :description="def.description"
-                                     :chips="(def.tags ?? []).map(t => ({ label: t }))"
-                                     @click="handleCreateFromCatalog(def.key)" />
-                    </div>
                 </template>
             </DataTable>
 
             <WizardDrawer v-model:open="drawerOpen"
-                          default-title="New Destination"
+                          default-title="New destination"
                           description="Configure destination"
                           :stepper="stepperRef">
                 <WizardDefinitionStepper v-if="drawerOpen"

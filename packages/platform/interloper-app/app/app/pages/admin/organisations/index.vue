@@ -12,19 +12,22 @@ const UBadge = resolveComponent('UBadge')
 const AdminUsageMeter = resolveComponent('AdminUsageMeter')
 
 const adminStore = useAdminStore()
+const appConfig = useAppConfig()
 const toast = useToast()
 
 const rows = ref<AdminOrganisation[]>([])
 const quotas = ref<AdminQuotas | null>(null)
 const loading = ref(false)
+const error = ref<Error | null>(null)
 
-// Create modal state — rename and delete live on the detail page's Settings tab.
+// Rename and delete live on the detail page's Settings tab.
 const createOpen = ref(false)
-const createName = ref('')
+const createState = reactive({ name: '' })
 const creating = ref(false)
 
 async function loadData() {
     loading.value = true
+    error.value = null
     try {
         [rows.value, quotas.value] = await Promise.all([
             adminStore.listOrganisations(),
@@ -32,7 +35,7 @@ async function loadData() {
         ])
     }
     catch (err) {
-        console.error('[Admin] Failed to load organisations', err)
+        error.value = err as Error
     }
     finally {
         loading.value = false
@@ -44,12 +47,12 @@ const usageByOrg = computed(() => new Map<string, AdminOrgQuotaStatus>(
     (quotas.value?.organisations ?? []).map(row => [row.id, row])))
 
 function openCreate() {
-    createName.value = ''
+    createState.name = ''
     createOpen.value = true
 }
 
 async function submitCreate() {
-    const name = createName.value.trim()
+    const name = createState.name.trim()
     if (!name) return
 
     creating.value = true
@@ -60,7 +63,7 @@ async function submitCreate() {
         await loadData()
     }
     catch (err) {
-        toast.add(errorToast(err, 'Failed to create organisation'))
+        toast.add(errorToast(err, "Couldn't create the organisation"))
     }
     finally {
         creating.value = false
@@ -83,7 +86,7 @@ const columns: TableColumn<AdminOrganisation>[] = [
             if (!org.deleted_at) return h('span', { class: 'font-medium' }, org.name)
             return h('div', { class: 'flex items-center gap-2' }, [
                 h('span', { class: 'text-dimmed line-through' }, org.name),
-                h(UBadge, { label: 'Deleted', color: 'neutral', variant: 'subtle', size: 'sm' }),
+                h(UBadge, { label: 'Deleted', color: 'neutral', size: 'sm' }),
             ])
         },
     },
@@ -92,7 +95,7 @@ const columns: TableColumn<AdminOrganisation>[] = [
         header: 'Members',
         cell: ({ row }) => row.original.deleted_at
             ? dash()
-            : h('span', { class: 'text-muted' }, String(row.original.member_count)),
+            : h('span', { class: 'text-muted tabular-nums' }, String(row.original.member_count)),
     },
     {
         id: 'sources',
@@ -100,7 +103,7 @@ const columns: TableColumn<AdminOrganisation>[] = [
         cell: ({ row }) => {
             const usage = usageByOrg.value.get(row.original.id)
             if (row.original.deleted_at || !usage) return dash()
-            return h('span', { class: 'text-muted' }, String(usage.sources))
+            return h('span', { class: 'text-muted tabular-nums' }, String(usage.sources))
         },
     },
     {
@@ -113,7 +116,7 @@ const columns: TableColumn<AdminOrganisation>[] = [
             if (!peak) return dash()
             return h('div', { class: 'flex flex-col gap-0.5' }, [
                 h('div', { class: 'w-32' }, h(AdminUsageMeter, { used: peak.used, limit: peak.limit })),
-                h('span', { class: 'text-xs text-dimmed whitespace-nowrap' },
+                h('span', { class: 'text-xs text-dimmed whitespace-nowrap tabular-nums' },
                     `${peak.label} ${peak.used.toLocaleString()} / ${peak.limit.toLocaleString()}`),
             ])
         },
@@ -126,14 +129,14 @@ const columns: TableColumn<AdminOrganisation>[] = [
             if (row.original.deleted_at || !usage) return dash()
             const drift = usage.successful_runs !== usage.recomputed_successful_runs
             return drift
-                ? h(UBadge, { label: 'Drift', color: 'warning', variant: 'subtle', icon: 'i-lucide-triangle-alert' })
-                : h(UBadge, { label: 'In sync', color: 'success', variant: 'subtle', icon: 'i-lucide-check' })
+                ? h(UBadge, { label: 'Drift', color: 'warning', icon: appConfig.ui.icons.warning })
+                : h(UBadge, { label: 'In sync', color: 'success', icon: appConfig.ui.icons.success })
         },
     },
     {
         accessorKey: 'created_at',
         header: 'Created',
-        cell: ({ row }) => h('span', { class: 'text-muted' }, formatDay(row.original.created_at)),
+        cell: ({ row }) => h('span', { class: 'text-muted tabular-nums' }, formatDay(row.original.created_at)),
     },
 ]
 
@@ -150,35 +153,43 @@ onMounted(loadData)
                        fill
                        :data="rows"
                        :loading="loading"
+                       :error="error"
                        no-actions
-                       search-placeholder="Search organisations..."
-                       @edit="openOrg">
+                       search-placeholder="Search organisations…"
+                       @edit="openOrg"
+                       @retry="loadData">
                 <template #actions>
-                    <UButton icon="i-lucide-plus"
+                    <UButton :icon="appConfig.ui.icons.plus"
                              label="New organisation"
                              @click="openCreate" />
                 </template>
             </DataTable>
 
             <UModal v-model:open="createOpen"
-                    title="New organisation"
-                    :ui="{ footer: 'justify-end' }">
+                    title="New organisation">
                 <template #body>
-                    <UInput v-model="createName"
-                            placeholder="Organisation name"
-                            autofocus
-                            class="w-full"
-                            @keydown.enter="submitCreate" />
+                    <UForm id="create-organisation"
+                           :state="createState"
+                           @submit="submitCreate">
+                        <UFormField label="Name"
+                                    name="name"
+                                    required>
+                            <UInput v-model="createState.name"
+                                    autofocus
+                                    class="w-full" />
+                        </UFormField>
+                    </UForm>
                 </template>
                 <template #footer>
                     <UButton label="Cancel"
                              color="neutral"
                              variant="outline"
                              @click="createOpen = false" />
-                    <UButton label="Create"
-                             :disabled="!createName.trim() || creating"
-                             :loading="creating"
-                             @click="submitCreate" />
+                    <UButton label="Create organisation"
+                             type="submit"
+                             form="create-organisation"
+                             :disabled="!createState.name.trim() || creating"
+                             :loading="creating" />
                 </template>
             </UModal>
         </template>

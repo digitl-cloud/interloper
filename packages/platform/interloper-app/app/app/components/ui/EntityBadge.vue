@@ -2,7 +2,7 @@
 /**
  * Reference chip for an entity (connection, destination, job, asset, …).
  * Entities use the `outline` variant so they read as object references,
- * distinct from the `subtle` badges used for statuses and tags.
+ * distinct from the `soft` badges (the theme default) of statuses and tags.
  */
 defineProps<{
     icon?: string

@@ -15,8 +15,4 @@ body,
     padding: 0;
     overflow: hidden;
 }
-
-html {
-    font-family: 'Inter', sans-serif;
-}
 </style>

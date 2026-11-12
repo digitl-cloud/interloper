@@ -1,16 +1,16 @@
 <script setup lang="ts">
-/** A run or backfill status as a badge; one still executing spins. */
+/** A run, backfill or execution status as a badge, from the status table; one still executing spins. */
 const props = defineProps<{
     status: string
 }>()
 
-const executing = computed(() => props.status === 'running' || props.status === 'dispatched')
+const meta = computed(() => statusMeta(props.status))
+const appConfig = useAppConfig()
 </script>
 
 <template>
-    <UBadge :color="statusColor(status)"
-            :icon="executing ? 'i-lucide-loader-circle' : undefined"
-            :ui="{ leadingIcon: 'animate-spin' }">
-        {{ statusLabel(status) }}
-    </UBadge>
+    <UBadge :color="meta.color"
+            :label="meta.label"
+            :icon="meta.executing ? appConfig.ui.icons.loading : undefined"
+            :ui="{ leadingIcon: 'animate-spin' }" />
 </template>

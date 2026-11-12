@@ -3,44 +3,37 @@ import type { Execution } from '~/types/execution'
 import { stateFromExecution } from '~/types/graph'
 import type { NodeStatus, GraphNodeState } from '~/types/graph'
 
-/** Tailwind class for a status indicator dot, keyed by node state. */
-const STATUS_DOT: Record<GraphNodeState, string> = {
-    idle: 'bg-[var(--ui-success)]',
-    attention: 'bg-[var(--ui-warning)]',
-    paused: 'bg-[var(--ui-text-dimmed)]',
-    queued: 'bg-[var(--ui-text-dimmed)]',
-    pending: 'bg-[var(--ui-text-dimmed)]',
-    running: 'bg-[var(--ui-info)] animate-pulse',
-    success: 'bg-[var(--ui-success)]',
-    failed: 'bg-[var(--ui-error)]',
-    skipped: 'bg-[var(--ui-text-dimmed)]',
-    canceled: 'bg-[var(--ui-text-dimmed)]',
+/**
+ * The status-table colour of a node state. The collection-level states sit on
+ * the same colours: healthy (idle) reads as success, attention as warning,
+ * paused as neutral; the execution states are the status table's own.
+ */
+export function nodeStateColor(state: GraphNodeState): StatusColor {
+    switch (state) {
+        case 'idle': return 'success'
+        case 'attention': return 'warning'
+        case 'paused': return 'neutral'
+        default: return statusMeta(state).color
+    }
 }
 
-export function statusDotClass(state: GraphNodeState): string {
-    return STATUS_DOT[state]
+/** Whether a node state is still executing (its dot pulses). */
+export function nodeStateExecuting(state: GraphNodeState): boolean {
+    return statusMeta(state).executing
 }
 
 /**
- * Border tint per node state. Healthy (idle) and the gray states keep the
- * default card border — their dot is enough; tints are reserved for states
- * that demand attention or are live.
+ * Border tint of a node: only states that demand attention or are live tint
+ * it; the rest keep the card border, their dot is enough.
  */
-const STATUS_BORDER: Record<GraphNodeState, string> = {
-    idle: '',
-    attention: 'border-warning/55',
-    paused: '',
-    queued: '',
-    pending: '',
-    running: 'border-info/55',
-    success: 'border-success/50',
-    failed: 'border-error/45',
-    skipped: '',
-    canceled: '',
+const STATUS_BORDER: Partial<Record<GraphNodeState, string>> = {
+    attention: 'border-warning/50',
+    running: 'border-info/50',
+    failed: 'border-error/50',
 }
 
 export function statusBorderClass(state: GraphNodeState): string {
-    return STATUS_BORDER[state]
+    return STATUS_BORDER[state] ?? ''
 }
 
 /** Rollup precedence for a container's dot: the loudest child state wins. */
@@ -62,8 +55,8 @@ export function useMaterializationStatus() {
 
     function label(execution: Execution): string {
         const at = execution.completed_at ?? execution.started_at ?? execution.created_at
-        const name = statusLabel(execution.status)
-        return at ? `${name} · ${timeSince(new Date(at))} ago` : name
+        const name = statusMeta(execution.status).label
+        return at ? `${name} · ${relativeTime(new Date(at))}` : name
     }
 
     function assetStatus(assetId: string): NodeStatus {

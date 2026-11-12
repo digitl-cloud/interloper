@@ -35,23 +35,16 @@ export default defineNuxtConfig({
     devtools: {
         enabled: true
     },
-    googleFonts: {
-        families: {
-            Inter: {
-                wght: [100, 200, 300, 400, 500, 600, 700, 800, 900],
-                ital: [100, 200, 300, 400, 500, 600, 700, 800, 900],
-            },
-            'JetBrains Mono': {
-                wght: [400, 500, 600],
-            },
+    // The families come from main.css `@theme`; @nuxt/fonts self-hosts these faces only.
+    fonts: {
+        defaults: {
+            weights: [400, 500, 600],
+            styles: ['normal'],
         },
-        display: 'swap',
-        prefetch: true,
-        preconnect: true,
     },
     icon: {
         serverBundle: {
-            collections: ['uil', 'mdi', 'logos'],
+            collections: ['lucide'],
         },
         customCollections: [
             {
@@ -69,7 +62,6 @@ export default defineNuxtConfig({
     modules: [
         '@nuxt/eslint',
         '@nuxt/ui',
-        '@nuxtjs/google-fonts',
         '@comark/vue',
         '@pinia/nuxt',
         '@vueuse/nuxt',

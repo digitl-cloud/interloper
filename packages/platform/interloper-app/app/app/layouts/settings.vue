@@ -2,37 +2,41 @@
 import type { NavigationMenuItem } from '@nuxt/ui'
 
 const route = useRoute()
+const appConfig = useAppConfig()
 
 /** Authentication lights up only while the collapsed sidebar hides its views; otherwise its active view does. */
-function navItems(collapsed: boolean): NavigationMenuItem[] {
+function buildNavItems(collapsed: boolean): NavigationMenuItem[] {
     const onAuth = route.path.startsWith('/settings/authentication')
     const tab = route.query.tab
     return [
         {
             label: 'Profile',
-            icon: 'i-lucide-user',
+            icon: appConfig.icons.user,
             to: '/settings/profile',
             active: route.path === '/settings/profile',
         },
         {
             label: 'Authentication',
-            icon: 'i-lucide-shield-check',
+            icon: appConfig.icons.authentication,
             // Collapsed by default, but never hide the active child.
             defaultOpen: onAuth,
             active: onAuth && collapsed,
             children: [
                 {
                     label: 'Sign in',
+                    icon: appConfig.icons.signIn,
                     to: { path: '/settings/authentication', query: { tab: 'signin' } },
                     active: onAuth && tab !== 'tokens' && tab !== 'apps',
                 },
                 {
-                    label: 'Personal Access Tokens',
+                    label: 'Personal access tokens',
+                    icon: appConfig.icons.token,
                     to: { path: '/settings/authentication', query: { tab: 'tokens' } },
                     active: onAuth && tab === 'tokens',
                 },
                 {
                     label: 'Authorised apps',
+                    icon: appConfig.icons.app,
                     to: { path: '/settings/authentication', query: { tab: 'apps' } },
                     active: onAuth && tab === 'apps',
                 },
@@ -40,42 +44,47 @@ function navItems(collapsed: boolean): NavigationMenuItem[] {
         },
     ]
 }
+
+// One stable list per sidebar state: built inside the sidebar's slot, a new list on every render
+// would re-render the whole menu on each pointer move while the sidebar is resized.
+const expandedNavItems = computed(() => buildNavItems(false))
+const collapsedNavItems = computed(() => buildNavItems(true))
 </script>
 
 <template>
-    <UDashboardGroup storage-key="dashboard-settings">
+    <UDashboardGroup storage="local"
+                     storage-key="dashboard-settings">
         <UDashboardSidebar collapsible
-                           resizable
-                           :ui="{ footer: 'border-t border-default' }">
+                           resizable>
             <template #header="{ collapsed }">
                 <NavLogo v-if="!collapsed" />
                 <LogoIcon v-else
-                          class="mx-auto h-6 w-auto text-primary" />
+                          class="mx-auto h-6 text-primary" />
             </template>
 
             <template #default="{ collapsed }">
                 <UBadge v-if="!collapsed"
                         color="neutral"
-                        variant="soft"
                         size="lg"
-                        class="eyebrow w-full justify-center py-2"
-                        label="User Settings" />
+                        class="caption w-full justify-center"
+                        label="User settings" />
                 <UNavigationMenu :collapsed="collapsed"
-                                 :items="navItems(collapsed)"
+                                 :items="collapsed ? collapsedNavItems : expandedNavItems"
                                  color="neutral"
                                  orientation="vertical" />
             </template>
 
             <template #footer="{ collapsed }">
-                <div class="flex flex-col gap-1 w-full">
+                <div class="flex w-full flex-col gap-1">
                     <UButton :label="collapsed ? undefined : 'Back to app'"
-                             icon="i-lucide-arrow-left"
+                             :icon="appConfig.ui.icons.arrowLeft"
                              color="neutral"
                              variant="ghost"
                              block
                              class="justify-start"
                              :square="collapsed"
-                             @click="navigateTo('/')" />
+                             :aria-label="collapsed ? 'Back to app' : undefined"
+                             to="/" />
                     <NavUser :collapsed="collapsed" />
                 </div>
             </template>

@@ -10,8 +10,9 @@ const REFRESH_INTERVAL = 60_000
 const timelineStore = useTimelineStore()
 const organisationStore = useOrganisationStore()
 const componentsStore = useComponentsStore()
+const appConfig = useAppConfig()
 
-const { runs, rangeStart, rangeEnd, loading, total, truncated } = storeToRefs(timelineStore)
+const { runs, rangeStart, rangeEnd, loading, error, total, truncated } = storeToRefs(timelineStore)
 
 /** Active status bucket from the breakdown bar; narrows the bars to that status. */
 const statusFilter = useQueryParam('status', null)
@@ -62,17 +63,20 @@ onUnmounted(() => timelineStore.$reset())
             <AppNavbar title="Timeline" />
         </template>
         <template #body>
-            <div v-if="!loading && !rows.length"
-                 class="w-full max-w-[1040px] mx-auto">
-                <EmptyState icon="i-lucide-gantt-chart"
-                            title="Nothing scheduled yet"
-                            description="The timeline lays every job's runs out on a wall-clock axis, so you can see what ran when, what overlapped, and what took longer than it should.">
-                    <UButton icon="i-lucide-calendar-plus"
-                             label="Create a job"
-                             class="mt-5"
-                             :to="organisationStore.path(kindPath('job'))" />
-                </EmptyState>
-            </div>
+            <LoadError v-if="error"
+                       title="Couldn't load the timeline"
+                       :error="error"
+                       @retry="timelineStore.fetch()" />
+
+            <UEmpty v-if="!loading && !error && !rows.length"
+                    :icon="appConfig.icons.timeline"
+                    title="Nothing scheduled yet"
+                    description="The timeline lays every job's runs out on a wall-clock axis, so you can see what ran when, what overlapped, and what took longer than it should."
+                    :actions="[{
+                        label: 'New job',
+                        icon: appConfig.ui.icons.plus,
+                        to: { path: organisationStore.path(kindPath('job')), query: { new: '1' } },
+                    }]" />
 
             <template v-else>
                 <UCard>
@@ -90,16 +94,17 @@ onUnmounted(() => timelineStore.$reset())
                                    size="xs"
                                    :content="false" />
                             <div class="ml-auto flex items-center gap-2">
-                                <UBadge v-if="truncated"
-                                        color="warning"
-                                        variant="subtle"
-                                        icon="i-lucide-triangle-alert"
-                                        :title="`Only the ${runCount} most recent of ${total} runs in this window are shown. Narrow the window to see them all.`">
-                                    Showing {{ runCount }} of {{ total }}
-                                </UBadge>
-                                <UButton icon="i-lucide-refresh-cw"
+                                <UTooltip v-if="truncated"
+                                          :text="`Only the ${runCount} most recent of ${total} runs in this window are shown. Narrow the window to see them all.`">
+                                    <UBadge color="warning"
+                                            :icon="appConfig.ui.icons.warning">
+                                        <span class="tabular-nums">Showing {{ runCount }} of {{ total }}</span>
+                                    </UBadge>
+                                </UTooltip>
+                                <UButton :icon="appConfig.icons.refresh"
                                          color="neutral"
-                                         variant="outline"
+                                         variant="ghost"
+                                         size="sm"
                                          :loading="loading"
                                          aria-label="Refresh"
                                          @click="timelineStore.fetch()" />
@@ -115,6 +120,9 @@ onUnmounted(() => timelineStore.$reset())
                                             label-title="Target"
                                             empty-message="No runs in this window"
                                             @bar-click="onBarClick" />
+                    <template #footer>
+                        <ChartTimelineLegend />
+                    </template>
                 </UCard>
             </template>
         </template>

@@ -9,6 +9,7 @@
 const props = withDefaults(defineProps<{ kind?: string }>(), { kind: 'source' })
 
 const componentsStore = useComponentsStore()
+const appConfig = useAppConfig()
 const toast = useToast()
 const { confirm } = useConfirm()
 const { missingOf, partialSources, missingAssetCount } = useDrift()
@@ -40,8 +41,6 @@ async function handleCleanup() {
         title: 'Clean up catalog drift',
         description: `This permanently removes ${driftSummary.value} that no longer ${driftCount.value === 1 ? 'exists' : 'exist'} in the catalog. This cannot be undone.`,
         confirmLabel: 'Remove',
-        confirmColor: 'error',
-        icon: 'i-lucide-triangle-alert',
     })
     if (!confirmed) return
 
@@ -61,7 +60,7 @@ async function handleCleanup() {
         toast.add({ title: 'Catalog drift cleaned up', color: 'success' })
     }
     catch (e) {
-        toast.add(inUseToast(e, singular.value) ?? errorToast(e, 'Failed to clean up drift'))
+        toast.add(inUseToast(e, singular.value) ?? errorToast(e, "Couldn't clean up the drift"))
     }
     finally {
         cleaningUp.value = false
@@ -74,17 +73,15 @@ async function handleCleanup() {
             color="error"
             variant="subtle"
             orientation="horizontal"
-            icon="i-lucide-unplug"
+            :icon="appConfig.icons.drift"
             title="Catalog drift detected"
-            :description="`${driftSummary} no longer ${driftCount === 1 ? 'exists' : 'exist'} in the catalog`">
-        <template #actions>
-            <UButton color="error"
-                     variant="solid"
-                     size="xs"
-                     icon="i-lucide-trash-2"
-                     label="Clean up"
-                     :loading="cleaningUp"
-                     @click="handleCleanup" />
-        </template>
-    </UAlert>
+            :description="`${driftSummary} no longer ${driftCount === 1 ? 'exists' : 'exist'} in the catalog`"
+            :actions="[{
+                label: 'Clean up',
+                icon: appConfig.icons.delete,
+                color: 'error',
+                variant: 'soft',
+                loading: cleaningUp,
+                onClick: handleCleanup,
+            }]" />
 </template>

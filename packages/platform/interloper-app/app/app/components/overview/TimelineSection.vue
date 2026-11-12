@@ -7,8 +7,7 @@ const organisationStore = useOrganisationStore()
 const props = defineProps<{ upcoming: UpcomingRun[] }>()
 
 const LABEL_WIDTH = 250
-const ROW_HEIGHT = 40
-const AXIS_HEIGHT = 30
+const { rowHeight: ROW_HEIGHT, axisHeight: AXIS_HEIGHT } = TIMELINE_LAYOUT
 const MAX_ROWS = 10
 const SKELETON_ROWS = 3
 const REFRESH_INTERVAL = 60_000
@@ -17,7 +16,8 @@ const FUTURE_RATIO = 1 / 3
 
 const timelineStore = useTimelineStore()
 const userStore = useUserStore()
-const { runs, span, rangeStart, rangeEnd, loading, loaded } = storeToRefs(timelineStore)
+const { runs, span, rangeStart, rangeEnd, loaded, error } = storeToRefs(timelineStore)
+const appConfig = useAppConfig()
 /** A window the user picked is loading: the bars on screen still show the previous one. */
 const switching = ref(false)
 
@@ -54,11 +54,13 @@ const activeSpan = computed({
 })
 
 const timezone = computed(() => userStore.user?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone)
-const rangeLabel = computed(() => {
-    const format = (ms: number) => `${formatShortDay(new Date(ms))} ${formatClockTime(new Date(ms))}`
-    return `${format(rangeStart.value)} → ${format(rangeEnd.value)}`
-})
+const rangeLabel = computed(() => `${formatDayTime(rangeStart.value)} → ${formatDayTime(rangeEnd.value)}`)
 const height = computed(() => AXIS_HEIGHT + (loaded.value && rows.value.length ? Math.min(rows.value.length, MAX_ROWS) : SKELETON_ROWS) * ROW_HEIGHT + 1)
+
+function refresh() {
+    now.value = new Date()
+    timelineStore.fetch({ futureRatio: FUTURE_RATIO })
+}
 
 function onBarClick(bar: TimelineBar) {
     if (bar.status === 'scheduled') navigateTo(organisationStore.path(kindPath('job')))
@@ -69,11 +71,8 @@ watch(rangeEnd, () => {
     now.value = new Date()
 })
 
-useIntervalFn(() => {
-    now.value = new Date()
-    timelineStore.fetch({ futureRatio: FUTURE_RATIO })
-}, REFRESH_INTERVAL)
-onMounted(() => timelineStore.fetch({ futureRatio: FUTURE_RATIO }))
+useIntervalFn(refresh, REFRESH_INTERVAL)
+onMounted(refresh)
 onUnmounted(() => timelineStore.$reset())
 </script>
 
@@ -83,7 +82,7 @@ onUnmounted(() => timelineStore.$reset())
             <CardHeader title="Timeline"
                         :description="`${timezone} · ${rangeLabel}`">
                 <UIcon v-if="switching"
-                       name="i-lucide-loader-circle"
+                       :name="appConfig.ui.icons.loading"
                        class="size-4 animate-spin text-dimmed" />
                 <span class="text-sm text-muted">Window</span>
                 <UTabs v-model="activeSpan"
@@ -98,7 +97,11 @@ onUnmounted(() => timelineStore.$reset())
                          size="sm" />
             </CardHeader>
         </template>
-        <div v-if="!loaded"
+        <LoadError v-if="error"
+                   title="Couldn't load the timeline"
+                   :error="error"
+                   @retry="refresh" />
+        <div v-else-if="!loaded"
              class="flex flex-col"
              :style="{ height: `${height}px`, paddingTop: `${AXIS_HEIGHT}px` }">
             <div v-for="i in SKELETON_ROWS"
@@ -111,10 +114,11 @@ onUnmounted(() => timelineStore.$reset())
             </div>
         </div>
         <UEmpty v-else-if="!rows.length"
-                icon="i-lucide-gantt-chart"
+                :icon="appConfig.icons.timeline"
                 title="No runs in this window"
                 description="Runs show up here as they execute, and each job's next firing as a dashed bar."
                 variant="naked"
+                size="sm"
                 class="transition-opacity"
                 :class="switching ? 'opacity-50' : ''"
                 :style="{ minHeight: `${height}px` }" />
@@ -131,16 +135,10 @@ onUnmounted(() => timelineStore.$reset())
                                     axis="clock"
                                     :label-width="LABEL_WIDTH"
                                     label-title="Target"
-                                    :empty-message="loading ? '' : 'No runs in this window'"
                                     @bar-click="onBarClick" />
         </div>
-        <div v-if="!loaded || rows.length"
-             class="mt-2.5 flex items-center gap-4 text-xs text-dimmed">
-            <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3.5 rounded-[3px] bg-success" />Success</span>
-            <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3.5 rounded-[3px] bg-error" />Failed</span>
-            <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3.5 rounded-[3px] bg-primary" />Running</span>
-            <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3.5 rounded-[3px] bg-accented" />Queued</span>
-            <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3.5 rounded-[3px] border-[1.5px] border-dashed border-dimmed" />Scheduled</span>
-        </div>
+        <ChartTimelineLegend v-if="!error && (!loaded || rows.length)"
+                             scheduled
+                             class="mt-3" />
     </UCard>
 </template>

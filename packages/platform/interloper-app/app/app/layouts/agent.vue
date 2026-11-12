@@ -1,6 +1,8 @@
 <script setup lang="ts">
 
 const route = useRoute()
+const appConfig = useAppConfig()
+const toast = useToast()
 const agentStore = useAgentStore()
 const organisationStore = useOrganisationStore()
 
@@ -12,7 +14,7 @@ const sidebarItems = computed(() => {
         ...agentStore.conversations.map(c => ({
             id: c.id,
             label: c.title ?? 'New conversation',
-            icon: 'i-lucide-message-square',
+            icon: appConfig.icons.conversation,
             to: organisationStore.path(`/agent/chat/${c.id}`),
             slot: 'chat' as const,
         })),
@@ -20,7 +22,13 @@ const sidebarItems = computed(() => {
 })
 
 async function deleteChat(id: string) {
-    await agentStore.deleteConversation(id)
+    try {
+        await agentStore.deleteConversation(id)
+    }
+    catch (e) {
+        toast.add(errorToast(e, "Couldn't delete the conversation"))
+        return
+    }
     if (route.params.id === id) {
         navigateTo(organisationStore.path('/agent'))
     }
@@ -32,10 +40,10 @@ watch(() => organisationStore.organisation?.id, () => agentStore.fetchConversati
 
 <template>
     <div>
-        <UDashboardGroup storage-key="dashboard-ai">
+        <UDashboardGroup storage="local"
+                         storage-key="dashboard-ai">
             <UDashboardSidebar collapsible
-                               resizable
-                               :ui="{ footer: 'border-t border-default' }">
+                               resizable>
                 <template #header="{ collapsed }">
                     <NavLogo v-if="!collapsed" />
                     <UDashboardSidebarCollapse :class="collapsed ? 'mx-auto' : 'ms-auto'" />
@@ -43,10 +51,10 @@ watch(() => organisationStore.organisation?.id, () => agentStore.fetchConversati
 
                 <template #default="{ collapsed }">
                     <UButton :label="collapsed ? undefined : 'New chat'"
-                             icon="i-lucide-plus"
-                             color="primary"
+                             :icon="appConfig.ui.icons.plus"
                              block
                              :square="collapsed"
+                             :aria-label="collapsed ? 'New chat' : undefined"
                              :to="organisationStore.path('/agent')" />
 
                     <UNavigationMenu v-if="sidebarItems.length"
@@ -55,22 +63,22 @@ watch(() => organisationStore.organisation?.id, () => agentStore.fetchConversati
                                      orientation="vertical"
                                      :ui="{ link: 'overflow-hidden' }">
                         <template #chat-trailing="{ item }">
-                            <div class="flex -mr-1.25 translate-x-full group-hover:translate-x-0 transition-transform">
-                                <UButton icon="i-lucide-x"
+                            <div class="-me-1 flex translate-x-full transition-transform group-hover:translate-x-0">
+                                <UButton :icon="appConfig.icons.delete"
                                          color="neutral"
                                          variant="ghost"
                                          size="xs"
-                                         class="text-muted hover:text-primary hover:bg-accented/50 p-0.5"
+                                         aria-label="Delete conversation"
                                          tabindex="-1"
                                          @click.stop.prevent="deleteChat((item as any).id)" />
                             </div>
                         </template>
                     </UNavigationMenu>
 
-                    <div v-else-if="!collapsed"
-                         class="mt-4 px-2 text-sm text-muted text-center">
-                        No conversations yet
-                    </div>
+                    <UEmpty v-else-if="!collapsed"
+                            variant="naked"
+                            size="sm"
+                            title="No conversations yet" />
                 </template>
 
                 <template #footer="{ collapsed }">

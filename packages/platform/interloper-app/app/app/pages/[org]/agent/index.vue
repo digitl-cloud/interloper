@@ -3,13 +3,15 @@ definePageMeta({ layout: 'agent' })
 
 const agentStore = useAgentStore()
 const organisationStore = useOrganisationStore()
+const appConfig = useAppConfig()
+const toast = useToast()
 const prompt = ref('')
 const creating = ref(false)
 
 const suggestions = [
-    { label: 'Setup a new source', icon: 'i-lucide-plug' },
-    { label: 'Setup a new connection', icon: 'i-lucide-key-round' },
-    { label: 'What failed in the last 24 hours?', icon: 'i-lucide-alert-circle' },
+    { label: 'Set up a new source', icon: appConfig.icons.source },
+    { label: 'Set up a new connection', icon: appConfig.icons.connection },
+    { label: 'What failed in the last 24 hours?', icon: appConfig.ui.icons.error },
 ]
 
 async function onSubmit(e: Event) {
@@ -25,7 +27,8 @@ async function onSubmit(e: Event) {
             query: { q: initialMessage },
         })
     }
-    catch {
+    catch (e) {
+        toast.add(errorToast(e, "Couldn't start the conversation"))
         creating.value = false
     }
 }
@@ -41,19 +44,19 @@ function useSuggestion(text: string) {
         <template #body>
             <UContainer class="flex-1 flex flex-col items-center justify-center gap-6 py-12">
                 <div class="flex flex-col items-center gap-1">
-                    <UIcon name="icon:agent"
-                           class="size-10 text-primary mb-2" />
-                    <h1 class="text-2xl font-semibold">
+                    <UIcon :name="appConfig.icons.agent"
+                           class="mb-2 size-8 text-primary" />
+                    <h1 class="text-2xl font-semibold text-highlighted">
                         How can I help you?
                     </h1>
-                    <p class="text-muted text-sm">
+                    <p class="text-sm text-muted">
                         Ask questions about your data assets, pipelines, and jobs.
                     </p>
                 </div>
 
                 <div class="w-full max-w-2xl flex flex-col gap-4">
                     <UChatPrompt v-model="prompt"
-                                 placeholder="Ask anything..."
+                                 placeholder="Ask anything…"
                                  variant="subtle"
                                  :disabled="creating"
                                  autofocus
@@ -69,7 +72,7 @@ function useSuggestion(text: string) {
                                  :label="suggestion.label"
                                  :icon="suggestion.icon"
                                  color="neutral"
-                                 variant="subtle"
+                                 variant="outline"
                                  size="sm"
                                  @click="useSuggestion(suggestion.label)" />
                     </div>

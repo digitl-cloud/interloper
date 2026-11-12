@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { RunEvent } from '~/stores/events'
 import type { Run } from '~/types/run'
-import type { SplitterItem } from '@nuxt/ui'
+import type { BreadcrumbItem, SplitterItem } from '@nuxt/ui'
 
 const route = useRoute()
 const organisationStore = useOrganisationStore()
@@ -61,18 +61,24 @@ watch(statusFilter, () => { selectedAsset.value = null })
 // Event category tab (All / Lifecycle / Errors / Logs), filtered server-side.
 const eventCategory = useQueryParam('events', 'all', oneOfQuery(EVENT_CATEGORIES))
 const eventTabs = [
-    { value: 'all', label: 'All', icon: 'i-lucide-list' },
-    { value: 'lifecycle', label: 'Lifecycle', icon: 'i-lucide-activity' },
-    { value: 'errors', label: 'Errors', icon: 'i-lucide-circle-alert' },
-    { value: 'logs', label: 'Logs', icon: 'i-lucide-scroll-text' },
+    { value: 'all', label: 'All' },
+    { value: 'lifecycle', label: 'Lifecycle' },
+    { value: 'errors', label: 'Errors' },
+    { value: 'logs', label: 'Logs' },
 ]
 watch(eventCategory, cat => eventsStore.filterByEventTypes(eventTypesForCategory(cat)))
+
+/** Refetch the events under the active filters, after a failed page. */
+async function reloadEvents() {
+    await eventsStore.fetchForRun(runId, eventTypesForCategory(eventCategory.value))
+    await eventsStore.filterByComponents(eventAssetIds.value)
+}
 
 // Top-panel view: the Gantt timeline or the run dependency graph.
 const view = useQueryParam('view', 'timeline', oneOfQuery(['timeline', 'graph'] as const))
 const viewTabs = [
-    { value: 'timeline', label: 'Timeline', icon: 'i-lucide-gantt-chart' },
-    { value: 'graph', label: 'Graph', icon: 'i-lucide-workflow' },
+    { value: 'timeline', label: 'Timeline', icon: appConfig.icons.timeline },
+    { value: 'graph', label: 'Graph', icon: appConfig.icons.graph },
 ]
 
 /** Design's table caption for the events panel, honest about server paging. */
@@ -132,11 +138,11 @@ async function onRetry(scope: 'all' | 'failed') {
     retrying.value = true
     try {
         const newRunId = await runsStore.retryRun(runId, scope)
-        toast.add({ title: `Retry queued (${newRunId.slice(0, 8)})`, color: 'success' })
+        toast.add({ title: `Retry queued (${shortId(newRunId)})`, color: 'success' })
         await navigateTo(organisationStore.path(`/executions/runs/${newRunId}`))
     }
     catch (e) {
-        toast.add(errorToast(e, 'Failed to queue retry'))
+        toast.add(errorToast(e, "Couldn't queue the retry"))
     }
     finally {
         retrying.value = false
@@ -153,8 +159,7 @@ async function onCancel() {
         title: 'Cancel run',
         description: 'The run stops within seconds and is not retried. Operations still in flight are canceled.',
         confirmLabel: 'Cancel run',
-        confirmColor: 'error',
-        icon: 'i-lucide-ban',
+        icon: appConfig.icons.cancel,
     })
     if (!confirmed) return
 
@@ -164,7 +169,7 @@ async function onCancel() {
         toast.add({ title: 'Run canceled', color: 'success' })
     }
     catch (e) {
-        toast.add(errorToast(e, 'Failed to cancel run'))
+        toast.add(errorToast(e, "Couldn't cancel the run"))
     }
     finally {
         cancelling.value = false
@@ -174,7 +179,13 @@ async function onCancel() {
 const fetchError = ref<unknown>(null)
 const notFound = computed(() => (fetchError.value as { statusCode?: number } | null)?.statusCode === 404)
 
-onMounted(async () => {
+const crumbs = computed<BreadcrumbItem[]>(() => [
+    { label: 'Runs', to: organisationStore.path('/executions/runs') },
+    { label: shortId(runId) },
+])
+
+async function load() {
+    fetchError.value = null
     try {
         const [fetchedRun] = await Promise.all([
             runsStore.fetchOne(runId),
@@ -195,7 +206,9 @@ onMounted(async () => {
     catch (e) {
         fetchError.value = e
     }
-})
+}
+
+onMounted(load)
 
 // Navigating between attempts mounts the next run's page before this one
 // unmounts, so only clear stores that still hold this run.
@@ -210,66 +223,69 @@ onUnmounted(() => {
         <template #header>
             <AppNavbar>
                 <template #title>
-                    <ULink :to="organisationStore.path('/executions/runs')"
-                           class="text-base font-medium text-muted hover:text-highlighted">Runs</ULink>
-                    <span class="text-base text-dimmed">/</span>
-                    <span class="truncate font-mono text-base font-semibold">{{ runId }}</span>
-                    <StatusPill v-if="run"
-                                :label="statusLabel(run.status)"
-                                :color="statusPillColor(run.status)"
-                                :spinner="run.status === 'running' || run.status === 'dispatched'" />
+                    <UBreadcrumb :items="crumbs">
+                        <template #item-label="{ item, active }">
+                            <UTooltip v-if="active"
+                                      :text="runId">
+                                <span class="tabular-nums slashed-zero">{{ item.label }}</span>
+                            </UTooltip>
+                            <template v-else>{{ item.label }}</template>
+                        </template>
+                    </UBreadcrumb>
+                    <StatusBadge v-if="run"
+                                 :status="run.status" />
                 </template>
             </AppNavbar>
-            <UDashboardToolbar v-if="cancellable">
+            <UDashboardToolbar v-if="cancellable || retryable">
                 <template #right>
-                    <UButton color="error"
-                             variant="subtle"
-                             icon="i-lucide-ban"
+                    <UButton v-if="cancellable"
+                             label="Cancel run"
+                             :icon="appConfig.icons.cancel"
+                             color="error"
+                             variant="soft"
                              :loading="cancelling"
-                             @click="onCancel">
-                        Cancel
-                    </UButton>
-                </template>
-            </UDashboardToolbar>
-            <UDashboardToolbar v-if="retryable">
-                <template #right>
-                    <UButton label="Retry failed"
-                             icon="i-lucide-rotate-ccw"
-                             color="neutral"
-                             variant="ghost"
-                             :loading="retrying"
-                             @click="onRetry('failed')" />
-                    <UButton label="Retry all"
-                             icon="i-lucide-refresh-cw"
-                             color="neutral"
-                             variant="ghost"
-                             :loading="retrying"
-                             @click="onRetry('all')" />
+                             @click="onCancel" />
+                    <template v-if="retryable">
+                        <UButton label="Retry all"
+                                 :icon="appConfig.ui.icons.reload"
+                                 color="neutral"
+                                 variant="outline"
+                                 :loading="retrying"
+                                 @click="onRetry('all')" />
+                        <UButton label="Retry failed"
+                                 :icon="appConfig.ui.icons.reload"
+                                 :loading="retrying"
+                                 @click="onRetry('failed')" />
+                    </template>
                 </template>
             </UDashboardToolbar>
         </template>
         <template #body>
-            <EmptyState v-if="notFound"
-                        icon="i-lucide-search-x"
-                          title="Run not found"
-                          :description="`No run ${runId} in ${organisationStore.organisation?.name}.`">
-                <UButton :to="organisationStore.path('/executions/runs')"
-                         class="mt-6"
-                         variant="outline"
-                         color="neutral"
-                         label="Back to runs" />
-            </EmptyState>
+            <UEmpty v-if="notFound"
+                    :icon="appConfig.ui.icons.search"
+                    title="Run not found"
+                    :description="`No run ${shortId(runId)} in ${organisationStore.organisation?.name}.`"
+                    :actions="[{
+                        label: 'Back to runs',
+                        color: 'neutral',
+                        variant: 'outline',
+                        to: organisationStore.path('/executions/runs'),
+                    }]" />
+            <LoadError v-else-if="fetchError"
+                       title="Couldn't load the run"
+                       :error="fetchError"
+                       @retry="load" />
             <template v-else>
-                <!-- The panel gap, less the 1px the splitter's panes pad their cards with. -->
-                <div class="flex min-h-0 flex-1 flex-col gap-[15px] sm:gap-[23px]">
+                <!-- The splitter's panes pad their cards by 1px for the ring; the splitter's -mt-px keeps the page's gap. -->
+                <div class="flex min-h-0 flex-1 flex-col gap-4 sm:gap-6">
                     <UCard v-if="run"
                            :ui="{ body: 'flex flex-col gap-4' }">
                         <ExecutionsRunMetaStrip :run="run"
                                                 :duration="stats.duration" />
                         <UAlert v-if="run.error"
-                                :color="run.status === 'canceled' ? 'neutral' : 'error'"
+                                :color="statusMeta(run.status).color"
                                 variant="subtle"
-                                icon="i-lucide-circle-x"
+                                :icon="statusIcon(run.status)"
                                 :title="run.status === 'canceled' ? 'Run canceled' : 'Run failed'"
                                 :description="run.error"
                                 :ui="{ description: 'whitespace-pre-wrap break-words font-mono text-xs' }" />
@@ -281,7 +297,7 @@ onUnmounted(() => {
                                ref="railSplitter"
                                auto-save-id="run-rail"
                                :items="railItems"
-                               :ui="{ root: 'min-h-0 flex-1', handle: railHandleClass }">
+                               :ui="{ root: 'min-h-0 flex-1 -mt-px', handle: railHandleClass }">
                         <template #rail="{ collapsed }">
                             <div v-if="!collapsed"
                                  class="h-full w-full min-w-0 overflow-y-auto">
@@ -319,10 +335,12 @@ onUnmounted(() => {
                                                        :content="false" />
                                             </div>
                                         </template>
-                                        <div v-if="run?.status === 'queued'"
-                                             class="flex h-full items-center justify-center text-muted">
-                                            <span class="text-sm">Run is currently queued...</span>
-                                        </div>
+                                        <UEmpty v-if="run?.status === 'queued'"
+                                                variant="naked"
+                                                size="sm"
+                                                :icon="appConfig.icons.queued"
+                                                title="Run is queued…"
+                                                class="h-full" />
                                         <ChartExecutionTimeline v-else-if="view === 'timeline'"
                                                                 v-model:selected-id="selectedAsset"
                                                                 :rows="timelineRows"
@@ -346,10 +364,15 @@ onUnmounted(() => {
                                                        size="xs"
                                                        :content="false" />
                                                 <span v-if="!eventsStore.loading"
-                                                      class="ml-auto text-sm text-muted">{{ eventCaption }}</span>
+                                                      class="ml-auto text-sm text-muted tabular-nums">{{ eventCaption }}</span>
                                             </div>
                                         </template>
-                                        <ExecutionsEventsTable v-model:event-in-focus="eventInFocus"
+                                        <LoadError v-if="eventsStore.error"
+                                                   title="Couldn't load the events"
+                                                   :error="eventsStore.error"
+                                                   @retry="reloadEvents" />
+                                        <ExecutionsEventsTable v-if="!eventsStore.error || eventsStore.events.length"
+                                                               v-model:event-in-focus="eventInFocus"
                                                                :events="eventsStore.events"
                                                                :loading="eventsStore.loading"
                                                                :loading-more="eventsStore.loadingMore"

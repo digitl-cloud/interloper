@@ -1,31 +1,25 @@
 <script setup lang="ts">
 import { h } from 'vue'
-import { StatusPill } from '#components'
+import { EntityBadge, StatusBadge } from '#components'
 import type { Run } from '~/types/run'
 
 const organisationStore = useOrganisationStore()
+const overviewStore = useOverviewStore()
+const { error } = storeToRefs(overviewStore)
+const appConfig = useAppConfig()
 
 const props = defineProps<{ runs: Run[] | null }>()
 
 /** As many rows as the overview returns, so the loaded table takes the skeleton's place. */
 const SKELETON_ROWS = 5
 
-const DOT: Record<ReturnType<typeof statusPillColor>, string> = {
-    success: 'bg-success',
-    error: 'bg-error',
-    primary: 'bg-primary',
-    warning: 'bg-warning',
-    neutral: 'bg-accented',
-}
-
 const rows = computed(() => (props.runs ?? []).map((run) => {
     const value = run.completed_at ?? run.started_at ?? run.created_at
     const at = value ? new Date(value) : null
     return {
         run,
-        color: statusPillColor(run.status),
         rel: at ? relativeTime(at) : '',
-        at: at ? `${formatShortDay(at)} ${formatClockTime(at)}` : '',
+        at: at ? formatDayTime(at) : '',
     }
 }))
 
@@ -35,21 +29,17 @@ const columns = withSkeletons<Row>([
     {
         id: 'target',
         header: 'Target',
-        cell: ({ row }) => h('span', { class: 'flex min-w-0 items-center gap-3' }, [
-            h('span', { class: ['size-2 shrink-0 rounded-full', DOT[row.original.color]] }),
-            h('span', { class: 'truncate font-mono text-xs text-highlighted' },
-                row.original.run.component_name ?? row.original.run.component_key ?? 'Deleted target'),
-        ]),
+        cell: ({ row }) => h(EntityBadge, { label: targetLabel(row.original.run), icon: targetIcon(row.original.run) }),
     },
     {
         id: 'status',
         header: 'Status',
-        cell: ({ row }) => h(StatusPill, { label: row.original.run.status, color: row.original.color, dot: false, class: 'capitalize' }),
+        cell: ({ row }) => h(StatusBadge, { status: row.original.run.status }),
     },
     {
         id: 'when',
         header: 'When',
-        cell: ({ row }) => h('span', { class: 'font-semibold text-highlighted' }, row.original.rel),
+        cell: ({ row }) => h('span', { class: 'font-semibold tabular-nums text-highlighted' }, row.original.rel),
     },
     {
         id: 'at',
@@ -71,12 +61,17 @@ const columns = withSkeletons<Row>([
                          size="sm" />
             </CardHeader>
         </template>
-        <UTable :data="runs ? rows : skeletonRows(SKELETON_ROWS)"
+        <LoadError v-if="!runs && error"
+                   title="Couldn't load recent runs"
+                   :error="error"
+                   @retry="overviewStore.fetchOverview()" />
+        <UTable v-else
+                :data="runs ? rows : skeletonRows(SKELETON_ROWS)"
                 :columns="columns"
                 :ui="{ tr: 'cursor-pointer' }"
                 @select="(_e: Event, row: any) => isSkeletonRow(row.original) || navigateTo(organisationStore.path(`/executions/runs/${row.original.run.id}`))">
             <template #empty>
-                <UEmpty icon="i-lucide-history"
+                <UEmpty :icon="appConfig.icons.run"
                         title="No runs yet"
                         description="The latest runs land here as they finish."
                         variant="naked"

@@ -4,9 +4,6 @@ import type { Backfill } from '~/types/backfill'
 /** A record carrying a server-resolved target (runs, backfills). */
 type Targeted = Pick<Run | Backfill, 'component_kind' | 'component_key' | 'component_name'>
 
-const JOB_ICON = 'i-lucide-calendar-clock'
-const DELETED_ICON = 'i-lucide-circle-slash'
-
 /**
  * Display label for a run/backfill target.
  *
@@ -26,6 +23,7 @@ export function targetLabel(record: Targeted): string {
  * target is gone.
  */
 export function targetIcon(record: Targeted): string {
-    if (record.component_key === null) return DELETED_ICON
-    return record.component_kind === 'job' ? JOB_ICON : componentIcon(record.component_key)
+    const { icons } = useAppConfig()
+    if (record.component_key === null) return icons.deleted
+    return record.component_kind === 'job' ? icons.job : componentIcon(record.component_key)
 }

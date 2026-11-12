@@ -3,6 +3,7 @@ import type { OrgMember } from '~/types/organisation'
 
 const organisationStore = useOrganisationStore()
 const toast = useToast()
+const appConfig = useAppConfig()
 const { orgId, members, loading, isMember, reload, join } = useAdminOrganisation()
 
 const inviteOpen = ref(false)
@@ -14,7 +15,7 @@ async function removeMember(member: OrgMember) {
         await reload()
     }
     catch (err) {
-        toast.add(errorToast(err, 'Failed to remove member'))
+        toast.add(errorToast(err, "Couldn't remove the member"))
     }
 }
 
@@ -25,7 +26,7 @@ async function cancelInvite(member: OrgMember) {
         await reload()
     }
     catch (err) {
-        toast.add(errorToast(err, 'Failed to cancel invitation'))
+        toast.add(errorToast(err, "Couldn't cancel the invitation"))
     }
 }
 
@@ -36,7 +37,7 @@ async function resendInvite(member: OrgMember) {
         await reload()
     }
     catch (err) {
-        toast.add(errorToast(err, 'Failed to resend invitation'))
+        toast.add(errorToast(err, "Couldn't resend the invitation"))
     }
 }
 </script>
@@ -51,11 +52,12 @@ async function resendInvite(member: OrgMember) {
                                   @resend-invite="resendInvite">
             <template #actions>
                 <UButton v-if="!loading && !isMember"
-                         icon="i-lucide-log-in"
+                         :icon="appConfig.icons.signIn"
                          label="Join"
+                         color="neutral"
                          variant="outline"
                          @click="join" />
-                <UButton icon="i-lucide-user-plus"
+                <UButton :icon="appConfig.icons.invite"
                          label="Invite"
                          @click="inviteOpen = true" />
             </template>

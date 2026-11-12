@@ -2,12 +2,13 @@ import type { ComputedRef, InjectionKey, Ref } from 'vue'
 import type { AdminOrganisation } from '~/types/admin'
 import type { OrgMember } from '~/types/organisation'
 
-/** What the admin organisation page shares with its tabs: the organisation, its members, and what changes them. */
+/** What the admin organisation page shares with its tabs: the organisation, its members, why they failed to load, and what changes them. */
 export interface AdminOrganisationPage {
     orgId: ComputedRef<string>
     org: Ref<AdminOrganisation | null>
     members: Ref<OrgMember[]>
     loading: Ref<boolean>
+    error: Ref<unknown>
     isMember: ComputedRef<boolean>
     reload: () => Promise<void>
     join: () => Promise<void>
@@ -26,11 +27,13 @@ export function provideAdminOrganisation(orgId: ComputedRef<string>): AdminOrgan
     const org = ref<AdminOrganisation | null>(null)
     const members = ref<OrgMember[]>([])
     const loading = ref(false)
+    const error = ref<unknown>(null)
     const isMember = computed(() =>
         members.value.some(member => member.status === 'active' && member.id === userStore.user?.id))
 
     async function reload() {
         loading.value = true
+        error.value = null
         try {
             const [memberRows, organisations] = await Promise.all([
                 organisationStore.fetchMemberRows(orgId.value, true),
@@ -40,7 +43,7 @@ export function provideAdminOrganisation(orgId: ComputedRef<string>): AdminOrgan
             members.value = memberRows
         }
         catch (err) {
-            console.error('[Admin] Failed to load organisation', err)
+            error.value = err
         }
         finally {
             loading.value = false
@@ -54,7 +57,7 @@ export function provideAdminOrganisation(orgId: ComputedRef<string>): AdminOrgan
             await reload()
         }
         catch (err) {
-            toast.add(errorToast(err, 'Failed to join organisation'))
+            toast.add(errorToast(err, "Couldn't join the organisation"))
         }
     }
 
@@ -65,7 +68,7 @@ export function provideAdminOrganisation(orgId: ComputedRef<string>): AdminOrgan
 
     watch(orgId, reload, { immediate: true })
 
-    const page: AdminOrganisationPage = { orgId, org, members, loading, isMember, reload, join, openWorkspace }
+    const page: AdminOrganisationPage = { orgId, org, members, loading, error, isMember, reload, join, openWorkspace }
     provide(ADMIN_ORGANISATION_PAGE, page)
     return page
 }

@@ -103,7 +103,7 @@ function onCreated(part: Part, result: ConnectionSetupResult) {
                       :streaming="isPartStreaming(segment.part)"
                       class="chat-prose *:first:mt-0 *:last:mb-0" />
             <p v-else
-               class="whitespace-pre-wrap">
+               class="whitespace-pre-wrap text-sm">
                 {{ segment.part.text }}
             </p>
         </template>

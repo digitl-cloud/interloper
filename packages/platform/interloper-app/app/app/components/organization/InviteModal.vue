@@ -1,4 +1,9 @@
 <script setup lang="ts">
+/**
+ * Invites people to an organisation, one email and role per row. Each
+ * invitation is sent on its own: the sent ones are counted in one toast, each
+ * failure gets its own, and the modal stays open while any failed.
+ */
 const open = defineModel<boolean>('open', { default: false })
 
 const props = defineProps<{
@@ -7,6 +12,7 @@ const props = defineProps<{
 
 const organisationStore = useOrganisationStore()
 const toast = useToast()
+const appConfig = useAppConfig()
 
 interface InviteRow {
     email: string
@@ -48,15 +54,17 @@ async function submit() {
 
     submitting.value = true
     let successCount = 0
-    const errors: string[] = []
+    let failed = false
 
     for (const invite of invites) {
+        const email = invite.email.trim()
         try {
-            await organisationStore.inviteMember(props.orgId, invite.email.trim(), invite.role)
+            await organisationStore.inviteMember(props.orgId, email, invite.role)
             successCount++
         }
         catch (err) {
-            errors.push(`${invite.email}: ${errorDetail(err) ?? 'Failed to send invitation'}`)
+            failed = true
+            toast.add(errorToast(err, `Couldn't invite ${email}`))
         }
     }
 
@@ -65,12 +73,9 @@ async function submit() {
         toast.add({ title: `${successCount} ${label} sent`, color: 'success' })
         emit('invited')
     }
-    for (const error of errors) {
-        toast.add({ title: error, color: 'error' })
-    }
 
     submitting.value = false
-    if (errors.length === 0) {
+    if (!failed) {
         open.value = false
     }
 }
@@ -78,41 +83,42 @@ async function submit() {
 
 <template>
     <UModal v-model:open="open"
-            title="Invite Members"
-            :ui="{ footer: 'justify-end' }">
+            title="Invite members">
         <template #body>
-            <div class="flex flex-col gap-3 w-full">
-                <div v-for="(row, index) in rows"
-                     :key="index"
-                     class="flex w-full items-center gap-2">
-                    <UInput v-model="row.email"
-                            type="email"
-                            placeholder="user@example.com"
-                            icon="i-lucide-mail"
-                            class="min-w-0 flex-1"
-                            :autofocus="index === 0" />
-                    <USelect v-model="row.role"
-                             :items="roleOptions"
-                             value-key="value"
-                             class="w-32 shrink-0" />
-                    <UButton v-if="rows.length > 1"
-                             icon="i-lucide-x"
+            <UFormField label="Invitations"
+                        description="Each person gets an email with a link to join, in the role you pick."
+                        required>
+                <div class="flex flex-col gap-2">
+                    <div v-for="(row, index) in rows"
+                         :key="index"
+                         class="flex items-center gap-2">
+                        <UInput v-model="row.email"
+                                type="email"
+                                placeholder="user@example.com"
+                                icon="i-lucide-mail"
+                                class="min-w-0 flex-1"
+                                :autofocus="index === 0" />
+                        <USelect v-model="row.role"
+                                 :items="roleOptions"
+                                 value-key="value"
+                                 aria-label="Role"
+                                 class="w-32 shrink-0" />
+                        <UButton v-if="rows.length > 1"
+                                 :icon="appConfig.ui.icons.close"
+                                 color="neutral"
+                                 variant="ghost"
+                                 aria-label="Remove invitation"
+                                 @click="removeRow(index)" />
+                    </div>
+                    <UButton label="Add another"
+                             :icon="appConfig.ui.icons.plus"
                              color="neutral"
                              variant="ghost"
                              size="sm"
-                             square
-                             class="shrink-0"
-                             @click="removeRow(index)" />
+                             class="self-start"
+                             @click="addRow" />
                 </div>
-
-                <UButton icon="i-lucide-plus"
-                         label="Add another"
-                         color="neutral"
-                         variant="ghost"
-                         size="sm"
-                         class="self-start"
-                         @click="addRow" />
-            </div>
+            </UFormField>
         </template>
 
         <template #footer>
@@ -120,8 +126,8 @@ async function submit() {
                      color="neutral"
                      variant="outline"
                      @click="open = false" />
-            <UButton label="Send Invitations"
-                     icon="i-lucide-send"
+            <UButton label="Send invitations"
+                     :icon="appConfig.icons.invite"
                      :disabled="!canSubmit || submitting"
                      :loading="submitting"
                      @click="submit" />

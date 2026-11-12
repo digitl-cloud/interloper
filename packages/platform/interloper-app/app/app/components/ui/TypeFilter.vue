@@ -10,6 +10,8 @@ const ALL = '__all__'
 
 const key = defineModel<string | null>({ required: true })
 
+const appConfig = useAppConfig()
+
 const props = defineProps<{
     components: Pick<ComponentRecord, 'kind' | 'key'>[]
 }>()
@@ -30,8 +32,9 @@ const items = computed(() => {
     <USelectMenu :model-value="key ?? ALL"
                  :items="items"
                  value-key="value"
-                 icon="i-lucide-tag"
-                 :search-input="{ placeholder: 'Search types...' }"
-                 class="w-56"
+                 :icon="appConfig.icons.type"
+                 :search-input="{ placeholder: 'Search types…', icon: appConfig.ui.icons.search }"
+                 :ui="{ content: 'min-w-fit' }"
+                 class="w-40"
                  @update:model-value="key = $event === ALL ? null : $event" />
 </template>

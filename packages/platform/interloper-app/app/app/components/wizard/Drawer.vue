@@ -1,9 +1,9 @@
 <script setup lang="ts">
 /**
- * Shared chrome for the create/edit wizards: right drawer at the design
- * width, close button, and the WizardStepperNav footer wired to the stepper
- * exposed by the body slot (pages keep `ref="stepperRef"` on their stepper
- * and pass it back via the `stepper` prop).
+ * Shared chrome for the create/edit wizards: a right drawer at the theme's
+ * width with its close button, and the WizardStepperNav footer wired to the
+ * stepper exposed by the body slot (pages keep `ref="stepperRef"` on their
+ * stepper and pass it back via the `stepper` prop).
  */
 interface StepperHandle {
     title: string
@@ -33,19 +33,13 @@ withDefaults(defineProps<{
              direction="right"
              :handle="false"
              :handle-only="true"
+             close
              :title="stepper?.title ?? defaultTitle"
-             :ui="{ content: 'w-[35rem]', description: 'sr-only' }">
+             :ui="{ description: 'sr-only' }">
         <template #description>
             {{ description }}
         </template>
         <template #body>
-            <UButton icon="i-lucide-x"
-                     color="neutral"
-                     variant="ghost"
-                     size="md"
-                     class="absolute top-[22px] right-[26px] text-muted"
-                     aria-label="Close"
-                     @click="open = false" />
             <slot />
         </template>
         <template #footer>

@@ -3,14 +3,10 @@ import { jobTargetIds, relationRefs } from '~/types/component'
 import type { AssetDefinition } from '~/types/catalog'
 import { ANY_SOURCE, parseQualifiedKey, qualifiedKey, requiredUpstreams } from '~/types/catalog'
 
-// ─── Types ───────────────────────────────────────────────────────────
-
 export interface AssetWarning {
     category: 'dependency' | 'destination' | 'job'
     message: string
 }
-
-// ─── Composable ──────────────────────────────────────────────────────
 
 /**
  * Computes categorised warnings for assets.

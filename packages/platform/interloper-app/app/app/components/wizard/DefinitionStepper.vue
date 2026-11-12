@@ -54,7 +54,7 @@ interface ExtraStep {
 const props = withDefaults(defineProps<{
     /** Component kind this wizard creates and edits (e.g. 'job'). */
     kind: string
-    /** Capitalized noun for titles and toasts (e.g. 'Job', 'Connection'). */
+    /** The kind's noun, capitalised (e.g. 'Job', 'Connection'): it starts toasts and is lowercased in titles and buttons. */
     noun: string
     /** Pass an existing component to edit, or null to create. */
     component: ComponentRecord | null
@@ -106,6 +106,7 @@ const emit = defineEmits<{
 const componentsStore = useComponentsStore()
 const catalogStore = useCatalogStore()
 const toast = useToast()
+const appConfig = useAppConfig()
 
 const isEditing = computed(() => !!props.component)
 
@@ -234,38 +235,44 @@ const resourceContext = computed<Record<string, Record<string, unknown>>>(() => 
 
 // ── Data fetching ────────────────────────────────────────────────
 
+/** Seed the form from the edited component; a failed load is reported, with a retry. */
+async function loadEdit() {
+    if (!props.component) return
+    loadingEdit.value = true
+    loadError.value = null
+    try {
+        // Config always comes from the detail response: a secret kind's
+        // list row carries at most the schema's x-public subset, which
+        // must never seed (and then resubmit as) the whole form.
+        const record = hasConfigFields.value
+            ? await componentsStore.fetchOne(props.component.id)
+            : props.component
+        name.value = props.component.name ?? ''
+        // Seed only fields the schema declares: retired config keys are
+        // dropped rather than resubmitted.
+        const properties = new Set(Object.keys((schema.value?.properties as object | undefined) ?? {}))
+        configData.value = Object.fromEntries(
+            Object.entries(record.config ?? {})
+                .filter(([key]) => properties.has(key) && !props.exclude.includes(key)),
+        )
+        for (const step of props.relationSteps) {
+            relationSelections.value[step.name] = relationIds(props.component, step.name)
+        }
+        resourceSelections.value = resourceMap(props.component)
+    }
+    catch (e) {
+        // Seeding half a form is worse than seeding none: say what failed
+        // and let the user decide, rather than resubmitting blanks.
+        loadError.value = e as Error
+    }
+    finally {
+        loadingEdit.value = false
+    }
+}
+
 onMounted(async () => {
     if (props.component) {
-        loadingEdit.value = true
-        loadError.value = null
-        try {
-            // Config always comes from the detail response: a secret kind's
-            // list row carries at most the schema's x-public subset, which
-            // must never seed (and then resubmit as) the whole form.
-            const record = hasConfigFields.value
-                ? await componentsStore.fetchOne(props.component.id)
-                : props.component
-            name.value = props.component.name ?? ''
-            // Seed only fields the schema declares: retired config keys are
-            // dropped rather than resubmitted.
-            const properties = new Set(Object.keys((schema.value?.properties as object | undefined) ?? {}))
-            configData.value = Object.fromEntries(
-                Object.entries(record.config ?? {})
-                    .filter(([key]) => properties.has(key) && !props.exclude.includes(key)),
-            )
-            for (const step of props.relationSteps) {
-                relationSelections.value[step.name] = relationIds(props.component, step.name)
-            }
-            resourceSelections.value = resourceMap(props.component)
-        }
-        catch (e) {
-            // Seeding half a form is worse than seeding none: say what failed
-            // and let the user decide, rather than resubmitting blanks.
-            loadError.value = e as Error
-        }
-        finally {
-            loadingEdit.value = false
-        }
+        await loadEdit()
     }
     else if (props.initialTypeKey) {
         // Triggers the selection watcher below, which advances past the type step.
@@ -309,7 +316,7 @@ const RELATION_CHROME: Record<string, { icon: string, noun: string }> = {
 }
 
 const steps = computed<StepperItem[]>(() => [
-    ...(hasTypeStep.value ? [{ title: 'Type', icon: 'i-lucide-shapes', slot: 'type' as const }] : []),
+    ...(hasTypeStep.value ? [{ title: 'Type', icon: appConfig.icons.type, slot: 'type' as const }] : []),
     ...props.extraSteps.filter(s => s.placement === 'start')
         .map(s => ({ title: s.title, icon: s.icon, slot: `step-${s.name}` })),
     ...activeRelationSteps.value.map(step => ({
@@ -324,7 +331,7 @@ const steps = computed<StepperItem[]>(() => [
     })),
     ...props.extraSteps.filter(s => s.placement === 'end')
         .map(s => ({ title: s.title, icon: s.icon, slot: `step-${s.name}` })),
-    { title: 'Details', icon: 'i-lucide-settings-2', slot: 'details' as const },
+    { title: 'Details', icon: appConfig.icons.config, slot: 'details' as const },
 ])
 
 const { activeStep, hasPrev, isLastStep, next: nextStep, prev: prevStep } = useStepperFlow(computed(() => steps.value.length))
@@ -424,7 +431,7 @@ async function submit() {
         else emit('created')
     }
     catch (e) {
-        toast.add(errorToast(e, `Failed to ${isEditing.value ? 'update' : 'create'} ${props.noun.toLowerCase()}`))
+        toast.add(errorToast(e, `Couldn't ${isEditing.value ? 'save' : 'create'} ${props.noun.toLowerCase()}`))
     }
     finally {
         submitting.value = false
@@ -438,10 +445,10 @@ function handleNext() {
 
 // ── Expose navigation state ──────────────────────────────────────
 
-const title = computed(() => `${isEditing.value ? 'Edit' : 'New'} ${props.noun}`)
+const title = computed(() => `${isEditing.value ? 'Edit' : 'New'} ${props.noun.toLowerCase()}`)
 const submitLabel = computed(() => {
     if (!isLastStep.value) return 'Next'
-    return isEditing.value ? `Save ${props.noun}` : `Create ${props.noun}`
+    return `${isEditing.value ? 'Save' : 'Create'} ${props.noun.toLowerCase()}`
 })
 
 defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, definition, next: handleNext, prev: prevStep })
@@ -450,15 +457,14 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
 <template>
     <div v-if="loadingEdit"
          class="flex items-center justify-center py-12">
-        <UIcon name="i-lucide-loader-2"
-               class="size-6 animate-spin text-muted" />
+        <UIcon :name="appConfig.ui.icons.loading"
+               class="size-5 animate-spin text-dimmed" />
     </div>
 
-    <UAlert v-else-if="loadError"
-            color="error"
-            icon="i-lucide-triangle-alert"
-            :title="`Couldn't load this ${noun.toLowerCase()}`"
-            :description="errorDetail(loadError) ?? GENERIC_ERROR" />
+    <LoadError v-else-if="loadError"
+               :title="`Couldn't load this ${noun.toLowerCase()}`"
+               :error="loadError"
+               @retry="loadEdit" />
 
     <UStepper v-else
               v-model="activeStep"
@@ -523,7 +529,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
 
                 <UAlert v-if="unreadableConfig"
                         color="warning"
-                        icon="i-lucide-lock"
+                        :icon="appConfig.icons.unreadable"
                         :title="`This ${noun.toLowerCase()}'s stored config could not be read`"
                         description="The server's encryption key does not match the one it was saved with. The fields below start empty; saving replaces the unreadable config." />
 
@@ -567,10 +573,10 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                                                   @field-errors="applyCheckErrors" />
                     </template>
                 </SchemaForm>
-                <div v-else
-                     class="text-sm text-muted italic">
-                    No configuration required for this type.
-                </div>
+                <p v-else
+                   class="text-sm text-muted">
+                    This type needs no configuration.
+                </p>
 
             </div>
         </template>

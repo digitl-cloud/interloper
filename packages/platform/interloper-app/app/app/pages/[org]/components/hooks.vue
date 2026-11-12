@@ -12,6 +12,7 @@ const views = useComponentViews()
 const { statusBadge } = useDrift()
 const catalogStore = useCatalogStore()
 const toast = useToast()
+const appConfig = useAppConfig()
 
 const hooks = computed(() => componentsStore.byKind('hook'))
 
@@ -83,7 +84,7 @@ async function handleDelete(ids: string[]) {
         toast.add({ title: `${ids.length} hook${ids.length > 1 ? 's' : ''} deleted`, color: 'success' })
     }
     catch (e) {
-        toast.add(inUseToast(e, 'Hook') ?? errorToast(e, 'Failed to delete hook'))
+        toast.add(inUseToast(e, 'Hook') ?? errorToast(e, "Couldn't delete the hook"))
     }
 }
 
@@ -115,7 +116,7 @@ function matchesFilters(hook: ComponentRecord): boolean {
                        :loading="componentsStore.loading"
                        :error="componentsStore.error"
                        :delete-impact="componentsStore.deleteImpact"
-                       search-placeholder="Search hooks..."
+                       search-placeholder="Search hooks…"
                        @delete="handleDelete"
                        @edit="handleEdit"
                        @retry="componentsStore.fetchAll(['hook'])">
@@ -125,26 +126,21 @@ function matchesFilters(hook: ComponentRecord): boolean {
                     <EnabledFilter v-model="enabled" />
                 </template>
 
+                <template #empty>
+                    <UEmpty :icon="appConfig.icons.hook"
+                            title="No hooks yet"
+                            description="A hook reacts to what your pipelines do. Watch a source, asset, or job and trigger downstream runs or notify an external system when runs complete or fail."
+                            :actions="[{ label: 'New hook', icon: appConfig.ui.icons.plus, onClick: handleCreate }]" />
+                </template>
                 <template #actions>
-                    <UButton icon="i-lucide-plus"
+                    <UButton :icon="appConfig.ui.icons.plus"
                              label="New hook"
                              @click="handleCreate" />
-                </template>
-
-                <template #empty>
-                    <EmptyState icon="i-carbon-lightning"
-                                title="No hooks yet"
-                                description="A hook reacts to what your pipelines do. Watch a source, asset, or job and trigger downstream runs or notify an external system when runs complete or fail.">
-                        <UButton icon="i-lucide-plus"
-                                 label="New hook"
-                                 class="mt-5"
-                                 @click="handleCreate" />
-                    </EmptyState>
                 </template>
             </DataTable>
 
             <WizardDrawer v-model:open="drawerOpen"
-                          :default-title="editingHook ? 'Edit Hook' : 'New Hook'"
+                          :default-title="editingHook ? 'Edit hook' : 'New hook'"
                           description="Configure hook"
                           :stepper="stepperRef">
                 <WizardDefinitionStepper v-if="drawerOpen"

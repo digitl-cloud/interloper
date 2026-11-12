@@ -5,6 +5,7 @@ import type { RunAttempt } from '~/composables/runAttempts'
 import type { RunStatusBucket } from '~/composables/runStats'
 
 const organisationStore = useOrganisationStore()
+const appConfig = useAppConfig()
 
 const props = defineProps<{
     /** This attempt's assets, unfiltered: the rail is where the status filter is chosen. */
@@ -56,7 +57,7 @@ const assetGroups = computed<ListboxItem[][]>(() => props.buckets
     ])
     .filter(group => group.length > 1))
 
-const bucketsByKey = computed(() => new Map(props.buckets.map(bucket => [bucket.key, bucket])))
+const countsByKey = computed(() => new Map(props.buckets.map(bucket => [bucket.key, bucket.count])))
 
 const durations = computed(() => new Map(props.rows.map((row) => {
     const bar = row.bars[0]
@@ -71,7 +72,7 @@ function onHighlight(payload: { value: unknown } | undefined) {
 const widest = computed(() => Math.max(1, ...props.attempts.map(attempt => attempt.stats.total)))
 
 function outcome(attempt: RunAttempt): string {
-    const started = attempt.run.started_at ? new Date(attempt.run.started_at).toLocaleTimeString('en-US', { hour12: false }) : 'not started'
+    const started = attempt.run.started_at ? formatClockTime(new Date(attempt.run.started_at), true) : 'not started'
     return [...outcomeSummary(attempt.stats), started].join(' · ')
 }
 </script>
@@ -82,13 +83,13 @@ function outcome(attempt: RunAttempt): string {
                 :items="sections"
                 :ui="{
                     root: 'flex w-full flex-col gap-3',
-                    item: 'overflow-hidden rounded-lg border border-default bg-muted last:border-b',
+                    item: 'overflow-hidden rounded-lg border-b-0 bg-muted ring ring-default',
                     trigger: 'px-4 py-3 text-sm font-semibold',
                     content: 'flex flex-col',
                 }">
         <template #trailing="{ item, ui }">
-            <span class="ms-auto text-xs font-normal text-muted tabular-nums">{{ item.count }}</span>
-            <UIcon name="i-lucide-chevron-down"
+            <span class="ms-auto text-xs font-normal tabular-nums text-muted">{{ item.count }}</span>
+            <UIcon :name="appConfig.ui.icons.chevronDown"
                    :class="ui.trailingIcon({ class: 'ms-0 size-3.5 text-dimmed' })" />
         </template>
 
@@ -108,20 +109,20 @@ function outcome(attempt: RunAttempt): string {
                       @leave="hovered = null">
                 <template #item="{ item, ui }">
                     <template v-if="item.header">
-                        <span class="m-1 size-[7px] shrink-0 rounded-full"
-                              :class="bucketsByKey.get(item.bucket)?.colorClass" />
-                        <span class="flex-1 truncate text-xs font-semibold uppercase tracking-[.05em]"
-                              :class="statusFilter === item.bucket ? 'text-primary' : 'text-dimmed'">{{ item.label }}</span>
-                        <span class="text-xs font-semibold tabular-nums"
-                              :class="statusFilter === item.bucket ? 'text-primary' : 'text-dimmed'">{{ bucketsByKey.get(item.bucket)?.count }}</span>
+                        <StatusDot :color="statusMeta(item.bucket).color"
+                                   class="m-1" />
+                        <span class="caption flex-1 truncate"
+                              :class="statusFilter === item.bucket ? 'text-primary' : 'text-muted'">{{ item.label }}</span>
+                        <span class="text-xs font-medium tabular-nums"
+                              :class="statusFilter === item.bucket ? 'text-primary' : 'text-dimmed'">{{ countsByKey.get(item.bucket) }}</span>
                     </template>
                     <span v-else
                           class="flex min-w-0 flex-1 items-center gap-1.5 transition-opacity"
-                          :class="statusFilter && statusFilter !== item.bucket ? 'opacity-45' : ''">
+                          :class="statusFilter && statusFilter !== item.bucket ? 'opacity-50' : ''">
                         <UIcon :name="item.icon"
                                :class="ui.itemLeadingIcon({ class: 'size-3.5' })" />
-                        <span class="min-w-0 flex-1 truncate font-mono">{{ item.label }}</span>
-                        <span class="shrink-0 font-mono text-xs text-dimmed">{{ durations.get(item.value) }}</span>
+                        <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
+                        <span class="shrink-0 text-xs tabular-nums text-dimmed">{{ durations.get(item.value) }}</span>
                     </span>
                 </template>
             </UListbox>
@@ -140,17 +141,15 @@ function outcome(attempt: RunAttempt): string {
                          active-variant="soft"
                          class="flex-col items-stretch gap-2 rounded-none px-4 py-2 text-left">
                     <span class="flex items-center gap-2">
-                        <span class="size-2 shrink-0 rounded-full"
-                              :class="runStatusDotClass(attempt.run.status)" />
+                        <StatusDot :status="attempt.run.status" />
                         <span class="text-sm font-semibold">Attempt {{ attempt.run.attempt }}</span>
-                        <span class="font-mono text-xs font-normal text-dimmed">{{ attempt.run.id.substring(0, 8) }}</span>
-                        <span class="ms-auto text-xs font-normal text-muted tabular-nums">{{ attempt.stats.duration ?? '—' }}</span>
+                        <span class="text-xs font-normal tabular-nums slashed-zero text-dimmed">{{ shortId(attempt.run.id) }}</span>
+                        <span class="ms-auto text-xs font-normal tabular-nums text-muted">{{ attempt.stats.duration ?? '—' }}</span>
                     </span>
                     <UProgressGroup :items="progressSegments(attempt.stats)"
                                     :max="widest"
-                                    size="sm"
-                                    :ui="{ base: 'h-1.5' }" />
-                    <span class="truncate text-xs font-normal text-dimmed">{{ outcome(attempt) }}</span>
+                                    size="sm" />
+                    <span class="truncate text-xs font-normal tabular-nums text-dimmed">{{ outcome(attempt) }}</span>
                 </UButton>
             </div>
         </template>

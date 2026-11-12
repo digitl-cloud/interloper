@@ -8,6 +8,7 @@ definePageMeta({
 const route = useRoute()
 const { apiFetch } = useApi()
 const userStore = useUserStore()
+const appConfig = useAppConfig()
 const toast = useToast()
 
 const status = ref<'loading' | 'error'>('loading')
@@ -26,33 +27,44 @@ onMounted(async () => {
     }
     catch (err) {
         status.value = 'error'
-        errorMessage.value = errorDetail(err) ?? 'Failed to accept invitation'
+        errorMessage.value = errorDetail(err) ?? GENERIC_ERROR
     }
 })
 </script>
 
 <template>
-    <div class="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
-        <div v-if="status === 'loading'"
-             class="text-center">
-            <UIcon name="i-lucide-loader-2"
-                   class="size-8 animate-spin text-primary" />
-            <p class="mt-4 text-muted">
-                Accepting invitation...
-            </p>
-        </div>
-        <div v-else
-             class="text-center space-y-4">
-            <UIcon name="i-lucide-circle-x"
-                   class="size-12 text-error" />
-            <p class="text-lg font-medium">
-                Unable to accept invitation
-            </p>
-            <p class="text-muted">
-                {{ errorMessage }}
-            </p>
-            <UButton label="Go Home"
-                     to="/" />
-        </div>
+    <div class="flex min-h-svh w-full items-center justify-center p-6">
+        <UCard class="w-full max-w-sm">
+            <template #header>
+                <div class="flex flex-col items-center gap-3 text-center">
+                    <LogoIcon class="h-8 text-primary" />
+                    <h1 class="text-2xl font-semibold text-highlighted">
+                        Invitation
+                    </h1>
+                </div>
+            </template>
+
+            <div v-if="status === 'loading'"
+                 class="flex flex-col items-center gap-3 py-6">
+                <UIcon :name="appConfig.ui.icons.loading"
+                       class="size-5 animate-spin text-dimmed" />
+                <p class="text-sm text-muted">
+                    Accepting the invitation…
+                </p>
+            </div>
+
+            <div v-else
+                 class="flex flex-col gap-4">
+                <UAlert color="error"
+                        :icon="appConfig.ui.icons.error"
+                        title="Couldn't accept the invitation"
+                        :description="errorMessage" />
+                <UButton label="Go home"
+                         color="neutral"
+                         variant="outline"
+                         block
+                         to="/" />
+            </div>
+        </UCard>
     </div>
 </template>

@@ -2,25 +2,20 @@ import type { Ref } from 'vue'
 import type { Run } from '~/types/run'
 import type { Execution, ExecutionStatus } from '~/types/execution'
 
-interface StatusMeta {
+interface StatusBucket {
     key: string
-    label: string
     /** Execution or run statuses the bucket gathers (a run is `dispatched` before it runs). */
     statuses: string[]
-    /** Tailwind background class for the dot. */
-    colorClass: string
-    /** The same color as a CSS value, for components colored by prop (`UProgressGroup`). */
-    color: string
 }
 
-/** Bucket order also drives the proportion-bar segment order and the legend. */
-const STATUS_META: StatusMeta[] = [
-    { key: 'success', label: 'Success', statuses: ['success'], colorClass: 'bg-emerald-500', color: 'var(--color-emerald-500)' },
-    { key: 'running', label: 'Running', statuses: ['running', 'dispatched'], colorClass: 'bg-blue-500', color: 'var(--color-blue-500)' },
-    { key: 'failed', label: 'Failed', statuses: ['failed'], colorClass: 'bg-red-500', color: 'var(--color-red-500)' },
-    { key: 'canceled', label: 'Canceled', statuses: ['canceled'], colorClass: 'bg-amber-500', color: 'var(--color-amber-500)' },
-    { key: 'skipped', label: 'Skipped', statuses: ['skipped'], colorClass: 'bg-gray-400', color: 'var(--color-gray-400)' },
-    { key: 'pending', label: 'Pending', statuses: ['pending', 'queued'], colorClass: 'bg-gray-600', color: 'var(--color-gray-600)' },
+/** Bucket order also drives the proportion-bar segment order and the legend; labels and colours come from the status table. */
+const STATUS_META: StatusBucket[] = [
+    { key: 'success', statuses: ['success'] },
+    { key: 'running', statuses: ['running', 'dispatched'] },
+    { key: 'failed', statuses: ['failed'] },
+    { key: 'canceled', statuses: ['canceled'] },
+    { key: 'skipped', statuses: ['skipped'] },
+    { key: 'pending', statuses: ['pending', 'queued'] },
 ]
 
 /** Always shown in the legend, even at zero. Pending only appears when present. */
@@ -67,12 +62,13 @@ export function runStats(run: Run | null, counts: Record<string, number>): RunSt
     const total = Object.values(counts).reduce((sum, count) => sum + count, 0)
     const buckets: RunStatusBucket[] = STATUS_META.map((m) => {
         const count = m.statuses.reduce((sum, st) => sum + (counts[st] ?? 0), 0)
+        const meta = statusMeta(m.key)
         return {
             key: m.key,
-            label: m.label,
+            label: meta.label,
             count,
-            colorClass: m.colorClass,
-            color: m.color,
+            colorClass: STATUS_BG[meta.color],
+            color: STATUS_CSS[meta.color],
             percent: total ? (count / total) * 100 : 0,
             core: CORE_KEYS.has(m.key),
         }
@@ -113,7 +109,7 @@ export function useRunStats(run: Ref<Run | null>, executions: Ref<Execution[]>) 
 
 /** Dot/segment color class for an execution or run status. */
 export function runStatusDotClass(status: string): string {
-    return STATUS_META.find(m => (m.statuses as string[]).includes(status))?.colorClass ?? 'bg-gray-400'
+    return STATUS_BG[statusMeta(status).color]
 }
 
 /** The status bucket an execution status falls in (e.g. queued → pending). */

@@ -7,9 +7,8 @@
 </script>
 
 <template>
-    <div class="flex items-center gap-1.5 text-muted">
+    <div class="flex items-center gap-1.5 text-sm text-muted">
         <AgentIndicator class="size-4" />
-        <UChatShimmer text="Thinking..."
-                      class="text-sm" />
+        <UChatShimmer text="Thinking…" />
     </div>
 </template>

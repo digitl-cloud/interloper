@@ -8,6 +8,8 @@ const ALL = '__all__'
 
 const kind = defineModel<string | null>({ required: true })
 
+const appConfig = useAppConfig()
+
 const props = defineProps<{
     components: Pick<ComponentRecord, 'kind'>[]
 }>()
@@ -22,7 +24,7 @@ const items = computed(() => [
     <USelect :model-value="kind ?? ALL"
              :items="items"
              value-key="value"
-             icon="i-lucide-shapes"
+             :icon="appConfig.icons.kind"
              class="w-40"
              @update:model-value="kind = $event === ALL ? null : $event" />
 </template>

@@ -25,6 +25,8 @@ const props = defineProps<{
 const config = defineModel<Record<string, unknown>>('config', { default: () => ({}) })
 const valid = defineModel<boolean>('valid', { default: true })
 
+const appConfig = useAppConfig()
+
 // A stored null lookback means "no window": the job was saved while its targets
 // were unpartitioned. Leaving it unset lets the field start from the schema
 // default instead of blank.
@@ -78,7 +80,7 @@ watch(
 <template>
     <template v-if="partitioned">
         <div class="flex items-center gap-2 text-sm text-muted">
-            <UIcon name="i-lucide-calendar-days"
+            <UIcon :name="appConfig.icons.window"
                    class="size-4 shrink-0" />
             <span>Partitioned: the selected targets contain time-partitioned assets.</span>
         </div>

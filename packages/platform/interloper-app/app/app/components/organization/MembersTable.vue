@@ -1,10 +1,15 @@
 <script setup lang="ts">
+/**
+ * An organisation's members and pending invitations, each with an avatar, a
+ * role badge and a membership status; admins get the row actions (remove a
+ * member, resend or cancel an invitation).
+ */
 import { h, resolveComponent } from 'vue'
 import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import type { OrgMember } from '~/types/organisation'
 
 const UAvatar = resolveComponent('UAvatar')
-const StatusPill = resolveComponent('StatusPill')
+const UBadge = resolveComponent('UBadge')
 
 const props = defineProps<{
     members: OrgMember[]
@@ -19,6 +24,7 @@ const emit = defineEmits<{
 }>()
 
 const userStore = useUserStore()
+const appConfig = useAppConfig()
 
 function getRowMenuItems(member: OrgMember): DropdownMenuItem[][] {
     if (member.status === 'active') {
@@ -37,14 +43,14 @@ function getRowMenuItems(member: OrgMember): DropdownMenuItem[][] {
         [
             {
                 label: 'Resend invitation',
-                icon: 'i-lucide-send',
+                icon: appConfig.icons.invite,
                 onSelect: () => emit('resend-invite', member),
             },
         ],
         [
             {
                 label: 'Cancel invitation',
-                icon: 'i-lucide-x',
+                icon: appConfig.icons.cancel,
                 color: 'error' as const,
                 onSelect: () => emit('cancel-invite', member),
             },
@@ -59,17 +65,16 @@ const columns = computed<TableColumn<OrgMember>[]>(() => {
             header: 'Name',
             cell: ({ row }) => {
                 const member = row.original
-                const avatar = member.avatar_url
-                    ? h(UAvatar, { src: member.avatar_url, alt: member.name ?? member.email, size: 'sm' })
-                    : h('div', {
-                        class: 'size-8 shrink-0 rounded-full flex items-center justify-center text-white text-xs font-semibold',
-                        style: { background: avatarColor(member.email || member.id) },
-                    }, getInitials(member.name, member.email))
+                const avatar = h(UAvatar, {
+                    src: member.avatar_url ?? undefined,
+                    alt: member.name ?? member.email,
+                    text: getInitials(member.name, member.email),
+                })
                 const name = member.name
-                    ? h('span', { class: 'font-semibold text-highlighted' }, member.name)
+                    ? h('span', { class: 'font-medium text-highlighted' }, member.name)
                     : h('span', { class: 'text-dimmed' }, '—')
                 const you = member.id === userStore.user?.id
-                    ? h('span', { class: 'px-1.5 py-px rounded-md bg-elevated text-[11px] font-semibold text-dimmed' }, 'You')
+                    ? h(UBadge, { color: 'neutral', size: 'sm', label: 'You' })
                     : null
                 return h('div', { class: 'flex items-center gap-3' }, [avatar, name, you])
             },
@@ -83,9 +88,7 @@ const columns = computed<TableColumn<OrgMember>[]>(() => {
             header: 'Role',
             cell: ({ row }) => {
                 const role = row.getValue<string>('role')
-                return h('span', {
-                    class: `inline-block px-2.5 py-1 rounded-md text-xs font-semibold ${ROLE_TINTS[role] ?? ROLE_TINTS.viewer}`,
-                }, role.charAt(0).toUpperCase() + role.slice(1))
+                return h(UBadge, { color: roleColor(role), label: role.charAt(0).toUpperCase() + role.slice(1) })
             },
         },
         {
@@ -93,7 +96,7 @@ const columns = computed<TableColumn<OrgMember>[]>(() => {
             header: 'Status',
             cell: ({ row }) => {
                 const active = row.getValue<string>('status') === 'active'
-                return h(StatusPill, {
+                return h(UBadge, {
                     color: active ? 'success' : 'warning',
                     label: active ? 'Active' : 'Pending',
                 })
@@ -112,7 +115,7 @@ const columns = computed<TableColumn<OrgMember>[]>(() => {
                :row-actions="isAdmin ? getRowMenuItems : undefined"
                no-actions
                no-row-click
-               search-placeholder="Search members...">
+               search-placeholder="Search members…">
         <template #actions>
             <slot name="actions" />
         </template>

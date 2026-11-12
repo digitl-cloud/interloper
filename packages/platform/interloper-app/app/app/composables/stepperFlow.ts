@@ -2,15 +2,17 @@ import type { StepperItem } from '@nuxt/ui'
 
 /** Swap completed steps' icons for a check, based on the active index. */
 export function useCheckedSteps(steps: MaybeRefOrGetter<StepperItem[]>, activeStep: Ref<number>) {
+    const appConfig = useAppConfig()
     return computed<StepperItem[]>(() => toValue(steps).map((item, i) => ({
         ...item,
-        icon: activeStep.value > i ? 'i-lucide-check' : item.icon,
+        icon: activeStep.value > i ? appConfig.ui.icons.check : item.icon,
     })))
 }
 
-/** Icon for a wizard resource-relation step or recap row. */
+/** Icon for a wizard resource-relation step or recap row. Call it where `useAppConfig` is available (setup, render). */
 export function resourceRelationIcon(relationName: string): string {
-    return relationName === 'connection' ? 'i-lucide-key-round' : 'i-lucide-settings'
+    const { icons } = useAppConfig()
+    return relationName === 'connection' ? icons.connection : icons.config
 }
 
 export function useStepperFlow(stepsCount: MaybeRefOrGetter<number>) {

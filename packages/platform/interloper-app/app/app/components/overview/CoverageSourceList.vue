@@ -16,6 +16,7 @@ const emit = defineEmits<{ select: [date: string] }>()
 const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
 const editor = useCanEdit()
+const { ui, icons } = useAppConfig()
 
 /** A window's partitions by state, summed over its days; missed snapshots are counted apart, never among them. */
 interface DayTally {
@@ -124,17 +125,12 @@ const summary = computed(() => {
     return parts.join(' · ')
 })
 
-const label = computed(() => new Date(`${props.date}T00:00:00Z`).toLocaleDateString(undefined, {
-    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
-}))
+const label = computed(() => formatCalendarDay(props.date, { weekday: true }))
 
 const windowLabel = computed(() => {
     const { since, until } = props.coverage
-    const year = since.slice(0, 4) !== until.slice(0, 4) ? 'numeric' : undefined
-    const format = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString(undefined, {
-        day: 'numeric', month: 'short', year, timeZone: 'UTC',
-    })
-    return `${format(since)} → ${format(until)}`
+    const year = since.slice(0, 4) !== until.slice(0, 4)
+    return `${formatCalendarDay(since, { year })} → ${formatCalendarDay(until, { year })}`
 })
 
 const selectedIndex = computed(() => dates.value.indexOf(props.date))
@@ -153,72 +149,88 @@ function run(row: SourceRow) {
     runOpen.value = true
 }
 
-const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_15rem_minmax(0,1fr)_6.5rem] items-center gap-3 border-t border-default py-2 text-sm'
+/** One row of the list; every row sizes its columns the same, so they line up as a table's would. */
+const ROW = 'flex items-center gap-3 border-t border-default py-2 text-sm'
+const COL = {
+    toggle: 'w-8 shrink-0',
+    name: 'w-64 min-w-0',
+    counts: 'w-60 shrink-0',
+    strip: 'min-w-0 flex-1',
+    action: 'flex w-28 shrink-0 justify-end',
+}
 </script>
 
 <template>
-    <div class="mt-5">
-        <div class="mb-2.5 flex flex-wrap items-baseline gap-2.5">
+    <div class="mt-4">
+        <div class="mb-3 flex flex-wrap items-baseline gap-3">
             <span class="text-sm font-semibold text-highlighted">{{ label }}</span>
-            <span class="text-xs text-muted">{{ summary }}</span>
+            <span class="text-xs tabular-nums text-muted">{{ summary }}</span>
         </div>
         <template v-if="groups.length">
             <div :class="ROW"
                  class="border-t-0 text-xs text-muted">
-                <span />
-                <span>Source</span>
-                <span>Partitions</span>
-                <span>{{ windowLabel }}</span>
-                <span />
+                <span :class="COL.toggle" />
+                <span :class="COL.name">Source</span>
+                <span :class="COL.counts">Partitions</span>
+                <span :class="COL.strip">{{ windowLabel }}</span>
+                <span :class="COL.action" />
             </div>
             <template v-for="group in visibleGroups"
                       :key="group.key">
                 <div :class="ROW">
-                    <UButton :icon="expanded.has(group.key) ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-                             :aria-label="expanded.has(group.key) ? `Collapse ${group.name}` : `Expand ${group.name}`"
-                             size="xs"
-                             color="neutral"
-                             variant="ghost"
-                             @click="toggle(group.key)" />
-                    <span class="flex min-w-0 items-center gap-2">
+                    <span :class="COL.toggle">
+                        <UButton :icon="expanded.has(group.key) ? ui.icons.chevronDown : ui.icons.chevronRight"
+                                 :aria-label="expanded.has(group.key) ? `Collapse ${group.name}` : `Expand ${group.name}`"
+                                 size="sm"
+                                 color="neutral"
+                                 variant="ghost"
+                                 @click="toggle(group.key)" />
+                    </span>
+                    <span class="flex items-center gap-2"
+                          :class="COL.name">
                         <UIcon :name="componentIcon(group.key)"
-                               class="size-5 shrink-0" />
+                               class="size-4 shrink-0" />
                         <span class="truncate font-medium text-highlighted">{{ group.name }}</span>
                     </span>
-                    <OverviewCoverageCounts :counts="group" />
+                    <OverviewCoverageCounts :counts="group"
+                                            :class="COL.counts" />
                     <OverviewCoverageStrip :dates="dates"
                                            :days="group.days"
                                            :selected="date"
+                                           :class="COL.strip"
                                            @select="emit('select', $event)" />
-                    <span />
+                    <span :class="COL.action" />
                 </div>
                 <template v-if="expanded.has(group.key)">
                     <div v-for="row in group.rows"
                          :key="row.source.id"
                          :class="ROW">
-                        <span />
-                        <span class="flex min-w-0 items-center gap-1.5 pl-2">
-                            <UIcon :name="row.source.kind === 'asset' ? 'i-lucide-box' : 'i-lucide-plug'"
-                                   class="size-3.5 shrink-0 text-dimmed" />
-                            <span class="truncate font-mono text-xs text-highlighted">{{ row.source.name }}</span>
+                        <span :class="COL.toggle" />
+                        <span class="flex items-center gap-1.5 pl-2"
+                              :class="COL.name">
+                            <UIcon :name="row.source.kind === 'asset' ? icons.asset : icons.source"
+                                   class="size-4 shrink-0 text-dimmed" />
+                            <span class="truncate text-highlighted">{{ row.source.name }}</span>
                         </span>
-                        <OverviewCoverageCounts :counts="row" />
+                        <OverviewCoverageCounts :counts="row"
+                                                :class="COL.counts" />
                         <OverviewCoverageStrip :dates="dates"
                                                :days="row.days"
                                                :selected="date"
+                                               :class="COL.strip"
                                                @select="emit('select', $event)" />
-                        <span class="flex h-5 items-center justify-end">
+                        <span :class="COL.action">
                             <UButton v-if="selectedDay(row)?.failed_run_id"
                                      label="Open run"
-                                     trailing-icon="i-lucide-arrow-right"
-                                     size="xs"
+                                     :trailing-icon="ui.icons.arrowRight"
+                                     size="sm"
                                      color="neutral"
                                      variant="outline"
                                      :to="{ path: organisationStore.path(`/executions/runs/${selectedDay(row)?.failed_run_id}`), query: { status: 'failed' } }" />
                             <UButton v-else-if="missingOn(selectedDay(row)) && editor"
-                                     icon="i-lucide-play"
+                                     :icon="icons.run"
                                      label="Run"
-                                     size="xs"
+                                     size="sm"
                                      color="neutral"
                                      variant="outline"
                                      @click="run(row)" />
@@ -227,34 +239,33 @@ const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_15rem_minmax(0,1fr)_6.5rem] 
                 </template>
             </template>
             <div v-if="completeGroups.length && troubledGroups.length"
-                 class="flex items-center gap-2 border-t border-default py-2.5 text-xs text-muted">
-                <UIcon name="i-lucide-check"
+                 class="flex items-center gap-2 border-t border-default py-2 text-xs text-muted">
+                <UIcon :name="ui.icons.success"
                        class="size-3.5 text-success" />
-                <span>{{ completeGroups.length }} {{ completeGroups.length === 1 ? 'type' : 'types' }} complete · {{ completeSources }} {{ completeSources === 1 ? 'source' : 'sources' }}</span>
+                <span class="tabular-nums">{{ completeGroups.length }} {{ completeGroups.length === 1 ? 'type' : 'types' }} complete · {{ completeSources }} {{ completeSources === 1 ? 'source' : 'sources' }}</span>
                 <UButton :label="showComplete ? 'Hide' : 'Show'"
                          size="xs"
                          color="neutral"
                          variant="link"
-                         class="p-0"
                          @click="showComplete = !showComplete" />
             </div>
             <div v-else-if="!troubledGroups.length && !showComplete"
-                 class="flex items-center gap-2 border-t border-default py-2.5 text-xs text-muted">
-                <UIcon name="i-lucide-check"
+                 class="flex items-center gap-2 border-t border-default py-2 text-xs text-muted">
+                <UIcon :name="ui.icons.success"
                        class="size-3.5 text-success" />
-                <span>Every source is complete in this window · {{ completeSources }} {{ completeSources === 1 ? 'source' : 'sources' }}</span>
+                <span class="tabular-nums">Every source is complete in this window · {{ completeSources }} {{ completeSources === 1 ? 'source' : 'sources' }}</span>
                 <UButton label="Show"
                          size="xs"
                          color="neutral"
                          variant="link"
-                         class="p-0"
                          @click="showComplete = true" />
             </div>
         </template>
-        <p v-else
-           class="text-sm text-muted">
-            No partitions in this window
-        </p>
+        <UEmpty v-else
+                :icon="icons.window"
+                :title="NO_PARTITIONS"
+                variant="naked"
+                size="sm" />
         <ExecutionsRunModal v-if="runTarget"
                             v-model:open="runOpen"
                             :target="runTarget"

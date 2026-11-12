@@ -4,33 +4,40 @@ import type { AdminConfig } from '~/types/admin'
 definePageMeta({ layout: 'admin', middleware: 'super-admin' })
 
 const adminStore = useAdminStore()
+const appConfig = useAppConfig()
 
 const config = ref<AdminConfig | null>(null)
 const loading = ref(true)
+const loadError = ref<unknown>(null)
 
-onMounted(async () => {
+async function load() {
+    loading.value = true
+    loadError.value = null
     try {
         config.value = await adminStore.getConfig()
     }
     catch (err) {
-        console.error('[Admin] Failed to load instance config', err)
+        loadError.value = err
     }
     finally {
         loading.value = false
     }
-})
+}
+
+onMounted(load)
 
 type Pill = { label: string, color: 'success' | 'warning' | 'error' | 'neutral' }
 
 interface ConfigRow {
     label: string
     value?: string
-    mono?: boolean
     pill?: Pill
     badges?: string[]
-    /** Sub-attributes rendered as key=value chips (tuning, hosts, URIs). Dim = class default, not configured. */
-    attrs?: { key: string, value: string, dim?: boolean }[]
-    /** Mono list under the value (catalog import paths). */
+    /** Configured sub-attributes (tuning, hosts, URIs), as key=value badges. */
+    attrs?: { key: string, value: string }[]
+    /** Class defaults the instance does not configure, listed apart from what it does. */
+    defaults?: { key: string, value: string }[]
+    /** Catalog import paths, listed under the value. */
     lines?: string[]
 }
 
@@ -61,24 +68,18 @@ const sections = computed<ConfigSection[]>(() => {
     const launcher = deployment.launcher
 
     const deploymentRows: ConfigRow[] = [
-        { label: 'Version', value: deployment.version ?? '—', mono: true },
+        { label: 'Version', value: deployment.version ?? '—' },
         {
             label: 'Launcher',
             value: launcher.type,
-            mono: true,
-            attrs: [
-                ...configAttrs(launcher.config),
-                ...configAttrs(launcher.defaults).map(attr => ({ ...attr, dim: true })),
-            ],
+            attrs: configAttrs(launcher.config),
+            defaults: configAttrs(launcher.defaults),
         },
         {
             label: 'Runner',
             value: deployment.runner.type,
-            mono: true,
-            attrs: [
-                ...configAttrs(deployment.runner.config),
-                ...configAttrs(deployment.runner.defaults).map(attr => ({ ...attr, dim: true })),
-            ],
+            attrs: configAttrs(deployment.runner.config),
+            defaults: configAttrs(deployment.runner.defaults),
         },
         {
             label: 'Agent',
@@ -151,7 +152,7 @@ const sections = computed<ConfigSection[]>(() => {
                     }
                 : {}),
         },
-        ...(services.app_external_url ? [{ label: 'App URL', value: services.app_external_url, mono: true }] : []),
+        ...(services.app_external_url ? [{ label: 'App URL', value: services.app_external_url }] : []),
     ]
 
     const CATALOG_PREVIEW = 4
@@ -187,69 +188,69 @@ const sections = computed<ConfigSection[]>(() => {
             <AppNavbar title="Instance configuration" />
         </template>
         <template #body>
-            <div class="mx-auto flex w-full max-w-3xl flex-col gap-4 sm:gap-6">
-                <p class="text-sm leading-relaxed text-muted">
-                    How this deployment is wired — read-only, sourced from the running instance.
-                    Secrets are redacted; dimmed values are class defaults.
+            <div class="mx-auto flex w-full max-w-2xl flex-col gap-4 sm:gap-6">
+                <p class="text-sm text-muted">
+                    How this deployment is wired, read from the running instance. Secrets are redacted.
                 </p>
+
                 <div v-if="loading"
-                     class="flex items-center justify-center py-16">
-                    <UIcon name="i-lucide-loader-circle"
+                     class="flex items-center justify-center py-12">
+                    <UIcon :name="appConfig.ui.icons.loading"
                            class="size-5 animate-spin text-dimmed" />
                 </div>
 
-                <UAlert v-else-if="!config"
-                        color="error"
-                        icon="i-lucide-alert-circle"
-                        title="Instance configuration unavailable" />
+                <LoadError v-else-if="loadError"
+                           title="Couldn't load the instance configuration"
+                           :error="loadError"
+                           @retry="load" />
 
                 <template v-else>
                     <section v-for="section in sections"
                              :key="section.title"
-                             class="flex flex-col gap-3">
-                        <CardHeader :title="section.title" />
-                        <UCard :ui="{ body: 'p-0 sm:p-0' }">
-                            <div class="divide-y divide-default">
-                                <div v-for="row in section.rows"
-                                     :key="row.label"
-                                     class="flex items-start gap-4 px-4 py-3 text-sm sm:px-6">
-                                    <span class="w-56 shrink-0 pt-px text-muted">{{ row.label }}</span>
-                                    <div class="min-w-0 flex-1">
+                             class="flex flex-col gap-4">
+                        <UPageCard variant="naked"
+                                   orientation="horizontal"
+                                   :title="section.title" />
+                        <UCard :ui="{ body: 'flex flex-col gap-4' }">
+                            <template v-for="(row, index) in section.rows"
+                                      :key="row.label">
+                                <USeparator v-if="index > 0" />
+                                <UFormField :label="row.label"
+                                            orientation="horizontal">
+                                    <div class="flex max-w-sm flex-col gap-1.5 sm:items-end sm:text-right">
                                         <div v-if="row.pill || row.badges || row.value"
-                                             class="flex flex-wrap items-center gap-1.5">
+                                             class="flex flex-wrap items-center gap-1.5 sm:justify-end">
                                             <UBadge v-if="row.pill"
-                                                    :color="row.pill.color">
-                                                {{ row.pill.label }}
-                                            </UBadge>
+                                                    :color="row.pill.color"
+                                                    :label="row.pill.label" />
                                             <UBadge v-for="badge in row.badges"
                                                     :key="badge"
-                                                    color="neutral">
-                                                {{ badge }}
-                                            </UBadge>
+                                                    color="neutral"
+                                                    :label="badge" />
                                             <span v-if="row.value"
-                                                  class="min-w-0 break-all font-medium"
-                                                  :class="row.mono && 'font-mono text-sm'">{{ row.value }}</span>
+                                                  class="min-w-0 break-all font-medium text-highlighted tabular-nums">{{ row.value }}</span>
                                         </div>
                                         <div v-if="row.attrs?.length"
-                                             class="flex flex-wrap gap-1.5"
-                                             :class="(row.pill || row.badges || row.value) && 'mt-1.5'">
-                                            <span v-for="attr in row.attrs"
-                                                  :key="attr.key"
-                                                  class="whitespace-nowrap rounded-md px-1.5 py-0.5 font-mono text-xs"
-                                                  :class="attr.dim ? 'bg-elevated/50 text-dimmed' : 'bg-elevated'"
-                                                  :title="attr.dim ? 'Class default (not configured)' : undefined">
-                                                <span class="text-muted">{{ attr.key }}=</span>{{ attr.value }}
-                                            </span>
+                                             class="flex flex-wrap gap-1.5 sm:justify-end">
+                                            <UBadge v-for="attr in row.attrs"
+                                                    :key="attr.key"
+                                                    color="neutral"
+                                                    size="sm"
+                                                    :label="`${attr.key}=${attr.value}`" />
                                         </div>
+                                        <p v-if="row.defaults?.length"
+                                           class="text-xs text-dimmed">
+                                            Defaults: {{ row.defaults.map(attr => `${attr.key}=${attr.value}`).join(', ') }}
+                                        </p>
                                         <div v-if="row.lines"
-                                             class="mt-1 flex flex-col gap-y-1">
+                                             class="flex flex-col gap-1 sm:items-end">
                                             <span v-for="line in row.lines"
                                                   :key="line"
                                                   class="break-all font-mono text-xs">{{ line }}</span>
                                         </div>
                                     </div>
-                                </div>
-                            </div>
+                                </UFormField>
+                            </template>
                         </UCard>
                     </section>
                 </template>

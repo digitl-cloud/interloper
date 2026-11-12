@@ -12,19 +12,10 @@ const emit = defineEmits<{ select: [date: string] }>()
 /** Past this many days the cells touch: a gap would eat most of each cell. */
 const GAPLESS_FROM = 120
 
-const colorMode = useColorMode()
-
-const cells = computed(() => {
-    const mode = colorMode.value === 'dark' ? 'dark' : 'light'
-    return props.dates.map((date, i) => {
-        const day = props.days[i]
-        return {
-            date,
-            day,
-            color: CELL[CELL_ORDER[cellStatus(day)]][mode],
-        }
-    })
-})
+const cells = computed(() => props.dates.map((date, i) => {
+    const day = props.days[i]
+    return { date, day, color: CELL[CELL_ORDER[cellStatus(day)]] }
+}))
 
 /**
  * One tooltip per strip, anchored to the hovered cell: a strip can hold a year of cells. The last cell is kept
@@ -51,17 +42,18 @@ function onClick(event: MouseEvent) {
               :reference="hovered?.element"
               :delay-duration="0"
               :content="{ side: 'top', sideOffset: 6 }"
-              :ui="{ content: 'h-auto py-1.5 pointer-events-none' }">
+              :ui="{ content: 'h-auto pointer-events-none' }">
         <div class="grid h-3.5 w-full cursor-pointer"
-             :style="{ gridTemplateColumns: `repeat(${dates.length}, minmax(0, 1fr))`, gap: dates.length >= GAPLESS_FROM ? '0' : '1px' }"
+             :class="dates.length >= GAPLESS_FROM ? 'gap-0' : 'gap-px'"
+             :style="{ gridTemplateColumns: `repeat(${dates.length}, minmax(0, 1fr))` }"
              @click="onClick"
              @pointerover="onPointerOver"
              @pointerleave="open = false">
             <div v-for="cell in cells"
                  :key="cell.date"
                  :data-date="cell.date"
-                 class="h-full rounded-[1px]"
-                 :class="cell.date === selected ? 'relative z-10 outline-1 outline-offset-1 outline-(--ui-text-highlighted)' : ''"
+                 class="h-full"
+                 :class="cell.date === selected ? 'relative z-10 outline-1 outline-offset-1 outline-inverted' : ''"
                  :style="{ backgroundColor: cell.color }" />
         </div>
         <template #content>

@@ -15,6 +15,7 @@ const sources = computed(() => componentsStore.byKind('source'))
 
 const stepperRef = ref<any>(null)
 const toast = useToast()
+const appConfig = useAppConfig()
 
 const {
     open: drawerOpen,
@@ -56,10 +57,10 @@ async function runNow(source: ComponentRecord) {
     }
     try {
         const runId = await runsStore.createRun(source.id)
-        toast.add({ title: `Run queued (${runId.slice(0, 8)})`, color: 'success' })
+        toast.add({ title: `Run queued (${shortId(runId)})`, color: 'success' })
     }
     catch (e) {
-        toast.add(errorToast(e, 'Failed to queue run'))
+        toast.add(errorToast(e, "Couldn't queue the run"))
     }
 }
 
@@ -67,7 +68,7 @@ function rowActions(source: ComponentRecord): DropdownMenuItem[][] {
     return [[
         {
             label: 'Run now',
-            icon: 'i-lucide-play',
+            icon: appConfig.icons.run,
             onSelect: () => runNow(source),
         },
     ]]
@@ -85,7 +86,7 @@ const columns: TableColumn<ComponentRecord>[] = [
         id: 'assets',
         header: 'Assets',
         accessorFn: (row: ComponentRecord) => row.children.length,
-        cell: ({ row }) => h('span', { class: 'text-muted' },
+        cell: ({ row }) => h('span', { class: 'text-muted tabular-nums' },
             `${row.original.children.length} asset${row.original.children.length !== 1 ? 's' : ''}`),
     },
     {
@@ -117,7 +118,7 @@ async function handleDelete(ids: string[]) {
         toast.add({ title: `${ids.length} source${ids.length > 1 ? 's' : ''} deleted`, color: 'success' })
     }
     catch (e) {
-        toast.add(inUseToast(e, 'Source') ?? errorToast(e, 'Failed to delete source'))
+        toast.add(inUseToast(e, 'Source') ?? errorToast(e, "Couldn't delete the source"))
     }
 }
 
@@ -144,7 +145,7 @@ const typeKey = useQueryParam('type', null)
                        :error="componentsStore.error"
                        :row-actions="rowActions"
                        :delete-impact="componentsStore.deleteImpact"
-                       search-placeholder="Search sources..."
+                       search-placeholder="Search sources…"
                        @delete="handleDelete"
                        @edit="handleEdit"
                        @retry="componentsStore.fetchAll(['source'])">
@@ -153,20 +154,19 @@ const typeKey = useQueryParam('type', null)
                                 :components="sources" />
                 </template>
 
-                <template #actions>
-                    <UButton icon="i-lucide-plus"
-                             label="New source"
-                             @click="handleCreate" />
-                </template>
-
                 <template #empty>
                     <SourcesEmptyState @create="handleCreate"
                                        @create-type="handleCreateFromCatalog" />
                 </template>
+                <template #actions>
+                    <UButton :icon="appConfig.ui.icons.plus"
+                             label="New source"
+                             @click="handleCreate" />
+                </template>
             </DataTable>
 
             <WizardDrawer v-model:open="drawerOpen"
-                          default-title="New Source"
+                          default-title="New source"
                           description="Configure a new source"
                           :stepper="stepperRef">
                 <SourcesWizard v-if="drawerOpen"

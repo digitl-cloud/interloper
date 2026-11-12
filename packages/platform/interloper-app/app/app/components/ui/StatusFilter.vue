@@ -6,13 +6,15 @@ const ALL = '__all__'
 
 const status = defineModel<string | null>({ required: true })
 
+const appConfig = useAppConfig()
+
 const props = defineProps<{
     statuses: string[]
 }>()
 
 const items = computed(() => [
     { label: 'All statuses', value: ALL },
-    ...props.statuses.map(value => ({ label: statusLabel(value), value })),
+    ...props.statuses.map(value => ({ label: statusMeta(value).label, value })),
 ])
 </script>
 
@@ -20,7 +22,7 @@ const items = computed(() => [
     <USelect :model-value="status ?? ALL"
              :items="items"
              value-key="value"
-             icon="i-lucide-activity"
+             :icon="appConfig.icons.status"
              class="w-40"
              @update:model-value="status = $event === ALL ? null : $event" />
 </template>

@@ -41,6 +41,7 @@ const emit = defineEmits<{
 }>()
 
 const { apiFetch } = useOrgApi()
+const appConfig = useAppConfig()
 
 const checking = ref(false)
 const result = ref<CheckResult | null>(null)
@@ -94,6 +95,7 @@ defineExpose({ run, checking, result })
         <!-- Manual mode: a persistent trigger — re-running replaces Retry. -->
         <UButton v-if="manual"
                  block
+                 color="neutral"
                  variant="outline"
                  icon="i-lucide-radio-tower"
                  label="Test connection"
@@ -101,24 +103,22 @@ defineExpose({ run, checking, result })
                  @click="run" />
         <UAlert v-else-if="checking"
                 color="info"
-                variant="subtle"
-                icon="i-lucide-loader-circle"
+                :icon="appConfig.ui.icons.loading"
+                :ui="{ icon: 'animate-spin' }"
                 title="Testing connection"
-                description="Making a lightweight call to the provider..." />
+                description="Making a lightweight call to the provider…" />
 
         <template v-if="!checking">
             <UAlert v-if="result?.ok"
                     color="success"
-                    variant="subtle"
-                    icon="i-lucide-circle-check"
+                    :icon="appConfig.ui.icons.success"
                     title="Connection verified"
                     :description="result.live ? 'The provider accepted the credentials.' : 'The configuration is valid.'" />
 
             <!-- Config failures surface under the form fields, not as a card. -->
             <UAlert v-else-if="result && result.category !== 'config'"
                     color="error"
-                    variant="subtle"
-                    icon="i-lucide-circle-x"
+                    :icon="appConfig.ui.icons.error"
                     title="Connection check failed"
                     :description="result.message ?? 'The connection check failed.'" />
         </template>

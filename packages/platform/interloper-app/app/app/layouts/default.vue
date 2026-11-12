@@ -10,7 +10,6 @@ const {
     loading: searchLoading,
     groups: searchGroups,
 } = useCommandPalette()
-const { open: agentOpen, width: agentWidth, dragging: agentDragging } = useAgentPanel()
 provide(AGENT_PANEL_HOST, true)
 
 const destinations = useNavDestinations()
@@ -27,7 +26,7 @@ watch(() => route.path, (path) => {
 }, { immediate: true })
 
 /** A hub lights up only while its views are hidden (folded, or a collapsed sidebar); otherwise its active view does. */
-function navItems(collapsed: boolean): NavigationMenuItem[] {
+function buildNavItems(collapsed: boolean): NavigationMenuItem[] {
     return destinations.value.map(page => ({
         value: page.to,
         label: page.label,
@@ -42,26 +41,29 @@ function navItems(collapsed: boolean): NavigationMenuItem[] {
         })),
     }))
 }
+
+// One stable list per sidebar state: built inside the sidebar's slot, a new list on every render
+// would re-render the whole menu on each pointer move while the sidebar is resized.
+const expandedNavItems = computed(() => buildNavItems(false))
+const collapsedNavItems = computed(() => buildNavItems(true))
 </script>
 
 <template>
     <div>
-        <UDashboardGroup storage-key="dashboard-data"
-                         :style="{ right: agentOpen && userStore.agentAvailable ? `${agentWidth + AGENT_PANEL_INSET}px` : '0px' }"
-                         :ui="{ base: `fixed top-0 bottom-0 left-0 flex overflow-hidden ${agentDragging ? '' : 'transition-[right] duration-300'}` }">
+        <UDashboardGroup storage="local"
+                         storage-key="dashboard-data">
             <UDashboardSidebar collapsible
-                               resizable
-                               :ui="{ footer: 'border-t border-default' }">
+                               resizable>
                 <template #header="{ collapsed }">
                     <NavLogo v-if="!collapsed" />
                     <LogoIcon v-else
-                              class="mx-auto h-6 w-auto text-primary" />
+                              class="mx-auto h-6 text-primary" />
                 </template>
 
                 <template #default="{ collapsed }">
                     <UNavigationMenu v-model="openMenus"
                                      :collapsed="collapsed"
-                                     :items="navItems(collapsed)"
+                                     :items="collapsed ? collapsedNavItems : expandedNavItems"
                                      type="multiple"
                                      popover
                                      color="neutral"
@@ -69,7 +71,7 @@ function navItems(collapsed: boolean): NavigationMenuItem[] {
                 </template>
 
                 <template #footer="{ collapsed }">
-                    <div class="flex flex-col gap-1 w-full">
+                    <div class="flex w-full flex-col gap-1">
                         <NavOrganisation :collapsed="collapsed" />
                         <NavUser :collapsed="collapsed" />
                     </div>
@@ -84,7 +86,7 @@ function navItems(collapsed: boolean): NavigationMenuItem[] {
                               :loading="searchLoading"
                               :color-mode="false"
                               :fuse="{ fuseOptions: { keys: ['label', 'suffix', 'keywords'] } }"
-                              placeholder="Search..." />
+                              placeholder="Search…" />
         </UDashboardGroup>
 
         <AgentPanel v-if="userStore.agentAvailable" />
