@@ -41,6 +41,22 @@ spec:
                 port:
                   number: {{ .Values.api.service.port }}
           {{- end }}
+          {{- if .Values.mcp.enabled }}
+          - path: /mcp
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "interloper.fullname" . }}-mcp
+                port:
+                  number: {{ .Values.mcp.service.port }}
+          - path: /.well-known/oauth-protected-resource
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "interloper.fullname" . }}-mcp
+                port:
+                  number: {{ .Values.mcp.service.port }}
+          {{- end }}
           {{- if .Values.frontend.enabled }}
           - path: {{ .Values.ingress.rootPath }}
             pathType: {{ .Values.ingress.rootPathType }}
