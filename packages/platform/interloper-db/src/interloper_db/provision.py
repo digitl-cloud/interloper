@@ -17,31 +17,24 @@ def upgrade(engine: Engine | None = None, revision: str = "head") -> None:
     """Run Alembic migrations up to the given revision.
 
     Args:
-        engine: SQLAlchemy engine. Defaults to the global engine.
+        engine: The engine the migrations run against. Defaults to the global engine.
         revision: Target revision (default ``"head"``).
     """
     from alembic import command
 
-    # Resolved for its side effect only: alembic's env.py reads the global
-    # engine singleton, not this value.
-    _eng = engine or get_engine()
-    command.upgrade(_alembic_config(), revision)
+    command.upgrade(_alembic_config(engine or get_engine()), revision)
 
 
 def downgrade(engine: Engine | None = None, revision: str = "-1") -> None:
     """Run Alembic downgrade.
 
     Args:
-        engine: SQLAlchemy engine. Defaults to the global engine.
+        engine: The engine the migrations run against. Defaults to the global engine.
         revision: Target revision (default: one step back).
     """
     from alembic import command
 
-    # Resolved for its side effect only: alembic's env.py reads the global
-    # engine singleton, not this value.
-    _eng = engine or get_engine()
-    alembic_config = _alembic_config()
-    command.downgrade(alembic_config, revision)
+    command.downgrade(_alembic_config(engine or get_engine()), revision)
 
 
 def create_all(engine: Engine | None = None) -> None:
@@ -166,13 +159,18 @@ def drop_database(dsn: str) -> None:
     engine.dispose()
 
 
-def _alembic_config() -> Config:
-    """Build an Alembic Config pointing at this package's migrations.
+def _alembic_config(engine: Engine) -> Config:
+    """Build an Alembic Config pointing at this package's migrations, run against *engine*.
 
     The ``[tool.alembic]`` section in ``pyproject.toml`` is used by the
     Alembic CLI when run from the package directory. This function is
     the programmatic equivalent — it resolves the migrations path from
     the package layout so it works regardless of the working directory.
+    The engine travels in the config's ``attributes``, where ``env.py``
+    reads it.
+
+    Args:
+        engine: The engine the migrations run against.
 
     Returns:
         Configured ``alembic.config.Config``.
@@ -184,4 +182,5 @@ def _alembic_config() -> Config:
     migrations_dir = Path(__file__).resolve().parent / "migrations"
     alembic_config = Config()
     alembic_config.set_main_option("script_location", str(migrations_dir))
+    alembic_config.attributes["engine"] = engine
     return alembic_config
