@@ -78,5 +78,6 @@ def scheduler_services(
                 heartbeat_timeout=settings.reaper.heartbeat_timeout,
                 run_timeout=settings.reaper.run_timeout,
                 poll_interval=settings.reaper.poll_interval,
+                credential_retention=settings.auth.credential_retention,
             )
     return services

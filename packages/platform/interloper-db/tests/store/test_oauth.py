@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -663,6 +664,180 @@ class TestRevocation:
 
     def test_find_refresh_of_an_unknown_token_is_none(self, store: Store):
         assert store.oauth.find_refresh("ilr_no-such-token") is None
+
+
+RETENTION = timedelta(days=30)
+
+
+def _set_code(auth_db: Engine, raw: str, **values: Any) -> None:
+    """Overwrite columns of one authorization code.
+
+    Args:
+        auth_db: The fixture database.
+        raw: The raw code whose row to change.
+        **values: The columns to set.
+    """
+    with session_scope(auth_db) as session:
+        session.connection().execute(
+            update(AuthorizationCode).where(col(AuthorizationCode.code_hash) == hash_token(raw)).values(**values)
+        )
+        session.commit()
+
+
+def _set_refresh(auth_db: Engine, raw: str, **values: Any) -> None:
+    """Overwrite columns of one refresh token.
+
+    Args:
+        auth_db: The fixture database.
+        raw: The raw refresh token whose row to change.
+        **values: The columns to set.
+    """
+    with session_scope(auth_db) as session:
+        session.connection().execute(
+            update(RefreshToken).where(col(RefreshToken.token_hash) == hash_token(raw)).values(**values)
+        )
+        session.commit()
+
+
+def _code_exists(auth_db: Engine, raw: str) -> bool:
+    """Whether an authorization code is still stored.
+
+    Args:
+        auth_db: The fixture database.
+        raw: The raw code.
+
+    Returns:
+        ``True`` when its row is still there.
+    """
+    with session_scope(auth_db) as session:
+        return session.get(AuthorizationCode, hash_token(raw)) is not None
+
+
+class TestPurge:
+    def _chain(self, store: Store, profile: Profile, client: OAuthClient) -> tuple[str, str]:
+        """Start a family and rotate it once.
+
+        Args:
+            store: The store to issue through.
+            profile: The user the family is for.
+            client: The client holding it.
+
+        Returns:
+            ``(rotated, newest)``: the raw token already rotated and its live successor.
+        """
+        rotated = store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP)
+        retired = store.oauth.rotate_refresh(rotated, client.client_id)
+        assert retired is not None
+        newest = store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP, family_id=retired.family_id)
+        return rotated, newest
+
+    def test_a_code_expired_past_the_window_is_deleted_whether_spent_or_not(
+        self, store: Store, profile: Profile, client: OAuthClient, auth_db: Engine
+    ):
+        spent = _issue_code(store, profile, client)
+        assert store.oauth.consume_code(spent) is not None
+        unspent = _issue_code(store, profile, client)
+        long_ago = datetime.now(UTC) - RETENTION - timedelta(minutes=1)
+        _set_code(auth_db, spent, expires_at=long_ago)
+        _set_code(auth_db, unspent, expires_at=long_ago)
+
+        assert store.oauth.purge(ended_for=RETENTION) == 2
+
+        assert not _code_exists(auth_db, spent)
+        assert not _code_exists(auth_db, unspent)
+
+    def test_a_code_expired_inside_the_window_or_still_valid_is_kept(
+        self, store: Store, profile: Profile, client: OAuthClient, auth_db: Engine
+    ):
+        recent = _issue_code(store, profile, client)
+        assert store.oauth.consume_code(recent) is not None
+        _set_code(auth_db, recent, expires_at=datetime.now(UTC) - RETENTION + timedelta(minutes=1))
+        valid = _issue_code(store, profile, client)
+
+        assert store.oauth.purge(ended_for=RETENTION) == 0
+
+        assert _code_exists(auth_db, recent)
+        assert _code_exists(auth_db, valid)
+
+    def test_a_family_whose_newest_token_expired_past_the_window_is_deleted_whole(
+        self, store: Store, profile: Profile, client: OAuthClient, auth_db: Engine
+    ):
+        rotated, newest = self._chain(store, profile, client)
+        long_ago = datetime.now(UTC) - RETENTION - timedelta(minutes=1)
+        _set_refresh(auth_db, rotated, expires_at=long_ago - timedelta(days=1))
+        _set_refresh(auth_db, newest, expires_at=long_ago)
+
+        assert store.oauth.purge(ended_for=RETENTION) == 2
+
+        assert store.oauth.find_refresh(rotated) is None
+        assert store.oauth.find_refresh(newest) is None
+
+    def test_a_family_whose_newest_token_expired_inside_the_window_is_kept(
+        self, store: Store, profile: Profile, client: OAuthClient, auth_db: Engine
+    ):
+        rotated, newest = self._chain(store, profile, client)
+        _set_refresh(auth_db, rotated, expires_at=datetime.now(UTC) - timedelta(days=365))
+        _set_refresh(auth_db, newest, expires_at=datetime.now(UTC) - RETENTION + timedelta(minutes=1))
+
+        assert store.oauth.purge(ended_for=RETENTION) == 0
+
+        assert store.oauth.find_refresh(rotated) is not None
+        assert store.oauth.find_refresh(newest) is not None
+
+    def test_a_live_family_keeps_a_rotated_token_long_past_the_window_so_its_replay_still_revokes(
+        self, store: Store, profile: Profile, client: OAuthClient, auth_db: Engine
+    ):
+        rotated, newest = self._chain(store, profile, client)
+        _set_refresh(
+            auth_db,
+            rotated,
+            rotated_at=datetime.now(UTC) - timedelta(days=365),
+            expires_at=datetime.now(UTC) - timedelta(days=335),
+        )
+
+        assert store.oauth.purge(ended_for=RETENTION) == 0
+
+        assert store.oauth.rotate_refresh(rotated, client.client_id) is None
+        assert store.oauth.rotate_refresh(newest, client.client_id) is None
+
+    def test_a_family_revoked_past_the_window_is_deleted_whole(
+        self, store: Store, profile: Profile, client: OAuthClient, auth_db: Engine
+    ):
+        rotated, newest = self._chain(store, profile, client)
+        token = store.oauth.find_refresh(newest)
+        assert token is not None
+        store.oauth.revoke_family(token)
+        long_ago = datetime.now(UTC) - RETENTION - timedelta(minutes=1)
+        _set_refresh(auth_db, rotated, revoked_at=long_ago)
+        _set_refresh(auth_db, newest, revoked_at=long_ago)
+
+        assert store.oauth.purge(ended_for=RETENTION) == 2
+
+        assert store.oauth.find_refresh(rotated) is None
+        assert store.oauth.find_refresh(newest) is None
+
+    def test_a_family_revoked_inside_the_window_is_kept(
+        self, store: Store, profile: Profile, client: OAuthClient, auth_db: Engine
+    ):
+        rotated, newest = self._chain(store, profile, client)
+        token = store.oauth.find_refresh(newest)
+        assert token is not None
+        store.oauth.revoke_family(token)
+
+        assert store.oauth.purge(ended_for=RETENTION) == 0
+
+        assert store.oauth.find_refresh(rotated) is not None
+        assert store.oauth.find_refresh(newest) is not None
+
+    def test_only_the_ended_family_goes(self, store: Store, profile: Profile, client: OAuthClient, auth_db: Engine):
+        ended = store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP)
+        _set_refresh(auth_db, ended, expires_at=datetime.now(UTC) - RETENTION - timedelta(days=1))
+        live = store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP)
+
+        assert store.oauth.purge(ended_for=RETENTION) == 1
+
+        assert store.oauth.find_refresh(ended) is None
+        assert store.oauth.rotate_refresh(live, client.client_id) is not None
 
 
 class TestMigration:

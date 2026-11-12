@@ -51,6 +51,19 @@ within 24 hours of registering, or when its last refresh token expired more than
 and it holds no live refresh token and no code still to exchange. Its conversations go with it.
 The scheduler's reaper checks hourly. Clients an operator registered are never deleted this way.
 
+Credentials that can no longer be used are kept for a while, so an incident can still be traced,
+and then deleted by the same hourly pass:
+
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| `auth.credential_retention_days` | `30` | Days a credential is kept once it expired or was revoked. |
+
+It covers login sessions, personal access tokens, OAuth access tokens and authorization codes,
+each counted from its expiry or revocation. A refresh token is deleted with its whole chain, and
+only once the chain has ended: its newest token expired, or the chain was revoked. Until then the
+used tokens of a chain stay, so presenting one of them still revokes the chain. A personal access
+token that never expires and was not revoked is never deleted.
+
 ## Personal access tokens
 
 A client that cannot run a browser flow (a script, a CI job, an older MCP client) takes a

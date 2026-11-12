@@ -19,6 +19,11 @@ A family stays revoked: a refresh token saved into it after the revocation
 and a pair issued into it is revoked on the spot. Revoking a family is done
 once: a later replay into it, or of a code past its lifetime, carries no new
 sign of theft and revokes nothing, so it cannot end a newer grant's access.
+
+Codes and refresh tokens that can no longer be used are kept for a retention
+window and then deleted by :meth:`OAuthStore.purge`. A refresh token goes
+with its whole family, once the family has ended, so a replay is still
+caught for as long as the family it would revoke can issue anything.
 """
 
 from __future__ import annotations
@@ -492,6 +497,40 @@ class OAuthStore:
         with session_scope(self._engine) as session:
             self._revoke_family(session, token.family_id, token.user_id, token.client_id, datetime.now(UTC))
             commit(session)
+
+    # -- Retention -------------------------------------------------------------
+
+    def purge(self, *, ended_for: timedelta) -> int:
+        """Delete the codes and refresh-token families that ended more than ``ended_for`` ago.
+
+        A code ends when it expires, whether it was spent or not: past its
+        expiry it is neither exchanged nor, replayed, read as theft. A family
+        ends when its newest token expires or the family is revoked, and is
+        deleted whole: until then each rotated token in it stays, so that its
+        replay still revokes the family. Once the family has ended there is
+        nothing left for that revocation to protect.
+
+        Args:
+            ended_for: How long a code or family is kept once it ended.
+
+        Returns:
+            The number of codes and refresh tokens deleted.
+        """
+        cutoff = datetime.now(UTC) - ended_for
+        ended_families = (
+            select(RefreshToken.family_id)
+            .group_by(col(RefreshToken.family_id))
+            .having((func.max(RefreshToken.expires_at) < cutoff) | (func.min(RefreshToken.revoked_at) < cutoff))
+        )
+        with session_scope(self._engine) as session:
+            codes = session.connection().execute(
+                delete(AuthorizationCode).where(col(AuthorizationCode.expires_at) < cutoff)
+            )
+            refresh_tokens = session.connection().execute(
+                delete(RefreshToken).where(col(RefreshToken.family_id).in_(ended_families))
+            )
+            commit(session)
+        return codes.rowcount + refresh_tokens.rowcount
 
     # -- Internals -------------------------------------------------------------
 

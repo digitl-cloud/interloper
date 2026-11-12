@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 import pytest
 from interloper.catalog import Catalog
-from interloper.settings import AppSettings, RenewalSettings
+from interloper.settings import AppSettings, AuthSettings, RenewalSettings
 
 import interloper_scheduler.services as services_module
 from interloper_scheduler import scheduler_services
@@ -49,6 +50,13 @@ def test_worker_and_reaper_share_one_launcher():
 
     assert set(built) == {"worker", "reaper"}
     assert built["worker"]._launcher is built["reaper"]._launcher
+
+
+def test_the_reaper_keeps_ended_credentials_for_the_auth_retention():
+    """The reaper purges credentials after the window the auth settings give."""
+    settings = AppSettings(auth=AuthSettings(credential_retention_days=7))
+
+    assert _build(settings, cron=False, worker=False, reaper=True)["reaper"]._credential_retention == timedelta(days=7)
 
 
 def test_nothing_enabled_builds_nothing():
