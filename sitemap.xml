@@ -4,97 +4,13 @@
         <loc>https://docs.interloper.dev/</loc>
       </url>
       <url>
-        <loc>https://docs.interloper.dev/tutorial/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/assets/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/sources/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/decorators/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/dependencies/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/views/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/resources/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/connections/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/oauth/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/fields/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/destinations/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/schema/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/normalization/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/partitioning/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/execution/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/backfilling/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/events/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/jobs/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/hooks/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/specs/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/catalog/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/cli/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/configuration/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/telemetry/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/ecosystem/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/claude-code/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/ui/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/ui/definitions/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/ui/connecting-clients/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/ui/running/</loc>
-      </url>
-      <url>
         <loc>https://docs.interloper.dev/extending/components/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/extending/extensions/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/extending/operations/</loc>
       </url>
       <url>
         <loc>https://docs.interloper.dev/extending/representations/</loc>
@@ -103,13 +19,85 @@
         <loc>https://docs.interloper.dev/extending/runners/</loc>
       </url>
       <url>
-        <loc>https://docs.interloper.dev/extending/operations/</loc>
+        <loc>https://docs.interloper.dev/guide/assets/</loc>
       </url>
       <url>
-        <loc>https://docs.interloper.dev/extending/extensions/</loc>
+        <loc>https://docs.interloper.dev/guide/backfilling/</loc>
       </url>
       <url>
-        <loc>https://docs.interloper.dev/reference/settings/</loc>
+        <loc>https://docs.interloper.dev/guide/catalog/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/claude-code/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/cli/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/configuration/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/connections/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/decorators/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/dependencies/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/destinations/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/ecosystem/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/events/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/execution/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/fields/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/hooks/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/jobs/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/normalization/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/oauth/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/partitioning/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/resources/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/schema/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/sources/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/specs/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/telemetry/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/views/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/reference/assets/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/reference/catalog/</loc>
       </url>
       <url>
         <loc>https://docs.interloper.dev/reference/cli/</loc>
@@ -118,19 +106,19 @@
         <loc>https://docs.interloper.dev/reference/components/</loc>
       </url>
       <url>
-        <loc>https://docs.interloper.dev/reference/assets/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/reference/sources/</loc>
+        <loc>https://docs.interloper.dev/reference/connections/</loc>
       </url>
       <url>
         <loc>https://docs.interloper.dev/reference/destinations/</loc>
       </url>
       <url>
-        <loc>https://docs.interloper.dev/reference/connections/</loc>
+        <loc>https://docs.interloper.dev/reference/errors/</loc>
       </url>
       <url>
-        <loc>https://docs.interloper.dev/reference/resources/</loc>
+        <loc>https://docs.interloper.dev/reference/events/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/reference/execution/</loc>
       </url>
       <url>
         <loc>https://docs.interloper.dev/reference/jobs/</loc>
@@ -139,24 +127,36 @@
         <loc>https://docs.interloper.dev/reference/partitioning/</loc>
       </url>
       <url>
-        <loc>https://docs.interloper.dev/reference/execution/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/reference/schema/</loc>
+        <loc>https://docs.interloper.dev/reference/resources/</loc>
       </url>
       <url>
         <loc>https://docs.interloper.dev/reference/rest/</loc>
       </url>
       <url>
-        <loc>https://docs.interloper.dev/reference/catalog/</loc>
+        <loc>https://docs.interloper.dev/reference/schema/</loc>
       </url>
       <url>
-        <loc>https://docs.interloper.dev/reference/events/</loc>
+        <loc>https://docs.interloper.dev/reference/settings/</loc>
       </url>
       <url>
-        <loc>https://docs.interloper.dev/reference/errors/</loc>
+        <loc>https://docs.interloper.dev/reference/sources/</loc>
       </url>
       <url>
         <loc>https://docs.interloper.dev/reference/utils/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/tutorial/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/ui/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/ui/connecting-clients/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/ui/definitions/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/ui/running/</loc>
       </url>
 </urlset>
