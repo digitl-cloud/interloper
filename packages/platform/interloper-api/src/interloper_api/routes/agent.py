@@ -38,7 +38,7 @@ from pydantic_ai.messages import (
     ModelMessage,
     ModelMessagesTypeAdapter,
     ModelRequest,
-    RetryPromptPart,  # ty: ignore[deprecated]
+    RetryPromptPart,  # type: ignore
     ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
@@ -203,7 +203,8 @@ class ConversationAdapter(VercelAIAdapter[ToolkitContext, Any]):
         approved = super().deferred_tool_results
         called = {part.tool_call_id for part in self._parts(self.history, ToolCallPart)}
         # Python 3.10 resolves pydantic-ai before 2.60, where a retry answering a call is still a RetryPromptPart.
-        replies = (ToolReturnPart, RetryPromptPart)  # ty: ignore[deprecated]
+        # Deprecated only from 2.60, so a plain type: ignore here and on its import: a ty: ignore goes unused on 3.10.
+        replies = (ToolReturnPart, RetryPromptPart)  # type: ignore
         answered = {part.tool_call_id for part in self._parts(self.history, replies)}
         calls = {
             part.tool_call_id: part.content
