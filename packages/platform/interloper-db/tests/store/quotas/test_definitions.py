@@ -22,7 +22,7 @@ from interloper_db.store.quotas import (
 class TestRegistry:
     def test_settings_fields_match_registered_quotas(self):
         """QuotaSettings carries exactly the per-org quota defaults."""
-        from interloper.settings import QuotaSettings
+        from interloper_db.settings import QuotaSettings
 
         assert set(QuotaSettings.model_fields) == set(QUOTAS.keys())
 

@@ -119,10 +119,12 @@ feature block: `auth.google_client_id` + `secrets.googleClientSecret`,
 `smtp.user` + `secrets.smtpPassword`, `externalPostgres` +
 `secrets.postgresPassword`.
 
-Anything else interloper.yaml accepts (server, cron, worker, reaper, mcp
-tuning) goes under `extraConfig`, which is rendered verbatim into the
-generated file.  Chart-managed and secret-bearing sections are rejected
-there — a YAML-provided field would override the injected env vars.
+Anything else interloper.yaml accepts (server, cron, worker, reaper,
+postgres and mcp tuning, and the sections extensions declare) goes under
+`extraConfig`, which is rendered verbatim into the generated file.
+Chart-managed sections are rejected there, since their root-level block is
+the single source of truth. The env vars the chart injects beat the file
+field by field, so nothing written there overrides them.
 
 ### `secrets.*`
 

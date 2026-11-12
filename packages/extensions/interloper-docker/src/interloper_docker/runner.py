@@ -30,7 +30,7 @@ from docker.models.containers import Container
 from interloper.errors import RunnerError, format_exception
 from interloper.operation import Operation, OperationResult
 from interloper.runner import Run, Runner
-from interloper.settings import AppSettings
+from interloper.settings import RunSettings, ServerSettings
 from interloper.telemetry.propagation import child_process_env
 from pydantic import Field
 
@@ -175,7 +175,7 @@ class DockerRun(Run):
         Returns:
             The argv.
         """
-        if AppSettings.get().run.token:
+        if RunSettings.get().token:
             return ["interloper", "launch", self.run_id, f"--operation-id={operation.id}"]
         spec = self.dag.mini_dag(operation.id).to_spec().model_dump(mode="json")
         command = ["interloper", "run", "--format", "inline", json.dumps(spec), f"--operation-id={operation.id}"]
@@ -245,12 +245,12 @@ class DockerRunner(Runner):
         """
         environment = dict(self.env_vars)
         environment.update(child_process_env())
-        settings = AppSettings.get()
-        if settings.run.token:
-            environment["INTERLOPER_RUN_TOKEN"] = settings.run.token
-            environment["INTERLOPER_RUN_HEARTBEAT_INTERVAL"] = str(settings.run.heartbeat_interval)
-            environment["INTERLOPER_RUN_HEARTBEAT_TIMEOUT"] = str(settings.run.heartbeat_timeout)
-            environment["INTERLOPER_SERVER_INTERNAL_URL"] = settings.server.internal_url
+        run = RunSettings.get()
+        if run.token:
+            environment["INTERLOPER_RUN_TOKEN"] = run.token
+            environment["INTERLOPER_RUN_HEARTBEAT_INTERVAL"] = str(run.heartbeat_interval)
+            environment["INTERLOPER_RUN_HEARTBEAT_TIMEOUT"] = str(run.heartbeat_timeout)
+            environment["INTERLOPER_SERVER_INTERNAL_URL"] = ServerSettings.get().internal_url
         return environment
 
     def mounts(self) -> dict[str, dict[str, str]]:

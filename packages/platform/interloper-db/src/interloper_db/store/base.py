@@ -142,7 +142,7 @@ class Store:
         """Build a Store with connection and encryption wired from runtime settings.
 
         The engine is the process engine, initialized from
-        ``AppSettings.postgres`` on first use — no prior ``init_engine``
+        the ``postgres`` settings on first use — no prior ``init_engine``
         call is needed. Encryption reads ``INTERLOPER_ENCRYPTION_KEY``:
         when set, the derived cipher is attached so resources are encrypted
         at rest; when unset, the store has no cipher and resource
@@ -169,12 +169,12 @@ class Store:
         Returns:
             A configured Store.
         """
-        from interloper.settings import AppSettings
+        from interloper_db.settings import EncryptionSettings, QuotaSettings
 
         catalog = catalog if catalog is not None else Catalog.from_settings()
         engine = engine_from_settings()
-        settings = AppSettings.get()
-        key = settings.encryption.key
+        quota_defaults = QuotaSettings.get()
+        key = EncryptionSettings.get().key
         if not key:
             logger.warning(
                 "INTERLOPER_ENCRYPTION_KEY is not configured; resource persistence will "
@@ -184,7 +184,7 @@ class Store:
             return cls(
                 catalog=catalog,
                 engine=engine,
-                quota_defaults=settings.quota,
+                quota_defaults=quota_defaults,
                 session_expiry=session_expiry,
                 access_token_expiry=access_token_expiry,
                 refresh_token_expiry=refresh_token_expiry,
@@ -198,7 +198,7 @@ class Store:
             engine=engine,
             encrypt=encrypt,
             decrypt=decrypt,
-            quota_defaults=settings.quota,
+            quota_defaults=quota_defaults,
             session_expiry=session_expiry,
             access_token_expiry=access_token_expiry,
             refresh_token_expiry=refresh_token_expiry,

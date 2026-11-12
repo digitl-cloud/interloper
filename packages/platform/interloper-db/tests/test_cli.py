@@ -3,25 +3,12 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Iterator
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from interloper.settings import AppSettings, PostgresSettings
 
 from interloper_db import cli as db_command
-
-
-@pytest.fixture(autouse=True)
-def _no_active_settings() -> Iterator[None]:
-    """Leave no activated settings behind for the rest of the suite.
-
-    Yields:
-        ``None``; the teardown clears the active settings.
-    """
-    yield
-    AppSettings.clear_active()
+from interloper_db.settings import PostgresSettings
 
 
 @pytest.fixture
@@ -100,15 +87,14 @@ class TestInit:
     def test_bootstraps_the_database(self, calls: dict[str, list[Any]], capsys: pytest.CaptureFixture[str]) -> None:
         db_command.DatabaseInitCommand().run(_parse("db", "init"))
 
-        assert calls["bootstrap"] == [(AppSettings.get().postgres.dsn, {})]
+        assert calls["bootstrap"] == [(PostgresSettings.get().dsn, {})]
         assert "Done." in capsys.readouterr().out
 
     def test_reads_the_postgres_settings_alone(
         self, calls: dict[str, list[Any]], monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # Any other section, auth among them, is absent: reading it would raise.
         postgres = PostgresSettings(host="db", database="x")
-        monkeypatch.setattr(AppSettings, "_active", SimpleNamespace(postgres=postgres))
+        PostgresSettings.activate(postgres)
 
         db_command.DatabaseInitCommand().run(_parse("db", "init"))
 
@@ -120,8 +106,7 @@ class TestInit:
         capsys: pytest.CaptureFixture[str],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        settings = AppSettings(postgres=PostgresSettings(user="me", password="s3cret-pw", host="db", database="x"))
-        monkeypatch.setattr(AppSettings, "_active", settings)
+        PostgresSettings.activate(PostgresSettings(user="me", password="s3cret-pw", host="db", database="x"))
 
         db_command.DatabaseInitCommand().run(_parse("db", "init"))
 
@@ -148,8 +133,7 @@ class TestReset:
         capsys: pytest.CaptureFixture[str],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        settings = AppSettings(postgres=PostgresSettings(user="me", password="s3cret-pw", host="db", database="x"))
-        monkeypatch.setattr(AppSettings, "_active", settings)
+        PostgresSettings.activate(PostgresSettings(user="me", password="s3cret-pw", host="db", database="x"))
         prompts: list[str] = []
         monkeypatch.setattr("builtins.input", lambda prompt: prompts.append(prompt) or "y")
 

@@ -2,3 +2,5 @@ manifest_version: 1
 key: mcp
 name: MCP server
 description: "MCP server over the catalog, lineage and run history."
+settings:
+  mcp: interloper_mcp.settings:McpSettings

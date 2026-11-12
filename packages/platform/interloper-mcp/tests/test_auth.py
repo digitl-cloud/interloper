@@ -14,16 +14,19 @@ from typing import Any
 import httpx2
 import interloper as il
 import pytest
-from interloper.settings import AppSettings, EncryptionSettings, McpSettings, ServerSettings
+from interloper.settings import ServerSettings
 from interloper_api.authorization import AuthorizationServer
+from interloper_api.settings import ApiSettings
 from interloper_db import engine as engine_module
 from interloper_db.crypto import hash_token
 from interloper_db.models import Audience, Profile, Token, TokenKind
+from interloper_db.settings import EncryptionSettings
 from interloper_db.store import Store
 from sqlmodel import Session
 
 from interloper_mcp.context import init_context
 from interloper_mcp.server import create_mcp_server, http_options
+from interloper_mcp.settings import McpSettings
 
 INITIALIZE = {
     "jsonrpc": "2.0",
@@ -105,10 +108,9 @@ async def test_anonymous_request_advertises_resource_metadata(store: Store, cata
 async def test_a_client_signs_in_to_the_resource_the_server_advertises(
     store: Store, catalog: il.Catalog, seeded: dict, external_url: str, public_url: str
 ):
-    settings = AppSettings(
-        server=ServerSettings(external_url=external_url, port=3100),
-        encryption=EncryptionSettings(key="key-material"),
-    )
+    ServerSettings.activate(ServerSettings(external_url=external_url, port=3100))
+    EncryptionSettings.activate(EncryptionSettings(key="key-material"))
+    settings = ApiSettings.get()
     authorization_server = AuthorizationServer.from_settings(store, settings)
     app = _app(store, catalog, settings.server.public_url)
 

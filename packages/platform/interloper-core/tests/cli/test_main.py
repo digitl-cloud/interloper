@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -13,18 +12,7 @@ from interloper.cli import Command
 from interloper.cli import main as cli_main
 from interloper.cli.commands.run import RunCommand
 from interloper.registry import Registry
-from interloper.settings import AppSettings
-
-
-@pytest.fixture(autouse=True)
-def _no_active_settings() -> Iterator[None]:
-    """Leave no activated settings behind for the rest of the suite.
-
-    Yields:
-        ``None``; the teardown clears the active settings.
-    """
-    yield
-    AppSettings.clear_active()
+from interloper.settings import ServerSettings, Settings
 
 
 class TestLoadDotenv:
@@ -95,16 +83,14 @@ class TestMain:
         assert len(seen) == 1
         assert seen[0].target == ["pkg.Asset"]
 
-    def test_activates_settings_for_the_duration_of_the_command(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        active: list[AppSettings | None] = []
+    def test_the_settings_a_command_ran_with_are_forgotten_when_it_ends(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        server = ServerSettings(port=4321)
         monkeypatch.setattr(sys, "argv", ["interloper", "run", "pkg.Asset"])
-        monkeypatch.setattr(RunCommand, "run", lambda self, args: active.append(AppSettings._active))
+        monkeypatch.setattr(RunCommand, "run", lambda self, args: ServerSettings.activate(server))
 
         cli_main.main()
 
-        assert active[0] is not None
-        # The activation is scoped to the command: nothing leaks to the process.
-        assert AppSettings._active is None
+        assert ServerSettings.get() is not server
 
     def test_telemetry_is_shut_down_even_when_the_handler_raises(
         self, monkeypatch: pytest.MonkeyPatch, isolated_process_state: dict[str, list[bool]]
@@ -117,7 +103,7 @@ class TestMain:
 
         assert isolated_process_state["init"] == [True]
         assert isolated_process_state["shutdown"] == [True]
-        assert AppSettings._active is None
+        assert not Settings._active
 
 
 class TestBuildParser:

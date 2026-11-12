@@ -7,15 +7,16 @@ ends every token it holds for them.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from urllib.parse import quote
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from interloper_agent.settings import AgentSettings
 from interloper_db import Audience, Profile, Store
 
 from interloper_api.app import create_app
+from interloper_api.settings import ApiSettings
 
 PREFIX = "/api/auth/apps"
 REDIRECT_URI = "http://127.0.0.1:8765/callback"
@@ -23,8 +24,8 @@ METADATA_CLIENT_ID = "https://claude.ai/oauth/claude-code-client-metadata"
 
 
 @pytest.fixture
-def client(oauth_store: Store, fake_settings: SimpleNamespace) -> TestClient:
-    fake_settings.agent.enabled = False
+def client(oauth_store: Store, fake_settings: ApiSettings) -> TestClient:
+    AgentSettings.get().enabled = False
     return TestClient(create_app(store=oauth_store, settings=fake_settings))
 
 

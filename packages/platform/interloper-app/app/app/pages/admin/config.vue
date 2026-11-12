@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AdminConfig } from '~/types/admin'
+import type { AdminConfig, AdminSettingsField } from '~/types/admin'
 
 definePageMeta({ layout: 'admin', middleware: 'super-admin' })
 
@@ -30,29 +30,27 @@ type Pill = { label: string, color: 'success' | 'warning' | 'error' | 'neutral' 
 
 interface ConfigRow {
     label: string
+    /** The field's description, shown on hover over its label. */
+    description?: string
     value?: string
     pill?: Pill
-    badges?: string[]
-    /** Configured sub-attributes (tuning, hosts, URIs), as key=value badges. */
+    /** The public keys of a mapping field, as key=value badges. */
     attrs?: { key: string, value: string }[]
-    /** Class defaults the instance does not configure, listed apart from what it does. */
-    defaults?: { key: string, value: string }[]
+    /** A list value, one entry per line. */
+    items?: string[]
     /** Catalog import paths, listed under the value. */
     lines?: string[]
 }
 
 interface ConfigSection {
     title: string
+    description?: string
+    /** The extension declaring a settings section. */
+    extension?: string
     rows: ConfigRow[]
 }
 
-function enabledPill(enabled: boolean): Pill {
-    return enabled
-        ? { label: 'Enabled', color: 'success' }
-        : { label: 'Disabled', color: 'neutral' }
-}
-
-/** Flatten a (possibly nested) config dict into dotted key=value attribute pairs. */
+/** Flatten a (possibly nested) mapping into dotted key=value attribute pairs. */
 function configAttrs(config: Record<string, unknown>, prefix = ''): { key: string, value: string }[] {
     return Object.entries(config).flatMap(([key, value]) => {
         const path = prefix ? `${prefix}.${key}` : key
@@ -62,122 +60,71 @@ function configAttrs(config: Record<string, unknown>, prefix = ''): { key: strin
     })
 }
 
+/** How a public value reads: booleans as pills, lists one entry per line, mappings as badges, the rest as text. */
+function valueRow(value: unknown): Partial<ConfigRow> {
+    if (typeof value === 'boolean')
+        return { pill: value ? { label: 'On', color: 'success' } : { label: 'Off', color: 'neutral' } }
+    if (Array.isArray(value))
+        return value.length ? { items: value.map(String) } : { value: 'none' }
+    if (value && typeof value === 'object')
+        return { attrs: configAttrs(value as Record<string, unknown>) }
+    if (value === null || value === undefined || value === '')
+        return { value: 'unset' }
+    return { value: String(value) }
+}
+
+/** One row per field; a mapping's public keys are badges on its own row rather than rows of their own. */
+function fieldRows(fields: AdminSettingsField[]): ConfigRow[] {
+    return fields
+        .filter(field => !field.name.includes('.'))
+        .map((field) => {
+            const keys = fields
+                .filter(child => child.name.startsWith(`${field.name}.`))
+                .map(child => ({ key: child.name.slice(field.name.length + 1), value: String(child.value) }))
+            const row: ConfigRow = { label: field.name, description: field.description ?? undefined }
+            if (field.public)
+                return { ...row, ...valueRow(field.value) }
+            return {
+                ...row,
+                pill: field.configured
+                    ? { label: 'Configured', color: 'success' }
+                    : { label: 'Not configured', color: 'neutral' },
+                ...(keys.length ? { attrs: keys } : {}),
+            }
+        })
+}
+
 const sections = computed<ConfigSection[]>(() => {
     if (!config.value) return []
-    const { deployment, auth, services, data } = config.value
-    const launcher = deployment.launcher
+    const { version, features, catalog } = config.value
 
     const deploymentRows: ConfigRow[] = [
-        { label: 'Version', value: deployment.version ?? '—' },
-        {
-            label: 'Launcher',
-            value: launcher.type,
-            attrs: configAttrs(launcher.config),
-            defaults: configAttrs(launcher.defaults),
-        },
-        {
-            label: 'Runner',
-            value: deployment.runner.type,
-            attrs: configAttrs(deployment.runner.config),
-            defaults: configAttrs(deployment.runner.defaults),
-        },
-        {
-            label: 'Agent',
-            pill: enabledPill(deployment.features.agent ?? false),
-            ...(deployment.features.agent && deployment.agent_model
-                ? { attrs: [{ key: 'model', value: deployment.agent_model }] }
-                : {}),
-        },
-    ]
-
-    const authRows: ConfigRow[] = [
-        {
-            label: 'Allowed domains',
-            ...(auth.allowed_domains.length
-                ? { badges: auth.allowed_domains }
-                : { pill: { label: '*', color: 'warning' } }),
-        },
-        auth.super_admin_emails.length
-            ? { label: 'Super admins', badges: auth.super_admin_emails }
-            : { label: 'Super admins', value: '—' },
-        {
-            label: 'Google OAuth',
-            pill: auth.google_oauth_configured
-                ? { label: 'Configured', color: 'success' }
-                : { label: 'Not configured', color: 'error' },
-            ...(auth.google_redirect_uri
-                ? { attrs: [{ key: 'redirect_uri', value: auth.google_redirect_uri }] }
-                : {}),
-        },
-        { label: 'Session expiry', value: `${auth.session_expiry_days} days` },
-        { label: 'Secure cookies', pill: enabledPill(auth.cookie_secure) },
-    ]
-
-    const serviceRows: ConfigRow[] = [
-        {
-            label: 'Cron',
-            pill: enabledPill(services.cron.enabled),
-            attrs: [
-                { key: 'reconcile', value: `${services.cron.reconcile_interval}s` },
-                { key: 'batch', value: String(services.cron.batch_size) },
-                { key: 'max_delay', value: `${services.cron.max_execution_delay}s` },
-            ],
-        },
-        {
-            label: 'Worker',
-            pill: enabledPill(services.worker.enabled),
-            attrs: [{ key: 'poll', value: `${services.worker.poll_interval}s` }],
-        },
-        {
-            label: 'Reaper',
-            pill: enabledPill(services.reaper.enabled),
-            attrs: [
-                { key: 'poll', value: `${services.reaper.poll_interval}s` },
-                { key: 'startup', value: `${services.reaper.startup_timeout}s` },
-                { key: 'heartbeat', value: `${services.reaper.heartbeat_interval}s / ${services.reaper.heartbeat_timeout}s` },
-                { key: 'run_timeout', value: services.reaper.run_timeout == null ? 'none' : `${services.reaper.run_timeout}s` },
-            ],
-        },
-        {
-            label: 'SMTP',
-            pill: services.smtp.enabled
-                ? { label: 'Configured', color: 'success' }
-                : { label: 'Not configured', color: 'neutral' },
-            ...(services.smtp.enabled
-                ? {
-                        attrs: [
-                            { key: 'host', value: services.smtp.host },
-                            { key: 'from', value: services.smtp.from_addr },
-                        ],
-                    }
-                : {}),
-        },
-        ...(services.app_external_url ? [{ label: 'App URL', value: services.app_external_url }] : []),
+        { label: 'Version', value: version ?? 'unknown' },
+        ...Object.entries(features).map(([feature, available]) => ({
+            label: feature,
+            pill: available
+                ? { label: 'Available', color: 'success' as const }
+                : { label: 'Unavailable', color: 'neutral' as const },
+        })),
     ]
 
     const CATALOG_PREVIEW = 4
-    const catalogRows: ConfigRow[] = Object.entries(data.catalog).map(([kind, keys]) => ({
+    const catalogRows: ConfigRow[] = Object.entries(catalog).map(([kind, keys]) => ({
         label: `${kindLabel(kind)} (${keys.length})`,
         lines: keys.length > CATALOG_PREVIEW
             ? [...keys.slice(0, CATALOG_PREVIEW), `+ ${keys.length - CATALOG_PREVIEW} more`]
             : keys,
     }))
 
-    const dataRows: ConfigRow[] = [
-        {
-            label: 'Encryption at rest',
-            pill: data.encryption_configured
-                ? { label: 'Configured', color: 'success' }
-                : { label: 'Missing', color: 'error' },
-        },
-        ...(catalogRows.length ? catalogRows : [{ label: 'Catalog', value: 'empty' }]),
-    ]
-
     return [
         { title: 'Deployment', rows: deploymentRows },
-        { title: 'Authentication', rows: authRows },
-        { title: 'Services', rows: serviceRows },
-        { title: 'Data', rows: dataRows },
+        { title: 'Catalog', rows: catalogRows.length ? catalogRows : [{ label: 'Catalog', value: 'empty' }] },
+        ...config.value.sections.map(section => ({
+            title: section.name,
+            description: section.description ?? undefined,
+            extension: section.extension,
+            rows: fieldRows(section.fields),
+        })),
     ]
 })
 </script>
@@ -190,7 +137,8 @@ const sections = computed<ConfigSection[]>(() => {
         <template #body>
             <div class="mx-auto flex w-full max-w-2xl flex-col gap-4 sm:gap-6">
                 <p class="text-sm text-muted">
-                    How this deployment is wired, read from the running instance. Secrets are redacted.
+                    How this deployment is wired, read from the running instance: one card per settings section the
+                    installed packages declare. A secret shows only whether it is configured.
                 </p>
 
                 <div v-if="loading"
@@ -210,23 +158,32 @@ const sections = computed<ConfigSection[]>(() => {
                              class="flex flex-col gap-4">
                         <UPageCard variant="naked"
                                    orientation="horizontal"
-                                   :title="section.title" />
+                                   :title="section.title"
+                                   :description="section.description">
+                            <div v-if="section.extension"
+                                 class="flex sm:justify-end">
+                                <UBadge color="neutral"
+                                        size="sm"
+                                        :label="section.extension" />
+                            </div>
+                        </UPageCard>
                         <UCard :ui="{ body: 'flex flex-col gap-4' }">
                             <template v-for="(row, index) in section.rows"
                                       :key="row.label">
                                 <USeparator v-if="index > 0" />
-                                <UFormField :label="row.label"
-                                            orientation="horizontal">
+                                <UFormField orientation="horizontal">
+                                    <template #label>
+                                        <UTooltip :text="row.description"
+                                                  :disabled="!row.description">
+                                            <span>{{ row.label }}</span>
+                                        </UTooltip>
+                                    </template>
                                     <div class="flex max-w-sm flex-col gap-1.5 sm:items-end sm:text-right">
-                                        <div v-if="row.pill || row.badges || row.value"
+                                        <div v-if="row.pill || row.value"
                                              class="flex flex-wrap items-center gap-1.5 sm:justify-end">
                                             <UBadge v-if="row.pill"
                                                     :color="row.pill.color"
                                                     :label="row.pill.label" />
-                                            <UBadge v-for="badge in row.badges"
-                                                    :key="badge"
-                                                    color="neutral"
-                                                    :label="badge" />
                                             <span v-if="row.value"
                                                   class="min-w-0 break-all font-medium text-highlighted tabular-nums">{{ row.value }}</span>
                                         </div>
@@ -238,10 +195,12 @@ const sections = computed<ConfigSection[]>(() => {
                                                     size="sm"
                                                     :label="`${attr.key}=${attr.value}`" />
                                         </div>
-                                        <p v-if="row.defaults?.length"
-                                           class="text-xs text-dimmed">
-                                            Defaults: {{ row.defaults.map(attr => `${attr.key}=${attr.value}`).join(', ') }}
-                                        </p>
+                                        <div v-if="row.items"
+                                             class="flex flex-col gap-1 sm:items-end">
+                                            <span v-for="item in row.items"
+                                                  :key="item"
+                                                  class="break-all font-medium text-highlighted">{{ item }}</span>
+                                        </div>
                                         <div v-if="row.lines"
                                              class="flex flex-col gap-1 sm:items-end">
                                             <span v-for="line in row.lines"

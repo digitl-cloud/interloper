@@ -18,7 +18,6 @@ import httpx2
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper.settings import AuthSettings
 from interloper_db import NotFoundError, Page
 from joserfc import jwt
 from joserfc.jwk import KeySet, RSAKey
@@ -27,6 +26,7 @@ from interloper_api.app import install_error_handlers
 from interloper_api.dependencies import get_caller, get_google_login, get_settings, get_store
 from interloper_api.login import SESSION_COOKIE, SESSION_MAX_AGE, SESSION_PATH, GoogleLogin
 from interloper_api.routes import auth as auth_module
+from interloper_api.settings import AuthSettings
 
 ISSUER = "https://accounts.google.com"
 AUTHORIZATION_ENDPOINT = f"{ISSUER}/o/oauth2/v2/auth"

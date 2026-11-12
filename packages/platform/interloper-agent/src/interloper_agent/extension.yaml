@@ -2,3 +2,5 @@ manifest_version: 1
 key: agent
 name: Agent
 description: "The assistant."
+settings:
+  agent: interloper_agent.settings:AgentSettings

@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import socket
 from collections.abc import Callable, Iterator
-from types import SimpleNamespace
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 import httpx2
 import interloper as il
 import pytest
-from interloper.settings import AuthSettings, ServerSettings
+from interloper.settings import RunnerSettings, ServerSettings, TelemetrySettings
+from interloper_agent.settings import AgentSettings
 from interloper_db import Store
 from interloper_db import engine as engine_module
 from interloper_db.models import (
@@ -24,10 +25,12 @@ from interloper_db.models import (
     Token,
     UserOrganisation,
 )
+from interloper_db.settings import EncryptionSettings, PostgresSettings, QuotaSettings
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 
 from interloper_api.authorization import ClientMetadataFetcher
+from interloper_api.settings import ApiSettings, AuthSettings, SmtpSettings
 
 PUBLIC_ADDRESS = "160.79.104.10"
 
@@ -109,31 +112,35 @@ def document_host(monkeypatch: pytest.MonkeyPatch) -> FakeDocumentHost:
 
 
 @pytest.fixture
-def fake_settings() -> SimpleNamespace:
-    """AppSettings-shaped namespace for the app and config-snapshot builders.
+def fake_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ApiSettings:
+    """The API's settings, with secrets planted so redaction can be proven.
 
-    Covers every field ``create_app`` and the config-snapshot builder read,
-    with secrets planted so redaction can be proven.
+    Every section they hold is activated, along with the runner, telemetry
+    and database sections, so the config snapshot, which reads each declared
+    section, sees the same values. The test runs where no config file can be
+    found, so every other section takes its defaults.
+
+    Args:
+        tmp_path: The working directory of the test.
+        monkeypatch: Moves the test into it.
 
     Returns:
-        The settings-shaped namespace.
+        The API's settings.
     """
-    return SimpleNamespace(
-        launcher=SimpleNamespace(
-            type="in_process",
-            config={
-                "image": "ghcr.io/x:1",
-                "namespace": "prod",
-                "service_account_name": "sa",
-                "ttl_seconds_after_finished": 300,
-                "env": "l-secret",
-                "image_pull_secrets": ["pull-secret"],
-                "runner_config": {"max_workers": 4, "env": "nested-secret"},
-            },
+    monkeypatch.chdir(tmp_path)
+    sections = [
+        RunnerSettings(type="async", config={"max_workers": 8, "env": "r-secret"}),
+        TelemetrySettings(
+            enabled=True,
+            protocol="grpc",
+            endpoint="http://collector:4317",
+            headers="secret-header=abc",
+            traces=True,
+            metrics=True,
+            sample_ratio=1.0,
         ),
-        runner=SimpleNamespace(type="async", config={"max_workers": 8, "env": "r-secret"}),
-        agent=SimpleNamespace(enabled=True, model="google:gemini-2.5-flash"),
-        auth=AuthSettings(
+        ServerSettings(external_url="", port=3000),
+        AuthSettings(
             allowed_domains=["digitlcloud.com"],
             super_admin_emails=["boss@example.com"],
             google_client_id="cid",
@@ -143,31 +150,15 @@ def fake_settings() -> SimpleNamespace:
             access_token_expiry_minutes=60,
             cookie_secure=True,
         ),
-        cron=SimpleNamespace(enabled=True, reconcile_interval=10, batch_size=50, max_execution_delay=3600),
-        worker=SimpleNamespace(enabled=True, poll_interval=5),
-        reaper=SimpleNamespace(
-            enabled=True,
-            poll_interval=15,
-            startup_timeout=600,
-            heartbeat_interval=10,
-            heartbeat_timeout=90,
-            run_timeout=43200,
-        ),
-        smtp=SimpleNamespace(enabled=True, host="smtp.example.com", from_addr="noreply@x", password="smtp-secret"),
-        otel=SimpleNamespace(
-            enabled=True,
-            protocol="grpc",
-            endpoint="http://collector:4317",
-            headers="secret-header=abc",
-            traces=True,
-            metrics=True,
-            sample_ratio=1.0,
-        ),
-        server=ServerSettings(external_url="", port=3000),
-        encryption=SimpleNamespace(key="key-material"),
-        postgres=SimpleNamespace(password="pg-secret"),
-        quota=SimpleNamespace(max_sources=None, max_assets_per_source=None, max_successful_runs_per_month=25),
-    )
+        SmtpSettings(host="smtp.example.com", user="mailer", from_addr="noreply@x", password="smtp-secret"),
+        EncryptionSettings(key="key-material"),
+        PostgresSettings(password="pg-secret"),
+        QuotaSettings(max_sources=None, max_assets_per_source=None, max_successful_runs_per_month=25),
+        AgentSettings(enabled=True, model="google:gemini-2.5-flash"),
+    ]
+    for section in sections:
+        type(section).activate(section)
+    return ApiSettings.get()
 
 
 @pytest.fixture

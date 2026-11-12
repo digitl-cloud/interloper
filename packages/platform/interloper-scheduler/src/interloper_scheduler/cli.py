@@ -8,12 +8,14 @@ import logging
 from interloper.catalog import Catalog
 from interloper.cli import Command
 from interloper.cli.console import configure_console_logging
-from interloper.settings import AppSettings
+from interloper.settings import LogSettings
 from interloper.utils import Supervisor
 from interloper_db import Store
 from interloper_db.provision import bootstrap
+from interloper_db.settings import PostgresSettings
 
 from interloper_scheduler.services import scheduler_services
+from interloper_scheduler.settings import SchedulerSettings
 
 logger = logging.getLogger(__name__)
 
@@ -64,18 +66,15 @@ class SchedulerCommand(Command):
         Raises:
             SystemExit: When no service is enabled.
         """
-        settings = AppSettings.get()
+        settings = SchedulerSettings.get()
         cron = settings.cron.enabled if args.cron is None else args.cron
         worker = settings.worker.enabled if args.worker is None else args.worker
         reaper = settings.reaper.enabled if args.reaper is None else args.reaper
         if not (cron or worker or reaper):
             raise SystemExit("Error: No scheduler service enabled. Enable at least one of: --cron, --worker, --reaper.")
-        configure_console_logging(logging.INFO, _LOG_FORMAT, log_format=settings.log.format)
-        bootstrap(
-            settings.postgres.dsn,
-            statement_timeout=settings.postgres.statement_timeout,
-            create_tables=not args.no_create_tables,
-        )
+        configure_console_logging(logging.INFO, _LOG_FORMAT, log_format=LogSettings.get().format)
+        postgres = PostgresSettings.get()
+        bootstrap(postgres.dsn, statement_timeout=postgres.statement_timeout, create_tables=not args.no_create_tables)
         catalog = Catalog.from_settings()
         store = Store.from_settings(catalog=catalog)
         services = scheduler_services(settings, store=store, catalog=catalog, cron=cron, worker=worker, reaper=reaper)

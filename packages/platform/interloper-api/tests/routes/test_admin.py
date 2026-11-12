@@ -7,7 +7,6 @@ store stands in for persistence so these stay pure unit tests.
 
 from __future__ import annotations
 
-import sys
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from typing import Any
@@ -16,6 +15,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from interloper.settings import SETTINGS, Settings
 from interloper_db import NotFoundError, OrganisationQuery, Page, PageQuery, ProfileQuery, Store, UsageQuery
 from interloper_db.crypto import hash_token
 from interloper_db.models import Audience, Conversation
@@ -28,6 +28,7 @@ from interloper_api.app import install_error_handlers
 from interloper_api.dependencies import State, get_session_caller, get_settings, get_store
 from interloper_api.notifications import SuperAdminPromotionEmail
 from interloper_api.routes import admin as admin_module
+from interloper_api.settings import ApiSettings
 
 
 class FakeStore:
@@ -216,52 +217,95 @@ def test_non_super_admin_is_forbidden(store: FakeStore) -> None:
     assert resp.status_code == 403
 
 
-def test_config_snapshot_redacts_secrets(fake_settings: SimpleNamespace) -> None:
-    snapshot = admin_module.AdminConfigResponse.from_settings(fake_settings, features={"agent": True})
+def _section(snapshot: admin_module.AdminConfigResponse, name: str) -> admin_module.AdminSettingsSection:
+    """The snapshot's section of that name.
+
+    Args:
+        snapshot: The config snapshot.
+        name: The section's name.
+
+    Returns:
+        The section.
+    """
+    return next(section for section in snapshot.sections if section.name == name)
+
+
+def _field(section: admin_module.AdminSettingsSection, name: str) -> admin_module.AdminSettingsField:
+    """The section's field of that name.
+
+    Args:
+        section: The snapshot's section.
+        name: The field's name, dotted for a key below a mapping field.
+
+    Returns:
+        The field.
+    """
+    return next(field for field in section.fields if field.name == name)
+
+
+def test_config_snapshot_redacts_secrets(fake_settings: ApiSettings) -> None:
+    snapshot = admin_module.AdminConfigResponse.from_declared(features={"agent": True})
     payload = snapshot.model_dump_json()
     secrets = (
         "oauth-secret",
         "smtp-secret",
         "pg-secret",
         "key-material",
-        "l-secret",
-        "nested-secret",
         "r-secret",
-        "pull-secret",
         "secret-header",
         "collector:4317",
     )
     for secret in secrets:
         assert secret not in payload
-    assert snapshot.auth.google_oauth_configured is True
-    assert snapshot.data.encryption_configured is True
-    assert (snapshot.services.reaper.heartbeat_timeout, snapshot.services.reaper.run_timeout) == (90, 43200)
-    assert snapshot.services.telemetry.enabled is True
-    assert snapshot.services.telemetry.endpoint_configured is True
+    secret = _field(_section(snapshot, "auth"), "google_client_secret")
+    assert (secret.public, secret.configured, secret.value) == (False, True, None)
+    assert _field(_section(snapshot, "encryption"), "key").configured is True
+    assert _field(_section(snapshot, "otel"), "endpoint").configured is True
 
 
-def test_config_snapshot_allowlists_launcher_and_runner_config(fake_settings: SimpleNamespace) -> None:
-    snapshot = admin_module.AdminConfigResponse.from_settings(fake_settings, features={"agent": True})
-    assert snapshot.deployment.launcher.config == {
-        "image": "ghcr.io/x:1",
-        "namespace": "prod",
-        "service_account_name": "sa",
-        "ttl_seconds_after_finished": 300,
-        "runner_config": {"max_workers": 4},
-    }
-    assert snapshot.deployment.runner.config == {"max_workers": 8}
-    # Explicitly configured keys are excluded from the class defaults.
-    assert snapshot.deployment.launcher.defaults == {"runner_type": "async"}
-    assert snapshot.deployment.runner.defaults == {}
+def test_config_snapshot_shows_every_declared_section(fake_settings: ApiSettings) -> None:
+    snapshot = admin_module.AdminConfigResponse.from_declared(features={"agent": True})
+
+    assert [section.name for section in snapshot.sections] == sorted(Settings.declared())
+    assert (_section(snapshot, "auth").extension, _section(snapshot, "server").extension) == ("api", "core")
+    assert _section(snapshot, "smtp").description == "SMTP settings for sending invitation emails."
 
 
-def test_config_snapshot_surfaces_class_defaults_for_unset_config(fake_settings: SimpleNamespace) -> None:
-    fake_settings.runner = SimpleNamespace(type="async", config={})
-    snapshot = admin_module.AdminConfigResponse.from_settings(fake_settings, features={"agent": True})
-    assert snapshot.deployment.runner.defaults == {"max_workers": 4}
+def test_config_snapshot_shows_the_values_of_public_fields(fake_settings: ApiSettings) -> None:
+    snapshot = admin_module.AdminConfigResponse.from_declared(features={"agent": True})
+
+    assert _field(_section(snapshot, "auth"), "allowed_domains").value == ["digitlcloud.com"]
+    assert _field(_section(snapshot, "quota"), "max_successful_runs_per_month").value == 25
+    assert _field(_section(snapshot, "otel"), "sample_ratio").value == 1.0
 
 
-def test_config_snapshot_reports_hydrated_catalog_by_kind(fake_settings: SimpleNamespace) -> None:
+def test_config_snapshot_reaches_public_keys_of_a_mapping_and_hides_the_rest(fake_settings: ApiSettings) -> None:
+    runner = _section(admin_module.AdminConfigResponse.from_declared(features={"agent": True}), "runner")
+
+    assert _field(runner, "config.max_workers").value == 8
+    config = _field(runner, "config")
+    assert (config.public, config.configured, config.value) == (False, True, None)
+    assert "config.image" not in {field.name for field in runner.fields}
+
+
+def test_config_snapshot_reports_whether_a_field_is_configured(fake_settings: ApiSettings) -> None:
+    smtp = _section(admin_module.AdminConfigResponse.from_declared(features={"agent": True}), "smtp")
+
+    assert _field(smtp, "host").configured is True
+    assert _field(smtp, "port").configured is False
+
+
+def test_config_snapshot_leaves_out_a_section_whose_package_cannot_be_imported(
+    fake_settings: ApiSettings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(admin_module, "SETTINGS", {name: cls for name, cls in SETTINGS.items() if name != "smtp"})
+
+    snapshot = admin_module.AdminConfigResponse.from_declared(features={"agent": True})
+
+    assert "smtp" not in {section.name for section in snapshot.sections}
+
+
+def test_config_snapshot_reports_hydrated_catalog_by_kind(fake_settings: ApiSettings) -> None:
     catalog = SimpleNamespace(
         components={
             "demo": SimpleNamespace(kind="source"),
@@ -269,8 +313,20 @@ def test_config_snapshot_reports_hydrated_catalog_by_kind(fake_settings: SimpleN
             "bigquery": SimpleNamespace(kind="destination"),
         }
     )
-    snapshot = admin_module.AdminConfigResponse.from_settings(fake_settings, features={"agent": True}, catalog=catalog)
-    assert snapshot.data.catalog == {"destination": ["bigquery", "csv"], "source": ["demo"]}
+    snapshot = admin_module.AdminConfigResponse.from_declared(features={"agent": True}, catalog=catalog)
+    assert snapshot.catalog == {"destination": ["bigquery", "csv"], "source": ["demo"]}
+
+
+def test_config_snapshot_leaves_the_version_unknown_without_an_installed_package(
+    monkeypatch: pytest.MonkeyPatch, fake_settings: ApiSettings
+) -> None:
+    # Running from a source checkout rather than an installed dist.
+    def missing(name: str) -> str:
+        raise admin_module.metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(admin_module.metadata, "version", missing)
+
+    assert admin_module.AdminConfigResponse.from_declared({"agent": True}).version is None
 
 
 def test_non_super_admin_cannot_read_config(store: FakeStore) -> None:
@@ -278,15 +334,15 @@ def test_non_super_admin_cannot_read_config(store: FakeStore) -> None:
     assert resp.status_code == 403
 
 
-def test_super_admin_reads_config(store: FakeStore, fake_settings: SimpleNamespace) -> None:
+def test_super_admin_reads_config(store: FakeStore, fake_settings: ApiSettings) -> None:
     app = _app(store, is_super_admin=True)
-    snapshot = admin_module.AdminConfigResponse.from_settings(fake_settings, features={"agent": True})
+    snapshot = admin_module.AdminConfigResponse.from_declared(features={"agent": True})
     app.state.interloper = State(admin_config=snapshot)
     client = TestClient(app)
     resp = client.get("/admin/config")
     assert resp.status_code == 200
-    assert resp.json()["deployment"]["launcher"]["type"] == "in_process"
-    assert resp.json()["auth"]["allowed_domains"] == ["digitlcloud.com"]
+    auth = next(section for section in resp.json()["sections"] if section["name"] == "auth")
+    assert next(field for field in auth["fields"] if field["name"] == "allowed_domains")["value"] == ["digitlcloud.com"]
 
 
 def test_config_unavailable_returns_503(store: FakeStore) -> None:
@@ -738,45 +794,6 @@ class TestActivityTitles:
 
 
 # -- Config-snapshot introspection --------------------------------------------
-
-
-class TestRegistryDefaults:
-    """The snapshot annotates configured values with the registry's defaults."""
-
-    def test_an_unregistered_launcher_has_no_defaults(self) -> None:
-        assert admin_module._launcher_defaults("not-a-launcher") == {}
-
-    def test_a_missing_scheduler_extra_yields_no_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # An API-only image is built without interloper-scheduler.
-        monkeypatch.setitem(sys.modules, "interloper_scheduler.launcher", None)
-
-        assert admin_module._launcher_defaults("kubernetes") == {}
-
-    def test_a_registered_launcher_exposes_its_defaults(self) -> None:
-        defaults = admin_module._launcher_defaults("in_process")
-
-        assert isinstance(defaults, dict)
-
-    def test_an_unregistered_runner_has_no_defaults(self) -> None:
-        assert admin_module._runner_defaults("not-a-runner") == {}
-
-    def test_a_registered_runner_exposes_its_field_defaults(self) -> None:
-        defaults = admin_module._runner_defaults("async")
-
-        assert defaults["max_workers"] == 4
-
-    def test_an_uninstalled_package_leaves_the_version_unknown(
-        self, monkeypatch: pytest.MonkeyPatch, fake_settings: SimpleNamespace
-    ) -> None:
-        # Running from a source checkout rather than an installed dist.
-        def missing(name: str) -> str:
-            raise admin_module.metadata.PackageNotFoundError(name)
-
-        monkeypatch.setattr(admin_module.metadata, "version", missing)
-
-        snapshot = admin_module.AdminConfigResponse.from_settings(fake_settings, {"agent": True})
-
-        assert snapshot.deployment.version is None
 
 
 class TestOAuthClients:

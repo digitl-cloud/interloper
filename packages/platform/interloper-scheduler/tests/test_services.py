@@ -7,10 +7,10 @@ from typing import Any
 
 import pytest
 from interloper.catalog import Catalog
-from interloper.settings import AppSettings, AuthSettings, RenewalSettings
 
 import interloper_scheduler.services as services_module
 from interloper_scheduler import scheduler_services
+from interloper_scheduler.settings import ReaperSettings, RenewalSettings, SchedulerSettings
 
 
 @pytest.fixture(autouse=True)
@@ -19,17 +19,16 @@ def _no_launcher(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(services_module.Launcher, "from_settings", classmethod(lambda cls, *args, **kwargs: object()))
 
 
-def _build(settings: AppSettings | None = None, **toggles: bool) -> dict[str, Any]:
-    """Build the services with a stand-in store.
+def _build(**toggles: bool) -> dict[str, Any]:
+    """Build the services over the active settings, with a stand-in store.
 
     Args:
-        settings: The settings; defaults apply when ``None``.
         **toggles: The ``cron``, ``worker`` and ``reaper`` flags.
 
     Returns:
         The built services, by name.
     """
-    return scheduler_services(settings or AppSettings(), store=object(), catalog=Catalog(), **toggles)  # ty: ignore[invalid-argument-type]
+    return scheduler_services(SchedulerSettings.get(), store=object(), catalog=Catalog(), **toggles)  # ty: ignore[invalid-argument-type]
 
 
 def test_cron_brings_hooks_and_renewal():
@@ -39,9 +38,9 @@ def test_cron_brings_hooks_and_renewal():
 
 def test_renewal_follows_its_setting():
     """Renewal stays off when its section disables it."""
-    settings = AppSettings(renewal=RenewalSettings(enabled=False))
+    RenewalSettings.activate(RenewalSettings(enabled=False))
 
-    assert set(_build(settings, cron=True, worker=False, reaper=False)) == {"cron", "hooks"}
+    assert set(_build(cron=True, worker=False, reaper=False)) == {"cron", "hooks"}
 
 
 def test_worker_and_reaper_share_one_launcher():
@@ -52,11 +51,11 @@ def test_worker_and_reaper_share_one_launcher():
     assert built["worker"]._launcher is built["reaper"]._launcher
 
 
-def test_the_reaper_keeps_ended_credentials_for_the_auth_retention():
-    """The reaper purges credentials after the window the auth settings give."""
-    settings = AppSettings(auth=AuthSettings(credential_retention_days=7))
+def test_the_reaper_keeps_ended_credentials_for_its_retention():
+    """The reaper purges credentials after the window its own section gives."""
+    ReaperSettings.activate(ReaperSettings(credential_retention_days=7))
 
-    assert _build(settings, cron=False, worker=False, reaper=True)["reaper"]._credential_retention == timedelta(days=7)
+    assert _build(cron=False, worker=False, reaper=True)["reaper"]._credential_retention == timedelta(days=7)
 
 
 def test_nothing_enabled_builds_nothing():

@@ -36,7 +36,7 @@ from uuid import UUID
 
 import interloper as il
 from interloper.errors import ConfigError
-from interloper.settings import AppSettings
+from interloper.settings import ServerSettings
 from interloper.telemetry.tracer import meter
 from interloper_db import BackfillStatus, NotFoundError, RelationQuery, RunStatus, Store
 from interloper_db.models import Backfill, Component, Run
@@ -181,7 +181,7 @@ class HookController(Controller):
             The absolute URL, or ``None`` when ``server.external_url`` is unset
             or the organisation is gone.
         """
-        base = AppSettings.get().server.external_url.rstrip("/")
+        base = ServerSettings.get().external_url.rstrip("/")
         if not base:
             return None
         try:

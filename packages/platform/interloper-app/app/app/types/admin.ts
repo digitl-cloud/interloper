@@ -13,49 +13,33 @@ export interface AdminUserOrganisation {
     name: string
 }
 
+/**
+ * One field of a settings section, or one public key of a mapping field
+ * (`config.image`). `value` is set only when the section lists the field as
+ * public; `configured` says whether the deployment changed it from its default.
+ */
+export interface AdminSettingsField {
+    name: string
+    description: string | null
+    public: boolean
+    configured: boolean
+    value: unknown
+}
+
+/** One settings section a package declares, as the running instance loaded it. */
+export interface AdminSettingsSection {
+    name: string
+    /** Key of the extension declaring the section (`core`, `db`, `scheduler`, ...). */
+    extension: string
+    description: string | null
+    fields: AdminSettingsField[]
+}
+
 export interface AdminConfig {
-    deployment: {
-        version: string | null
-        launcher: {
-            type: string
-            config: Record<string, unknown>
-            defaults: Record<string, unknown>
-        }
-        runner: {
-            type: string
-            config: Record<string, unknown>
-            defaults: Record<string, unknown>
-        }
-        features: Record<string, boolean>
-        agent_model: string | null
-    }
-    auth: {
-        allowed_domains: string[]
-        super_admin_emails: string[]
-        google_oauth_configured: boolean
-        google_redirect_uri: string
-        session_expiry_days: number
-        cookie_secure: boolean
-    }
-    services: {
-        cron: { enabled: boolean, reconcile_interval: number, batch_size: number, max_execution_delay: number }
-        worker: { enabled: boolean, poll_interval: number }
-        reaper: {
-            enabled: boolean
-            poll_interval: number
-            startup_timeout: number
-            heartbeat_interval: number
-            heartbeat_timeout: number
-            run_timeout: number | null
-        }
-        smtp: { enabled: boolean, host: string, from_addr: string }
-        app_external_url: string
-    }
-    data: {
-        encryption_configured: boolean
-        catalog: Record<string, string[]>
-    }
-    quotas: AdminQuotaLimits
+    version: string | null
+    features: Record<string, boolean>
+    catalog: Record<string, string[]>
+    sections: AdminSettingsSection[]
 }
 
 /**

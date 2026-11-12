@@ -22,8 +22,10 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from interloper.catalog import Catalog
-    from interloper.settings import LauncherSettings, ReaperSettings, ServerSettings
+    from interloper.settings import ServerSettings
     from interloper_db.models import Run
+
+    from interloper_scheduler.settings import LauncherSettings, ReaperSettings
 
 logger = logging.getLogger(__name__)
 

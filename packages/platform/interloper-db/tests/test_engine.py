@@ -146,7 +146,7 @@ class TestEngineFromSettings:
     def test_an_existing_engine_is_reused_without_reading_settings(self, monkeypatch: pytest.MonkeyPatch) -> None:
         engine = init_engine("sqlite://")
         monkeypatch.setattr(
-            "interloper.settings.AppSettings.get",
+            "interloper_db.settings.PostgresSettings.get",
             classmethod(lambda cls: pytest.fail("settings must not be read when an engine exists")),
         )
 
@@ -156,8 +156,8 @@ class TestEngineFromSettings:
         from types import SimpleNamespace
 
         monkeypatch.setattr(
-            "interloper.settings.AppSettings.get",
-            classmethod(lambda cls: SimpleNamespace(postgres=SimpleNamespace(dsn="sqlite://", statement_timeout=None))),
+            "interloper_db.settings.PostgresSettings.get",
+            classmethod(lambda cls: SimpleNamespace(dsn="sqlite://", statement_timeout=None)),
         )
 
         engine = engine_from_settings()
@@ -171,9 +171,7 @@ class TestEngineFromSettings:
         from types import SimpleNamespace
 
         postgres = SimpleNamespace(dsn="postgresql+psycopg://u:p@localhost/db", statement_timeout=15)
-        monkeypatch.setattr(
-            "interloper.settings.AppSettings.get", classmethod(lambda cls: SimpleNamespace(postgres=postgres))
-        )
+        monkeypatch.setattr("interloper_db.settings.PostgresSettings.get", classmethod(lambda cls: postgres))
 
         engine_from_settings()
 

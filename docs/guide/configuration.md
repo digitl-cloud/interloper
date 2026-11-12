@@ -1,19 +1,27 @@
 # Configuration
 
-`AppSettings` is the runtime configuration the CLI and the platform read. It loads from three
-sources: an `interloper.yaml` in the working directory, environment variables, field defaults. Every section has its own environment prefix.
+The CLI and the platform read their configuration as **settings sections**, each declared by the
+package whose behaviour it configures: core declares `runner`, `otel`, `log`, `catalog`, `run`
+and `server`, the database package `postgres`, `encryption` and `quota`, the API `auth` and `smtp`,
+the scheduler `cron`, `renewal`, `worker`, `reaper` and `launcher`, the agent `agent` and the MCP
+server `mcp`. Every section and field is listed in [Settings](../reference/settings.md).
+
+A section loads from three sources, highest first: environment variables, its block of
+`interloper.yaml` in the working directory, field defaults. A section class reads itself:
 
 ```py
-from interloper.settings import AppSettings
+from interloper.settings import RunnerSettings
 
-settings = AppSettings.get()          # the active settings, or freshly loaded ones
-settings.runner.type
+RunnerSettings.get().type   # the section this process runs with, loaded on the first read
 ```
 
-`AppSettings.activate(settings)` pins an instance for the current process (the CLI does this);
-`clear_active()` releases it.
+A section is loaded once per process and kept. `RunnerSettings.activate(settings)` makes another
+instance the one every later `get()` returns (a command does this to apply its flags), and
+`Settings.clear_active()` forgets every section, so the next read loads it again.
 
-Every top-level key is a section. In `interloper.yaml` a section is a mapping under its key; in the environment every field is `INTERLOPER_<SECTION>_<FIELD>` in upper case (`INTERLOPER_RUNNER_TYPE`), and a list takes comma-separated values (`INTERLOPER_CATALOG_INCLUDE=my_package.sources.Shop,my_package.sources.Finance`). The framework reads `runner`, `otel`, `log`, `catalog`, `run` and `server`; the other sections configure the platform packages. Every section and field is listed in [Settings](../reference/settings.md).
+In `interloper.yaml` a section is a mapping under its name; in the environment every field is
+`INTERLOPER_<SECTION>_<FIELD>` in upper case (`INTERLOPER_RUNNER_TYPE`), and a list takes
+comma-separated values (`INTERLOPER_CATALOG_INCLUDE=my_package.sources.Shop,my_package.sources.Finance`).
 
 ## YAML example
 
@@ -34,11 +42,14 @@ catalog:
     - my_package.sources.Finance
 ```
 
-Within a section, a field present in the YAML wins over its environment variable, and the
-environment fills the fields the YAML leaves out: `runner: {type: serial}` with
-`INTERLOPER_RUNNER_TYPE=async` resolves to `serial`, while `INTERLOPER_POSTGRES_PASSWORD` completes a
-`postgres:` block that omits the password. The YAML is not interpolated, so secrets belong in the
-environment, not in `${VAR}` placeholders.
+The environment beats the file for every field, and the file fills the fields the environment
+leaves out: `runner: {type: serial}` with `INTERLOPER_RUNNER_TYPE=async` resolves to `async`, while
+`INTERLOPER_POSTGRES_PASSWORD` completes a `postgres:` block that omits the password. The YAML is
+not interpolated, so secrets belong in the environment, not in `${VAR}` placeholders.
+
+One file serves every role, so a block no installed package declares is ignored: the API's
+process reads no `launcher` block when the scheduler is not installed beside it. An unknown field
+inside a declared block is still an error wherever the package declaring it is installed.
 
 ## Other environment variables
 

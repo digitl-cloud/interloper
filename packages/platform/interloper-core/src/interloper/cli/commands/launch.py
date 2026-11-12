@@ -66,33 +66,33 @@ class LaunchCommand(Command):
         from interloper.rest import HTTPBearerAuth, RESTClient
         from interloper.runner import Runner
         from interloper.runner.spec import RunSpec
-        from interloper.settings import AppSettings
+        from interloper.settings import RunnerSettings, RunSettings, ServerSettings
 
         configure_logging()
-        settings = AppSettings.get()
-        if not settings.run.token:
+        run = RunSettings.get()
+        if not run.token:
             raise SystemExit(
                 "Error: launch executes a platform run, which needs the run's token (INTERLOPER_RUN_TOKEN) "
                 "and the API it belongs to (server.internal_url)."
             )
-        client = RESTClient(settings.server.internal_url, auth=HTTPBearerAuth(settings.run.token), timeout=30)
+        client = RESTClient(ServerSettings.get().internal_url, auth=HTTPBearerAuth(run.token), timeout=30)
         recorder = EventRecorder(
             partial(EventBatch.post, client=client, run_id=args.run_id),
             run_id=args.run_id,
-            heartbeat_interval=settings.run.heartbeat_interval,
-            heartbeat_timeout=settings.run.heartbeat_timeout,
+            heartbeat_interval=run.heartbeat_interval,
+            heartbeat_timeout=run.heartbeat_timeout,
             on_lost=_exit_lost,
         )
 
         try:
             try:
-                spec = RunSpec.from_api(client, args.run_id, timeout=settings.run.heartbeat_timeout / 2)
+                spec = RunSpec.from_api(client, args.run_id, timeout=run.heartbeat_timeout / 2)
             except RunnerError as error:
                 raise SystemExit(f"Error: {error}") from error
             dag, window = DAG.from_spec(spec.dag), spec.window
             if args.operation_id is not None:
                 dag, window = for_operation(dag, window, args.operation_id, spec.metadata)
-            runner = Runner.from_settings(settings.runner)
+            runner = Runner.from_settings(RunnerSettings.get())
         except (Exception, SystemExit) as error:
             reason = str(error) if isinstance(error, SystemExit) else format_exception(error)
             if args.operation_id is not None:

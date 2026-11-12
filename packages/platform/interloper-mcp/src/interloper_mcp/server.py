@@ -5,13 +5,13 @@ from __future__ import annotations
 from importlib.metadata import version
 from typing import Any
 
-from interloper.settings import McpSettings
 from interloper_db import Audience, Store
 from mcp.server.auth.settings import AuthSettings as McpAuthSettings
 from mcp.server.mcpserver import MCPServer
 from mcp.types import Icon
 
 from interloper_mcp.auth import PatVerifier
+from interloper_mcp.settings import McpSettings
 from interloper_mcp.tools import register_tools
 
 SERVER_NAME = "interloper"

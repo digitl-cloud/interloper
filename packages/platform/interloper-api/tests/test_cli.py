@@ -3,28 +3,15 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Iterator
 from datetime import timedelta
 from typing import Any
 
 import pytest
-from interloper.settings import AppSettings, AuthSettings
 from interloper_db import Store
 from interloper_db.crypto import hash_token
 
 from interloper_api import cli
-
-
-@pytest.fixture(autouse=True)
-def _no_active_settings() -> Iterator[None]:
-    """Start and leave every test with no activated settings.
-
-    Yields:
-        ``None``; the teardown clears the active settings.
-    """
-    AppSettings.clear_active()
-    yield
-    AppSettings.clear_active()
+from interloper_api.settings import ApiSettings, AuthSettings
 
 
 def _parse(*argv: str) -> argparse.Namespace:
@@ -60,7 +47,7 @@ def wiring(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         recorded["lifetimes"] = lifetimes
         return store
 
-    def from_settings(cls: Any, settings: AppSettings, **kwargs: Any) -> object:
+    def from_settings(cls: Any, settings: ApiSettings, **kwargs: Any) -> object:
         recorded["server"] = (settings, kwargs)
         return object()
 
@@ -100,7 +87,7 @@ def test_no_create_tables_reaches_the_bootstrap(wiring: dict[str, Any]) -> None:
 def test_the_api_serves_through_a_store_issuing_tokens_for_the_configured_lifetimes(wiring: dict[str, Any]) -> None:
     """The store the API serves through issues sessions and OAuth tokens for the ``auth`` lifetimes."""
     auth = AuthSettings(session_expiry_days=2, access_token_expiry_minutes=15, refresh_token_expiry_days=7)
-    AppSettings.activate(AppSettings(auth=auth))
+    AuthSettings.activate(auth)
 
     cli.ApiCommand().run(_parse("api"))
 

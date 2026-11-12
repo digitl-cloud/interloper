@@ -30,28 +30,42 @@ def define_env(env: Any) -> None:
 
 
 def settings_reference() -> str:
-    """Render every ``AppSettings`` section as a table of its fields.
+    """Render every declared settings section as a table of its fields, grouped by the distribution declaring it.
 
     Returns:
-        Markdown: one heading per section with its prefix, then a table of
-        field, type, default and description.
+        Markdown: one heading per distribution, ``interloper-core`` first,
+        then one heading per section with its prefix and a table of field,
+        type, default and description.
     """
-    from interloper.settings import AppSettings
+    from importlib.metadata import entry_points
 
-    return "\n".join(_section(name, field.annotation) for name, field in AppSettings.model_fields.items())
+    from interloper.settings import PREFIX, SETTINGS, Settings
+
+    distributions = {
+        locator.value: locator.dist.name for locator in entry_points(group="interloper.extensions") if locator.dist
+    }
+    by_distribution: dict[str, list[str]] = {}
+    for name, entry in sorted(Settings.declared().items()):
+        distribution = distributions.get(entry.package, entry.package)
+        by_distribution.setdefault(distribution, []).append(name)
+    lines: list[str] = []
+    for distribution in sorted(by_distribution, key=lambda name: (name != "interloper-core", name)):
+        lines += [f"## `{distribution}`", ""]
+        lines += [_section(name, SETTINGS[name], f"{PREFIX}{name.upper()}_") for name in by_distribution[distribution]]
+    return "\n".join(lines)
 
 
-def _section(name: str, section: type[BaseSettings]) -> str:
+def _section(name: str, section: type[BaseSettings], prefix: str) -> str:
     """Render one settings section.
 
     Args:
-        name: The section's key in ``AppSettings`` and in ``interloper.yaml``.
+        name: The section's name, its block in ``interloper.yaml``.
         section: The section's settings class.
+        prefix: The prefix of its environment variables.
 
     Returns:
         Markdown: the heading, the summary line, the prefix and the table.
     """
-    prefix = section.model_config.get("env_prefix", "")
     summary = (section.__doc__ or "").strip().splitlines()[0]
     rows = [
         f"| `{field_name}` | {_type(field)} | {_default(field)} | {field.description or ''} |"

@@ -15,9 +15,12 @@ import logging
 from interloper.catalog import Catalog
 from interloper.cli import Command
 from interloper.cli.console import configure_console_logging
-from interloper.settings import AppSettings
+from interloper.settings import LogSettings, ServerSettings
+from interloper_api.settings import ApiSettings
 from interloper_db import Store
 from interloper_db.provision import bootstrap
+from interloper_db.settings import PostgresSettings
+from interloper_scheduler.settings import CronSettings, ReaperSettings, SchedulerSettings, WorkerSettings
 
 from interloper_app.services import App
 
@@ -70,57 +73,48 @@ class AppCommand(Command):
             args: The parsed command line: the service toggles, ``host``, ``port``, ``dev`` and
                 ``no_create_tables``.
         """
-        settings = _with_overrides(args, AppSettings.get())
-        AppSettings.activate(settings)
+        self._activate_flags(args)
         configure_console_logging(
-            logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s", log_format=settings.log.format
+            logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s", log_format=LogSettings.get().format
         )
-        bootstrap(
-            settings.postgres.dsn,
-            statement_timeout=settings.postgres.statement_timeout,
-            create_tables=not args.no_create_tables,
-        )
+        postgres = PostgresSettings.get()
+        bootstrap(postgres.dsn, statement_timeout=postgres.statement_timeout, create_tables=not args.no_create_tables)
+        api_settings = ApiSettings.get()
+        scheduler_settings = SchedulerSettings.get()
         catalog = Catalog.from_settings()
         store = Store.from_settings(
             catalog=catalog,
-            session_expiry=settings.auth.session_expiry,
-            access_token_expiry=settings.auth.access_token_expiry,
-            refresh_token_expiry=settings.auth.refresh_token_expiry,
+            session_expiry=api_settings.auth.session_expiry,
+            access_token_expiry=api_settings.auth.access_token_expiry,
+            refresh_token_expiry=api_settings.auth.refresh_token_expiry,
         )
         App.from_settings(
-            settings,
+            api_settings,
+            scheduler_settings,
             store=store,
             catalog=catalog,
-            api=settings.server.enabled,
-            cron=settings.cron.enabled,
-            worker=settings.worker.enabled,
-            reaper=settings.reaper.enabled,
+            api=api_settings.server.enabled,
+            cron=scheduler_settings.cron.enabled,
+            worker=scheduler_settings.worker.enabled,
+            reaper=scheduler_settings.reaper.enabled,
             dev=args.dev,
             port=args.port,
         ).run()
 
+    def _activate_flags(self, args: argparse.Namespace) -> None:
+        """Activate the sections the command's flags override, with the flags applied; an unset flag keeps its setting.
 
-def _with_overrides(args: argparse.Namespace, settings: AppSettings) -> AppSettings:
-    """Fold the command's flags into the settings; a flag left unset keeps the setting.
-
-    Args:
-        args: Parsed CLI arguments: ``host``, ``port`` and the ``api``/``cron``/``worker``/``reaper`` toggles.
-        settings: The loaded settings, left unchanged.
-
-    Returns:
-        A copy of the settings with the given flags applied.
-    """
-    server = settings.server
-    if args.host is not None:
-        server = server.model_copy(update={"host": args.host})
-    if args.port is not None:
-        server = server.model_copy(update={"port": args.port})
-    if args.api is not None:
-        server = server.model_copy(update={"enabled": args.api})
-    toggles = {"cron": args.cron, "worker": args.worker, "reaper": args.reaper}
-    sections = {
-        name: getattr(settings, name).model_copy(update={"enabled": value})
-        for name, value in toggles.items()
-        if value is not None
-    }
-    return settings.model_copy(update={"server": server, **sections})
+        Args:
+            args: The parsed command line: ``host``, ``port`` and the ``api``/``cron``/``worker``/``reaper`` toggles.
+        """
+        server = {"host": args.host, "port": args.port, "enabled": args.api}
+        ServerSettings.activate(
+            ServerSettings.get().model_copy(update={name: value for name, value in server.items() if value is not None})
+        )
+        for section, enabled in (
+            (CronSettings, args.cron),
+            (WorkerSettings, args.worker),
+            (ReaperSettings, args.reaper),
+        ):
+            if enabled is not None:
+                section.activate(section.get().model_copy(update={"enabled": enabled}))

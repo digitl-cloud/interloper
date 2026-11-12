@@ -8,10 +8,11 @@ from uuid import uuid4
 
 import pytest
 from interloper.catalog import Catalog
-from interloper.settings import CatalogSettings, LauncherSettings, ReaperSettings, RunnerSettings, ServerSettings
+from interloper.settings import CatalogSettings, RunnerSettings, ServerSettings
 from interloper_db import RunStatus
 from interloper_db.models import Run
 from interloper_scheduler.launcher import LAUNCHERS
+from interloper_scheduler.settings import LauncherSettings, ReaperSettings
 from kubernetes import client, config
 
 from interloper_k8s.launcher import KubernetesLauncher

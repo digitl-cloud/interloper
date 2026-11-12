@@ -6,3 +6,9 @@ cli:
   scheduler: interloper_scheduler.cli:SchedulerCommand
 launchers:
   in_process: interloper_scheduler.launcher:InProcessLauncher
+settings:
+  cron: interloper_scheduler.settings:CronSettings
+  launcher: interloper_scheduler.settings:LauncherSettings
+  reaper: interloper_scheduler.settings:ReaperSettings
+  renewal: interloper_scheduler.settings:RenewalSettings
+  worker: interloper_scheduler.settings:WorkerSettings

@@ -87,7 +87,7 @@ The process exits non-zero when the run does not complete.
 
 ## The runner
 
-The runner comes from `AppSettings`: the `runner` block of `interloper.yaml` or
+The runner comes from the `runner` settings section: the `runner` block of `interloper.yaml` or
 `INTERLOPER_RUNNER_TYPE` / `INTERLOPER_RUNNER_CONFIG`. Built-in types are `async` (default),
 `serial`; companion packages add `docker` and `kubernetes`.
 

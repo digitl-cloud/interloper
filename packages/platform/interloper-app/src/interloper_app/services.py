@@ -19,8 +19,9 @@ from interloper_app.assets import SpaFallback, source_dir, static_dir
 
 if TYPE_CHECKING:
     from interloper.catalog import Catalog
-    from interloper.settings import AppSettings
+    from interloper_api.settings import ApiSettings
     from interloper_db import Store
+    from interloper_scheduler.settings import SchedulerSettings
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,8 @@ class App:
     @classmethod
     def from_settings(
         cls,
-        settings: AppSettings,
+        api_settings: ApiSettings,
+        scheduler_settings: SchedulerSettings,
         *,
         store: Store,
         catalog: Catalog,
@@ -64,7 +66,8 @@ class App:
         everything when the parent process dies.
 
         Args:
-            settings: The active settings, the command's flags already applied.
+            api_settings: The API's settings, the command's flags already applied.
+            scheduler_settings: The scheduler's settings, the command's flags already applied.
             store: The store every service reads and writes through.
             catalog: The catalog the services resolve components against.
             api: Whether to serve the API.
@@ -85,16 +88,19 @@ class App:
         if dev and not api:
             raise SystemExit("Error: --dev runs the Nuxt dev server against the API; it cannot be used with --no-api.")
         services: dict[str, Service] = {}
-        api_port = cls._api_port(settings, dev=dev, port=port)
+        server_port = api_settings.server.port
+        api_port = cls._api_port(server_port, dev=dev, port=port)
         if api:
-            services["api"] = cls._api(settings, store=store, catalog=catalog, port=api_port, dev=dev)
+            services["api"] = cls._api(api_settings, store=store, catalog=catalog, port=api_port, dev=dev)
         services.update(
-            scheduler_services(settings, store=store, catalog=catalog, cron=cron, worker=worker, reaper=reaper)
+            scheduler_services(
+                scheduler_settings, store=store, catalog=catalog, cron=cron, worker=worker, reaper=reaper
+            )
         )
         if dev:
-            services["nuxt-dev"] = DevServer(server_port=settings.server.port, api_port=api_port)
+            services["nuxt-dev"] = DevServer(server_port=server_port, api_port=api_port)
             services["parent-watchdog"] = ParentWatchdog()
-        return cls(services, dev_port=settings.server.port if dev else None)
+        return cls(services, dev_port=server_port if dev else None)
 
     def run(self) -> None:
         """Run every service until a signal or a service's death."""
@@ -105,14 +111,14 @@ class App:
     # -- Internals -------------------------------------------------------------
 
     @staticmethod
-    def _api_port(settings: AppSettings, *, dev: bool, port: int | None) -> int:
+    def _api_port(server_port: int, *, dev: bool, port: int | None) -> int:
         """The port the API binds.
 
         In dev mode with no explicit port, the API moves to a free port so the
         Nuxt dev server can take ``server.port`` and proxy to it.
 
         Args:
-            settings: The active settings, ``--port`` already folded into ``server.port``.
+            server_port: The ``server.port`` setting, ``--port`` already folded in.
             dev: Whether the Nuxt dev server runs alongside.
             port: The explicit ``--port``, ``None`` when it was not given.
 
@@ -123,14 +129,14 @@ class App:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
                 probe.bind(("", 0))
                 return probe.getsockname()[1]
-        return settings.server.port
+        return server_port
 
     @staticmethod
-    def _api(settings: AppSettings, *, store: Store, catalog: Catalog, port: int, dev: bool) -> ApiServer:
+    def _api(settings: ApiSettings, *, store: Store, catalog: Catalog, port: int, dev: bool) -> ApiServer:
         """Build the API, serving the built SPA outside dev mode.
 
         Args:
-            settings: The active settings.
+            settings: The API's settings.
             store: The store the routes read and write through.
             catalog: The catalog the routes describe.
             port: The port to bind.

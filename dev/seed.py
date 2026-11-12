@@ -36,10 +36,10 @@ import os
 from uuid import UUID
 
 import interloper as il
-from interloper.settings import AppSettings
 from interloper_db import create_all, ensure_database, init_engine
 from interloper_db.engine import get_engine
 from interloper_db.models import Component, Organisation, Profile, UserOrganisation
+from interloper_db.settings import PostgresSettings
 from interloper_db.store import ComponentQuery, Store
 from sqlmodel import Session, col, select
 
@@ -214,10 +214,10 @@ def _ensure_demo_job(store: Store, org_id: UUID, source_id: UUID) -> bool:
 
 def main() -> None:
     """Provision the dev dataset against the configured database."""
-    settings = AppSettings.get()
+    postgres = PostgresSettings.get()
     catalog = il.Catalog.from_settings()
 
-    dsn = settings.postgres.dsn
+    dsn = postgres.dsn
     print(f"Seeding database at {dsn} ...")
     ensure_database(dsn)
     engine = init_engine(dsn)

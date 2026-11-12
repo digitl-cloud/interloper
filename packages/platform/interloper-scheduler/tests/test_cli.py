@@ -3,28 +3,15 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Iterator
 from typing import Any
 from uuid import UUID
 
 import pytest
-from interloper.settings import AppSettings, CronSettings, ReaperSettings, WorkerSettings
 
 from interloper_scheduler import cli
+from interloper_scheduler.settings import CronSettings, ReaperSettings, SchedulerSettings, WorkerSettings
 
 RUN_ID = UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
-
-
-@pytest.fixture(autouse=True)
-def _no_active_settings() -> Iterator[None]:
-    """Start and leave every test with no activated settings.
-
-    Yields:
-        ``None``; the teardown clears the active settings.
-    """
-    AppSettings.clear_active()
-    yield
-    AppSettings.clear_active()
 
 
 def _parse(*argv: str) -> argparse.Namespace:
@@ -57,7 +44,7 @@ def services(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """
     recorded: dict[str, Any] = {}
 
-    def scheduler_services(settings: AppSettings, **kwargs: Any) -> dict[str, object]:
+    def scheduler_services(settings: SchedulerSettings, **kwargs: Any) -> dict[str, object]:
         recorded["services"] = kwargs
         return {"stub": object()}
 
@@ -80,10 +67,9 @@ class TestScheduler:
         assert services["ran"] == ["stub"]
 
     def test_no_enabled_service_is_an_error(self, services: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
-        settings = AppSettings(
-            cron=CronSettings(enabled=False), worker=WorkerSettings(enabled=False), reaper=ReaperSettings(enabled=False)
-        )
-        monkeypatch.setattr(AppSettings, "_active", settings)
+        CronSettings.activate(CronSettings(enabled=False))
+        WorkerSettings.activate(WorkerSettings(enabled=False))
+        ReaperSettings.activate(ReaperSettings(enabled=False))
 
         with pytest.raises(SystemExit, match="No scheduler service enabled"):
             cli.SchedulerCommand().run(_parse("scheduler"))

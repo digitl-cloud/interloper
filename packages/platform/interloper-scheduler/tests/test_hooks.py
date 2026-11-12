@@ -13,7 +13,7 @@ from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
-from interloper.settings import AppSettings, ServerSettings
+from interloper.settings import ServerSettings
 from interloper_db import RunStatus, Store
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, ComponentRelation, Execution, Organisation, Quota, Run, Usage
@@ -852,9 +852,9 @@ class TestSubjectUrl:
 
     @pytest.fixture
     def public_url(self) -> Iterator[None]:
-        AppSettings.activate(AppSettings(server=ServerSettings(external_url="https://app.test/")))
+        ServerSettings.activate(ServerSettings(external_url="https://app.test/"))
         yield
-        AppSettings.clear_active()
+        ServerSettings.clear_active()
 
     @pytest.fixture
     def org_id(self, store: Store) -> UUID:

@@ -20,8 +20,8 @@ to is left in the termination message the host reads back. A platform run is
 executed by its id instead, with ``interloper launch``.
 
 The window comes from the date flags; a snapshot asset writes the period the
-run started in instead, in UTC. The runner is the one configured in
-``AppSettings.runner`` (top-level ``runner`` key in ``interloper.yaml`` or
+run started in instead, in UTC. The runner is the one configured in the
+``runner`` settings section (the ``runner`` block of ``interloper.yaml`` or
 ``INTERLOPER_RUNNER_*`` environment variables).
 
 ``--dry-run`` validates and prints the resolved plan (operations grouped by
@@ -145,7 +145,7 @@ class RunCommand(Command):
         from interloper.errors import format_exception
         from interloper.events import ConsoleEventHandler
         from interloper.runner import Runner
-        from interloper.settings import AppSettings
+        from interloper.settings import RunnerSettings
 
         configure_logging(quiet=args.quiet, verbose=args.verbose)
         metadata = {"observed_at": dt.datetime.now(dt.UTC).isoformat()}
@@ -154,7 +154,7 @@ class RunCommand(Command):
             window = _resolve_window(args, dag)
             if args.operation_id is not None:
                 dag, window = for_operation(dag, window, args.operation_id, metadata)
-            runner = Runner.from_settings(AppSettings.get().runner)
+            runner = Runner.from_settings(RunnerSettings.get())
         except (Exception, SystemExit) as error:
             leave_failure(args.operation_id, str(error) if isinstance(error, SystemExit) else format_exception(error))
             raise

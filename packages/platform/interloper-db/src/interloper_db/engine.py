@@ -66,7 +66,7 @@ def engine_from_settings() -> Engine:
     """
     if _engine is not None:
         return _engine
-    from interloper.settings import AppSettings
+    from interloper_db.settings import PostgresSettings
 
-    postgres = AppSettings.get().postgres
+    postgres = PostgresSettings.get()
     return init_engine(postgres.dsn, statement_timeout=postgres.statement_timeout)

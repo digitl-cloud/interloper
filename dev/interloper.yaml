@@ -1,11 +1,10 @@
 # Local dev/test config for the harness (make dev-up / docker compose).
 #
-# Deliberately contains ONLY the catalog. It omits the postgres / launcher /
-# runner / smtp blocks so the matching INTERLOPER_* env vars (set by the
-# Makefile's DEV_ENV and docker-compose.yml) take effect: when one of those
-# blocks is present, pydantic-settings lets the YAML win over env for that
-# whole submodel. The harness runs the CLI from this directory so this file
-# is the active ./interloper.yaml instead of the repo-root (k8s) one.
+# Deliberately contains ONLY the catalog. The database, launcher and runner
+# come from the INTERLOPER_* env vars the Makefile's DEV_ENV and
+# docker-compose.yml set, which beat this file field by field anyway. The
+# harness runs the CLI from this directory so this file is the active
+# ./interloper.yaml instead of the repo-root one.
 
 catalog:
   include:

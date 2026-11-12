@@ -14,7 +14,9 @@ from interloper.telemetry.setup import _exporter_kwargs, _parse_headers, init_te
 
 
 @pytest.fixture(autouse=True)
-def _reset_state():
+def _reset_state(tmp_path, monkeypatch):
+    # Each test builds its own otel section, which must not pick up the repo-root config's block.
+    monkeypatch.chdir(tmp_path)
     yield
     shutdown_telemetry()
 

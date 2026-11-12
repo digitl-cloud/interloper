@@ -7,7 +7,6 @@ behind the gateway, so the request URL Authlib sees is the issuer's.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
@@ -15,9 +14,11 @@ import pytest
 from authlib.oauth2.rfc7636 import create_s256_code_challenge
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from interloper_agent.settings import AgentSettings
 from interloper_db import Audience, Profile, Store
 
 from interloper_api.app import create_app
+from interloper_api.settings import ApiSettings
 
 ISSUER = "https://testserver"
 API_RESOURCE = f"{ISSUER}/api"
@@ -29,8 +30,8 @@ METADATA_CLIENT_ID = "https://claude.ai/oauth/claude-code-client-metadata"
 
 
 @pytest.fixture
-def client(oauth_store: Store, fake_settings: SimpleNamespace) -> TestClient:
-    fake_settings.agent.enabled = False
+def client(oauth_store: Store, fake_settings: ApiSettings) -> TestClient:
+    AgentSettings.get().enabled = False
     fake_settings.server.external_url = ISSUER
     return TestClient(create_app(store=oauth_store, settings=fake_settings), follow_redirects=False)
 
@@ -665,8 +666,8 @@ def test_revoke_leaves_personal_tokens_alone(client: TestClient, oauth_store: St
     assert oauth_store.tokens.resolve(personal, Audience.API) is not None
 
 
-def test_an_unconfigured_server_answers_503(fake_settings: SimpleNamespace, oauth_store: Store):
-    fake_settings.agent.enabled = False
+def test_an_unconfigured_server_answers_503(fake_settings: ApiSettings, oauth_store: Store):
+    AgentSettings.get().enabled = False
     fake_settings.encryption.key = ""
     client = TestClient(create_app(store=oauth_store, settings=fake_settings))
 
@@ -716,10 +717,8 @@ def test_the_browser_steps_stay_same_origin(client: TestClient, path: str):
     assert "access-control-allow-origin" not in response.headers
 
 
-def test_the_app_cors_policy_does_not_refuse_a_client_facing_endpoint(
-    oauth_store: Store, fake_settings: SimpleNamespace
-):
-    fake_settings.agent.enabled = False
+def test_the_app_cors_policy_does_not_refuse_a_client_facing_endpoint(oauth_store: Store, fake_settings: ApiSettings):
+    AgentSettings.get().enabled = False
     app = create_app(store=oauth_store, settings=fake_settings, cors_origins=["http://localhost:3000"])
 
     preflight = TestClient(app).options(
