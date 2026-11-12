@@ -82,12 +82,11 @@ class Store:
             decrypt: Optional callable ``(data: bytes) -> bytes`` for resource decryption.
             quota_defaults: QuotaSettings-shaped default limits enforced when
                 an organisation has no override. None = everything unlimited.
-            session_expiry: How long a login session stays valid, defaulting
-                to ``auth.session_expiry_days``'s own default.
+            session_expiry: How long a login session stays valid, 30 days by default.
             access_token_expiry: How long an OAuth access token stays valid,
-                defaulting to ``auth.access_token_expiry_minutes``'s own default.
+                60 minutes by default.
             refresh_token_expiry: How long an OAuth refresh token stays valid,
-                defaulting to ``auth.refresh_token_expiry_days``'s own default.
+                30 days by default.
         """
         self._catalog = catalog
         self._engine = engine or get_engine()
@@ -132,7 +131,14 @@ class Store:
         self.insights = InsightStore(self._engine, catalog, self.components, self.runs, self.backfills, self.executions)
 
     @classmethod
-    def from_settings(cls, catalog: Catalog | None = None) -> Store:
+    def from_settings(
+        cls,
+        catalog: Catalog | None = None,
+        *,
+        session_expiry: timedelta = timedelta(days=30),
+        access_token_expiry: timedelta = timedelta(minutes=60),
+        refresh_token_expiry: timedelta = timedelta(days=30),
+    ) -> Store:
         """Build a Store with connection and encryption wired from runtime settings.
 
         The engine is the process engine, initialized from
@@ -147,9 +153,18 @@ class Store:
         scheduler, runner, agent) — prefer it over ``Store(catalog)`` so the
         connection and crypto wiring stay consistent across entry points.
 
+        The token lifetimes are read only when a token is issued, so a
+        process that issues none (one that only checks them) can leave the
+        defaults.
+
         Args:
             catalog: Catalog for hydration. Defaults to the
                 settings-configured catalog.
+            session_expiry: How long a login session stays valid, 30 days by default.
+            access_token_expiry: How long an OAuth access token stays valid,
+                60 minutes by default.
+            refresh_token_expiry: How long an OAuth refresh token stays valid,
+                30 days by default.
 
         Returns:
             A configured Store.
@@ -159,11 +174,6 @@ class Store:
         catalog = catalog if catalog is not None else Catalog.from_settings()
         engine = engine_from_settings()
         settings = AppSettings.get()
-        lifetimes = {
-            "session_expiry": timedelta(days=settings.auth.session_expiry_days),
-            "access_token_expiry": timedelta(minutes=settings.auth.access_token_expiry_minutes),
-            "refresh_token_expiry": timedelta(days=settings.auth.refresh_token_expiry_days),
-        }
         key = settings.secrets.encryption_key
         if not key:
             logger.warning(
@@ -171,7 +181,14 @@ class Store:
                 "fail closed (writes are rejected rather than stored in plaintext). Set it "
                 "to enable encrypted resources at rest."
             )
-            return cls(catalog=catalog, engine=engine, quota_defaults=settings.quota, **lifetimes)
+            return cls(
+                catalog=catalog,
+                engine=engine,
+                quota_defaults=settings.quota,
+                session_expiry=session_expiry,
+                access_token_expiry=access_token_expiry,
+                refresh_token_expiry=refresh_token_expiry,
+            )
 
         from interloper_db.crypto import make_cipher
 
@@ -182,7 +199,9 @@ class Store:
             encrypt=encrypt,
             decrypt=decrypt,
             quota_defaults=settings.quota,
-            **lifetimes,
+            session_expiry=session_expiry,
+            access_token_expiry=access_token_expiry,
+            refresh_token_expiry=refresh_token_expiry,
         )
 
     # -- Session policy --------------------------------------------------------

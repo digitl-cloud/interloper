@@ -1,5 +1,7 @@
 """Tests for runtime settings."""
 
+from datetime import timedelta
+
 import pytest
 from pydantic import ValidationError
 
@@ -84,6 +86,17 @@ def test_auth_settings_super_admin_emails_list():
     settings = AuthSettings(super_admin_emails=["Admin@Example.com"])
 
     assert settings.super_admin_emails == ["admin@example.com"]
+
+
+def test_auth_settings_token_lifetimes_are_durations():
+    """Each lifetime reads as the duration its field states, in its field's unit."""
+    settings = AuthSettings(session_expiry_days=2, access_token_expiry_minutes=15, refresh_token_expiry_days=7)
+
+    assert (settings.session_expiry, settings.access_token_expiry, settings.refresh_token_expiry) == (
+        timedelta(days=2),
+        timedelta(minutes=15),
+        timedelta(days=7),
+    )
 
 
 def test_auth_settings_allowed_domains_default():

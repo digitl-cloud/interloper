@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, Request
@@ -19,6 +21,7 @@ from interloper_db import (
     QuotaExceededError,
     Store,
 )
+from starlette.concurrency import run_in_threadpool
 
 from interloper_api.authorization import AuthorizationServer, CrossOriginMiddleware
 from interloper_api.dependencies import State
@@ -181,6 +184,9 @@ def create_app(
 ) -> FastAPI:
     """Create the FastAPI application with all routes.
 
+    On startup the application promotes the configured super-admins and
+    starts the realtime listener.
+
     Args:
         store: The ``Store`` instance for persistence.
         catalog: Catalog instance.
@@ -196,7 +202,7 @@ def create_app(
     Returns:
         The configured FastAPI application.
     """
-    app = FastAPI(title="Interloper API", lifespan=websocket.realtime_lifespan, **kwargs)
+    app = FastAPI(title="Interloper API", lifespan=_lifespan, **kwargs)
 
     install_error_handlers(app)
 
@@ -231,6 +237,32 @@ def create_app(
 
 
 # -- Internals -----------------------------------------------------------------
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Promote the configured super-admins, then serve with the realtime listener running.
+
+    ``auth.super_admin_emails`` is applied here as well as at login, so a
+    deployment shipping a new list promotes the profiles that already exist
+    without waiting for them to sign in again.
+
+    Args:
+        app: The application being started; its state carries the store and
+            the settings, and an app built without either promotes no one.
+
+    Yields:
+        None, while the application serves.
+    """
+    state: State = app.state.interloper
+    if state.store is not None and state.settings is not None:
+        promoted = await run_in_threadpool(
+            state.store.profiles.promote_super_admins, state.settings.auth.super_admin_emails
+        )
+        for profile in promoted:
+            logger.info("Promoted profile %s to super-admin.", profile.id)
+    async with websocket.realtime_lifespan(app):
+        yield
 
 
 def _mount_agent(api: APIRouter, settings: Any | None) -> bool:

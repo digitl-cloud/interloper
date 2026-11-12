@@ -1,12 +1,12 @@
 {{/*
-Schema bootstrap: runs `interloper db init` once per release, which also
-promotes the configured super-admins. Application deployments are launched
-with --no-create-tables, so this Job is the sole writer of schema. The Job and the deployments come up together; deployments
+Schema bootstrap: runs `interloper db init` once per release. Application
+deployments are launched with --no-create-tables, so this Job is the sole
+writer of schema. The Job and the deployments come up together; deployments
 crash-loop briefly until the Job completes (~one backoff cycle).
 
 Not a Helm hook on purpose — hooks can't reference the chart's Secret
 (hooks live outside the managed-resource set). As a normal manifest, the
-Job sees the Secret and ConfigMap like any other pod.
+Job sees the Secret like any other pod.
 
 Reuses the api image (interloper-db is installed; image is already cached).
 */}}
@@ -46,20 +46,11 @@ spec:
           envFrom:
             {{- . | nindent 12 }}
           {{- end }}
+          # No config mount: `db init` reads only the Postgres connection, from the environment.
           env:
             {{- include "interloper.commonEnv" . | nindent 12 }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-          # The config carries auth.super_admin_emails, which `db init` applies.
-          volumeMounts:
-            - name: config
-              mountPath: /etc/interloper
-              readOnly: true
-          workingDir: /etc/interloper
           resources: {{- toYaml .Values.dbInit.resources | nindent 12 }}
-      volumes:
-        - name: config
-          configMap:
-            name: {{ include "interloper.fullname" . }}-config
 {{- end }}

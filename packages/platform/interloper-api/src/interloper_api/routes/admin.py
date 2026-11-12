@@ -874,7 +874,7 @@ def update_user(
 
     A promotion emails every super-admin, the new one included, so a grant
     never goes unnoticed. A revocation is refused for an email listed in
-    ``auth.super_admin_emails``: the next login or ``db init`` would promote
+    ``auth.super_admin_emails``: the next login or API start would promote
     it straight back.
 
     Args:

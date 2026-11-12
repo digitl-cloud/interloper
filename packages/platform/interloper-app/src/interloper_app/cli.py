@@ -80,7 +80,12 @@ def _cmd_app(args: argparse.Namespace) -> None:
         create_tables=not args.no_create_tables,
     )
     catalog = Catalog.from_settings()
-    store = Store.from_settings(catalog=catalog)
+    store = Store.from_settings(
+        catalog=catalog,
+        session_expiry=settings.auth.session_expiry,
+        access_token_expiry=settings.auth.access_token_expiry,
+        refresh_token_expiry=settings.auth.refresh_token_expiry,
+    )
     App.from_settings(
         settings,
         store=store,

@@ -925,7 +925,7 @@ class AuthorizationServer(rfc6749.AuthorizationServer):
             issuer=issuer,
             mcp_url=settings.mcp.public_url(settings.server),
             encryption_key=settings.secrets.encryption_key,
-            access_token_expiry=timedelta(minutes=settings.auth.access_token_expiry_minutes),
+            access_token_expiry=settings.auth.access_token_expiry,
         )
 
     # -- Framework -------------------------------------------------------------

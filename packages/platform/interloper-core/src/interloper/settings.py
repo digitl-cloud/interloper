@@ -13,6 +13,7 @@ the documentation site renders, so it is user-facing copy.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Annotated, Any, ClassVar, Literal
 from urllib.parse import quote
 
@@ -166,7 +167,7 @@ class AuthSettings(BaseSettings):
     )
     super_admin_emails: Annotated[list[str], NoDecode] = Field(
         default_factory=list,
-        description="Google emails promoted to platform-wide super-admin by `interloper db init` and on login; "
+        description="Google emails promoted to platform-wide super-admin when the API starts and on login; "
         "promotion only, removing an email never demotes.",
     )
     allowed_domains: Annotated[list[str], NoDecode] = Field(
@@ -191,6 +192,33 @@ class AuthSettings(BaseSettings):
         if isinstance(value, str):
             value = value.split(",")
         return [entry.strip().lower().lstrip("@") for entry in value if entry and entry.strip()]
+
+    @property
+    def session_expiry(self) -> timedelta:
+        """How long a login session stays valid.
+
+        Returns:
+            ``session_expiry_days`` as a duration.
+        """
+        return timedelta(days=self.session_expiry_days)
+
+    @property
+    def access_token_expiry(self) -> timedelta:
+        """How long an OAuth access token stays valid.
+
+        Returns:
+            ``access_token_expiry_minutes`` as a duration.
+        """
+        return timedelta(minutes=self.access_token_expiry_minutes)
+
+    @property
+    def refresh_token_expiry(self) -> timedelta:
+        """How long an OAuth refresh token stays valid, counted again from each rotation.
+
+        Returns:
+            ``refresh_token_expiry_days`` as a duration.
+        """
+        return timedelta(days=self.refresh_token_expiry_days)
 
 
 class ServerSettings(BaseSettings):
