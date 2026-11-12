@@ -18,6 +18,7 @@ from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.brandwatch import constants
+from interloper_assets.brandwatch.connection import BrandwatchConnection
 from interloper_assets.brandwatch.connector import schemas
 from interloper_assets.brandwatch.connector.source import Brandwatch, _clean_metric, _reshape
 
@@ -33,7 +34,7 @@ _NETWORK_SCHEMA = {
 
 
 def _source() -> Any:
-    return Brandwatch(id="src-1", channel_id="chan-1")  # ty: ignore[missing-argument]
+    return Brandwatch(id="src-1", channel_id="chan-1", connection=BrandwatchConnection(api_key="x"))
 
 
 class TestMetricSchemaCoverage:

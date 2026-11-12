@@ -50,7 +50,11 @@ CAMPAIGNS_COLUMNS = ["Day", "CampaignId", "Campaign", "Currency", *constants.STA
 
 
 def _source() -> Any:
-    return Criteo(id="src-1", advertiser_id="123")  # ty: ignore[missing-argument]
+    return Criteo(
+        id="src-1",
+        advertiser_id="123",
+        connection=CriteoConnection(client_id="x", client_secret="x", refresh_token="x"),
+    )
 
 
 class TestSourceNormalizer:

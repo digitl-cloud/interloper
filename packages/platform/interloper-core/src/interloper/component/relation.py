@@ -149,12 +149,16 @@ class Relation(BaseModel):
     as the declaration and the instance attribute as what the relation
     resolves to, and assignment rebinds it.
 
-    The declaration form the framework writes pairs the relation with the
-    annotation of what fills it
+    A relation is declared by an annotation naming the component class that
+    fills it (``connection: PostgresConnection``), or by a ``Relation`` value
+    paired with the annotation of what fills it: an empty ``Relation()``
+    takes its kind, key and target from that annotation and adds the flags it
+    is given, one naming its target or kind needs none
     (``destinations: list[Destination] = Relation("destination", many=True)``).
-    The ``TYPE_CHECKING`` ``__new__`` is what makes that form check: the type
-    checker reads a Pydantic field of the annotated type, so the constructor
-    kwarg and the instance attribute are both typed, while the runtime sees a
+    The ``TYPE_CHECKING`` ``__new__`` is what makes a value check: the type
+    checker reads a Pydantic field of the annotated type with a default, so
+    the constructor kwarg is optional and both it and the instance attribute
+    are typed, while the runtime sees a
     ``Relation`` (Pydantic ignores it, and `Component._collect` drops the
     annotation before fields are collected).
 
@@ -266,6 +270,19 @@ class Relation(BaseModel):
         if get_origin(target) is None and isinstance(target, type) and issubclass(target, Component) and target.kind:
             return cls(target, optional=optional)
         return None
+
+    def with_target_of(self, annotated: Relation) -> Relation:
+        """Complete an empty ``Relation()`` with the target its annotation declares.
+
+        Args:
+            annotated: The relation the annotation declares (see `from_annotation`).
+
+        Returns:
+            The annotation's relation, with every flag this one was given
+            (``optional``, ``on_delete``, ``default``, ...) in place of its own.
+        """
+        given = self.model_fields_set - {"kind", "key"}
+        return annotated.model_copy(update={name: getattr(self, name) for name in given})
 
     @property
     def kinds(self) -> list[str]:

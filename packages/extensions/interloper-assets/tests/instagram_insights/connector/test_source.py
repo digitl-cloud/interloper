@@ -41,7 +41,11 @@ GRAPH = "https://graph.facebook.com/v26.0"
 
 def _source(connection: InstagramInsightsConnection | None = None) -> Any:
     if connection is None:
-        return InstagramInsights(id="src-1", account_id="1784")  # ty: ignore[missing-argument]
+        return InstagramInsights(
+            id="src-1",
+            account_id="1784",
+            connection=InstagramInsightsConnection(client_id="x", client_secret="x", refresh_token="x"),
+        )
     return InstagramInsights(id="src-1", account_id="1784", connection=connection)
 
 

@@ -39,7 +39,7 @@ ASSETS = {"consents_stats": schemas.ConsentsStats, "interactions_stats": schemas
 
 
 def _source() -> Any:
-    return Usercentrics(id="src-1", analytics_id="an-1")  # ty: ignore[missing-argument]
+    return Usercentrics(id="src-1", analytics_id="an-1", connection=UsercentricsConnection(api_key="x"))
 
 
 def _asset(key: str) -> Any:

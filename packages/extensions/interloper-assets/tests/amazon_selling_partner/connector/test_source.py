@@ -28,7 +28,11 @@ _ASSET_KEY = "vendor_inventory_retail_manufacturing_stats"
 
 
 def _source() -> Any:
-    return AmazonSellingPartner(id="src-1", marketplace="A1PA6795UKMFR9")  # ty: ignore[missing-argument]
+    return AmazonSellingPartner(
+        id="src-1",
+        marketplace="A1PA6795UKMFR9",
+        connection=AmazonSellingPartnerConnection(location="EU", client_id="x", client_secret="x", refresh_token="x"),
+    )
 
 
 class TestSourceNormalizer:

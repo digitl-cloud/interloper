@@ -19,12 +19,13 @@ from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
+from interloper_assets.awin.connection import AwinConnection
 from interloper_assets.awin.connector.schemas import Transactions
 from interloper_assets.awin.connector.source import Awin, AwinTransactionsNormalizer, _reshape_transaction
 
 
 def _source() -> Any:
-    return Awin(id="src-1", advertiser_id="12345")  # ty: ignore[missing-argument]
+    return Awin(id="src-1", advertiser_id="12345", connection=AwinConnection(access_token="x"))
 
 
 class TestSourceNormalizer:
