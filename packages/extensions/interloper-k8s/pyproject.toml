@@ -7,7 +7,7 @@ version = "0.132.0"
 description = "Interloper Kubernetes integration"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     # 36.0.0 has a broken in-cluster config: requests are sent without an Authorization
     # header and the API server rejects them as system:anonymous (fixed upstream in 36.0.1).

@@ -10,11 +10,10 @@ from abc import ABC, abstractmethod
 from contextlib import AsyncExitStack
 from functools import partial
 from types import TracebackType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Self
 
 from opentelemetry import trace
 from opentelemetry.trace import StatusCode
-from typing_extensions import Self
 
 from interloper.errors import RunnerError, format_exception
 from interloper.events import Event, EventBus, EventType
@@ -86,7 +85,7 @@ class Run(ABC):
         for operation in dag.operations:
             self._promote(operation.id)
         self.fault: BaseException | None = None
-        self.started_at = dt.datetime.now(dt.timezone.utc)
+        self.started_at = dt.datetime.now(dt.UTC)
         self._held = AsyncExitStack()
 
     async def __aenter__(self) -> Self:
@@ -450,7 +449,7 @@ class Run(ABC):
             window=self.window,
             status=ExecutionStatus.FAILED if failed else ExecutionStatus.COMPLETED,
             executions=dict(self.executions),
-            execution_time=(dt.datetime.now(dt.timezone.utc) - self.started_at).total_seconds(),
+            execution_time=(dt.datetime.now(dt.UTC) - self.started_at).total_seconds(),
         )
 
     def _span_attributes(self) -> dict[str, str]:

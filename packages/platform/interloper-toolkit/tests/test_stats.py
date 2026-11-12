@@ -6,7 +6,7 @@ import datetime
 
 from interloper_toolkit.stats import max_concurrent, window
 
-_T0 = datetime.datetime(2026, 9, 29, 4, 0, tzinfo=datetime.timezone.utc)
+_T0 = datetime.datetime(2026, 9, 29, 4, 0, tzinfo=datetime.UTC)
 
 
 def _at(minutes: float) -> datetime.datetime:
@@ -17,14 +17,14 @@ class TestWindow:
     def test_dates_and_datetimes_resolve_to_aware_instants(self):
         start, end = window("2026-09-01", "2026-09-02T12:00:00Z", default_days=7)
 
-        assert start == datetime.datetime(2026, 9, 1, tzinfo=datetime.timezone.utc)
-        assert end == datetime.datetime(2026, 9, 2, 12, tzinfo=datetime.timezone.utc)
+        assert start == datetime.datetime(2026, 9, 1, tzinfo=datetime.UTC)
+        assert end == datetime.datetime(2026, 9, 2, 12, tzinfo=datetime.UTC)
 
     def test_defaults_open_days_ago_or_stay_open(self):
         start, end = window(None, None, default_days=1)
         assert end is None
         assert start is not None
-        assert datetime.timedelta(hours=23) < datetime.datetime.now(tz=datetime.timezone.utc) - start
+        assert datetime.timedelta(hours=23) < datetime.datetime.now(tz=datetime.UTC) - start
 
         assert window(None, None, default_days=None) == (None, None)
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
@@ -58,7 +58,7 @@ class TestQuotaReads:
 class TestRunCreationGate:
     def _exhaust(self, store: Store, org_id: UUID, *, used: int = 0, reserved: int = 0) -> None:
         with Session(store.engine) as session:
-            period = month_start(datetime.now(timezone.utc))
+            period = month_start(datetime.now(dt.UTC))
             UsageLedger(session).increment(org_id, METRIC_SUCCESSFUL_RUNS, period, used=used, reserved=reserved)
             session.commit()
 
@@ -200,7 +200,7 @@ class TestTryReserveRun:
 
     def test_denies_when_exhausted(self, store: Store, org_id: UUID, usage_rows: UsageRows, make_run: RunFactory):
         with Session(store.engine) as session:
-            period = month_start(datetime.now(timezone.utc))
+            period = month_start(datetime.now(dt.UTC))
             UsageLedger(session).increment(org_id, METRIC_SUCCESSFUL_RUNS, period, used=1)
             session.commit()
         store._quota_defaults = _defaults(max_successful_runs_per_month=1)

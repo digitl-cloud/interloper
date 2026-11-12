@@ -8,6 +8,7 @@
 import asyncio
 import datetime
 import datetime as dt
+import inspect
 import warnings
 from typing import Any, ClassVar
 
@@ -818,10 +819,10 @@ class TestSnapshot:
         def campaigns(context: il.ExecutionContext) -> list:
             return [{"date": context.partition_date}]
 
-        before = dt.datetime.now(dt.timezone.utc).date()
+        before = dt.datetime.now(dt.UTC).date()
         [row] = campaigns().run()
 
-        assert before <= row["date"] <= dt.datetime.now(dt.timezone.utc).date()
+        assert before <= row["date"] <= dt.datetime.now(dt.UTC).date()
 
 
 # -- __call__ reconfiguration --------------------------------------------------
@@ -1013,7 +1014,7 @@ class TestAsyncAndSyncData:
         def users() -> list[dict[str, Any]]:
             return [{"id": 1}]
 
-        assert not asyncio.iscoroutinefunction(users().data)
+        assert not inspect.iscoroutinefunction(users().data)
         assert await users().run_async() == [{"id": 1}]
 
     async def test_async_data_function_is_awaited_natively(self):
@@ -1024,7 +1025,7 @@ class TestAsyncAndSyncData:
         # The decorator must preserve coroutine-ness, otherwise the engine
         # would offload a sync wrapper to a thread and return an un-awaited
         # coroutine instead of the data.
-        assert asyncio.iscoroutinefunction(users().data)
+        assert inspect.iscoroutinefunction(users().data)
         assert await users().run_async() == [{"id": 1}]
 
     def test_run_is_callable_directly_from_sync_code(self):

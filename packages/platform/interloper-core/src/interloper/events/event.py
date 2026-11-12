@@ -26,7 +26,7 @@ class Event:
     """
 
     type: EventType
-    timestamp: dt.datetime = field(default_factory=lambda: dt.datetime.now(dt.timezone.utc))
+    timestamp: dt.datetime = field(default_factory=lambda: dt.datetime.now(dt.UTC))
     metadata: dict[str, Any] = field(default_factory=dict)
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 

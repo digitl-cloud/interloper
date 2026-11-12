@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -156,7 +156,7 @@ def test_a_runs_token_outlives_its_run_by_the_heartbeat_timeout(
     with Session(store.engine) as session:
         run = session.get(Run, run_id)
         assert run is not None
-        run.completed_at = datetime.now(timezone.utc) - timedelta(seconds=60)
+        run.completed_at = datetime.now(UTC) - timedelta(seconds=60)
         session.add(run)
         session.commit()
     assert (store.runs.resolve_token(token) is not None) is accepted

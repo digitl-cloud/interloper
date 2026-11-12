@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID
 
 import pytest
@@ -49,7 +49,7 @@ class TestSettleRunUsage:
         usage_rows: UsageRows,
         make_run: RunFactory,
     ):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(dt.UTC)
         run = make_run(quota_reserved_at=now)
         with Session(store.engine) as session:
             UsageLedger(session).increment(org_id, METRIC_SUCCESSFUL_RUNS, month_start(now), reserved=1)
@@ -64,7 +64,7 @@ class TestSettleRunUsage:
         usage_rows: UsageRows,
         make_run: RunFactory,
     ):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(dt.UTC)
         run = make_run(quota_reserved_at=now)
         with Session(store.engine) as session:
             UsageLedger(session).increment(org_id, METRIC_SUCCESSFUL_RUNS, month_start(now), reserved=1)
@@ -86,7 +86,7 @@ class TestSettleRunUsage:
         usage_rows: UsageRows,
         make_run: RunFactory,
     ):
-        reserved_at = datetime(2026, 7, 31, 23, 59, tzinfo=timezone.utc)
+        reserved_at = datetime(2026, 7, 31, 23, 59, tzinfo=dt.UTC)
         run = make_run(quota_reserved_at=reserved_at)
         with Session(store.engine) as session:
             UsageLedger(session).increment(org_id, METRIC_SUCCESSFUL_RUNS, dt.date(2026, 7, 1), reserved=1)
@@ -94,7 +94,7 @@ class TestSettleRunUsage:
             session.commit()
         rows = usage_rows()
         assert rows[dt.date(2026, 7, 1)] == (0, 0)  # reservation released where taken
-        current = month_start(datetime.now(timezone.utc))
+        current = month_start(datetime.now(dt.UTC))
         assert rows[current] == (1, 0)  # charge lands in the completion month
 
     def test_complete_run_charges_the_ledger(self, store: Store, usage_rows: UsageRows, make_run: RunFactory):

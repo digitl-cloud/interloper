@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import importlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
@@ -31,8 +31,8 @@ class TestConversations:
         # SQLite stamps whole seconds; set the clock apart so the order is the store's, not a tie-break.
         with Session(store.engine) as session:
             for row_id, moment in (
-                (first.id, datetime(2026, 1, 1, tzinfo=timezone.utc)),
-                (second.id, datetime(2026, 1, 2, tzinfo=timezone.utc)),
+                (first.id, datetime(2026, 1, 1, tzinfo=UTC)),
+                (second.id, datetime(2026, 1, 2, tzinfo=UTC)),
             ):
                 row = session.get(Conversation, row_id)
                 assert row is not None

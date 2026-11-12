@@ -13,7 +13,7 @@ from sqlmodel import Session
 
 from interloper_db.models import Component, Event, Run
 
-_CREATED = dt.datetime(2026, 10, 30, 23, 30, tzinfo=dt.timezone.utc)
+_CREATED = dt.datetime(2026, 10, 30, 23, 30, tzinfo=dt.UTC)
 
 
 def test_event_metadata_carries_target_context() -> None:
@@ -70,7 +70,7 @@ _RUN_ID = UUID("99c018d6-98fe-4de5-a867-1f1a9a545a38")
 
 @pytest.mark.parametrize("status", ["queued", "success", "failed", "canceled"])
 def test_a_run_neither_dispatched_nor_running_is_never_overdue(status: str) -> None:
-    long_ago = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+    long_ago = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
     run = Run(org_id=uuid4(), status=status, heartbeat_at=long_ago, started_at=long_ago)
 
     overdue = run.overdue(long_ago + dt.timedelta(days=30), startup_timeout=1, heartbeat_timeout=1, run_timeout=1)
@@ -81,13 +81,13 @@ def test_a_run_neither_dispatched_nor_running_is_never_overdue(status: str) -> N
 @pytest.mark.parametrize(
     ("status", "fields", "kind"),
     [
-        ("dispatched", {"heartbeat_at": dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)}, "startup"),
-        ("running", {"heartbeat_at": dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)}, "heartbeat"),
-        ("running", {"started_at": dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)}, "timeout"),
+        ("dispatched", {"heartbeat_at": dt.datetime(2026, 1, 1, tzinfo=dt.UTC)}, "startup"),
+        ("running", {"heartbeat_at": dt.datetime(2026, 1, 1, tzinfo=dt.UTC)}, "heartbeat"),
+        ("running", {"started_at": dt.datetime(2026, 1, 1, tzinfo=dt.UTC)}, "timeout"),
     ],
 )
 def test_an_overdue_run_names_the_rule_that_caught_it(status: str, fields: dict[str, object], kind: str) -> None:
-    now = dt.datetime(2026, 1, 2, tzinfo=dt.timezone.utc)
+    now = dt.datetime(2026, 1, 2, tzinfo=dt.UTC)
     run = Run(org_id=uuid4(), status=status, heartbeat_at=now, started_at=now)
     for name, value in fields.items():
         setattr(run, name, value)
@@ -161,7 +161,7 @@ def test_sanitize_data_drops_unencodable_payloads() -> None:
 def _framework_event(metadata: dict[str, object]) -> il.Event:
     return il.Event(
         type=il.EventType.OPERATION_COMPLETED,
-        timestamp=dt.datetime(2026, 8, 5, tzinfo=dt.timezone.utc),
+        timestamp=dt.datetime(2026, 8, 5, tzinfo=dt.UTC),
         metadata=metadata,
     )
 
@@ -269,7 +269,7 @@ class TestObservedAt:
         source = Component(org_id=uuid4(), kind="source", key="shop", config={"timezone": "Europe/Berlin"})
 
         assert Run(org_id=source.org_id, target=source, created_at=_CREATED).observed_at.date() == dt.date(2026, 10, 30)
-        assert Run(org_id=source.org_id, created_at=_CREATED).observed_at.tzinfo is dt.timezone.utc
+        assert Run(org_id=source.org_id, created_at=_CREATED).observed_at.tzinfo is dt.UTC
 
     def test_a_held_retry_observes_when_its_backoff_ends(self):
         due = _CREATED + dt.timedelta(hours=2)

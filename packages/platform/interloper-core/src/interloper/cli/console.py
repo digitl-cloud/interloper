@@ -33,7 +33,7 @@ class JsonLogFormatter(logging.Formatter):
             inside a span and ``exception`` when the record carries one.
         """
         entry: dict[str, str] = {
-            "timestamp": dt.datetime.fromtimestamp(record.created, dt.timezone.utc).isoformat(),
+            "timestamp": dt.datetime.fromtimestamp(record.created, dt.UTC).isoformat(),
             "severity": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),

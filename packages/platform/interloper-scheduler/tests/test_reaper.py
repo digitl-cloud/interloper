@@ -67,7 +67,7 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
 
 
 def _ago(seconds: float) -> dt.datetime:
-    return dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=seconds)
+    return dt.datetime.now(dt.UTC) - dt.timedelta(seconds=seconds)
 
 
 def _run(store: Store, status: RunStatus, *, component_id: UUID | None = None, **fields: Any) -> UUID:

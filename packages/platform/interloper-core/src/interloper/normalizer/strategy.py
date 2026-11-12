@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class MaterializationStrategy(str, Enum):
+class MaterializationStrategy(StrEnum):
     """How the conform step enforces an asset's schema.
 
     Both strategies hand destinations data in the schema's canonical types;

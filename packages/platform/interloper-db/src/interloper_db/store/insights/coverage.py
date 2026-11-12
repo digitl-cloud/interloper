@@ -28,7 +28,7 @@ from bisect import bisect_right
 from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from functools import cached_property
 from typing import NamedTuple
 from uuid import UUID
@@ -131,7 +131,7 @@ class Period(NamedTuple):
         return self.end <= coerce_to_datetime(now)
 
 
-class Verdict(str, Enum):
+class Verdict(StrEnum):
     """What an asset's partitions came to over one period.
 
     ``successful`` once one succeeded, ``failed`` when one failed and none

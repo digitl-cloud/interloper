@@ -9,7 +9,7 @@
   <a href="https://github.com/digitl-cloud/interloper/actions/workflows/checks.yaml"><img src="https://github.com/digitl-cloud/interloper/actions/workflows/checks.yaml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://codecov.io/gh/digitl-cloud/interloper"><img src="https://codecov.io/gh/digitl-cloud/interloper/graph/badge.svg" alt="Coverage"></a>
   <a href="https://pypi.org/project/interloper-core/"><img src="https://img.shields.io/pypi/v/interloper-core?logo=pypi&logoColor=white&label=PyPI" alt="PyPI"></a>
-  <img src="https://img.shields.io/badge/python-3.10+-3776ab?logo=python&logoColor=white" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/python-3.11+-3776ab?logo=python&logoColor=white" alt="Python 3.11+">
   <a href="https://github.com/digitl-cloud/interloper/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License"></a>
 </p>
 

@@ -7,7 +7,7 @@ version = "0.132.0"
 description = "Interloper AWS integration: Amazon S3 destination and connection"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "interloper-core",
     "boto3>=1.34",

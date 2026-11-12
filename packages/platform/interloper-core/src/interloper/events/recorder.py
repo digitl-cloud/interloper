@@ -23,9 +23,7 @@ import threading
 import time
 from collections.abc import Callable
 from types import TracebackType
-from typing import TYPE_CHECKING
-
-from typing_extensions import Self
+from typing import TYPE_CHECKING, Self
 
 from interloper.errors import DeliveryError, RunLostError
 from interloper.events.batch import EventBatch

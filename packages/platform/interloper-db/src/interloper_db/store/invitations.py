@@ -8,7 +8,7 @@ redeeming takes the token alone, since that is all the recipient holds.
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import Engine
@@ -121,7 +121,7 @@ class InvitationStore:
             invitation = session.exec(select(Invitation).where(Invitation.token == token)).first()
             if not invitation:
                 return None
-            if invitation.expires_at < datetime.now(timezone.utc):
+            if invitation.expires_at < datetime.now(UTC):
                 session.delete(invitation)
                 commit(session)
                 return None
@@ -143,7 +143,7 @@ class InvitationStore:
         Returns:
             True when at least one pending invitation has not expired.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         with session_scope(self._engine) as session:
             invitations = session.exec(select(Invitation).where(func.lower(Invitation.email) == email.lower())).all()
             return any(invitation.expires_at > now for invitation in invitations)
@@ -169,7 +169,7 @@ class InvitationStore:
             role=Role.parse(role).value,
             token=secrets.token_urlsafe(32),
             invited_by=invited_by,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=INVITATION_EXPIRY_DAYS),
+            expires_at=datetime.now(UTC) + timedelta(days=INVITATION_EXPIRY_DAYS),
         )
 
     def _lock(self, invitation_id: UUID, org_id: UUID) -> Invitation:

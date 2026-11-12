@@ -1,7 +1,7 @@
 """Tokens: the bearer secrets a user authenticates with, one row per secret."""
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any, ClassVar
 from uuid import UUID
 
@@ -11,7 +11,7 @@ from sqlmodel import Field as SQLField
 from interloper_db.models.columns import TZDateTime, timestamp_column
 
 
-class TokenKind(str, Enum):
+class TokenKind(StrEnum):
     """What issued a token, which decides the surfaces that accept it.
 
     The column stores the value, so a row read back carries the plain string,
@@ -23,7 +23,7 @@ class TokenKind(str, Enum):
     ACCESS = "access"
 
 
-class Audience(str, Enum):
+class Audience(StrEnum):
     """A surface a token is presented to.
 
     ``api`` and ``mcp`` double as the resource an access token is issued for:

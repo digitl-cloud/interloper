@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID, uuid4
 
 from interloper.utils import month_start
@@ -63,8 +63,8 @@ class TestCounts:
 
     def test_successful_runs_by_org(self, store: Store, org_id: UUID):
         period = dt.date(2026, 8, 1)
-        inside = datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc)
-        outside = datetime(2026, 7, 31, 12, 0, tzinfo=timezone.utc)
+        inside = datetime(2026, 8, 10, 12, 0, tzinfo=dt.UTC)
+        outside = datetime(2026, 7, 31, 12, 0, tzinfo=dt.UTC)
         with Session(store.engine) as session:
             session.add(Run(id=uuid4(), org_id=org_id, status="success", completed_at=inside))
             session.add(Run(id=uuid4(), org_id=org_id, status="success", completed_at=outside))
@@ -74,12 +74,12 @@ class TestCounts:
         assert store.usage.successful_runs_by_org(period) == {org_id: 1}
 
     def test_current_period_is_this_month(self, store: Store):
-        assert store.usage.current_period() == month_start(datetime.now(timezone.utc))
+        assert store.usage.current_period() == month_start(datetime.now(dt.UTC))
 
 
 class TestReconcile:
     def test_reports_drift_both_ways(self, store: Store, org_id: UUID):
-        period = month_start(datetime.now(timezone.utc))
+        period = month_start(datetime.now(dt.UTC))
         with Session(store.engine) as session:
             UsageLedger(session).increment(org_id, METRIC_SUCCESSFUL_RUNS, period, used=5)
             session.commit()
@@ -93,7 +93,7 @@ class TestReconcile:
             stored = session.get(Run, run.id)
             assert stored is not None
             stored.status = RunStatus.SUCCESS
-            stored.completed_at = datetime.now(timezone.utc)
+            stored.completed_at = datetime.now(dt.UTC)
             session.add(stored)
             session.commit()
 

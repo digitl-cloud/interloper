@@ -5,9 +5,7 @@ from __future__ import annotations
 import traceback
 from enum import Enum
 from types import TracebackType
-from typing import Any
-
-from typing_extensions import Self
+from typing import Any, Self
 
 from interloper.errors import format_exception
 from interloper.events.bus import EventBus

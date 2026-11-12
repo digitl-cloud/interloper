@@ -130,7 +130,7 @@ class TestSpecRoundtripAndReconcile:
         assert int(row["id"]) == 42
         assert float(row["daily_budget_amount"]) == 18.0
         assert row["daily_budget_currency_code"] == "EUR"
-        assert row["run_schedule_start"] == dt.datetime(2025, 9, 15, tzinfo=dt.timezone.utc)
+        assert row["run_schedule_start"] == dt.datetime(2025, 9, 15, tzinfo=dt.UTC)
         assert row["campaign_group"] == "urn:li:sponsoredCampaignGroup:7"
         assert row["date"] == DAY
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -149,7 +149,7 @@ class TestAccept:
         with SQLSession(auth_db) as session:
             row = session.get(Invitation, invitation.id)
             assert row is not None
-            row.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
+            row.expires_at = datetime.now(UTC) - timedelta(days=1)
             session.add(row)
             session.commit()
 
@@ -202,7 +202,7 @@ class TestHasPending:
         with SQLSession(auth_db) as session:
             db_invitation = session.get(Invitation, invitation.id)
             assert db_invitation is not None
-            db_invitation.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
+            db_invitation.expires_at = datetime.now(UTC) - timedelta(days=1)
             session.add(db_invitation)
             session.commit()
 

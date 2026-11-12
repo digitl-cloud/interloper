@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import importlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
@@ -151,7 +151,7 @@ class TestDeleteOrganisation:
         run = Run(org_id=org_id, component_id=source.id)
         session.add(run)
         session.commit()
-        session.add(Event(org_id=org_id, run_id=run.id, event_type="run_started", timestamp=datetime.now(timezone.utc)))
+        session.add(Event(org_id=org_id, run_id=run.id, event_type="run_started", timestamp=datetime.now(UTC)))
         session.commit()
 
     def test_purges_payload_but_keeps_the_ledger(self, store: Store, auth_db: Engine):

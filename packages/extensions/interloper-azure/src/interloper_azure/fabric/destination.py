@@ -552,5 +552,5 @@ def _bind(value: Any) -> Any:
     if isinstance(value, (dict, list)):
         return json.dumps(replace_non_finite(value), default=json_default)
     if isinstance(value, datetime.datetime) and value.tzinfo is not None:
-        return value.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        return value.astimezone(datetime.UTC).replace(tzinfo=None)
     return value

@@ -189,7 +189,7 @@ class InstagramInsights(il.Source):
         until = context.partition_date + dt.timedelta(days=1)
 
         def unix(day: dt.date) -> int:
-            return int(dt.datetime.combine(day, dt.time.min, tzinfo=dt.timezone.utc).timestamp())
+            return int(dt.datetime.combine(day, dt.time.min, tzinfo=dt.UTC).timestamp())
 
         media = await _paginate(
             client,

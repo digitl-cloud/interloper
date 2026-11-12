@@ -25,7 +25,7 @@ from sqlmodel import Session, select
 from interloper_scheduler.hooks import HookController
 
 _ORG = uuid4()
-_PAST = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+_PAST = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
 _DAILY = il.TimePartitionConfig(column="date", allow_window=False)
 
 
@@ -96,7 +96,7 @@ def _terminal_run(
         assert db_run is not None
         db_run.status = status
         db_run.error = error
-        db_run.completed_at = dt.datetime.now(dt.timezone.utc)
+        db_run.completed_at = dt.datetime.now(dt.UTC)
         session.add(db_run)
         session.commit()
         session.refresh(db_run)

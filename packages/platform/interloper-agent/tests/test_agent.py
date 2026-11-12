@@ -39,7 +39,7 @@ class TestBuildAgent:
         assert isinstance(first, ModelRequest)
         assert first.instructions is not None
         assert "Interloper Assistant" in first.instructions
-        assert f"Current date and time: {datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d}" in first.instructions
+        assert f"Current date and time: {datetime.datetime.now(datetime.UTC):%Y-%m-%d}" in first.instructions
         assert result.output == "hello"
 
     def test_the_instructions_tell_the_thread_block_is_quoted_data(self):

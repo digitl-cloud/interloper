@@ -3,10 +3,9 @@
 # Note: no ``from __future__ import annotations``. Decorated functions'
 # parameter annotations must be real classes for relation inference.
 
-from typing import Any
+from typing import Any, assert_type
 
 import pytest
-from typing_extensions import assert_type
 
 import interloper as il
 from interloper.component import Decorator

@@ -11,7 +11,7 @@ from interloper_db.store.insights import Attention, ErrorCause, ErrorGroup, JobC
 
 from interloper_toolkit.models import AssetCoverage, AttentionRow
 
-SINCE = datetime.datetime(2026, 10, 6, 9, tzinfo=datetime.timezone.utc)
+SINCE = datetime.datetime(2026, 10, 6, 9, tzinfo=datetime.UTC)
 
 
 class TestAttentionRow:

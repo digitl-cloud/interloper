@@ -129,7 +129,7 @@ class Activity:
         for run in completed:
             if run.completed_at is None or run.status not in (RunStatus.SUCCESS, RunStatus.FAILED):
                 continue
-            finished = run.completed_at.astimezone(dt.timezone.utc)
+            finished = run.completed_at.astimezone(dt.UTC)
             if start <= finished <= now:
                 counts[finished.replace(minute=0, second=0, microsecond=0)][run.status] += 1
         hours = (start + dt.timedelta(hours=i) for i in range(24))

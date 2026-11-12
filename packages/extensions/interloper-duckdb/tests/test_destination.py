@@ -155,7 +155,7 @@ class TestDDL:
         class Scheduled(Schema):
             start_time: datetime.datetime | None
 
-        late_evening = datetime.datetime(2026, 5, 4, 22, tzinfo=datetime.timezone.utc)
+        late_evening = datetime.datetime(2026, 5, 4, 22, tzinfo=datetime.UTC)
         destination.write(_ctx(plain(), schema=Scheduled), [{"start_time": late_evening}])
 
         berlin_day = 'SELECT CAST("start_time" AT TIME ZONE \'Europe/Berlin\' AS DATE) FROM "main"."plain"'

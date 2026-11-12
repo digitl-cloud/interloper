@@ -7,7 +7,7 @@ version = "0.132.0"
 description = "Interloper Assets"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = ["interloper-core", "interloper-pandas", "interloper-sql", "httpx2>=2.13.1", "tenacity>=9.1.4"]
 
 [project.optional-dependencies]

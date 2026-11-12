@@ -32,7 +32,7 @@ def pipeline_overview(ctx: ToolkitContext, upcoming: int = 5) -> PipelineOvervie
         upcoming: How many of the next scheduled firings to include (default 5).
     """
     try:
-        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        now = datetime.datetime.now(tz=datetime.UTC)
         health = ctx.store.insights.health(ctx.org_id, now=now)
         activity = ctx.store.insights.activity(ctx.org_id, now=now)
         return PipelineOverview.from_insights(health, activity, upcoming)
@@ -56,7 +56,7 @@ def job_health(ctx: ToolkitContext, limit: int = 50, offset: int = 0) -> JobHeal
     covers, plus the org-wide failing and overdue counts.
     """
     try:
-        health = ctx.store.insights.health(ctx.org_id, now=datetime.datetime.now(tz=datetime.timezone.utc))
+        health = ctx.store.insights.health(ctx.org_id, now=datetime.datetime.now(tz=datetime.UTC))
         rows = sorted(
             (JobHealthRow.from_health(job) for job in health.jobs),
             key=lambda row: (not row.failing, not row.overdue, row.job_name or ""),
@@ -144,7 +144,7 @@ def asset_coverage(
             UUID(component_id),
             start_key=start_key,
             end_key=end_key,
-            now=datetime.datetime.now(tz=datetime.timezone.utc),
+            now=datetime.datetime.now(tz=datetime.UTC),
         )
         return AssetCoverage.from_coverage(coverage, limit=limit, offset=offset)
     except Exception as e:

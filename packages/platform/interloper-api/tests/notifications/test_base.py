@@ -7,10 +7,9 @@ import smtplib
 from collections.abc import Iterator
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import ClassVar
+from typing import ClassVar, Self
 
 import pytest
-from typing_extensions import Self
 
 from interloper_api.notifications import Email
 

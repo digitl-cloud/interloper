@@ -7,12 +7,12 @@ version = "0.132.0"
 description = "Interloper AI agent, on pydantic-ai"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "interloper-core",
     "interloper-db",
     "interloper-toolkit",
-    "pydantic-ai-slim[google,anthropic,openai]>=2.51.0",
+    "pydantic-ai-slim[google,anthropic,openai]>=2.60.0",
 ]
 
 [project.entry-points."interloper.extensions"]

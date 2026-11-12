@@ -39,7 +39,7 @@ def _fake_value(annotation: Any) -> Any:
     if annotation is dt.date:
         return dt.date(2025, 1, 1) + dt.timedelta(days=random.randint(0, 365))
     if annotation is dt.datetime:
-        return dt.datetime(2025, 1, 1, tzinfo=dt.timezone.utc) + dt.timedelta(seconds=random.randint(0, 365 * 86400))
+        return dt.datetime(2025, 1, 1, tzinfo=dt.UTC) + dt.timedelta(seconds=random.randint(0, 365 * 86400))
 
     return None
 

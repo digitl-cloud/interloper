@@ -73,7 +73,7 @@ last seven days, or the last three days because the vendor restates data. The wi
 in partitions, and `TimePartitionWindow.lookback` computes it:
 
 ```py
-now = dt.datetime.now(dt.timezone.utc)
+now = dt.datetime.now(dt.UTC)
 il.TimePartitionWindow.lookback(now, lookback=7, offset=1)          # the seven days ending yesterday
 il.TimePartitionWindow.lookback(now, lookback=1, offset=0)          # today, still incomplete
 il.TimePartitionWindow.lookback(now, lookback=3, offset=1, granularity=il.TimeGranularity.MONTH)

@@ -7,7 +7,7 @@ version = "0.132.0"
 description = "Interloper Microsoft Azure integration: Entra connection and Microsoft Fabric Warehouse destination"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "interloper-core",
     "azure-identity>=1.19",

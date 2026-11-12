@@ -247,7 +247,7 @@ class TestOnDuckDB:
         assert (row["budget"], row["budget_type"]) == (17500.0, "lifetime")
         # 22:00 UTC on 30 September is midnight on 1 October in Berlin
         assert (row["start_date"], row["end_date"]) == (dt.date(2026, 10, 1), None)
-        assert row["created_at"] == dt.datetime(2026, 9, 1, 8, 0, tzinfo=dt.timezone.utc)
+        assert row["created_at"] == dt.datetime(2026, 9, 1, 8, 0, tzinfo=dt.UTC)
         assert row["as_of_date"] == dt.date(2026, 9, 30)
 
     def test_the_schedule_is_read_in_each_accounts_own_timezone(self, warehouse):

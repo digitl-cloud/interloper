@@ -63,8 +63,8 @@ jobs:
         uses: astral-sh/setup-uv@v10.3.3
         with:
           enable-cache: true
-          python-version: "3.10"
-          cache-suffix: "3.10"
+          python-version: "3.11"
+          cache-suffix: "3.11"
 
       - name: UV sync
         run: uv sync --all-packages --all-extras

@@ -24,7 +24,7 @@ sign of theft and revokes nothing, so it cannot end a newer grant's access.
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
@@ -183,7 +183,7 @@ class OAuthStore:
             The deleted client, or ``None`` when no client has that id (or
             none registered that way), in which case nothing changes.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         with session_scope(self._engine) as session:
             client = session.get(OAuthClient, client_id)
             if client is None or (registered_by is not None and client.registered_by != registered_by):
@@ -222,7 +222,7 @@ class OAuthStore:
         Returns:
             The deleted clients.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         live_refresh = exists().where(col(RefreshToken.client_id) == col(OAuthClient.client_id), *self._live(now))
         pending_code = exists().where(
             col(AuthorizationCode.client_id) == col(OAuthClient.client_id),
@@ -256,7 +256,7 @@ class OAuthStore:
             The clients, by name.
         """
         live = select(RefreshToken.client_id).where(
-            col(RefreshToken.user_id) == user_id, *self._live(datetime.now(timezone.utc))
+            col(RefreshToken.user_id) == user_id, *self._live(datetime.now(UTC))
         )
         statement = (
             select(OAuthClient)
@@ -278,7 +278,7 @@ class OAuthStore:
             user_id: Profile UUID.
             client_id: The client losing access.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         with session_scope(self._engine) as session:
             session.connection().execute(
                 update(AuthorizationCode)
@@ -331,7 +331,7 @@ class OAuthStore:
             redirect_uri=redirect_uri,
             code_challenge=code_challenge,
             resource=resource.value,
-            expires_at=datetime.now(timezone.utc) + AUTHORIZATION_CODE_EXPIRY,
+            expires_at=datetime.now(UTC) + AUTHORIZATION_CODE_EXPIRY,
         )
         with session_scope(self._engine) as session:
             save(session, code)
@@ -352,7 +352,7 @@ class OAuthStore:
             revokes the family it opened; past it, the code was exchanged long
             enough ago that its replay says nothing new, and revokes nothing.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         with session_scope(self._engine) as session:
             code = session.exec(
                 select(AuthorizationCode).where(col(AuthorizationCode.code_hash) == hash_token(raw)).with_for_update()
@@ -390,7 +390,7 @@ class OAuthStore:
             client_id=client_id,
             user_id=user_id,
             resource=resource.value,
-            expires_at=datetime.now(timezone.utc) + self._refresh_token_expiry,
+            expires_at=datetime.now(UTC) + self._refresh_token_expiry,
         )
         with session_scope(self._engine) as session:
             save(session, token)
@@ -422,7 +422,7 @@ class OAuthStore:
             if not self._family_revoked(session, family_id):
                 commit(session)
                 return access, refresh
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             session.connection().execute(
                 update(Token).where(col(Token.token_hash) == hash_token(access)).values(revoked_at=now)
             )
@@ -447,7 +447,7 @@ class OAuthStore:
             another client's, expired or revoked. Presenting a token already
             rotated also revokes its family.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         with session_scope(self._engine) as session:
             token = session.exec(
                 select(RefreshToken).where(col(RefreshToken.token_hash) == hash_token(raw)).with_for_update()
@@ -490,7 +490,7 @@ class OAuthStore:
             token: A token of the family, typically one presented for revocation.
         """
         with session_scope(self._engine) as session:
-            self._revoke_family(session, token.family_id, token.user_id, token.client_id, datetime.now(timezone.utc))
+            self._revoke_family(session, token.family_id, token.user_id, token.client_id, datetime.now(UTC))
             commit(session)
 
     # -- Internals -------------------------------------------------------------

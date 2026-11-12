@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from interloper.operation.base import Effect
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from interloper.operation.base import OperationResult
 
 
-class ExecutionStatus(str, Enum):
+class ExecutionStatus(StrEnum):
     """Execution status for operations and runs."""
 
     QUEUED = "queued"
@@ -79,7 +79,7 @@ class ExecutionInfo:
     def start(self) -> None:
         """Mark the operation running, from now."""
         self.status = ExecutionStatus.RUNNING
-        self.start_time = dt.datetime.now(dt.timezone.utc)
+        self.start_time = dt.datetime.now(dt.UTC)
 
     def finish(self, result: OperationResult) -> None:
         """Record what the operation came to: completed when it succeeded, failed otherwise.
@@ -88,13 +88,13 @@ class ExecutionInfo:
             result: The operation's result.
         """
         self.status = ExecutionStatus.COMPLETED if result.succeeded else ExecutionStatus.FAILED
-        self.end_time = dt.datetime.now(dt.timezone.utc)
+        self.end_time = dt.datetime.now(dt.UTC)
         self.result = result
 
     def cancel(self) -> None:
         """Mark the operation canceled, from now."""
         self.status = ExecutionStatus.CANCELED
-        self.end_time = dt.datetime.now(dt.timezone.utc)
+        self.end_time = dt.datetime.now(dt.UTC)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the record to a plain dict; the result's effects and exception stay in the process.

@@ -118,7 +118,7 @@ class TestStampState:
     def test_datetimes_are_stored_as_aware_iso_strings(self):
         # Lexicographic comparison in SQL then stays chronological.
         row = Component(org_id=_ORG, kind="job", key="cron_job")
-        stamp = dt.datetime(2026, 6, 1, 12, 30, tzinfo=dt.timezone.utc)
+        stamp = dt.datetime(2026, 6, 1, 12, 30, tzinfo=dt.UTC)
 
         row.stamp_state(next_run_at=stamp)
 
@@ -153,7 +153,7 @@ class TestStateDatetime:
     """State timestamps read back aware, naive ones as UTC."""
 
     def test_an_aware_stamp_round_trips(self):
-        stamp = dt.datetime(2026, 6, 1, 12, 30, tzinfo=dt.timezone.utc)
+        stamp = dt.datetime(2026, 6, 1, 12, 30, tzinfo=dt.UTC)
         row = Component(org_id=_ORG, kind="job", key="cron_job")
         row.stamp_state(next_run_at=stamp)
 
@@ -162,7 +162,7 @@ class TestStateDatetime:
     def test_a_naive_value_reads_as_utc(self):
         row = Component(org_id=_ORG, kind="job", key="cron_job", state={"next_run_at": "2026-06-01T12:30:00"})
 
-        assert row.state_datetime("next_run_at") == dt.datetime(2026, 6, 1, 12, 30, tzinfo=dt.timezone.utc)
+        assert row.state_datetime("next_run_at") == dt.datetime(2026, 6, 1, 12, 30, tzinfo=dt.UTC)
 
     def test_an_absent_key_reads_none(self):
         row = Component(org_id=_ORG, kind="job", key="cron_job", state={"next_run_at": None})

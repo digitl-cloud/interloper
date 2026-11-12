@@ -7,7 +7,7 @@ version = "0.132.0"
 description = "Interloper web UI (Nuxt SPA, bundled as static assets)"
 readme = { text = "", content-type = "text/plain" }
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = ["interloper-api", "interloper-db", "interloper-scheduler"]
 
 [project.entry-points."interloper.extensions"]

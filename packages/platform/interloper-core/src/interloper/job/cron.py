@@ -101,7 +101,7 @@ class CronJob(Job):
         try:
             return ZoneInfo(config.get("timezone") or "UTC")
         except (ZoneInfoNotFoundError, ValueError, TypeError):
-            return dt.timezone.utc
+            return dt.UTC
 
     @classmethod
     def window(

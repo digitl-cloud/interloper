@@ -10,7 +10,7 @@ statements, ordered children-first, and no other method here crosses over.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import Engine, delete, update
@@ -199,6 +199,6 @@ class OrganisationStore:
                 update(Profile).where(col(Profile.last_organisation_id) == org_id).values(last_organisation_id=None),
             ):
                 session.connection().execute(statement)
-            db_organisation.deleted_at = datetime.now(timezone.utc)
+            db_organisation.deleted_at = datetime.now(UTC)
             session.add(db_organisation)
             commit(session)

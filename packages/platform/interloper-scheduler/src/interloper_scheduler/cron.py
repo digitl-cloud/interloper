@@ -16,7 +16,7 @@ correct chronological comparison — no JSON-to-timestamp casting needed.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone, tzinfo
+from datetime import UTC, datetime, tzinfo
 from typing import Any, cast
 
 import interloper as il
@@ -77,7 +77,7 @@ class CronController(Controller):
 
     def _tick(self) -> None:
         """Process a batch of due jobs in a single transaction."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         with self._store.transaction():
             jobs = self._store.components.lock_due(
                 "job", "next_run_at", now=now, limit=self._batch_size, enabled_only=True
@@ -236,4 +236,4 @@ class CronController(Controller):
         next_run = cast(datetime, iterator.get_next(datetime))
         if next_run.tzinfo is None:
             next_run = next_run.replace(tzinfo=zone)
-        return next_run.astimezone(timezone.utc)
+        return next_run.astimezone(UTC)

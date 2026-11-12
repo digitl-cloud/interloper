@@ -10,7 +10,7 @@ from __future__ import annotations
 import builtins
 import datetime as dt
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID
 
 from interloper.utils import add_months
@@ -104,8 +104,8 @@ class UsageStore:
             The successful billable-run count keyed by org id; organisations
             with none are absent.
         """
-        lower = datetime.combine(period_start, dt.time.min, tzinfo=timezone.utc)
-        upper = datetime.combine(add_months(period_start, 1), dt.time.min, tzinfo=timezone.utc)
+        lower = datetime.combine(period_start, dt.time.min, tzinfo=dt.UTC)
+        upper = datetime.combine(add_months(period_start, 1), dt.time.min, tzinfo=dt.UTC)
         statement = (
             select(Run.org_id, func.count())
             .where(

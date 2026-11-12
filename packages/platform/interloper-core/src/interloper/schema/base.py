@@ -7,10 +7,9 @@ import logging
 import types
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Union, get_args, get_origin
+from typing import Any, Self, Union, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError, create_model
-from typing_extensions import Self
 
 from interloper.errors import SchemaError
 from interloper.serializable import Serializable

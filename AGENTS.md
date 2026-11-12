@@ -98,7 +98,7 @@ The dockerfile's `ARG` defaults are the single source of truth for what "loaded"
 - Conventional Commits (`feat:`, `fix:`, `chore:`, `refactor:`, …). Breaking changes use `!` — see the recent `refactor!:` commits.
 - Branch names use the same type prefix with a slash: `feat/xxx`, `fix/xxx`, `chore/xxx`, …
 - PR titles follow Conventional Commits (`feat: …`, `fix: …`); every commit that lands on `main` feeds `python-semantic-release`.
-- Python ≥3.10, ruff line length 120, type-checked with `ty`.
+- Python ≥3.11, ruff line length 120, type-checked with `ty`.
 - Test files mirror the package layout one-to-one: a test for `src/interloper/<pkg>/<module>.py` lives in `tests/<pkg>/test_<module>.py`. Don't add standalone `test_<feature>.py` files — fold tests for an existing module into that module's test file (e.g. tests for `asset/base.py` go in `tests/asset/test_base.py`, not a new `test_<feature>.py`).
 - Pre-commit runs ruff + ty on every commit and pytest on every push ([.pre-commit-config.yaml](.pre-commit-config.yaml)); `pre-commit install` (part of `make setup`) installs both hooks.
 - All workspace packages share `version = "0.2.0"`, bumped by `python-semantic-release` from commit history.

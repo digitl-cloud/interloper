@@ -117,7 +117,7 @@ class LinkedinOrganic(il.Source):
         Returns:
             The statistics elements for that day.
         """
-        start = dt.datetime.combine(date, dt.time(), tzinfo=dt.timezone.utc)
+        start = dt.datetime.combine(date, dt.time(), tzinfo=dt.UTC)
         start_millis = int(start.timestamp() * 1000)
         end_millis = int((start + dt.timedelta(days=1)).timestamp() * 1000)
         query = "&".join(

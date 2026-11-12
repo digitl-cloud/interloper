@@ -7,7 +7,7 @@ version = "0.132.0"
 description = "Interloper tool functions shared by the AI surfaces (agent, MCP)"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "interloper-core",
     "interloper-db",

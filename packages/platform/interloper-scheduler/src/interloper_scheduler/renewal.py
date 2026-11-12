@@ -14,7 +14,7 @@ provisional slot that re-arms the connection if that run never completes.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from interloper.catalog import Catalog
 from interloper_db import Store
@@ -68,7 +68,7 @@ class RenewalController(Controller):
         if not self._renewable_keys:
             return
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         with self._store.transaction():
             connections = self._store.components.lock_due(
                 "connection", "next_renewal_at", now=now, limit=self._batch_size, keys=self._renewable_keys

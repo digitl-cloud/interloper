@@ -200,7 +200,7 @@ class TestOnDuckDB:
         assert (row["budget"], row["budget_type"]) == (1000.0, "lifetime")
         # The Trade Desk reports in UTC, so 22:00 UTC on 30 September stays 30 September
         assert (row["start_date"], row["end_date"]) == (dt.date(2026, 9, 30), dt.date(2026, 10, 31))
-        assert row["created_at"] == dt.datetime(2026, 9, 1, 8, 0, tzinfo=dt.timezone.utc)
+        assert row["created_at"] == dt.datetime(2026, 9, 1, 8, 0, tzinfo=dt.UTC)
         assert row["as_of_date"] == dt.date(2026, 9, 30)
 
     def test_without_a_snapshot_a_campaign_comes_from_the_report(self, warehouse):
@@ -235,7 +235,7 @@ class TestOnDuckDB:
             "Active",
         )
         assert (entity["budget"], entity["budget_type"]) == (250.0, "lifetime")
-        assert entity["updated_at"] == dt.datetime(2026, 9, 2, 8, 0, tzinfo=dt.timezone.utc)
+        assert entity["updated_at"] == dt.datetime(2026, 9, 2, 8, 0, tzinfo=dt.UTC)
         assert (report["campaign_id"], report["ad_group_name"], report["status"], report["as_of_date"]) == (
             "caaa",
             "Second group",

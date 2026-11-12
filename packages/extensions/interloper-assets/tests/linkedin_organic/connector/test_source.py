@@ -151,8 +151,8 @@ class TestReconcile:
         assert int(row["total_page_statistics_views_careers_page_views_page_views"]) == 2
         assert int(row["total_page_statistics_views_desktop_life_at_page_views_page_views"]) == 1
         assert '"VISIT_WEBSITE"' in row["total_page_statistics_clicks_desktop_custom_button_click_counts"]
-        assert row["time_range_start"] == dt.datetime(2026, 9, 15, tzinfo=dt.timezone.utc)
-        assert row["time_range_end"] == dt.datetime(2026, 9, 16, tzinfo=dt.timezone.utc)
+        assert row["time_range_start"] == dt.datetime(2026, 9, 15, tzinfo=dt.UTC)
+        assert row["time_range_end"] == dt.datetime(2026, 9, 16, tzinfo=dt.UTC)
         assert row["date"] == DAY
 
     def test_share_statistics_are_typed(self):

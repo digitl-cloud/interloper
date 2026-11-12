@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-
-from typing_extensions import Self
+from typing import Self
 
 from interloper.events import Event, EventBus
 

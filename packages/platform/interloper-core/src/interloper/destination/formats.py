@@ -221,7 +221,7 @@ def _spec_to_arrow_field(spec: FieldSpec) -> pa.Field:
 def _is_concrete_type(python_type: Any) -> bool:
     """Return whether *python_type* is a real class the Arrow mapping can use.
 
-    ``typing.Any`` is excluded explicitly: on Python 3.11+ it *is* an
+    ``typing.Any`` is excluded explicitly: it is a class, so it passes
     ``isinstance(..., type)``, but it types nothing.
 
     Args:

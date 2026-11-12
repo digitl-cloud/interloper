@@ -39,8 +39,7 @@ def _event(org_id: Any, run_id: Any, event_type: str, second: int, **fields: Any
         run_id=run_id,
         event_type=event_type,
         component_key="orders",
-        timestamp=datetime.datetime(2026, 9, 29, 4, 0, 0, tzinfo=datetime.timezone.utc)
-        + datetime.timedelta(seconds=second),
+        timestamp=datetime.datetime(2026, 9, 29, 4, 0, 0, tzinfo=datetime.UTC) + datetime.timedelta(seconds=second),
         **fields,
     )
 
@@ -206,7 +205,7 @@ class TestErrorBreakdown:
             component_id=job_id,
             status="failed",
             error="RuntimeError: destination unreachable",
-            completed_at=datetime.datetime(2026, 9, 29, 4, 0, 5, tzinfo=datetime.timezone.utc),
+            completed_at=datetime.datetime(2026, 9, 29, 4, 0, 5, tzinfo=datetime.UTC),
         )
         run_id = run.id
         error = HTTPX = (
@@ -270,7 +269,7 @@ class TestBackfillTimeline:
         backfill = store.backfills.create(
             ctx.org_id, component_id=_job_id(ctx.org_id), start_key="2026-07-01", end_key="2026-07-03", concurrency=1
         )
-        t0 = datetime.datetime(2026, 9, 29, 4, 0, tzinfo=datetime.timezone.utc)
+        t0 = datetime.datetime(2026, 9, 29, 4, 0, tzinfo=datetime.UTC)
         with Session(engine_module.get_engine()) as session:
             row = session.get(Backfill, backfill.id)
             assert row is not None

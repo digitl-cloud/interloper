@@ -217,8 +217,8 @@ class TestGraphQL:
         assert set(frame.columns) <= set(schemas.Campaigns.model_fields)
         record = TableData.from_data(frame).reconcile(schemas.Campaigns).to_dict("records")[0]
         assert (record["advertiser_id"], record["budget_total"], record["primary_goal_type"]) == ("adv1", 1000.5, "CPA")
-        assert record["start_date"] == dt.datetime(2026, 9, 30, 22, tzinfo=dt.timezone.utc)
-        assert record["created_at_utc"] == dt.datetime(2026, 9, 1, 8, tzinfo=dt.timezone.utc)
+        assert record["start_date"] == dt.datetime(2026, 9, 30, 22, tzinfo=dt.UTC)
+        assert record["created_at_utc"] == dt.datetime(2026, 9, 1, 8, tzinfo=dt.UTC)
         assert record["time_zone"] == "Europe/Berlin"
 
     def test_entities_are_snapshots(self):

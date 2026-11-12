@@ -113,7 +113,7 @@ class TestDurationBuckets:
         provider = MeterProvider(metric_readers=[reader], views=setup._duration_views())
         monkeypatch.setattr(metrics_module, "meter", lambda: provider.get_meter("interloper"))
 
-        t0 = dt.datetime(2026, 7, 1, tzinfo=dt.timezone.utc)
+        t0 = dt.datetime(2026, 7, 1, tzinfo=dt.UTC)
         handler = OtelMetricsHandler()
         handler(Event(type=EventType.RUN_STARTED, timestamp=t0, metadata={"run_id": "r"}))
         handler(Event(type=EventType.RUN_COMPLETED, timestamp=t0, metadata={"run_id": "r"}))

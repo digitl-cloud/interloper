@@ -1,7 +1,7 @@
 """People, the organisations they belong to, and how they sign in."""
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import ClassVar, Optional
 from uuid import UUID
 
@@ -12,7 +12,7 @@ from sqlmodel import Field as SQLField
 from interloper_db.models.columns import TZDateTime, timestamp_column
 
 
-class Role(str, Enum):
+class Role(StrEnum):
     """A member's role in an organisation, from least to most privileged.
 
     Each role grants everything the roles before it grant, so a gate names the

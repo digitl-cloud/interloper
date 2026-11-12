@@ -42,7 +42,7 @@ from interloper_api.app import ORG_PREFIX, install_error_handlers
 from interloper_api.dependencies import get_caller, get_store
 from interloper_api.routes import overview as overview_module
 
-NOW = dt.datetime(2026, 8, 13, 9, 14, tzinfo=dt.timezone.utc)
+NOW = dt.datetime(2026, 8, 13, 9, 14, tzinfo=dt.UTC)
 
 
 @il.connection(name="Shop API")

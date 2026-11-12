@@ -24,7 +24,7 @@ def window(
     """
     start = _parse(since)
     if start is None and default_days is not None:
-        start = datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(days=default_days)
+        start = datetime.datetime.now(tz=datetime.UTC) - datetime.timedelta(days=default_days)
     return start, _parse(until)
 
 
@@ -37,7 +37,7 @@ def max_concurrent(spans: Iterable[tuple[datetime.datetime, datetime.datetime | 
     Returns:
         The peak number of overlapping spans.
     """
-    now = datetime.datetime.now(tz=datetime.timezone.utc)
+    now = datetime.datetime.now(tz=datetime.UTC)
     # Ends sort before starts at the same instant, so touching spans don't overlap.
     edges = sorted((t, delta) for start, end in spans for t, delta in ((start, 1), (end or now, -1)))
     peak = open_spans = 0
@@ -58,5 +58,5 @@ def _parse(value: str | None) -> datetime.datetime | None:
     """
     if value is None:
         return None
-    parsed = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=datetime.timezone.utc)
+    parsed = datetime.datetime.fromisoformat(value)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=datetime.UTC)

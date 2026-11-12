@@ -850,7 +850,7 @@ class TestAcceptInvite:
 
     def test_the_joined_organisation_is_returned(self) -> None:
         org_id = uuid4()
-        created_at = dt.datetime(2026, 1, 2, tzinfo=dt.timezone.utc)
+        created_at = dt.datetime(2026, 1, 2, tzinfo=dt.UTC)
         store = CallerStore(accepted=SimpleNamespace(id=org_id, name="Dev Org", key="dev-org", created_at=created_at))
 
         response = _session_client(store).post("/auth/accept-invite", json={"token": "invite-token"})

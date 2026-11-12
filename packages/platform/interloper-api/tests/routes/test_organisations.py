@@ -29,7 +29,7 @@ _ORG_ID = uuid4()
 _OTHER_ORG_ID = uuid4()
 _USER_ID = uuid4()
 _SUPER_ADMIN_ID = uuid4()
-_NOW = dt.datetime(2026, 6, 1, tzinfo=dt.timezone.utc)
+_NOW = dt.datetime(2026, 6, 1, tzinfo=dt.UTC)
 
 
 def _profile(
