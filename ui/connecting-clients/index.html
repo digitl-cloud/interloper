@@ -2545,10 +2545,9 @@ you revoke it on the same page. Treat it like a password.</p>
   server both derive it from <code>server.external_url</code>, so the resource the MCP server advertises is
   the one the authorization server accepts, and there is no separate MCP address to set.</li>
 </ul>
-<p>The chart's HTTPRoute sends <code>/mcp</code> and <code>/.well-known/oauth-protected-resource</code> to the MCP service
-and <code>/.well-known/oauth-authorization-server</code> to the API, all on the app hostnames. The Ingress
-sends the authorization server's metadata to the API as well; it does not route the MCP
-endpoint, so an Ingress deployment that serves MCP clients adds those routes itself.</p>
+<p>The chart's HTTPRoute and Ingress both send <code>/mcp</code> and <code>/.well-known/oauth-protected-resource</code> to
+the MCP service when <code>mcp.enabled</code>, and <code>/.well-known/oauth-authorization-server</code> to the API, all
+on the app hostnames.</p>
 <p>Outside the chart, <code>interloper app</code>, the compose stack's nginx and the Nuxt dev server route
 <code>/.well-known/oauth-authorization-server</code> to the API too, and <code>make dev-up</code> and the compose stack
 set <code>server.external_url</code> to the address the browser opens.</p>
