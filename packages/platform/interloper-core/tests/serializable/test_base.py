@@ -161,7 +161,7 @@ class TestStrictInit:
 
     def test_unknown_kwarg_raises(self):
         with pytest.raises(TypeError, match=r"unexpected keyword argument.*nope"):
-            FakeSerializable(nope=1)  # type: ignore[call-arg]
+            FakeSerializable(nope=1)  # ty: ignore[unknown-argument]
 
 
 class TestReferences:

@@ -533,7 +533,8 @@ class TestInjection:
 
         memory = make_destination(tmp_path)
         fb = FbLike(destinations=[memory])
-        asset = lonely(destinations=[memory], campaigns=fb.campaigns)
+        asset = lonely(destinations=[memory])
+        asset.bind("campaigns", fb.campaigns)
         warnings_seen: list[Event] = []
 
         def handler(event: Event) -> None:
@@ -647,7 +648,8 @@ class TestInjection:
             return []
 
         fb = FbLike(destinations=[il.MemoryDestination()])
-        asset = consumer(destinations=[il.MemoryDestination()], campaigns=fb.campaigns)
+        asset = consumer(destinations=[il.MemoryDestination()])
+        asset.bind("campaigns", fb.campaigns)
 
         with pytest.raises(AssetError, match="has upstreams but no DAG provided"):
             await asset.run_async()
@@ -1329,7 +1331,8 @@ class TestUpstreamReads:
     def test_many_slot_receives_one_upstream_per_leg(self):
         mem = il.MemoryDestination()
         one, two = FbLike(destinations=[mem]), TtLike(destinations=[mem])
-        matcher = self._matcher()(destinations=[mem], campaigns=[one.campaigns, two.campaigns])
+        matcher = self._matcher()(destinations=[mem])
+        matcher.bind("campaigns", one.campaigns, two.campaigns)
         partition = TimePartition(dt.date(2026, 1, 1))
 
         result = DAG(one, two, matcher).materialize(partition)
@@ -1344,7 +1347,8 @@ class TestUpstreamReads:
         one, two = FbLike(destinations=[mem]), TtLike(destinations=[mem])
         partition = TimePartition(dt.date(2026, 1, 1))
         DAG(one).materialize(partition)  # only provider one has data
-        matcher = self._matcher()(destinations=[mem], campaigns=[one.campaigns, two.campaigns])
+        matcher = self._matcher()(destinations=[mem])
+        matcher.bind("campaigns", one.campaigns, two.campaigns)
         warnings_seen: list[Event] = []
 
         def handler(event: Event) -> None:
@@ -1373,7 +1377,8 @@ class TestUpstreamReads:
 
         mem = il.MemoryDestination()
         one = FbLike(destinations=[Broken()])
-        matcher = self._matcher()(destinations=[mem], campaigns=[one.campaigns])
+        matcher = self._matcher()(destinations=[mem])
+        matcher.bind("campaigns", one.campaigns)
         partition = TimePartition(dt.date(2026, 1, 1))
 
         result = DAG(one(enabled=False), matcher).materialize(partition)
@@ -1398,7 +1403,8 @@ class TestUpstreamReads:
         def single(context: il.ExecutionContext, c: il.Upstream) -> Any:
             return [{"date": context.partition_date, "ids": [row["id"] for row in c.data]}]
 
-        asset = single(destinations=[mem], c=one.campaigns)
+        asset = single(destinations=[mem])
+        asset.bind("c", one.campaigns)
         DAG(one(enabled=False), asset).materialize(partition)
 
         assert mem.read(il.IOContext(asset=asset, window=partition.window)) == [
@@ -1416,7 +1422,8 @@ class TestUpstreamReads:
         def lenient(context: il.ExecutionContext, c: il.Upstream | None = None) -> Any:
             return [{"date": context.partition_date, "got": c is not None and c.data is not None}]
 
-        asset = lenient(destinations=[mem], c=one.campaigns)
+        asset = lenient(destinations=[mem])
+        asset.bind("c", one.campaigns)
         partition = TimePartition(dt.date(2030, 5, 5))  # provider never ran for this day
 
         result = DAG(one(enabled=False), asset).materialize(partition)
@@ -1433,7 +1440,8 @@ class TestUpstreamReads:
                 raise RuntimeError("boom")
 
         broken = FbLike(destinations=[Broken()])
-        asset = lenient(destinations=[mem], c=broken.campaigns)
+        asset = lenient(destinations=[mem])
+        asset.bind("c", broken.campaigns)
         assert DAG(broken(enabled=False), asset).materialize(partition).status is ExecutionStatus.FAILED
 
     def test_an_upstream_absent_from_the_dag_is_skipped_with_a_warning(self):
@@ -1481,7 +1489,8 @@ class TestAssetPath:
             return [{"date": partition.key, "rows": len(orders.data)} for partition in context.window]
 
         upstream = orders(id="orders", destinations=[mem])
-        downstream = totals(id="totals", destinations=[mem], orders=upstream)
+        downstream = totals(id="totals", destinations=[mem])
+        downstream.bind("orders", upstream)
         window = TimePartitionWindow(dt.date(2026, 1, 1), dt.date(2026, 1, 3))
 
         result = DAG(upstream, downstream).materialize(window)
@@ -1503,7 +1512,8 @@ class TestAssetPath:
             return [{"region": context.partition.value, "rows": len(sales.data)}]
 
         upstream = sales(id="sales", destinations=[mem])
-        downstream = report(id="report", destinations=[mem], sales=upstream)
+        downstream = report(id="report", destinations=[mem])
+        downstream.bind("sales", upstream)
 
         result = DAG(upstream, downstream).materialize(ListPartition("eu"))
 
@@ -1524,7 +1534,8 @@ class TestAssetPath:
             return [{"date": context.partition_date, "rows": len(orders.data)}]
 
         upstream = orders(id="orders", destinations=[mem])
-        downstream = report(id="report", destinations=[mem], orders=upstream)
+        downstream = report(id="report", destinations=[mem])
+        downstream.bind("orders", upstream)
         captured: list[Event] = []
         EventBus.subscribe(captured.append)
         try:
@@ -1554,7 +1565,8 @@ class TestUpstreamReadFailures:
         def consumer(context: il.ExecutionContext, c: il.Upstream) -> Any:  # pragma: no cover - never reached
             return []
 
-        asset = consumer(destinations=[il.MemoryDestination()], c=one.campaigns)
+        asset = consumer(destinations=[il.MemoryDestination()])
+        asset.bind("c", one.campaigns)
         dag = DAG(one(enabled=False), asset)
 
         with pytest.raises(AssetError, match="No destination found for upstream asset 'campaigns'"):
@@ -1581,7 +1593,8 @@ class TestUpstreamReadFailures:
         def consumer(context: il.ExecutionContext, c: il.Upstream) -> Any:  # pragma: no cover - never reached
             return []
 
-        asset = consumer(destinations=[il.MemoryDestination()], c=one.campaigns)
+        asset = consumer(destinations=[il.MemoryDestination()])
+        asset.bind("c", one.campaigns)
         dag = DAG(one(enabled=False), asset)
         captured: list[Event] = []
         EventBus.subscribe(captured.append)
