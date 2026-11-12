@@ -14,8 +14,9 @@ from interloper.errors import ConfigError
 from interloper.telemetry.propagation import child_process_env
 
 if TYPE_CHECKING:
-    from interloper.settings import LauncherSettings, ReaperSettings, RunnerSettings, ServerSettings
+    from interloper.settings import RunnerSettings, ServerSettings
     from interloper_db.models import Run
+    from interloper_scheduler.settings import LauncherSettings, ReaperSettings
 from interloper_scheduler.launcher import Launcher
 
 logger = logging.getLogger(__name__)

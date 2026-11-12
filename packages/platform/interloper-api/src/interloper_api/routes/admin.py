@@ -20,6 +20,7 @@ from uuid import UUID
 
 from authlib.oauth2.rfc7591 import InvalidRedirectURIError
 from fastapi import APIRouter, HTTPException, Query, Request, Response
+from interloper.settings import SETTINGS, Settings
 from interloper_db import Organisation, OrganisationQuery, Page, PageQuery, Profile, ProfileQuery, UsageQuery
 from interloper_db.models import OAuthClient
 from interloper_db.store.insights import ActivityEntry
@@ -169,113 +170,79 @@ class AdminOAuthClientCreatedResponse(AppResponse):
         return cls(**AppResponse.from_client(client).model_dump(), client_secret=secret)
 
 
-class AdminLauncherConfig(BaseModel):
-    """Launcher type plus the key-allowlisted, non-secret part of its config.
+class AdminSettingsField(BaseModel):
+    """One field of a settings section, or one public key inside a mapping field (``config.image``).
 
-    ``defaults`` carries the launcher class's own constructor defaults for
-    allowlisted keys the config doesn't set — the effective values.
+    ``value`` is filled only when the section lists the field as public;
+    ``configured`` says whether the deployment changed it from its default,
+    which is all a secret ever shows.
     """
 
-    type: str
-    config: dict[str, Any]
-    defaults: dict[str, Any]
+    name: str
+    description: str | None = None
+    public: bool
+    configured: bool
+    value: Any = None
 
 
-class AdminRunnerConfig(BaseModel):
-    """Runner type plus the key-allowlisted, non-secret part of its config.
+class AdminSettingsSection(BaseModel):
+    """One declared settings section, as the running instance loaded it."""
 
-    ``defaults`` carries the runner class's own field defaults for
-    allowlisted keys the config doesn't set — the effective values.
-    """
+    name: str
+    extension: str
+    description: str | None = None
+    fields: list[AdminSettingsField]
 
-    type: str
-    config: dict[str, Any]
-    defaults: dict[str, Any]
+    @classmethod
+    def from_settings(cls, name: str, extension: str, settings: Settings) -> AdminSettingsSection:
+        """Redact a loaded section down to the values it lists as public.
 
+        Args:
+            name: The section's name.
+            extension: The key of the extension that declares it.
+            settings: The section as this process runs with it.
 
-class AdminDeploymentConfig(BaseModel):
-    """What this instance is: version, execution stack, optional features."""
+        Returns:
+            The section, its fields in declaration order, each public key of a
+            mapping field right after that field.
+        """
+        fields: list[AdminSettingsField] = []
+        for field_name, field in type(settings).model_fields.items():
+            value = getattr(settings, field_name)
+            public = field_name in settings.public
+            fields.append(
+                AdminSettingsField(
+                    name=field_name,
+                    description=field.description,
+                    public=public,
+                    configured=value != field.get_default(call_default_factory=True),
+                    value=value if public else None,
+                )
+            )
+            for path in sorted(entry for entry in settings.public if entry.startswith(f"{field_name}.")):
+                found, nested = cls._reach(value, path.split(".")[1:])
+                if found:
+                    fields.append(AdminSettingsField(name=path, public=True, configured=True, value=nested))
+        summary = inspect.cleandoc(type(settings).__doc__ or "").partition("\n")[0]
+        return cls(name=name, extension=extension, description=summary or None, fields=fields)
 
-    version: str | None = None
-    launcher: AdminLauncherConfig
-    runner: AdminRunnerConfig
-    features: dict[str, bool]
-    agent_model: str | None = None
+    @classmethod
+    def _reach(cls, value: Any, keys: list[str]) -> tuple[bool, Any]:
+        """Follow ``keys`` down nested mappings.
 
+        Args:
+            value: The mapping field's value.
+            keys: The keys below the field, outermost first.
 
-class AdminAuthConfig(BaseModel):
-    """Authentication and signup policy."""
-
-    allowed_domains: list[str]
-    super_admin_emails: list[str]
-    google_oauth_configured: bool
-    google_redirect_uri: str
-    session_expiry_days: int
-    cookie_secure: bool
-
-
-class AdminCronConfig(BaseModel):
-    """Cron controller tuning."""
-
-    enabled: bool
-    reconcile_interval: int
-    batch_size: int
-    max_execution_delay: int
-
-
-class AdminWorkerConfig(BaseModel):
-    """Queue worker tuning."""
-
-    enabled: bool
-    poll_interval: int
-
-
-class AdminReaperConfig(BaseModel):
-    """Run liveness tuning: the heartbeat and the reaper that fails silent or overdue runs."""
-
-    enabled: bool
-    poll_interval: int
-    startup_timeout: int
-    heartbeat_interval: int
-    heartbeat_timeout: int
-    run_timeout: int | None
-
-
-class AdminSmtpConfig(BaseModel):
-    """SMTP status (credentials reduced to the enabled flag)."""
-
-    enabled: bool
-    host: str
-    from_addr: str
-
-
-class AdminTelemetryConfig(BaseModel):
-    """OpenTelemetry status (endpoint/headers reduced to booleans)."""
-
-    enabled: bool
-    protocol: str
-    endpoint_configured: bool
-    traces: bool
-    metrics: bool
-    sample_ratio: float
-
-
-class AdminServicesConfig(BaseModel):
-    """Background service roles and their tuning."""
-
-    cron: AdminCronConfig
-    worker: AdminWorkerConfig
-    reaper: AdminReaperConfig
-    smtp: AdminSmtpConfig
-    telemetry: AdminTelemetryConfig
-    app_external_url: str
-
-
-class AdminDataConfig(BaseModel):
-    """Data-layer status and the computed catalog (kind → component keys)."""
-
-    encryption_configured: bool
-    catalog: dict[str, list[str]]
+        Returns:
+            Whether every key was present, and the value it leads to (``None``
+            when one was missing).
+        """
+        for key in keys:
+            if not isinstance(value, dict) or key not in value:
+                return False, None
+            value = value[key]
+        return True, value
 
 
 # One set of quota limits, keyed by quota key; null means unlimited (or unset,
@@ -392,27 +359,27 @@ class AdminActivityEntry(BaseModel):
 class AdminConfigResponse(BaseModel):
     """Read-only, secrets-redacted snapshot of the instance configuration."""
 
-    deployment: AdminDeploymentConfig
-    auth: AdminAuthConfig
-    services: AdminServicesConfig
-    data: AdminDataConfig
-    quotas: AdminQuotaLimits
+    version: str | None = None
+    features: dict[str, bool]
+    catalog: dict[str, list[str]]
+    sections: list[AdminSettingsSection]
 
     @classmethod
-    def from_settings(cls, settings: Any, features: dict[str, bool], catalog: Any = None) -> AdminConfigResponse:
-        """Build the redacted instance-config snapshot served by ``GET /admin/config``.
+    def from_declared(cls, features: dict[str, bool], catalog: Any = None) -> AdminConfigResponse:
+        """Build the redacted snapshot served by ``GET /admin/config`` from every declared settings section.
 
-        Every exposed field is hand-picked here (allowlist, not blocklist), so new
-        settings fields default to *not exposed* and secrets only ever surface as
-        "configured" booleans. The catalog is reported from the hydrated ``Catalog``
-        (the enabled components, their dependencies and the framework's own), not
-        ``settings.catalog.include``, which only holds the explicitly configured import paths.
+        A section shows the values of the fields it lists as public and, for
+        every other field, only whether it is configured, so a new field stays
+        hidden until its section makes it public. A section whose package
+        cannot be imported is left out. The catalog is reported from the
+        hydrated ``Catalog`` (the enabled components, their dependencies and
+        the framework's own), not the ``catalog.include`` setting, which only
+        holds the explicitly configured import paths.
 
         Args:
-            settings: The instance settings the snapshot reads from.
             features: Optional-feature flags keyed by feature name.
-            catalog: The hydrated catalog to report, or ``None`` to report an empty
-                one (the snapshot is then built without catalog access).
+            catalog: The hydrated catalog to report, or ``None`` to report an
+                empty one (the snapshot is then built without catalog access).
 
         Returns:
             The snapshot, ready to serve as-is.
@@ -421,185 +388,20 @@ class AdminConfigResponse(BaseModel):
             version: str | None = metadata.version("interloper-api")
         except metadata.PackageNotFoundError:
             version = None
-
-        launcher_config = _filter_config(settings.launcher.config, _LAUNCHER_CONFIG_KEYS)
-        # The launcher forwards a nested runner config into the containers it
-        # launches — that's where the effective run concurrency lives on k8s/docker.
-        nested_runner_config = (settings.launcher.config or {}).get("runner_config")
-        if isinstance(nested_runner_config, dict):
-            launcher_config["runner_config"] = _filter_config(nested_runner_config, _RUNNER_CONFIG_KEYS)
-
-        runner_config = _filter_config(settings.runner.config, _RUNNER_CONFIG_KEYS)
-
+        sections = []
+        for name, entry in sorted(Settings.declared().items()):
+            settings_class = SETTINGS.get(name)
+            if settings_class is not None:
+                sections.append(AdminSettingsSection.from_settings(name, entry.extension, settings_class.get()))
         return cls(
-            deployment=AdminDeploymentConfig(
-                version=version,
-                launcher=AdminLauncherConfig(
-                    type=settings.launcher.type,
-                    config=launcher_config,
-                    defaults={
-                        key: value
-                        for key, value in _launcher_defaults(settings.launcher.type).items()
-                        if key not in launcher_config
-                    },
-                ),
-                runner=AdminRunnerConfig(
-                    type=settings.runner.type,
-                    config=runner_config,
-                    defaults={
-                        key: value
-                        for key, value in _runner_defaults(settings.runner.type).items()
-                        if key not in runner_config
-                    },
-                ),
-                features=features,
-                agent_model=settings.agent.model if settings.agent.enabled else None,
-            ),
-            auth=AdminAuthConfig(
-                allowed_domains=settings.auth.allowed_domains,
-                super_admin_emails=settings.auth.super_admin_emails,
-                google_oauth_configured=bool(settings.auth.google_client_id and settings.auth.google_client_secret),
-                google_redirect_uri=settings.auth.google_redirect_uri,
-                session_expiry_days=settings.auth.session_expiry_days,
-                cookie_secure=settings.auth.cookie_secure,
-            ),
-            services=AdminServicesConfig(
-                cron=AdminCronConfig(
-                    enabled=settings.cron.enabled,
-                    reconcile_interval=settings.cron.reconcile_interval,
-                    batch_size=settings.cron.batch_size,
-                    max_execution_delay=settings.cron.max_execution_delay,
-                ),
-                worker=AdminWorkerConfig(
-                    enabled=settings.worker.enabled,
-                    poll_interval=settings.worker.poll_interval,
-                ),
-                reaper=AdminReaperConfig(
-                    enabled=settings.reaper.enabled,
-                    poll_interval=settings.reaper.poll_interval,
-                    startup_timeout=settings.reaper.startup_timeout,
-                    heartbeat_interval=settings.reaper.heartbeat_interval,
-                    heartbeat_timeout=settings.reaper.heartbeat_timeout,
-                    run_timeout=settings.reaper.run_timeout,
-                ),
-                smtp=AdminSmtpConfig(
-                    enabled=settings.smtp.enabled,
-                    host=settings.smtp.host,
-                    from_addr=settings.smtp.from_addr,
-                ),
-                telemetry=AdminTelemetryConfig(
-                    enabled=settings.otel.enabled,
-                    protocol=settings.otel.protocol,
-                    endpoint_configured=bool(settings.otel.endpoint),
-                    traces=settings.otel.traces,
-                    metrics=settings.otel.metrics,
-                    sample_ratio=settings.otel.sample_ratio,
-                ),
-                app_external_url=settings.server.external_url,
-            ),
-            data=AdminDataConfig(
-                encryption_configured=bool(settings.encryption.key),
-                catalog=_catalog_by_kind(catalog) if catalog is not None else {},
-            ),
-            quotas=_quota_limits(settings.quota),
+            version=version,
+            features=features,
+            catalog=_catalog_by_kind(catalog) if catalog is not None else {},
+            sections=sections,
         )
 
 
 # -- Config snapshot -----------------------------------------------------------
-
-
-# Non-secret launcher/runner config keys exposed on /admin/config. Anything not
-# listed (env injections, image_pull_secrets, credentials, …) stays server-side.
-_LAUNCHER_CONFIG_KEYS = frozenset(
-    {
-        "image",
-        "namespace",
-        "service_account_name",
-        "image_pull_policy",
-        "ttl_seconds_after_finished",
-        "node_selector",
-        "resources",
-        "volumes",
-        "runner_type",
-    }
-)
-_RUNNER_CONFIG_KEYS = frozenset(
-    {
-        "max_workers",
-        "image",
-        "namespace",
-        "service_account_name",
-        "image_pull_policy",
-        "ttl_seconds_after_finished",
-        "node_selector",
-        "resources",
-    }
-)
-
-
-def _filter_config(config: dict[str, Any] | None, allowed: frozenset[str]) -> dict[str, Any]:
-    """Keep only allowlisted keys of a launcher/runner config dict.
-
-    Args:
-        config: The raw config dict, or ``None`` when nothing is configured.
-        allowed: The keys cleared for exposure on the admin surface.
-
-    Returns:
-        The config restricted to ``allowed``, empty when ``config`` is ``None``.
-    """
-    return {key: value for key, value in (config or {}).items() if key in allowed}
-
-
-def _launcher_defaults(launcher_type: str) -> dict[str, Any]:
-    """Allowlisted constructor defaults of the registered launcher class.
-
-    Launcher defaults live in ``__init__`` signatures, invisible to settings —
-    without this, an unset value reads as "missing" when a class default
-    applies. Returns ``{}`` when the launcher package isn't installed here
-    (e.g. an API-only image) — the view then simply shows no defaults.
-
-    Args:
-        launcher_type: The registered launcher key, as configured on the
-            instance (``k8s``, ``docker``, ``in_process``, …).
-
-    Returns:
-        Allowlisted parameter names mapped to their default value, skipping
-        parameters that default to ``None``.
-    """
-    try:
-        from interloper_scheduler.launcher import LAUNCHERS
-    except ImportError:
-        return {}
-    launcher_cls = LAUNCHERS.get(launcher_type)
-    if launcher_cls is None:
-        return {}
-    return {
-        name: param.default
-        for name, param in inspect.signature(launcher_cls.__init__).parameters.items()
-        if name in _LAUNCHER_CONFIG_KEYS and param.default is not inspect.Parameter.empty and param.default is not None
-    }
-
-
-def _runner_defaults(runner_type: str) -> dict[str, Any]:
-    """Allowlisted field defaults of the registered runner class (pydantic model).
-
-    Args:
-        runner_type: The registered runner key, as configured on the instance.
-
-    Returns:
-        Allowlisted field names mapped to their default value, empty when the
-        type is unregistered.
-    """
-    from interloper.runner import RUNNERS
-
-    runner_cls = RUNNERS.get(runner_type)
-    if runner_cls is None:
-        return {}
-    return {
-        name: field.default
-        for name, field in runner_cls.model_fields.items()
-        if name in _RUNNER_CONFIG_KEYS and not field.is_required() and field.default is not None
-    }
 
 
 def _catalog_by_kind(catalog: Any) -> dict[str, list[str]]:

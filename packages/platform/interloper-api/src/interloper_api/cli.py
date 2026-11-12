@@ -15,13 +15,15 @@ from authlib.oauth2.rfc7591 import InvalidRedirectURIError
 from interloper.catalog import Catalog
 from interloper.cli import Command
 from interloper.cli.console import configure_console_logging
-from interloper.settings import AppSettings
+from interloper.settings import LogSettings, ServerSettings
 from interloper.utils import Supervisor
 from interloper_db import Store
 from interloper_db.provision import bootstrap
+from interloper_db.settings import PostgresSettings
 
 from interloper_api.authorization import Client
 from interloper_api.server import ApiServer
+from interloper_api.settings import ApiSettings
 
 
 class ApiCommand(Command):
@@ -51,18 +53,14 @@ class ApiCommand(Command):
         Args:
             args: The parsed command line: ``host``, ``port`` and ``no_create_tables``.
         """
-        settings = AppSettings.get()
         if args.host is not None:
-            settings = settings.model_copy(update={"server": settings.server.model_copy(update={"host": args.host})})
-            AppSettings.activate(settings)
+            ServerSettings.activate(ServerSettings.get().model_copy(update={"host": args.host}))
+        settings = ApiSettings.get()
         configure_console_logging(
-            logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s", log_format=settings.log.format
+            logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s", log_format=LogSettings.get().format
         )
-        bootstrap(
-            settings.postgres.dsn,
-            statement_timeout=settings.postgres.statement_timeout,
-            create_tables=not args.no_create_tables,
-        )
+        postgres = PostgresSettings.get()
+        bootstrap(postgres.dsn, statement_timeout=postgres.statement_timeout, create_tables=not args.no_create_tables)
         catalog = Catalog.from_settings()
         store = Store.from_settings(
             catalog=catalog,

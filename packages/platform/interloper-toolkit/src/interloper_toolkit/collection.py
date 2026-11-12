@@ -20,7 +20,7 @@ from interloper.component import KINDS
 from interloper.connection import Connection
 from interloper.errors import CatalogKeyError, ConfigError
 from interloper.oauth import OAuthAppCredentials
-from interloper.settings import AppSettings
+from interloper.settings import ServerSettings
 from interloper_db import ComponentDriftError, ComponentQuery, HydrationError, InUseError, NotFoundError
 from pydantic import ValidationError
 
@@ -486,7 +486,7 @@ def _setup_url(ctx: ToolkitContext, connection_key: str, name: str | None) -> st
     Returns:
         The deep link, or ``None`` when the deployment has no public app URL.
     """
-    base = AppSettings.get().server.external_url.rstrip("/")
+    base = ServerSettings.get().external_url.rstrip("/")
     if not base:
         return None
     organisation_key = ctx.store.organisations.get(ctx.org_id).key

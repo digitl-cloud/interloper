@@ -15,11 +15,12 @@ import pytest
 from interloper.errors import ConfigError
 from interloper.events import EventRecorder
 from interloper.runner.spec import RunSpec
-from interloper.settings import LauncherSettings, ReaperSettings, RunnerSettings, ServerSettings
+from interloper.settings import RunnerSettings, ServerSettings
 from interloper_db import NotFoundError, RunStatus
 from interloper_db.models import Run
 
 from interloper_scheduler.launcher import LAUNCHERS, InProcessLauncher, Launcher
+from interloper_scheduler.settings import LauncherSettings, ReaperSettings
 
 
 class TestRegistry:

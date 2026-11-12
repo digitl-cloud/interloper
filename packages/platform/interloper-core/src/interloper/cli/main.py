@@ -7,7 +7,7 @@ import sys
 
 from interloper.cli.command import Command
 from interloper.registry import Registry
-from interloper.settings import AppSettings
+from interloper.settings import Settings, TelemetrySettings
 
 COMMANDS: Registry[type[Command]] = Registry("cli")
 
@@ -53,7 +53,7 @@ def build_parser(command: str | None = None) -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    """Run one command: load ``.env``, activate settings and telemetry, call the handler, shut down."""
+    """Run one command: load ``.env``, start telemetry, call the handler, then shut down and forget its settings."""
     _load_dotenv()
 
     parser = build_parser(next((argument for argument in sys.argv[1:] if not argument.startswith("-")), None))
@@ -63,16 +63,14 @@ def main() -> None:
         parser.print_help()
         sys.exit(0)
 
-    AppSettings.activate(AppSettings.get())
-
     from interloper.telemetry import init_telemetry, shutdown_telemetry
 
-    init_telemetry(AppSettings.get().otel)
+    init_telemetry(TelemetrySettings.get())
     try:
         args.handler(args)
     finally:
         shutdown_telemetry()
-        AppSettings.clear_active()
+        Settings.clear_active()
 
 
 if __name__ == "__main__":

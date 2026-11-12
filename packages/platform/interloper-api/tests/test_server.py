@@ -6,15 +6,17 @@ import socket
 import threading
 
 from interloper.catalog import Catalog
-from interloper.settings import AppSettings, ServerSettings
+from interloper.settings import ServerSettings
 from interloper.utils import Supervisor
 
 from interloper_api import ApiServer
+from interloper_api.settings import ApiSettings
 
 
 def test_binds_the_settings_host_and_the_given_port():
     """The bind host comes from ``server.host``; the port is the one the command chose."""
-    settings = AppSettings(server=ServerSettings(host="127.0.0.1", port=3000))
+    ServerSettings.activate(ServerSettings(host="127.0.0.1", port=3000))
+    settings = ApiSettings.get()
 
     server = ApiServer.from_settings(settings, store=None, catalog=Catalog(), port=3101)  # ty: ignore[invalid-argument-type]
 
@@ -23,7 +25,7 @@ def test_binds_the_settings_host_and_the_given_port():
 
 def test_stop_asks_uvicorn_to_exit():
     """``stop`` lets uvicorn finish its requests and return from ``start``."""
-    server = ApiServer.from_settings(AppSettings(), store=None, catalog=Catalog(), port=3101)  # ty: ignore[invalid-argument-type]
+    server = ApiServer.from_settings(ApiSettings.get(), store=None, catalog=Catalog(), port=3101)  # ty: ignore[invalid-argument-type]
 
     server.stop()
 
@@ -36,7 +38,8 @@ def test_a_bound_port_fails_the_process_instead_of_hanging():
         occupant.bind(("127.0.0.1", 0))
         occupant.listen(1)
         port = occupant.getsockname()[1]
-        settings = AppSettings(server=ServerSettings(host="127.0.0.1", port=port))
+        ServerSettings.activate(ServerSettings(host="127.0.0.1", port=port))
+        settings = ApiSettings.get()
         server = ApiServer.from_settings(settings, store=None, catalog=Catalog(), port=port)  # ty: ignore[invalid-argument-type]
         outcome: list[object] = []
 

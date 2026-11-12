@@ -17,6 +17,7 @@ from starlette.requests import HTTPConnection
 
 from interloper_api.authorization import AuthorizationServer
 from interloper_api.login import GoogleLogin
+from interloper_api.settings import ApiSettings
 
 
 @dataclass(frozen=True)
@@ -26,7 +27,7 @@ class State:
     Attributes:
         store: The persistence layer every route reads and writes through.
         catalog: The component definitions the deployment ships.
-        settings: The full ``AppSettings``; ``None`` on an app built without
+        settings: Every section the API reads; ``None`` on an app built without
             them, whose routes then cannot read a configuration.
         agent: The built assistant, when the agent routes are mounted.
         features: Optional-feature availability, by feature name.
@@ -40,7 +41,7 @@ class State:
 
     store: Store | None = None
     catalog: Catalog | None = None
-    settings: Any | None = None
+    settings: ApiSettings | None = None
     agent: Any | None = None
     features: dict[str, bool] = field(default_factory=dict)
     admin_config: Any | None = None
@@ -98,8 +99,8 @@ def get_catalog(state: StateDep) -> Catalog:
     return state.catalog
 
 
-def get_settings(state: StateDep) -> Any:
-    """The full ``AppSettings``.
+def get_settings(state: StateDep) -> ApiSettings:
+    """Every section the API reads, as the command serving it read them.
 
     Args:
         state: The application's state.
@@ -169,7 +170,7 @@ def get_google_login(state: StateDep) -> GoogleLogin:
 
 StoreDep = Annotated[Store, Depends(get_store)]
 CatalogDep = Annotated[Catalog, Depends(get_catalog)]
-SettingsDep = Annotated[Any, Depends(get_settings)]
+SettingsDep = Annotated[ApiSettings, Depends(get_settings)]
 AgentDep = Annotated[Any, Depends(get_agent)]
 AuthorizationServerDep = Annotated[AuthorizationServer, Depends(get_authorization_server)]
 GoogleLoginDep = Annotated[GoogleLogin, Depends(get_google_login)]

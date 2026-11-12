@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Any
 from interloper.errors import RunnerError, format_exception
 from interloper.operation import Operation, OperationResult
 from interloper.runner import Run, Runner
-from interloper.settings import AppSettings
+from interloper.settings import RunSettings, ServerSettings
 from interloper.telemetry.propagation import child_process_env
 from kubernetes import client, config
 from pydantic import Field
@@ -211,7 +211,7 @@ class KubernetesRun(Run):
         Returns:
             The argv.
         """
-        if AppSettings.get().run.token:
+        if RunSettings.get().token:
             return ["interloper", "launch", self.run_id, f"--operation-id={operation.id}"]
         spec = self.dag.mini_dag(operation.id).to_spec().model_dump(mode="json")
         command = ["interloper", "run", "--format", "inline", json.dumps(spec), f"--operation-id={operation.id}"]
@@ -288,13 +288,13 @@ class KubernetesRunner(Runner):
         """
         environment = [client.V1EnvVar(name=name, value=value) for name, value in self.env_vars.items()]
         environment.extend(client.V1EnvVar(name=name, value=value) for name, value in child_process_env().items())
-        settings = AppSettings.get()
-        if settings.run.token:
+        run = RunSettings.get()
+        if run.token:
             platform = {
-                "INTERLOPER_RUN_TOKEN": settings.run.token,
-                "INTERLOPER_RUN_HEARTBEAT_INTERVAL": str(settings.run.heartbeat_interval),
-                "INTERLOPER_RUN_HEARTBEAT_TIMEOUT": str(settings.run.heartbeat_timeout),
-                "INTERLOPER_SERVER_INTERNAL_URL": settings.server.internal_url,
+                "INTERLOPER_RUN_TOKEN": run.token,
+                "INTERLOPER_RUN_HEARTBEAT_INTERVAL": str(run.heartbeat_interval),
+                "INTERLOPER_RUN_HEARTBEAT_TIMEOUT": str(run.heartbeat_timeout),
+                "INTERLOPER_SERVER_INTERNAL_URL": ServerSettings.get().internal_url,
             }
             environment.extend(client.V1EnvVar(name=name, value=value) for name, value in platform.items())
         return environment

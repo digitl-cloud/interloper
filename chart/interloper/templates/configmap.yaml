@@ -7,16 +7,12 @@ and runner defaults (image, namespace, service account) and the API's
 in-cluster URL run pods report to (server.internal_url) are auto-filled
 from the release context.
 
-Chart-managed sections may not appear in extraConfig (their root block is
-the single source of truth), and neither may secret-bearing ones: a field
-provided via YAML beats the env var the chart injects, so extraConfig.postgres
-or extraConfig.encryption would silently override the Secret-fed credentials.
+Chart-managed sections may not appear in extraConfig: their root block is the
+single source of truth, and the blocks below would replace them. Any other
+section may, an extension's included; the env vars the chart injects (the
+database credentials, the encryption key, the external URL) beat the file
+field by field.
 */}}
-{{- range $key := list "postgres" "encryption" -}}
-  {{- if hasKey $.Values.extraConfig $key -}}
-    {{- fail (printf "extraConfig.%s is not allowed — it would override the credentials the chart injects via env vars; use postgresql/externalPostgres and `secrets` instead" $key) -}}
-  {{- end -}}
-{{- end -}}
 {{- range $key := list "agent" "launcher" "runner" "catalog" "smtp" "auth" "log" -}}
   {{- if hasKey $.Values.extraConfig $key -}}
     {{- fail (printf "extraConfig.%s is not allowed — this section is chart-managed; set the root-level `%s` value instead" $key $key) -}}

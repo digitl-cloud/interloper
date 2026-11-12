@@ -12,7 +12,7 @@ manifests, and nothing else:
   component classes are all declared. One entry that fails to import is
   skipped and recorded, never failing the catalog.
 
-Installation defines the *declared universe*; ``AppSettings.catalog.include``
+Installation defines the *declared universe*; the ``catalog.include`` setting
 narrows it to what a deployment *enables*. An enabled catalog holds the
 configured components, everything they depend on (the target class of every
 relation they declare and, for sources, of every relation their assets
@@ -44,7 +44,7 @@ from pydantic import BaseModel, Field
 from interloper.component import KINDS, Component, ComponentDefinition, Relation
 from interloper.errors import ConfigError
 from interloper.registry import Registry
-from interloper.settings import AppSettings
+from interloper.settings import CatalogSettings
 from interloper.source.base import Source, SourceDefinition
 
 logger = logging.getLogger(__name__)
@@ -163,13 +163,13 @@ class Catalog(BaseModel):
     def from_settings(cls) -> Catalog:
         """Load the catalog a deployment enables.
 
-        ``AppSettings.catalog.include`` lists the enabled import paths; when
+        The ``catalog.include`` setting lists the enabled import paths; when
         it is empty, the catalog is the whole declared universe.
 
         Returns:
             Catalog of all enabled component definitions.
         """
-        include = AppSettings.get().catalog.include
+        include = CatalogSettings.get().include
         if include:
             return cls.from_paths(include)
         return cls.discover()

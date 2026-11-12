@@ -12,8 +12,9 @@ from interloper_api.app import create_app
 if TYPE_CHECKING:
     from fastapi import FastAPI
     from interloper.catalog import Catalog
-    from interloper.settings import AppSettings
     from interloper_db import Store
+
+    from interloper_api.settings import ApiSettings
 
 
 class ApiServer:
@@ -36,7 +37,7 @@ class ApiServer:
     @classmethod
     def from_settings(
         cls,
-        settings: AppSettings,
+        settings: ApiSettings,
         *,
         store: Store,
         catalog: Catalog,
@@ -46,7 +47,7 @@ class ApiServer:
         """Build the API and its server from settings.
 
         Args:
-            settings: The active settings; ``server.host`` is the bind host.
+            settings: The API's settings; ``server.host`` is the bind host.
             store: The store the routes read and write through.
             catalog: The catalog the routes describe.
             port: The port to bind.

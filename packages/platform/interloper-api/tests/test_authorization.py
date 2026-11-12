@@ -25,6 +25,7 @@ from interloper_api.authorization import (
     ClientMetadataFetcher,
     InvalidTargetError,
 )
+from interloper_api.settings import ApiSettings
 
 ISSUER = "https://app.example.com"
 MCP_URL = "https://app.example.com/mcp"
@@ -66,7 +67,7 @@ class TestResources:
 
 class TestFromSettings:
     def test_the_issuer_is_the_external_url_and_the_resources_live_under_it(
-        self, oauth_store: Store, fake_settings: SimpleNamespace
+        self, oauth_store: Store, fake_settings: ApiSettings
     ):
         fake_settings.server.external_url = "https://app.example.com/"
 
@@ -80,7 +81,7 @@ class TestFromSettings:
         assert server.access_token_expires_in == 3600
 
     def test_without_an_external_url_the_issuer_is_the_local_server(
-        self, oauth_store: Store, fake_settings: SimpleNamespace
+        self, oauth_store: Store, fake_settings: ApiSettings
     ):
         server = AuthorizationServer.from_settings(oauth_store, fake_settings)
 

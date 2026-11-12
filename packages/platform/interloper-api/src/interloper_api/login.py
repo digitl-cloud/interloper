@@ -29,6 +29,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 from starlette.responses import RedirectResponse
 
+from interloper_api.settings import ApiSettings
+
 logger = logging.getLogger(__name__)
 
 GOOGLE_METADATA_URL = "https://accounts.google.com/.well-known/openid-configuration"
@@ -144,11 +146,11 @@ class GoogleLogin:
         )
 
     @classmethod
-    def from_settings(cls, settings: Any) -> GoogleLogin | None:
-        """Build the login from the application settings.
+    def from_settings(cls, settings: ApiSettings) -> GoogleLogin | None:
+        """Build the login from the API's settings.
 
         Args:
-            settings: The full ``AppSettings``.
+            settings: The API's settings, of which ``auth`` and ``encryption`` are read.
 
         Returns:
             The login, or ``None`` when no Google client or no encryption key

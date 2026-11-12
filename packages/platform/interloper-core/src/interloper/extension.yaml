@@ -34,3 +34,10 @@ cli:
   extensions: interloper.cli.commands.extensions:ExtensionsCommand
   launch: interloper.cli.commands.launch:LaunchCommand
   run: interloper.cli.commands.run:RunCommand
+settings:
+  catalog: interloper.settings.sections:CatalogSettings
+  log: interloper.settings.sections:LogSettings
+  otel: interloper.settings.sections:TelemetrySettings
+  run: interloper.settings.sections:RunSettings
+  runner: interloper.settings.sections:RunnerSettings
+  server: interloper.settings.sections:ServerSettings

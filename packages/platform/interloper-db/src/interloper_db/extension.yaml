@@ -4,3 +4,7 @@ name: Database
 description: "Database persistence, platform errors and the database commands."
 cli:
   db: interloper_db.cli:DatabaseCommand
+settings:
+  encryption: interloper_db.settings:EncryptionSettings
+  postgres: interloper_db.settings:PostgresSettings
+  quota: interloper_db.settings:QuotaSettings

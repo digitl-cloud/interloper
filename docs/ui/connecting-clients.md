@@ -91,7 +91,7 @@ and then deleted by the same hourly pass:
 
 | Setting | Default | Meaning |
 |---------|---------|---------|
-| `auth.credential_retention_days` | `30` | Days a credential is kept once it expired or was revoked. |
+| `reaper.credential_retention_days` | `30` | Days a credential is kept once it expired or was revoked. |
 
 It covers login sessions, personal access tokens, OAuth access tokens and authorization codes,
 each counted from its expiry or revocation. A refresh token is deleted with its whole chain, and

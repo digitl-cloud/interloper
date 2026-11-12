@@ -5,16 +5,16 @@ The login's flow against Google runs in ``tests/routes/test_auth.py``.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
 from interloper_api.login import GoogleAccount, GoogleLogin, LoginError
+from interloper_api.settings import ApiSettings
 
 
 class TestFromSettings:
-    def test_a_configured_client_and_key_build_a_login(self, fake_settings: SimpleNamespace) -> None:
+    def test_a_configured_client_and_key_build_a_login(self, fake_settings: ApiSettings) -> None:
         login = GoogleLogin.from_settings(fake_settings)
 
         assert login is not None
@@ -24,7 +24,7 @@ class TestFromSettings:
         ("section", "field"),
         [("auth", "google_client_id"), ("auth", "google_client_secret"), ("encryption", "key")],
     )
-    def test_anything_missing_builds_none(self, fake_settings: SimpleNamespace, section: str, field: str) -> None:
+    def test_anything_missing_builds_none(self, fake_settings: ApiSettings, section: str, field: str) -> None:
         setattr(getattr(fake_settings, section), field, "")
 
         assert GoogleLogin.from_settings(fake_settings) is None

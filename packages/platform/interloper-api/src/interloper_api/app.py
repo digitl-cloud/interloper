@@ -44,6 +44,7 @@ from interloper_api.routes import (
     websocket,
 )
 from interloper_api.routes import catalog as catalog_routes
+from interloper_api.settings import ApiSettings
 
 logger = logging.getLogger(__name__)
 
@@ -178,7 +179,7 @@ def install_error_handlers(app: FastAPI) -> None:
 def create_app(
     store: Store | None = None,
     catalog: Catalog | None = None,
-    settings: Any | None = None,
+    settings: ApiSettings | None = None,
     cors_origins: list[str] | None = None,
     **kwargs: Any,
 ) -> FastAPI:
@@ -190,11 +191,11 @@ def create_app(
     Args:
         store: The ``Store`` instance for persistence.
         catalog: Catalog instance.
-        settings: Full ``AppSettings``; the factory slices what it needs
-            (auth, smtp, agent) and builds the secrets-redacted snapshot for
-            the super-admin ``/admin/config`` view. The agent routes mount
-            only when enabled (or with no settings) and the ``agent`` extra
-            is installed.
+        settings: Every section the API reads; with them, the factory also
+            builds the secrets-redacted snapshot of every declared section
+            for the super-admin ``/admin/config`` view. The agent routes
+            mount only when enabled (or with no settings) and the ``agent``
+            extra is installed.
         cors_origins: Allowed CORS origins. Only needed in dev mode for direct
             WebSocket connections that bypass the Vite proxy.
         **kwargs: Additional kwargs forwarded to ``FastAPI()``.
@@ -265,20 +266,20 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         yield
 
 
-def _mount_agent(api: APIRouter, settings: Any | None) -> bool:
+def _mount_agent(api: APIRouter, settings: ApiSettings | None) -> bool:
     """Mount the optional agent routes, reporting whether they are available.
 
     The conversation routes go under the organisation prefix, the tool list outside it.
 
     Args:
         api: The ``/api`` router to mount onto.
-        settings: Full ``AppSettings``, or ``None`` to mount whenever the
+        settings: The API's settings, or ``None`` to mount whenever the
             extra is installed.
 
     Returns:
         True when the agent routes are mounted.
     """
-    if settings is not None and not settings.agent.enabled:
+    if settings is not None and settings.agent is not None and not settings.agent.enabled:
         logger.info("Agent routes not mounted: disabled via settings.")
         return False
 
@@ -299,7 +300,7 @@ def _mount_agent(api: APIRouter, settings: Any | None) -> bool:
 def _state(
     store: Store | None,
     catalog: Catalog | None,
-    settings: Any | None,
+    settings: ApiSettings | None,
     *,
     agent_available: bool,
     google_login: GoogleLogin | None,
@@ -309,7 +310,7 @@ def _state(
     Args:
         store: The ``Store`` instance, or ``None``.
         catalog: Catalog instance, or ``None``.
-        settings: Full ``AppSettings``, or ``None`` for neither an
+        settings: The API's settings, or ``None`` for neither an
             authorization server nor an admin config snapshot.
         agent_available: Whether the agent routes mounted, recorded as a
             feature flag and in the admin config snapshot.
@@ -322,10 +323,10 @@ def _state(
     features = {"agent": agent_available}
     agent = None
     if agent_available:
-        from interloper.settings import AgentSettings
         from interloper_agent import build_agent
+        from interloper_agent.settings import AgentSettings
 
-        agent = build_agent(settings.agent.model if settings else AgentSettings().model)
+        agent = build_agent((settings.agent if settings and settings.agent else AgentSettings.get()).model)
     if settings is None:
         return State(store=store, catalog=catalog, agent=agent, features=features)
     return State(
@@ -334,17 +335,17 @@ def _state(
         settings=settings,
         agent=agent,
         features=features,
-        admin_config=admin.AdminConfigResponse.from_settings(settings, features=features, catalog=catalog),
+        admin_config=admin.AdminConfigResponse.from_declared(features=features, catalog=catalog),
         authorization_server=_authorization_server(store, settings),
         google_login=google_login,
     )
 
 
-def _google_login(settings: Any | None) -> GoogleLogin | None:
+def _google_login(settings: ApiSettings | None) -> GoogleLogin | None:
     """Build the Google login, when the deployment can run one.
 
     Args:
-        settings: Full ``AppSettings``, or ``None``.
+        settings: The API's settings, or ``None``.
 
     Returns:
         The login, or ``None`` without settings, without a Google client, or
@@ -359,12 +360,12 @@ def _google_login(settings: Any | None) -> GoogleLogin | None:
     return google_login
 
 
-def _authorization_server(store: Store | None, settings: Any) -> AuthorizationServer | None:
+def _authorization_server(store: Store | None, settings: ApiSettings) -> AuthorizationServer | None:
     """Build the OAuth authorization server, when the deployment can run one.
 
     Args:
         store: The ``Store`` instance, or ``None``.
-        settings: Full ``AppSettings``.
+        settings: The API's settings.
 
     Returns:
         The server, or ``None`` without a store, without an encryption key

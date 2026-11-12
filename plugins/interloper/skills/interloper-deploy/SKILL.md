@@ -7,9 +7,10 @@ description: Use when configuring or deploying the Interloper platform (interlop
 
 ## Overview
 
-The platform reads `AppSettings`: an `interloper.yaml` in the working directory plus
-`INTERLOPER_<SECTION>_<FIELD>` variables. A field present in the YAML wins for that field; the
-environment fills what the YAML leaves out. The YAML is not interpolated, so secrets stay out
+The platform reads settings sections, each declared by the package it configures: an
+`interloper.yaml` in the working directory plus `INTERLOPER_<SECTION>_<FIELD>` variables. The
+environment wins for every field it sets; the YAML fills what the environment leaves out, and a
+block no installed package declares is ignored. The YAML is not interpolated, so secrets stay out
 of it and come from the environment. Reference: https://docs.interloper.dev/reference/settings/
 and https://docs.interloper.dev/ui/running/
 
@@ -85,11 +86,11 @@ and https://docs.interloper.dev/ui/running/
 4. **Verify the resolved settings** from the deployment directory with the variables exported:
 
    ```py
-   from interloper.settings import AppSettings
    import interloper as il
-   s = AppSettings()
-   print(s.postgres.host, s.auth.allowed_domains, s.catalog.include, s.otel.endpoint, s.launcher.type)
-   print(bool(s.encryption.key))                            # encryption at rest enabled
+   from interloper.settings import SETTINGS
+   s = {name: SETTINGS[name].get() for name in SETTINGS.keys()}   # every installed package's sections
+   print(s["postgres"].host, s["auth"].allowed_domains, s["catalog"].include, s["otel"].endpoint, s["launcher"].type)
+   print(bool(s["encryption"].key))                         # encryption at rest enabled
    print(sorted(il.Catalog.from_settings().components))     # dict keyed by component key; the provider key is `facebook`, the component key `facebook_ads`
    ```
 

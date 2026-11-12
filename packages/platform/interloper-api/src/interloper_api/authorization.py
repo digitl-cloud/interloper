@@ -97,6 +97,8 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from interloper_api.settings import ApiSettings
+
 PREFIX = "/api/auth/oauth"
 
 AUTHORIZE_PATH = f"{PREFIX}/authorize"
@@ -1158,7 +1160,7 @@ class AuthorizationServer(rfc6749.AuthorizationServer):
         self.register_endpoint(Registration)  # ty: ignore[invalid-argument-type]
 
     @classmethod
-    def from_settings(cls, store: Store, settings: Any) -> AuthorizationServer:
+    def from_settings(cls, store: Store, settings: ApiSettings) -> AuthorizationServer:
         """Build the server from the application settings.
 
         The issuer is the app's public URL (``server.public_url``); the MCP
@@ -1166,7 +1168,7 @@ class AuthorizationServer(rfc6749.AuthorizationServer):
 
         Args:
             store: The store every hook reads and writes through.
-            settings: The full ``AppSettings``.
+            settings: The API's settings, of which ``server``, ``encryption`` and ``auth`` are read.
 
         Returns:
             The server.

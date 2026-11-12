@@ -14,8 +14,10 @@ from typing import Any
 import interloper_api.server
 import pytest
 from interloper.catalog import Catalog
-from interloper.settings import AppSettings
+from interloper.settings import ServerSettings
 from interloper_api import ApiServer
+from interloper_api.settings import ApiSettings
+from interloper_scheduler.settings import SchedulerSettings
 
 import interloper_app.services as services_module
 from interloper_app import SpaFallback
@@ -31,19 +33,6 @@ def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
         probe.bind(("127.0.0.1", 0))
         return probe.getsockname()[1]
-
-
-def _with_port(port: int) -> AppSettings:
-    """Default settings with ``server.port`` moved.
-
-    Args:
-        port: The server port.
-
-    Returns:
-        The settings.
-    """
-    settings = AppSettings()
-    return settings.model_copy(update={"server": settings.server.model_copy(update={"port": port})})
 
 
 @pytest.fixture
@@ -64,7 +53,7 @@ def stub_roles(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         recorded["create_app"] = kwargs
         return FastAPI()
 
-    def scheduler_services(settings: AppSettings, **kwargs: Any) -> dict[str, object]:
+    def scheduler_services(settings: SchedulerSettings, **kwargs: Any) -> dict[str, object]:
         recorded["scheduler"] = kwargs
         enabled = [name for name in ("cron", "worker", "reaper") if kwargs[name]]
         return {name: object() for name in enabled}
@@ -75,11 +64,10 @@ def stub_roles(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     return recorded
 
 
-def _app(settings: AppSettings | None = None, **overrides: Any) -> App:
-    """Build an ``App`` with stand-in collaborators.
+def _app(**overrides: Any) -> App:
+    """Build an ``App`` over the active settings, with stand-in collaborators.
 
     Args:
-        settings: The settings; defaults apply when ``None``.
         **overrides: Any ``from_settings`` toggle to change; every service is off unless asked for.
 
     Returns:
@@ -88,29 +76,31 @@ def _app(settings: AppSettings | None = None, **overrides: Any) -> App:
     toggles: dict[str, Any] = {"api": False, "cron": False, "worker": False, "reaper": False}
     toggles |= {"dev": False, "port": None}
     toggles.update(overrides)
-    return App.from_settings(settings or AppSettings(), store=object(), catalog=Catalog(), **toggles)  # ty: ignore[invalid-argument-type]
+    return App.from_settings(
+        ApiSettings.get(),
+        SchedulerSettings.get(),
+        store=object(),  # ty: ignore[invalid-argument-type]
+        catalog=Catalog(),
+        **toggles,
+    )
 
 
 class TestApiPort:
     """The API moves off the configured port only when Nuxt needs it."""
 
     def test_production_uses_the_configured_port(self) -> None:
-        settings = AppSettings()
-
-        assert App._api_port(settings, dev=False, port=None) == settings.server.port
+        assert App._api_port(3000, dev=False, port=None) == 3000
 
     def test_dev_mode_picks_a_free_port_for_the_api(self) -> None:
-        settings = AppSettings()
+        port = App._api_port(3000, dev=True, port=None)
 
-        port = App._api_port(settings, dev=True, port=None)
-
-        assert port != settings.server.port
+        assert port != 3000
         assert DevServer._port_in_use(port) is False
 
     def test_an_explicit_port_is_honoured_in_dev_mode(self) -> None:
         # --port already moved server.port; the API must land there rather
         # than on a random one Nuxt would not proxy to.
-        assert App._api_port(_with_port(4567), dev=True, port=4567) == 4567
+        assert App._api_port(4567, dev=True, port=4567) == 4567
 
 
 class TestFromSettings:
@@ -132,17 +122,15 @@ class TestFromSettings:
         api = _app(api=True).services["api"]
 
         assert isinstance(api, ApiServer)
-        assert api._server.config.port == AppSettings().server.port
+        assert api._server.config.port == ServerSettings.get().port
 
     def test_dev_mode_allows_the_nuxt_origin_and_skips_the_spa(
         self, stub_roles: dict[str, Any], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(services_module, "static_dir", lambda: pytest.fail("dev mode must not mount the built SPA"))
-        settings = AppSettings()
+        _app(api=True, dev=True)
 
-        _app(settings, api=True, dev=True)
-
-        assert stub_roles["create_app"]["cors_origins"] == [f"http://localhost:{settings.server.port}"]
+        assert stub_roles["create_app"]["cors_origins"] == [f"http://localhost:{ServerSettings.get().port}"]
 
     def test_production_mounts_the_built_spa(
         self, stub_roles: dict[str, Any], monkeypatch: pytest.MonkeyPatch, tmp_path: Path

@@ -48,7 +48,7 @@ yours reads after your extension's key (`acme_widgets`), so it can never collide
 A section holds import strings, `module` or `module:attribute`, in one of three shapes:
 
 - a **map** of names to import strings, for a registry that looks entries up by the name you
-  declare (`runners`, `launchers`, `cli`);
+  declare (`runners`, `launchers`, `cli`, `settings`);
 - a **list** of import strings, for a registry that keys an entry by the object itself
   (`kinds`, `representations`, `oauth_providers`, `components`);
 - a **single** import string, named by the extension's key.
@@ -67,9 +67,47 @@ needs it.
 | `oauth_providers` | an OAuth provider | an instance or class | `interloper.oauth.PROVIDERS`, `OAuthConfig` |
 | `cli` | an `interloper` command | the `Command` class | the `interloper` CLI |
 | `launchers` | a launcher | the class | the scheduler's queue worker |
+| `settings` | a settings section | the `Settings` class | its own `get()`; the admin configuration page; the settings reference |
 
-Core declares its own kinds, jobs, hooks, runners, representation, providers and commands in its
-own manifest, the same way.
+Core declares its own kinds, jobs, hooks, runners, representation, providers, commands and
+settings in its own manifest, the same way.
+
+## Settings
+
+A `settings` entry names a subclass of `interloper.settings.Settings`, and the entry's name is
+the section's: its block of `interloper.yaml` and the prefix of its environment variables.
+
+```yaml
+settings:
+  acme_widgets: acme_interloper.settings:WidgetSettings
+```
+
+```py
+from typing import ClassVar
+
+from interloper.settings import Settings
+from pydantic import Field
+
+
+class WidgetSettings(Settings):
+    """Widget settings."""
+
+    public: ClassVar[frozenset[str]] = frozenset({"size"})
+
+    size: int = Field(default=1, description="Widget size.")
+    token: str = Field(default="", description="Widget service token.")
+```
+
+`WidgetSettings.get()` is the section this process runs with, loaded on the first read from
+`INTERLOPER_ACME_WIDGETS_SIZE` and the `acme_widgets` block, the environment winning. The class
+finds its name by looking up its own import path, so declare it by the module that defines it.
+Two packages declaring the same section, or one class declared under two names, fail every load
+with an error naming both.
+
+Each field's `description` is the settings reference's copy. `public` names the fields whose
+values the admin configuration page shows; every other field shows only whether the deployment
+set it, so a secret never leaves the process and a new field stays hidden until listed. A dotted
+name (`config.image`) shows one key of a mapping field.
 
 ## Commands
 

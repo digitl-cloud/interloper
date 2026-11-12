@@ -13,13 +13,14 @@ from interloper_scheduler.renewal import RenewalController
 
 if TYPE_CHECKING:
     from interloper.catalog import Catalog
-    from interloper.settings import AppSettings
     from interloper.utils import Service
     from interloper_db import Store
 
+    from interloper_scheduler.settings import SchedulerSettings
+
 
 def scheduler_services(
-    settings: AppSettings, *, store: Store, catalog: Catalog, cron: bool, worker: bool, reaper: bool
+    settings: SchedulerSettings, *, store: Store, catalog: Catalog, cron: bool, worker: bool, reaper: bool
 ) -> dict[str, Service]:
     """Build the enabled scheduler services, by name.
 
@@ -28,7 +29,7 @@ def scheduler_services(
     The worker and the reaper share one launcher.
 
     Args:
-        settings: The active settings.
+        settings: The scheduler's settings.
         store: The store every service reads and writes through.
         catalog: The catalog the renewal controller and the launcher resolve components against.
         cron: Whether to run the cron, hook and renewal controllers.
@@ -78,6 +79,6 @@ def scheduler_services(
                 heartbeat_timeout=settings.reaper.heartbeat_timeout,
                 run_timeout=settings.reaper.run_timeout,
                 poll_interval=settings.reaper.poll_interval,
-                credential_retention=settings.auth.credential_retention,
+                credential_retention=settings.reaper.credential_retention,
             )
     return services

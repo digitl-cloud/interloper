@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterator
 from uuid import UUID, uuid4
 
 import pytest
-from interloper.settings import AppSettings, ServerSettings
+from interloper.settings import ServerSettings
 from interloper_db.models import Component
 from interloper_db.store import ComponentQuery, RelationQuery, Store
 
@@ -177,12 +177,11 @@ def external_url(request: pytest.FixtureRequest) -> Iterator[str]:
     Yields:
         The URL the settings carry.
     """
-    settings = AppSettings.model_construct(server=ServerSettings(external_url=request.param))
-    AppSettings.activate(settings)
+    ServerSettings.activate(ServerSettings(external_url=request.param))
     try:
         yield request.param
     finally:
-        AppSettings.clear_active()
+        ServerSettings.clear_active()
 
 
 def _source_with_job(ctx: ToolkitContext, store: Store) -> tuple[Component, Component, Component]:

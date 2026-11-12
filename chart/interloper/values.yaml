@@ -213,8 +213,8 @@ dbInit:
 # the issuer of the OAuth authorization server the API runs,
 # whose metadata the API serves at /.well-known/oauth-authorization-server
 # (routed by the HTTPRoute and the Ingress). Injected as
-# INTERLOPER_SERVER_EXTERNAL_URL into every pod; ignored when extraConfig
-# carries a `server` section (the YAML block then owns the whole submodel).
+# INTERLOPER_SERVER_EXTERNAL_URL into every pod, which beats an
+# `external_url` written under extraConfig.server.
 externalUrl: ""
 
 # The assistant. The loaded api image always bundles interloper-agent; this
@@ -307,11 +307,11 @@ log:
   format: json
 
 # Extra interloper.yaml sections rendered verbatim into the generated
-# ConfigMap — tuning the chart has no opinion on (server, cron, worker,
-# reaper, mcp). Sections owned by a root-level block (agent, launcher,
-# runner, catalog, smtp, auth, log) are rejected here, as are secret-bearing
-# ones (postgres, secrets): a YAML-provided field beats the env var the
-# chart injects, so allowing them would silently override credentials.
+# ConfigMap: tuning the chart has no opinion on (server, cron, worker,
+# reaper, postgres.statement_timeout, mcp) and the sections extensions
+# declare. Sections owned by a root-level block (agent, launcher, runner,
+# catalog, smtp, auth, log) are rejected here. The env vars the chart injects
+# beat the file field by field, so a field set here never overrides them.
 extraConfig: {}
 
 # =============================================================================

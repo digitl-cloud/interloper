@@ -3,26 +3,16 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Iterator
 from datetime import timedelta
 from typing import Any
 
 import pytest
-from interloper.settings import AppSettings, AuthSettings
+from interloper.settings import ServerSettings
+from interloper_api.settings import AuthSettings
+from interloper_db.settings import PostgresSettings
+from interloper_scheduler.settings import CronSettings, ReaperSettings, WorkerSettings
 
 from interloper_app import cli
-
-
-@pytest.fixture(autouse=True)
-def _no_active_settings() -> Iterator[None]:
-    """Start and leave every test with no activated settings.
-
-    Yields:
-        ``None``; the teardown clears the active settings.
-    """
-    AppSettings.clear_active()
-    yield
-    AppSettings.clear_active()
 
 
 def _parse(*argv: str) -> argparse.Namespace:
@@ -60,8 +50,8 @@ def wiring(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         recorded["lifetimes"] = lifetimes
         return store
 
-    def from_settings(cls: Any, settings: AppSettings, **kwargs: Any) -> FakeApp:
-        recorded["settings"] = settings
+    def from_settings(cls: Any, api_settings: Any, scheduler_settings: Any, **kwargs: Any) -> FakeApp:
+        recorded["settings"] = (api_settings, scheduler_settings)
         recorded["app"] = kwargs
         return FakeApp()
 
@@ -90,43 +80,42 @@ class TestArguments:
         assert (args.api, args.cron, args.worker, args.reaper) == (True, False, True, False)
 
 
-class TestWithOverrides:
-    """``interloper app`` flags fold into the loaded settings."""
+class TestActivateFlags:
+    """``interloper app`` flags fold into the sections they override, which the command then runs with."""
 
     def test_omitted_flags_leave_settings_untouched(self) -> None:
-        settings = AppSettings()
+        server, cron = ServerSettings.get(), CronSettings.get()
 
-        result = cli._with_overrides(_parse("app"), settings)
+        cli.AppCommand()._activate_flags(_parse("app"))
 
-        assert (result.server.host, result.server.port) == (settings.server.host, settings.server.port)
-        assert result.server.enabled == settings.server.enabled
-        assert (result.cron.enabled, result.worker.enabled, result.reaper.enabled) == (
-            settings.cron.enabled,
-            settings.worker.enabled,
-            settings.reaper.enabled,
-        )
+        assert ServerSettings.get() == server
+        assert CronSettings.get() is cron
 
     def test_host_and_port_override_the_server_block(self) -> None:
-        result = cli._with_overrides(_parse("app", "--host", "0.0.0.0", "--port", "9999"), AppSettings())
+        cli.AppCommand()._activate_flags(_parse("app", "--host", "0.0.0.0", "--port", "9999"))
 
-        assert (result.server.host, result.server.port) == ("0.0.0.0", 9999)
+        assert (ServerSettings.get().host, ServerSettings.get().port) == ("0.0.0.0", 9999)
 
     @pytest.mark.parametrize("enabled", [True, False])
     def test_every_service_toggle_is_applied(self, enabled: bool) -> None:
         flags = [f"--{'' if enabled else 'no-'}{name}" for name in ("api", "cron", "worker", "reaper")]
 
-        result = cli._with_overrides(_parse("app", *flags), AppSettings())
+        cli.AppCommand()._activate_flags(_parse("app", *flags))
 
-        assert result.server.enabled is enabled
-        assert (result.cron.enabled, result.worker.enabled, result.reaper.enabled) == (enabled, enabled, enabled)
+        assert ServerSettings.get().enabled is enabled
+        assert (CronSettings.get().enabled, WorkerSettings.get().enabled, ReaperSettings.get().enabled) == (
+            enabled,
+            enabled,
+            enabled,
+        )
 
-    def test_the_original_settings_are_not_mutated(self) -> None:
-        settings = AppSettings()
-        original_port = settings.server.port
+    def test_the_loaded_section_is_not_mutated(self) -> None:
+        server = ServerSettings.get()
+        original_port = server.port
 
-        cli._with_overrides(_parse("app", "--port", str(original_port + 1)), settings)
+        cli.AppCommand()._activate_flags(_parse("app", "--port", str(original_port + 1)))
 
-        assert settings.server.port == original_port
+        assert server.port == original_port
 
 
 class TestRun:
@@ -145,7 +134,7 @@ class TestRun:
         cli.AppCommand().run(_parse("app", "--api", "--no-cron", "--no-worker", "--no-reaper"))
 
         expected = {"statement_timeout": None, "create_tables": True}
-        assert wiring["bootstrap"] == (wiring["settings"].postgres.dsn, expected)
+        assert wiring["bootstrap"] == (PostgresSettings.get().dsn, expected)
         assert wiring["ran"] is True
         assert (wiring["app"]["api"], wiring["app"]["cron"], wiring["app"]["worker"], wiring["app"]["reaper"]) == (
             True,
@@ -164,7 +153,7 @@ class TestRun:
     def test_the_flags_are_activated_for_the_command(self, wiring: dict[str, Any]) -> None:
         cli.AppCommand().run(_parse("app", "--port", "4321"))
 
-        assert AppSettings.get().server.port == 4321
+        assert ServerSettings.get().port == 4321
         assert wiring["app"]["port"] == 4321
 
     def test_dev_and_an_explicit_port_reach_the_composition(self, wiring: dict[str, Any]) -> None:
@@ -176,7 +165,7 @@ class TestRun:
         self, wiring: dict[str, Any]
     ) -> None:
         auth = AuthSettings(session_expiry_days=2, access_token_expiry_minutes=15, refresh_token_expiry_days=7)
-        AppSettings.activate(AppSettings(auth=auth))
+        AuthSettings.activate(auth)
 
         cli.AppCommand().run(_parse("app"))
 

@@ -10,11 +10,15 @@ SQLite stands in for Postgres in every suite. It stores no offset, so a
 TIMESTAMPTZ column would read back naive where Postgres hands back an aware
 value; every stored instant is UTC, so the SQLite dialect is taught here,
 once per process, to read datetimes back aware.
+
+A settings section is loaded once per process and kept, so every test
+forgets the sections it read or activated: the next one loads its own from
+its environment and working directory.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from typing import Any
 
@@ -139,3 +143,16 @@ def metric_total(metric_reader: InMemoryMetricReader) -> Callable[..., float]:
         )
 
     return total
+
+
+@pytest.fixture(autouse=True)
+def _forget_settings() -> Iterator[None]:
+    """Forget every settings section the test read or activated.
+
+    Yields:
+        ``None``; the teardown clears the active sections.
+    """
+    yield
+    from interloper.settings import Settings
+
+    Settings.clear_active()

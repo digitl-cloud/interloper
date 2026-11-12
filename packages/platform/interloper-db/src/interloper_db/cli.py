@@ -8,10 +8,10 @@ from collections.abc import Mapping
 from typing import ClassVar
 
 from interloper.cli import Command
-from interloper.settings import AppSettings
 
 from interloper_db.engine import init_engine
 from interloper_db.provision import bootstrap, downgrade, drop_database, upgrade
+from interloper_db.settings import PostgresSettings
 
 
 class DatabaseInitCommand(Command):
@@ -25,7 +25,7 @@ class DatabaseInitCommand(Command):
         Args:
             args: The parsed command line; this command takes no arguments.
         """
-        postgres = AppSettings.get().postgres
+        postgres = PostgresSettings.get()
         print(f"Bootstrapping the database at {postgres.location}...")
         bootstrap(postgres.dsn)
         print("Done.")
@@ -48,7 +48,7 @@ class DatabaseResetCommand(Command):
         Args:
             args: The parsed command line, carrying ``yes`` to skip the confirmation prompt.
         """
-        postgres = AppSettings.get().postgres
+        postgres = PostgresSettings.get()
 
         if not args.yes:
             answer = input(f"This will DROP and recreate the database at {postgres.location}. Continue? [y/N] ")
@@ -80,7 +80,7 @@ class DatabaseUpgradeCommand(Command):
         Args:
             args: The parsed command line, carrying ``revision`` (the target, default ``head``).
         """
-        init_engine(AppSettings.get().postgres.dsn)
+        init_engine(PostgresSettings.get().dsn)
         print(f"Running migrations to {args.revision}...")
         upgrade(revision=args.revision)
         print("Done.")
@@ -103,7 +103,7 @@ class DatabaseDowngradeCommand(Command):
         Args:
             args: The parsed command line, carrying ``revision`` (the target, default ``-1``).
         """
-        init_engine(AppSettings.get().postgres.dsn)
+        init_engine(PostgresSettings.get().dsn)
         print(f"Downgrading to {args.revision}...")
         downgrade(revision=args.revision)
         print("Done.")

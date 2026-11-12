@@ -7,11 +7,12 @@ import logging
 import sys
 
 from interloper.catalog import Catalog
-from interloper.settings import AppSettings
+from interloper.settings import ServerSettings
 from interloper_db import Audience, Profile, Store
 
 from interloper_mcp.context import init_context, set_static_user
 from interloper_mcp.server import create_mcp_server, http_options
+from interloper_mcp.settings import McpSettings
 
 logger = logging.getLogger(__name__)
 
@@ -31,12 +32,12 @@ def main() -> None:
 
     logging.basicConfig(level=logging.INFO, stream=sys.stderr)
 
-    settings = AppSettings.get()
-    mcp_settings = settings.mcp
+    mcp_settings = McpSettings.get()
     if args.host is not None:
         mcp_settings.host = args.host
     if args.port is not None:
         mcp_settings.port = args.port
+    public_url = ServerSettings.get().public_url
 
     catalog = Catalog.from_settings()
     store = Store.from_settings(catalog=catalog)
@@ -44,10 +45,10 @@ def main() -> None:
 
     if args.transport == "stdio":
         set_static_user(_resolve_stdio_user(store, mcp_settings.token))
-        mcp = create_mcp_server(settings.server.public_url, store=None)
+        mcp = create_mcp_server(public_url, store=None)
         mcp.run(transport="stdio")
     else:
-        mcp = create_mcp_server(settings.server.public_url, store=store)
+        mcp = create_mcp_server(public_url, store=store)
         logger.info("Serving streamable HTTP on %s:%s/mcp", mcp_settings.host, mcp_settings.port)
         mcp.run(transport="streamable-http", port=mcp_settings.port, **http_options(mcp_settings))
 

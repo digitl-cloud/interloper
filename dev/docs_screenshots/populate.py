@@ -16,10 +16,10 @@ from pathlib import Path
 
 import interloper as il
 import psycopg2
-from interloper.settings import AppSettings
 from interloper_db import init_engine
 from interloper_db.engine import get_engine
 from interloper_db.models import Organisation, Profile
+from interloper_db.settings import PostgresSettings
 from interloper_db.store import BackfillQuery, ComponentQuery, Store
 from sqlmodel import Session, select
 
@@ -29,8 +29,8 @@ DEV_USER_EMAIL = os.environ.get("INTERLOPER_DEV_USER_EMAIL", "admin@dev.local")
 
 def main() -> None:
     """Create the demo components, run them, and spread the runs over the last day."""
-    settings = AppSettings.get()
-    init_engine(settings.postgres.dsn)
+    postgres = PostgresSettings.get()
+    init_engine(postgres.dsn)
     store = Store.from_settings(il.Catalog.from_settings())
 
     with Session(get_engine()) as session:
@@ -108,7 +108,7 @@ def main() -> None:
         store.runs.create(org_id, component_id=flaky_job.id, partition_key="2026-09-02")
         store.runs.create(org_id, component_id=monthly_job.id, partition_key="2026-08")
         print("runs queued; waiting for the worker")
-        _wait_and_backdate(settings.postgres.dsn)
+        _wait_and_backdate(postgres.dsn)
 
     (HERE / "session_token").write_text(store.tokens.create_session(user_id))
     print("session minted")
