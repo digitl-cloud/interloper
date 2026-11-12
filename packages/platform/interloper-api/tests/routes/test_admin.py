@@ -808,7 +808,8 @@ class TestOAuthClients:
         assert row["id"] == operator.client_id
         assert row["name"] == "Slack"
         assert row["redirect_uris"] == ["https://slack.example.com/cb"]
-        assert set(row) == {"id", "name", "redirect_uris", "created_at"}
+        assert row["client_host"] is None
+        assert set(row) == {"id", "name", "client_host", "redirect_uris", "created_at"}
         assert secret is not None
         assert secret not in response.text
         assert str(operator.secret_hash) not in response.text

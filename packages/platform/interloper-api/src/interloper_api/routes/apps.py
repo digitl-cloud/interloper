@@ -21,10 +21,15 @@ router = APIRouter(prefix="/auth/apps", tags=["apps"])
 
 
 class AppResponse(BaseModel):
-    """An application the caller has authorised; ``id`` is its OAuth client id. Never carries secret material."""
+    """An application the caller has authorised; ``id`` is its OAuth client id. Never carries secret material.
+
+    ``client_host`` is the host that served the application's metadata
+    document, ``None`` for an application that registered.
+    """
 
     id: str
     name: str
+    client_host: str | None = None
     redirect_uris: list[str]
     created_at: datetime | None = None
 
@@ -41,6 +46,7 @@ class AppResponse(BaseModel):
         return cls(
             id=client.client_id,
             name=client.name,
+            client_host=client.metadata_host,
             redirect_uris=client.redirect_uris,
             created_at=client.created_at,
         )
@@ -60,7 +66,7 @@ def list_apps(user: SessionUserDep, store: StoreDep) -> list[AppResponse]:
     return [AppResponse.from_client(client) for client in store.oauth.authorised_clients(user.id)]
 
 
-@router.delete("/{client_id}", status_code=204)
+@router.delete("/{client_id:path}", status_code=204)
 def revoke_app(client_id: str, user: SessionUserDep, store: StoreDep) -> Response:
     """Revoke an application's access for the caller.
 
@@ -72,7 +78,7 @@ def revoke_app(client_id: str, user: SessionUserDep, store: StoreDep) -> Respons
     an existence oracle.
 
     Args:
-        client_id: The application's client id.
+        client_id: The application's client id, which may be a URL, slashes included.
         user: The caller, authenticated by the session cookie alone.
         store: The database store.
 

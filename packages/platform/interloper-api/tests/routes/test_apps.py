@@ -8,6 +8,7 @@ ends every token it holds for them.
 from __future__ import annotations
 
 from types import SimpleNamespace
+from urllib.parse import quote
 from uuid import uuid4
 
 import pytest
@@ -18,6 +19,7 @@ from interloper_api.app import create_app
 
 PREFIX = "/api/auth/apps"
 REDIRECT_URI = "http://127.0.0.1:8765/callback"
+METADATA_CLIENT_ID = "https://claude.ai/oauth/claude-code-client-metadata"
 
 
 @pytest.fixture
@@ -67,7 +69,29 @@ def test_lists_clients_with_live_refresh(client: TestClient, oauth_store: Store,
     assert [app["id"] for app in body] == [live]
     assert body[0]["name"] == "Claude Code"
     assert body[0]["redirect_uris"] == [REDIRECT_URI]
-    assert set(body[0]) == {"id", "name", "redirect_uris", "created_at"}
+    assert body[0]["client_host"] is None
+    assert set(body[0]) == {"id", "name", "client_host", "redirect_uris", "created_at"}
+
+
+def test_a_metadata_client_is_listed_with_its_domain(client: TestClient, oauth_store: Store, user: Profile):
+    oauth_store.oauth.save_metadata_client(METADATA_CLIENT_ID, "Claude Code", ["http://localhost/callback"])
+    _grant(oauth_store, user, METADATA_CLIENT_ID)
+
+    [app] = client.get(PREFIX).json()
+
+    assert app["id"] == METADATA_CLIENT_ID
+    assert app["client_host"] == "claude.ai"
+
+
+def test_a_metadata_client_is_revoked_by_its_url(client: TestClient, oauth_store: Store, user: Profile):
+    oauth_store.oauth.save_metadata_client(METADATA_CLIENT_ID, "Claude Code", ["http://localhost/callback"])
+    access, _ = _grant(oauth_store, user, METADATA_CLIENT_ID)
+
+    response = client.delete(f"{PREFIX}/{quote(METADATA_CLIENT_ID, safe='')}")
+
+    assert response.status_code == 204
+    assert oauth_store.tokens.resolve(access, Audience.MCP) is None
+    assert client.get(PREFIX).json() == []
 
 
 def test_revoke_app_kills_its_tokens(client: TestClient, oauth_store: Store, user: Profile):

@@ -13,7 +13,8 @@ data providers. The flow:
    error.
 3. The client exchanges the code at ``POST /auth/oauth/token``, refreshes
    there, and may revoke at ``POST /auth/oauth/revoke``. Clients register at
-   ``POST /auth/oauth/register``; the server describes itself at
+   ``POST /auth/oauth/register``, or name themselves by the URL of their
+   metadata document, which step 1 reads; the server describes itself at
    ``/.well-known/oauth-authorization-server``.
 """
 
@@ -143,10 +144,12 @@ def authorize(
         A redirect to the app's consent page carrying the request sealed for
         the session's user; to the Google login, returning here, when no
         session resolves; to the client with the error once its redirect URI
-        is validated; a 400 before that.
+        is validated; a 400 before that, and whenever the metadata document
+        a client id URL names cannot be read or is invalid.
     """
     oauth_request = server.authorization_request(list(request.query_params.multi_items()))
     try:
+        server.discover_client(oauth_request.payload.client_id)
         server.get_consent_grant(oauth_request)
     except OAuth2Error as error:
         return server.handle_error_response(oauth_request, error)
@@ -162,12 +165,16 @@ class ConsentResponse(BaseModel):
     """What the consent page shows the user before they decide.
 
     Attributes:
-        client_name: The name the client registered; unverified.
+        client_name: The name the client registered or its metadata document
+            declares; unverified.
+        client_host: The host that served the client's metadata document,
+            proven by reading it; ``None`` for a registered client.
         redirect_host: The host the browser returns to, with its port.
         resource: The surface the client asks for, ``api`` or ``mcp``.
     """
 
     client_name: str
+    client_host: str | None
     redirect_host: str
     resource: Audience
 
@@ -183,7 +190,8 @@ class ConsentResponse(BaseModel):
         """
         parts = urlsplit(grant.redirect_uri)
         host = f"{parts.hostname}:{parts.port}" if parts.port else parts.hostname or ""
-        return cls(client_name=grant.request.client.row.name, redirect_host=host, resource=grant.audience)
+        row = grant.request.client.row
+        return cls(client_name=row.name, client_host=row.metadata_host, redirect_host=host, resource=grant.audience)
 
 
 class ConsentDecision(BaseModel):

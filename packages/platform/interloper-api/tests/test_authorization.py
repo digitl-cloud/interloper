@@ -2,17 +2,29 @@
 
 from __future__ import annotations
 
+import json
+import time
 from datetime import timedelta
 from types import SimpleNamespace
+from typing import Any
 from uuid import uuid4
 
+import httpx2
 import pytest
 from authlib.oauth2 import OAuth2Error
+from authlib.oauth2.rfc6749 import InvalidClientError
 from cryptography import fernet
 from cryptography.fernet import Fernet
 from interloper_db import Audience, Store
 
-from interloper_api.authorization import AUTHORIZE_PATH, AuthorizationServer, Client, InvalidTargetError
+from interloper_api.authorization import (
+    AUTHORIZE_PATH,
+    AuthorizationServer,
+    Client,
+    ClientMetadataDocument,
+    ClientMetadataFetcher,
+    InvalidTargetError,
+)
 
 ISSUER = "https://app.example.com"
 MCP_URL = "https://app.example.com/mcp"
@@ -270,3 +282,256 @@ class TestRedirectUris:
 
     def test_a_loopback_uri_with_an_invalid_port_is_left_as_is(self):
         assert Client.without_loopback_port("http://127.0.0.1:99999/cb") == "http://127.0.0.1:99999/cb"
+
+
+CLIENT_ID = "https://claude.ai/oauth/claude-code-client-metadata"
+PUBLIC_ADDRESS = "160.79.104.10"
+
+
+def _document(**overrides: Any) -> dict[str, Any]:
+    document = {
+        "client_id": CLIENT_ID,
+        "client_name": "Claude Code",
+        "client_uri": "https://claude.ai",
+        "redirect_uris": ["http://localhost/callback", "http://127.0.0.1/callback"],
+        "grant_types": ["authorization_code", "refresh_token"],
+        "response_types": ["code"],
+        "token_endpoint_auth_method": "none",
+        **overrides,
+    }
+    return {key: value for key, value in document.items() if value is not None}
+
+
+class TestClientMetadataDocument:
+    def test_a_valid_document_describes_the_client(self):
+        document = ClientMetadataDocument.from_json(CLIENT_ID, _document())
+
+        assert document == ClientMetadataDocument(
+            client_id=CLIENT_ID,
+            name="Claude Code",
+            redirect_uris=["http://localhost/callback", "http://127.0.0.1/callback"],
+        )
+
+    def test_a_document_without_a_name_is_named_after_its_host(self):
+        assert ClientMetadataDocument.from_json(CLIENT_ID, _document(client_name=None)).name == "claude.ai"
+
+    def test_a_long_name_is_cut(self):
+        assert len(ClientMetadataDocument.from_json(CLIENT_ID, _document(client_name="x" * 500)).name) == 100
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {"token_endpoint_auth_method": None},
+            {"token_endpoint_auth_method": None, "token_endpoint_auth_methods_supported": ["private_key_jwt", "none"]},
+        ],
+    )
+    def test_a_public_client_is_accepted(self, overrides: dict[str, Any]):
+        assert ClientMetadataDocument.from_json(CLIENT_ID, _document(**overrides)).client_id == CLIENT_ID
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [],
+            "a string",
+            _document(client_id="https://claude.ai/oauth/another-client"),
+            _document(client_id=CLIENT_ID + "/"),
+            _document(client_id=None),
+            _document(client_secret="shared"),
+            _document(client_secret_expires_at=0),
+            _document(token_endpoint_auth_method="client_secret_basic"),
+            _document(token_endpoint_auth_method="private_key_jwt"),
+            _document(token_endpoint_auth_method=None, token_endpoint_auth_methods_supported=["private_key_jwt"]),
+            _document(grant_types=["client_credentials"]),
+            _document(response_types=["token"]),
+            _document(redirect_uris=None),
+            _document(redirect_uris=[]),
+            _document(redirect_uris="http://localhost/callback"),
+            _document(redirect_uris=[42]),
+            _document(redirect_uris=["http://evil.example/callback"]),
+            _document(redirect_uris=["javascript://x/%0Aalert(document.domain)//"]),
+        ],
+    )
+    def test_an_invalid_document_is_refused(self, data: Any):
+        with pytest.raises(InvalidClientError) as raised:
+            ClientMetadataDocument.from_json(CLIENT_ID, data)
+
+        assert raised.value.redirect_uri is None
+
+    @pytest.mark.parametrize(
+        "client_id",
+        [CLIENT_ID, "https://client.example.com:8443/metadata.json", "https://client.example.com/metadata?v=1"],
+    )
+    def test_an_https_url_with_a_path_is_a_client_id(self, client_id: str):
+        assert ClientMetadataDocument.check_client_id(client_id).scheme == "https"
+
+    @pytest.mark.parametrize(
+        "client_id",
+        [
+            "http://client.example.com/metadata.json",
+            "https://client.example.com",
+            "https://client.example.com/",
+            "https://user:pass@client.example.com/metadata.json",
+            "https://client.example.com@evil.example/metadata.json",
+            "https://client.example.com/metadata.json#fragment",
+            "https://client.example.com/metadata.json#",
+            "https://client.example.com/./metadata.json",
+            "https://client.example.com/a/../metadata.json",
+            "https:///metadata.json",
+            "https://client.example.com:99999/metadata.json",
+            "https://client.example.com/meta data.json",
+            "https://client.example.com/metadata.json\n",
+        ],
+    )
+    def test_anything_else_is_refused(self, client_id: str):
+        with pytest.raises(InvalidClientError):
+            ClientMetadataDocument.check_client_id(client_id)
+
+
+@pytest.fixture
+def host(document_host: Any) -> Any:
+    document_host.documents[CLIENT_ID] = _document()
+    return document_host
+
+
+@pytest.fixture
+def fetcher(host: Any) -> ClientMetadataFetcher:
+    return host.fetcher()
+
+
+class TestClientMetadataFetcher:
+    def test_the_document_is_read_from_the_vetted_address_under_its_host_name(
+        self, fetcher: ClientMetadataFetcher, host: Any
+    ):
+        document = fetcher.fetch(CLIENT_ID)
+
+        assert document.name == "Claude Code"
+        [request] = host.requests
+        assert str(request.url) == f"https://{PUBLIC_ADDRESS}/oauth/claude-code-client-metadata"
+        assert request.headers["host"] == "claude.ai"
+        assert request.headers["accept"] == "application/json"
+        assert "cookie" not in request.headers
+        assert request.extensions["sni_hostname"] == "claude.ai"
+
+    def test_an_ipv6_address_is_bracketed_and_the_port_kept(self, fetcher: ClientMetadataFetcher, host: Any):
+        client_id = "https://client.example.com:8443/metadata.json"
+        host.addresses["client.example.com"] = ["2606:4700::6810:84e5"]
+        host.respond = lambda request: httpx2.Response(200, json=_document(client_id=client_id))
+
+        fetcher.fetch(client_id)
+
+        [request] = host.requests
+        assert str(request.url) == "https://[2606:4700::6810:84e5]:8443/metadata.json"
+        assert request.headers["host"] == "client.example.com:8443"
+
+    @pytest.mark.parametrize(
+        "addresses",
+        [
+            ["127.0.0.1"],
+            ["10.0.0.7"],
+            ["192.168.1.1"],
+            ["169.254.169.254"],
+            ["100.64.0.1"],
+            ["0.0.0.0"],
+            ["224.0.0.1"],
+            ["::1"],
+            ["fd00::1"],
+            ["fe80::1%en0"],
+            ["::ffff:10.0.0.1"],
+            [PUBLIC_ADDRESS, "10.0.0.7"],
+            [],
+        ],
+    )
+    def test_a_host_resolving_to_any_address_that_is_not_public_is_never_fetched(
+        self, fetcher: ClientMetadataFetcher, host: Any, addresses: list[str]
+    ):
+        host.addresses["claude.ai"] = addresses
+
+        with pytest.raises(InvalidClientError):
+            fetcher.fetch(CLIENT_ID)
+
+        assert host.requests == []
+
+    def test_an_unknown_host_is_refused(self, fetcher: ClientMetadataFetcher, host: Any):
+        del host.addresses["claude.ai"]
+
+        with pytest.raises(InvalidClientError):
+            fetcher.fetch(CLIENT_ID)
+
+    @pytest.mark.parametrize(
+        "response",
+        [
+            httpx2.Response(302, headers={"Location": "https://claude.ai/elsewhere"}),
+            httpx2.Response(404),
+            httpx2.Response(500),
+            httpx2.Response(201, json=_document()),
+            httpx2.Response(200, content=b"not json"),
+            httpx2.Response(200, content=json.dumps(_document(client_name="x" * 6000)).encode()),
+            httpx2.Response(200, json=_document(client_id="https://claude.ai/oauth/another-client")),
+        ],
+    )
+    def test_anything_but_a_valid_document_under_200_is_refused(
+        self, fetcher: ClientMetadataFetcher, host: Any, response: httpx2.Response
+    ):
+        host.respond = lambda request: response
+
+        with pytest.raises(InvalidClientError):
+            fetcher.fetch(CLIENT_ID)
+
+        assert len(host.requests) == 1
+
+    def test_a_document_still_arriving_at_the_deadline_is_refused(self):
+        response = httpx2.Response(200, json=_document())
+
+        with pytest.raises(InvalidClientError) as raised:
+            ClientMetadataFetcher._read(response, deadline=time.monotonic() - 1)
+
+        assert raised.value.description == "The client metadata document took too long to read."
+
+    def test_a_network_failure_is_refused(self, fetcher: ClientMetadataFetcher, host: Any):
+        def fail(request: httpx2.Request) -> httpx2.Response:
+            raise httpx2.ConnectTimeout("timed out", request=request)
+
+        host.respond = fail
+
+        with pytest.raises(InvalidClientError):
+            fetcher.fetch(CLIENT_ID)
+
+    def test_an_invalid_client_id_is_refused_before_any_lookup(self, fetcher: ClientMetadataFetcher, host: Any):
+        with pytest.raises(InvalidClientError):
+            fetcher.fetch("https://claude.ai/")
+
+        assert host.requests == []
+
+
+class TestDiscoverClient:
+    @pytest.fixture
+    def server(self, oauth_store: Store, host: Any) -> AuthorizationServer:
+        server = AuthorizationServer(
+            oauth_store, issuer=ISSUER, encryption_key="key-material", access_token_expiry=timedelta(minutes=60)
+        )
+        server.client_metadata = host.fetcher()
+        return server
+
+    def test_a_url_client_is_read_and_kept(self, server: AuthorizationServer, oauth_store: Store):
+        server.discover_client(CLIENT_ID)
+
+        stored = oauth_store.oauth.get_client(CLIENT_ID)
+        assert stored is not None
+        assert stored.registered_by == "metadata"
+        assert stored.name == "Claude Code"
+        assert stored.redirect_uris == ["http://localhost/callback", "http://127.0.0.1/callback"]
+
+    @pytest.mark.parametrize("client_id", [None, "0123456789abcdef0123456789abcdef", "http://claude.ai/oauth/x"])
+    def test_any_other_client_id_reads_nothing(self, server: AuthorizationServer, host: Any, client_id: Any):
+        server.discover_client(client_id)
+
+        assert host.requests == []
+
+    @pytest.mark.parametrize("client_id", [f"{ISSUER}/api/auth/apps", ISSUER])
+    def test_a_url_on_the_servers_own_origin_is_refused_unread(
+        self, server: AuthorizationServer, host: Any, client_id: str
+    ):
+        with pytest.raises(InvalidClientError):
+            server.discover_client(client_id)
+
+        assert host.requests == []

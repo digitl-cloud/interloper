@@ -102,6 +102,9 @@ async function decide(approve: boolean) {
                  class="flex flex-col gap-4">
                 <p class="text-sm wrap-break-word">
                     <span class="font-semibold text-highlighted">{{ consent.client_name }}</span>
+                    <template v-if="consent.client_host">
+                        (from <span class="font-semibold text-highlighted break-all">{{ consent.client_host }}</span>)
+                    </template>
                     wants to act as you in every organisation you belong to, with your role in each.
                     It will return you to
                     <span class="font-semibold text-highlighted break-all">{{ consent.redirect_host }}</span>.
