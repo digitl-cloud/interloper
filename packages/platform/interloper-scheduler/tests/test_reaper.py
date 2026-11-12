@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -184,22 +184,24 @@ class TestTick:
 
         assert "Reaped" not in caplog.text
 
-    def test_the_first_tick_reconciles_and_prunes(self, store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_the_first_tick_reconciles_prunes_and_purges(self, store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
         # ``_ticks_since_reconcile`` starts at the threshold on purpose.
         calls: list[str] = []
         reaper = Reaper(store=store, launcher=_FakeLauncher(None))
         monkeypatch.setattr(reaper, "_reconcile_usage", lambda: calls.append("reconcile"))
         monkeypatch.setattr(reaper, "_prune_oauth_clients", lambda: calls.append("prune"))
+        monkeypatch.setattr(reaper, "_purge_credentials", lambda: calls.append("purge"))
 
         reaper._tick()
 
-        assert calls == ["reconcile", "prune"]
+        assert calls == ["reconcile", "prune", "purge"]
 
     def test_later_ticks_wait_for_the_interval(self, store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
         calls: list[bool] = []
         reaper = Reaper(store=store, launcher=_FakeLauncher(None), poll_interval=60)
         monkeypatch.setattr(reaper, "_reconcile_usage", lambda: calls.append(True))
         monkeypatch.setattr(reaper, "_prune_oauth_clients", lambda: None)
+        monkeypatch.setattr(reaper, "_purge_credentials", lambda: None)
 
         reaper._tick()  # the first one reconciles
         reaper._tick()
@@ -318,6 +320,72 @@ class TestPruneOAuthClients:
             reaper._prune_oauth_clients()
 
         assert "Pruning OAuth clients failed" in caplog.text
+
+
+class TestPurgeCredentials:
+    """Credentials ended longer ago than the retention window are deleted hourly."""
+
+    def test_the_window_reaches_both_stores_and_deletions_are_logged(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        windows: list[tuple[str, dt.timedelta]] = []
+
+        def purge(name: str, deleted: int) -> Callable[..., int]:
+            def record(*, ended_for: dt.timedelta) -> int:
+                windows.append((name, ended_for))
+                return deleted
+
+            return record
+
+        monkeypatch.setattr(store.tokens, "purge", purge("tokens", 2))
+        monkeypatch.setattr(store.oauth, "purge", purge("oauth", 3))
+        reaper = Reaper(store=store, launcher=_FakeLauncher(None), credential_retention=dt.timedelta(days=7))
+
+        with caplog.at_level("INFO", logger="interloper_scheduler.reaper"):
+            reaper._purge_credentials()
+
+        assert windows == [("tokens", dt.timedelta(days=7)), ("oauth", dt.timedelta(days=7))]
+        assert "Purged 5 ended credential(s)" in caplog.text
+
+    def test_the_window_defaults_to_thirty_days(self, store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
+        windows: list[dt.timedelta] = []
+
+        def purge(*, ended_for: dt.timedelta) -> int:
+            windows.append(ended_for)
+            return 0
+
+        monkeypatch.setattr(store.tokens, "purge", purge)
+        monkeypatch.setattr(store.oauth, "purge", purge)
+
+        Reaper(store=store, launcher=_FakeLauncher(None))._purge_credentials()
+
+        assert windows == [dt.timedelta(days=30), dt.timedelta(days=30)]
+
+    def test_nothing_purged_logs_nothing(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        monkeypatch.setattr(store.tokens, "purge", lambda **window: 0)
+        monkeypatch.setattr(store.oauth, "purge", lambda **window: 0)
+        reaper = Reaper(store=store, launcher=_FakeLauncher(None))
+
+        with caplog.at_level("INFO", logger="interloper_scheduler.reaper"):
+            reaper._purge_credentials()
+
+        assert "Purged" not in caplog.text
+
+    def test_a_failed_purge_does_not_stop_the_loop(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        def broken(**window: dt.timedelta) -> int:
+            raise RuntimeError("query failed")
+
+        monkeypatch.setattr(store.tokens, "purge", broken)
+        reaper = Reaper(store=store, launcher=_FakeLauncher(None))
+
+        with caplog.at_level("ERROR", logger="interloper_scheduler.reaper"):
+            reaper._purge_credentials()
+
+        assert "Purging ended credentials failed" in caplog.text
 
 
 class TestFailureReportingIsBestEffort:

@@ -7,14 +7,15 @@ import importlib
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import Engine, event, inspect, text
+from sqlalchemy import Engine, event, inspect, text, update
 from sqlalchemy.pool import StaticPool
+from sqlmodel import col, select
 
 from interloper_db import NotFoundError, PageQuery
 from interloper_db import engine as engine_module
@@ -374,3 +375,80 @@ class TestResolveOrphanedToken:
             connection.commit()
 
         assert store.tokens.resolve(raw, Audience.API) is None
+
+
+RETENTION = timedelta(days=30)
+
+
+class TestPurge:
+    """Tokens that ended, by expiry or revocation, longer ago than the window are deleted."""
+
+    def _set(self, token_db: Engine, token_id: UUID, **values: Any) -> None:
+        """Overwrite columns of one token.
+
+        Args:
+            token_db: The fixture database.
+            token_id: The token's id.
+            **values: The columns to set.
+        """
+        with session_scope(token_db) as session:
+            session.connection().execute(update(Token).where(col(Token.id) == token_id).values(**values))
+            session.commit()
+
+    def _remaining(self, token_db: Engine) -> set[UUID]:
+        """The ids of the tokens still stored.
+
+        Args:
+            token_db: The fixture database.
+
+        Returns:
+            Their ids.
+        """
+        with session_scope(token_db) as session:
+            return set(session.exec(select(Token.id)).all())
+
+    def test_every_kind_ended_past_the_window_is_deleted(self, store: Store, profile: Profile, token_db: Engine):
+        long_ago = datetime.now(UTC) - RETENTION - timedelta(minutes=1)
+        store.tokens.create_session(profile.id)
+        store.tokens.create_access(profile.id, "client", Audience.MCP)
+        store.tokens.create_personal(profile.id, "expired", long_ago)
+        revoked_personal, _ = store.tokens.create_personal(profile.id, "revoked", None)
+        with session_scope(token_db) as session:
+            session.connection().execute(
+                update(Token).where(col(Token.kind) != TokenKind.PERSONAL).values(expires_at=long_ago)
+            )
+            session.commit()
+        self._set(token_db, revoked_personal.id, revoked_at=long_ago)
+
+        assert store.tokens.purge(ended_for=RETENTION) == 4
+
+        assert self._remaining(token_db) == set()
+
+    def test_a_token_ended_inside_the_window_is_kept(self, store: Store, profile: Profile, token_db: Engine):
+        recently = datetime.now(UTC) - RETENTION + timedelta(minutes=1)
+        expired, _ = store.tokens.create_personal(profile.id, "expired", recently)
+        revoked, _ = store.tokens.create_personal(profile.id, "revoked", None)
+        self._set(token_db, revoked.id, revoked_at=recently)
+
+        assert store.tokens.purge(ended_for=RETENTION) == 0
+
+        assert self._remaining(token_db) == {expired.id, revoked.id}
+
+    def test_a_live_token_is_kept_however_old(self, store: Store, profile: Profile, token_db: Engine):
+        forever, _ = store.tokens.create_personal(profile.id, "forever", None)
+        self._set(token_db, forever.id, created_at=datetime.now(UTC) - timedelta(days=3650))
+        store.tokens.create_session(profile.id)
+
+        assert store.tokens.purge(ended_for=RETENTION) == 0
+
+        assert len(self._remaining(token_db)) == 2
+
+    def test_a_token_revoked_recently_but_expired_long_ago_is_deleted(
+        self, store: Store, profile: Profile, token_db: Engine
+    ):
+        token, _ = store.tokens.create_personal(profile.id, "t", datetime.now(UTC) - timedelta(days=365))
+        store.tokens.revoke(token.id)
+
+        assert store.tokens.purge(ended_for=RETENTION) == 1
+
+        assert self._remaining(token_db) == set()

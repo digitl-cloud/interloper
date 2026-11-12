@@ -91,6 +91,7 @@ class Reaper(Controller):
         poll_interval: int = 15,
         oauth_client_unused_for: timedelta = timedelta(hours=24),
         oauth_client_ended_for: timedelta = timedelta(days=30),
+        credential_retention: timedelta = timedelta(days=30),
     ) -> None:
         """Initialize the reaper.
 
@@ -107,6 +108,8 @@ class Reaper(Controller):
                 client may go without obtaining a grant before it is deleted.
             oauth_client_ended_for: How long such a client is kept after its
                 last refresh token expired.
+            credential_retention: How long a token, authorization code or
+                refresh-token family is kept once it expired or was revoked.
         """
         super().__init__(poll_interval=poll_interval)
         self._store = store
@@ -120,7 +123,8 @@ class Reaper(Controller):
         self._run_timeout = run_timeout
         self._oauth_client_unused_for = oauth_client_unused_for
         self._oauth_client_ended_for = oauth_client_ended_for
-        # Usage reconciliation and OAuth client pruning ride the reaper's
+        self._credential_retention = credential_retention
+        # Usage reconciliation and OAuth housekeeping ride the reaper's
         # loop (the singleton housekeeping process) roughly hourly.
         self._reconcile_every = max(1, 3600 // max(1, poll_interval))
         self._ticks_since_reconcile = self._reconcile_every  # reconcile on first tick
@@ -136,6 +140,7 @@ class Reaper(Controller):
             self._ticks_since_reconcile = 0
             self._reconcile_usage()
             self._prune_oauth_clients()
+            self._purge_credentials()
 
     # -- Internals -------------------------------------------------------------
 
@@ -177,6 +182,21 @@ class Reaper(Controller):
             return
         if deleted:
             logger.info("Deleted %d unused OAuth client(s)", len(deleted))
+
+    def _purge_credentials(self) -> None:
+        """Delete the tokens, codes and refresh tokens that ended longer ago than the retention window.
+
+        They keep per-user records long after they stop being usable, so
+        nothing should hold them past what an incident investigation needs.
+        """
+        try:
+            deleted = self._store.tokens.purge(ended_for=self._credential_retention)
+            deleted += self._store.oauth.purge(ended_for=self._credential_retention)
+        except Exception:
+            logger.exception("Purging ended credentials failed")
+            return
+        if deleted:
+            logger.info("Purged %d ended credential(s)", deleted)
 
     def _reap(self) -> int:
         """Fail every overdue run that has not moved since it was read.

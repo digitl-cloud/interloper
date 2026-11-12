@@ -198,6 +198,12 @@ class AuthSettings(BaseSettings):
     refresh_token_expiry_days: int = Field(
         default=30, description="Days an OAuth refresh token stays valid, counted again from each rotation."
     )
+    credential_retention_days: int = Field(
+        default=30,
+        description="Days a session, personal or OAuth access token, authorization code or refresh token is kept "
+        "once it expired or was revoked, before the reaper deletes it; a refresh token goes with its whole chain, "
+        "once the chain has ended.",
+    )
     super_admin_emails: Annotated[list[str], NoDecode] = Field(
         default_factory=list,
         description="Google emails promoted to platform-wide super-admin when the API starts and on login; "
@@ -252,6 +258,15 @@ class AuthSettings(BaseSettings):
             ``refresh_token_expiry_days`` as a duration.
         """
         return timedelta(days=self.refresh_token_expiry_days)
+
+    @property
+    def credential_retention(self) -> timedelta:
+        """How long a credential is kept once it expired or was revoked.
+
+        Returns:
+            ``credential_retention_days`` as a duration.
+        """
+        return timedelta(days=self.credential_retention_days)
 
 
 class ServerSettings(BaseSettings):

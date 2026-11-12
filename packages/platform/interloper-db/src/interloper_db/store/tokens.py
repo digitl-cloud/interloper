@@ -14,7 +14,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import Engine, update
+from sqlalchemy import Engine, delete, update
 from sqlmodel import col, select
 
 from interloper_db.crypto import hash_token
@@ -246,7 +246,7 @@ class TokenStore:
             return db_token
 
     def revoke(self, token_id: UUID) -> Token:
-        """Revoke a token (soft delete — the row stays for audit).
+        """Revoke a token (soft delete: the row stays for audit until :meth:`purge` deletes it).
 
         Args:
             token_id: Token UUID.
@@ -260,3 +260,22 @@ class TokenStore:
                 db_token.revoked_at = datetime.now(UTC)
                 save(session, db_token)
             return db_token
+
+    def purge(self, *, ended_for: timedelta) -> int:
+        """Delete the tokens that expired or were revoked more than ``ended_for`` ago.
+
+        Every kind goes the same way: sessions, personal tokens and OAuth
+        access tokens. A token that never expires and was never revoked is kept.
+
+        Args:
+            ended_for: How long a token is kept once it expired or was revoked.
+
+        Returns:
+            The number of tokens deleted.
+        """
+        cutoff = datetime.now(UTC) - ended_for
+        statement = delete(Token).where((col(Token.expires_at) < cutoff) | (col(Token.revoked_at) < cutoff))
+        with session_scope(self._engine) as session:
+            deleted = session.connection().execute(statement).rowcount
+            commit(session)
+        return deleted
