@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v0.131.0 (2026-11-12)
+
+### Bug Fixes
+
+- **assets**: Criteo reports no longer look up the marketplace advertiser
+  ([`65b3860`](https://github.com/digitl-cloud/interloper/commit/65b38603538a4115450938c6064382bf26c78d44))
+
+- **db**: A manual retry executes what its stack's first attempt did
+  ([`897d604`](https://github.com/digitl-cloud/interloper/commit/897d6049056cea5a4c6c9c774b89c52ab53507bd))
+
+### Refactoring
+
+- Packages no longer carry extras that install an extension
+  ([`b32be24`](https://github.com/digitl-cloud/interloper/commit/b32be24ef90b31f52657ae1346a71f1079b755a9))
+
+- Platform packages no longer depend on extensions
+  ([`2e6366c`](https://github.com/digitl-cloud/interloper/commit/2e6366ca2c7423b0ec7292f88e4be1bdaafeb85e))
+
+### Breaking Changes
+
+- Install an extension by name next to the package it extends. `pip install
+  "interloper-core[duckdb]"` becomes `pip install interloper-core interloper-duckdb`,
+  `interloper-core[sql]` becomes `"interloper-sql[postgres]"`, and `interloper-scheduler[k8s]`
+  becomes `interloper-scheduler interloper-k8s`. The image build args CORE_EXTRAS and
+  SCHEDULER_EXTRAS are replaced by COMPONENT_PACKAGES, which takes full package names.
+
+
 ## v0.130.2 (2026-11-11)
 
 ### Bug Fixes
