@@ -1890,10 +1890,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#secrets" class="md-nav__link">
+  <a href="#encryption" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <code>secrets</code>
+        <code>encryption</code>
       </span>
     </span>
   </a>
@@ -2715,9 +2715,7 @@
 </tbody>
 </table>
 <h3 id="catalog"><code>catalog</code><a class="headerlink" href="#catalog" title="Permanent link">&para;</a></h3>
-<p><code>INTERLOPER_CATALOG</code>, <code>list[str]</code>. Import paths of the enabled components; empty enables everything installed.</p>
-<h3 id="secrets"><code>secrets</code><a class="headerlink" href="#secrets" title="Permanent link">&para;</a></h3>
-<p>Secrets used to protect sensitive data at rest. Prefix <code>INTERLOPER_</code>.</p>
+<p>Which installed components the deployment enables. Prefix <code>INTERLOPER_CATALOG_</code>.</p>
 <table>
 <thead>
 <tr>
@@ -2729,7 +2727,27 @@
 </thead>
 <tbody>
 <tr>
-<td><code>encryption_key</code></td>
+<td><code>include</code></td>
+<td><code>list[str]</code></td>
+<td><code>[]</code></td>
+<td>Import paths of the enabled components; empty enables everything installed.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="encryption"><code>encryption</code><a class="headerlink" href="#encryption" title="Permanent link">&para;</a></h3>
+<p>The key the platform encrypts and signs with. Prefix <code>INTERLOPER_ENCRYPTION_</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>key</code></td>
 <td><code>str</code></td>
 <td><code>''</code></td>
 <td>Fernet key encrypting stored resource payloads and run tokens, and signing the Google login's state; required by the platform to persist resources, to dispatch runs and for Google login.</td>

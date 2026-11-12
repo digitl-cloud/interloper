@@ -2448,7 +2448,7 @@ sources: an <code>interloper.yaml</code> in the working directory, environment v
 </span></code></pre></div>
 <p><code>AppSettings.activate(settings)</code> pins an instance for the current process (the CLI does this);
 <code>clear_active()</code> releases it.</p>
-<p>In <code>interloper.yaml</code> a section is a mapping under its key; in the environment every field is the section's prefix followed by the field name in upper case (<code>INTERLOPER_RUNNER_TYPE</code>). The framework reads <code>runner</code>, <code>otel</code>, <code>catalog</code> and <code>secrets</code>; the other sections configure the platform packages. Every section and field is listed in <a href="../../reference/settings/">Settings</a>.</p>
+<p>Every top-level key is a section. In <code>interloper.yaml</code> a section is a mapping under its key; in the environment every field is <code>INTERLOPER_&lt;SECTION&gt;_&lt;FIELD&gt;</code> in upper case (<code>INTERLOPER_RUNNER_TYPE</code>), and a list takes comma-separated values (<code>INTERLOPER_CATALOG_INCLUDE=my_package.sources.Shop,my_package.sources.Finance</code>). The framework reads <code>runner</code>, <code>otel</code>, <code>log</code>, <code>catalog</code>, <code>run</code> and <code>server</code>; the other sections configure the platform packages. Every section and field is listed in <a href="../../reference/settings/">Settings</a>.</p>
 <h2 id="yaml-example">YAML example<a class="headerlink" href="#yaml-example" title="Permanent link">&para;</a></h2>
 <div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># interloper.yaml</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nt">runner</span><span class="p">:</span>
@@ -2461,8 +2461,9 @@ sources: an <code>interloper.yaml</code> in the working directory, environment v
 </span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">  </span><span class="nt">endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:4317</span>
 </span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>
 </span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="nt">catalog</span><span class="p">:</span>
-</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_package.sources.Shop</span>
-</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_package.sources.Finance</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">  </span><span class="nt">include</span><span class="p">:</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_package.sources.Shop</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_package.sources.Finance</span>
 </span></code></pre></div>
 <p>Within a section, a field present in the YAML wins over its environment variable, and the
 environment fills the fields the YAML leaves out: <code>runner: {type: serial}</code> with

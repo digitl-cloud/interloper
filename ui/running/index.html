@@ -2549,7 +2549,7 @@ a bare <code>pip install</code> would resolve to the base image's interpreter in
 somewhere the app never looks, with no error to show for it.</p>
 <p>Anything installed this way registers itself: a package declaring components under the
 <code>interloper.components</code> entry point joins the catalog on the next start, with no change to the
-image's command. List what you want enabled under <code>catalog</code> and the deployment sees exactly
+image's command. List what you want enabled under <code>catalog.include</code> and the deployment sees exactly
 that, as described in <a href="../../guide/catalog/">Catalog</a> and
 <a href="../../extending/entry-points/">Entry points &amp; registries</a>.</p>
 <p>The same recipe works on a loaded image when you want everything it ships plus your own
@@ -2584,8 +2584,9 @@ the Nuxt dev server with hot reload instead of the built assets.</p>
 </span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">  </span><span class="nt">allowed_domains</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">example.com</span><span class="p p-Indicator">]</span>
 </span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>
 </span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="nt">catalog</span><span class="p">:</span>
-</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_package.sources.Shop</span>
-</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper_assets.facebook_ads.connector.source.FacebookAds</span>
+</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="w">  </span><span class="nt">include</span><span class="p">:</span>
+</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_package.sources.Shop</span>
+</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper_assets.facebook_ads.connector.source.FacebookAds</span>
 </span></code></pre></div>
 <p>The file is not interpolated: a field left out of a block is read from its <code>INTERLOPER_&lt;SECTION&gt;_&lt;FIELD&gt;</code>
 variable, which is where secrets go. <code>INTERLOPER_ENCRYPTION_KEY</code> is required: resource configs are

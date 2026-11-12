@@ -2498,9 +2498,10 @@ it configured" without instantiating or executing anything, and it is what <code
 <p><strong>Discovery</strong> reads the <code>interloper.components</code> entry-point group of every installed package.
 Each entry names a component class, or a module whose public attributes are scanned for
 component classes. The scan is cached for the process.</p>
-<p><strong>Settings</strong> narrow the universe: when <code>catalog</code> in <code>interloper.yaml</code> (or
-<code>INTERLOPER_CATALOG</code>) lists import paths, the catalog holds those components, everything they
-depend on, and the framework's own components. An empty list means everything installed.</p>
+<p><strong>Settings</strong> narrow the universe: when <code>catalog.include</code> in <code>interloper.yaml</code> (or
+<code>INTERLOPER_CATALOG_INCLUDE</code>, comma-separated) lists import paths, the catalog holds those
+components, everything they depend on, and the framework's own components. An empty list means
+everything installed.</p>
 <p><strong>Dependencies come along.</strong> Enabling a source pulls in the target class of every relation it
 declares and, through its assets, theirs, transitively. A catalog therefore never carries a
 relation whose target class it cannot resolve. Framework components (<code>cron_job</code>, <code>trigger_hook</code>,
