@@ -36,6 +36,7 @@ from interloper_db.models import (
     Token,
     Usage,
     UserOrganisation,
+    table_of,
 )
 from interloper_db.store import Store
 from interloper_toolkit import ToolkitContext
@@ -90,7 +91,7 @@ def agent_db() -> Iterator[Engine]:
         Usage,
     )
     for model in (*models, Conversation):
-        model.__table__.create(eng)  # ty: ignore[missing-attribute]
+        table_of(model).create(eng)
     try:
         yield eng
     finally:

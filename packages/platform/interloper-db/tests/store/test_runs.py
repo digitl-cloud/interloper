@@ -34,6 +34,7 @@ from interloper_db.models import (
     Run,
     RunStatus,
     Usage,
+    table_of,
 )
 from interloper_db.settings import QuotaSettings
 from interloper_db.store import EventQuery, PageQuery, RunQuery, Store
@@ -120,7 +121,7 @@ def store() -> Iterator[Store]:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
     for model in (Backfill, Component, ComponentRelation, Run, Event, Execution, Quota, Usage):
-        model.__table__.create(engine)  # ty: ignore[missing-attribute]
+        table_of(model).create(engine)
     try:
         yield Store(catalog=il.Catalog.from_assets([DemoSource, EntitySource]), engine=engine)
     finally:

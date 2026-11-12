@@ -16,7 +16,17 @@ import pytest
 from interloper.settings import ServerSettings
 from interloper_db import RunStatus, Store
 from interloper_db import engine as engine_module
-from interloper_db.models import Backfill, Component, ComponentRelation, Execution, Organisation, Quota, Run, Usage
+from interloper_db.models import (
+    Backfill,
+    Component,
+    ComponentRelation,
+    Execution,
+    Organisation,
+    Quota,
+    Run,
+    Usage,
+    table_of,
+)
 from interloper_db.models import Event as EventRow
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
@@ -71,7 +81,7 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
     for model in (Organisation, Component, ComponentRelation, Backfill, Run, EventRow, Execution, Quota, Usage):
-        model.__table__.create(eng)  # ty: ignore[missing-attribute]
+        table_of(model).create(eng)
 
     store = Store(catalog=il.Catalog.from_assets([DemoSource]))
 

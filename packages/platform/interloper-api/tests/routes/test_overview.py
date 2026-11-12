@@ -32,6 +32,7 @@ from interloper_db.models import (
     Run,
     Usage,
     UserOrganisation,
+    table_of,
 )
 from interloper_db.store import Store
 from sqlalchemy import Engine, event
@@ -146,7 +147,7 @@ def engine() -> Iterator[Engine]:
 
     models = (Profile, Organisation, UserOrganisation, Component, ComponentRelation, Backfill, Run, Event, Quota, Usage)
     for model in (*models, Execution):
-        model.__table__.create(engine)  # ty: ignore[missing-attribute]
+        table_of(model).create(engine)
     try:
         yield engine
     finally:

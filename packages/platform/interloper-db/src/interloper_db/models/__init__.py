@@ -20,6 +20,7 @@ Key design decisions:
 """
 
 from interloper_db.models.auth import Invitation, Organisation, Profile, Role, UserOrganisation
+from interloper_db.models.columns import table_of
 from interloper_db.models.components import Component, ComponentRelation
 from interloper_db.models.conversations import Conversation
 from interloper_db.models.oauth import AuthorizationCode, OAuthClient, RefreshToken
@@ -65,4 +66,5 @@ __all__ = [
     "TokenKind",
     "Usage",
     "UserOrganisation",
+    "table_of",
 ]

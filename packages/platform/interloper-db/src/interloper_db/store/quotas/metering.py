@@ -19,7 +19,7 @@ from uuid import UUID
 from interloper.utils import month_start
 from sqlmodel import Session
 
-from interloper_db.models import Run, Usage
+from interloper_db.models import Run, Usage, table_of
 from interloper_db.session import database_now, dialect_insert
 
 METRIC_SUCCESSFUL_RUNS = "successful_runs"
@@ -108,7 +108,7 @@ class UsageLedger:
         """
         if metric not in METRICS:
             raise ValueError(f"Unknown usage metric: {metric}")
-        table = Usage.__table__  # ty: ignore[missing-attribute]
+        table = table_of(Usage)
         statement = (
             dialect_insert(self._session)(table)
             .values(org_id=org_id, metric=metric, period_start=period_start, used=used, reserved=reserved)
@@ -137,7 +137,7 @@ class UsageLedger:
         if limit <= 0:
             return None
         now = self.now()
-        table = Usage.__table__  # ty: ignore[missing-attribute]
+        table = table_of(Usage)
         statement = (
             dialect_insert(self._session)(table)
             .values(org_id=org_id, metric=metric, period_start=month_start(now), used=0, reserved=1)

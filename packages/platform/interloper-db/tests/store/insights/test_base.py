@@ -34,6 +34,7 @@ from interloper_db.models import (
     Token,
     Usage,
     UserOrganisation,
+    table_of,
 )
 from interloper_db.store import PageQuery, Store
 from interloper_db.store.insights import ActivityEntry
@@ -80,7 +81,7 @@ def store() -> Iterator[Store]:
 
     tenant = (Organisation, Profile, UserOrganisation, Invitation, Token)
     for model in (*tenant, Component, ComponentRelation, Backfill, Run, Event, Execution, Quota, Usage):
-        model.__table__.create(engine)  # ty: ignore[missing-attribute]
+        table_of(model).create(engine)
     try:
         yield Store(catalog=il.Catalog.from_assets([DemoSource, SnapshotSource]))
     finally:

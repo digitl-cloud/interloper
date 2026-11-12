@@ -14,7 +14,7 @@ from sqlmodel import Session
 
 from interloper_db import NotFoundError
 from interloper_db import engine as engine_module
-from interloper_db.models import Component, Event, Execution, Run
+from interloper_db.models import Component, Event, Execution, Run, table_of
 from interloper_db.store import EventQuery, Page, Store
 
 _RUN_ID = UUID("99c018d6-98fe-4de5-a867-1f1a9a545a38")
@@ -38,7 +38,7 @@ def store() -> Iterator[Store]:
     # Only what these tests exercise; creating the full schema would pull in
     # Postgres-only column types (e.g. ARRAY) that SQLite can't render.
     for model in (Component, Event, Execution):
-        model.__table__.create(engine)  # ty: ignore[missing-attribute]
+        table_of(model).create(engine)
     try:
         yield Store(catalog=il.Catalog(components={}), engine=engine)
     finally:

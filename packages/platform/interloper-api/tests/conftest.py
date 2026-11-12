@@ -25,6 +25,7 @@ from interloper_db.models import (
     RefreshToken,
     Token,
     UserOrganisation,
+    table_of,
 )
 from interloper_db.settings import EncryptionSettings, PostgresSettings, QuotaSettings
 from sqlalchemy import event
@@ -209,7 +210,7 @@ def oauth_store() -> Iterator[Store]:
         RefreshToken,
         Conversation,
     ):
-        model.__table__.create(engine)  # ty: ignore[missing-attribute]
+        table_of(model).create(engine)
     try:
         yield Store(catalog=il.Catalog(components={}))
     finally:

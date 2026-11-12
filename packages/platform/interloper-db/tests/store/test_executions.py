@@ -17,7 +17,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session
 
 from interloper_db import engine as engine_module
-from interloper_db.models import Component, Execution, Run
+from interloper_db.models import Component, Execution, Run, table_of
 from interloper_db.store import ExecutionQuery, Store
 
 _ORG_ID = uuid4()
@@ -36,7 +36,7 @@ def store() -> Iterator[Store]:
         poolclass=StaticPool,
     )
     for model in (Component, Run, Execution):
-        model.__table__.create(engine)  # ty: ignore[missing-attribute]
+        table_of(model).create(engine)
     try:
         yield Store(catalog=il.Catalog(components={}), engine=engine)
     finally:

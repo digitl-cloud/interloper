@@ -20,7 +20,7 @@ from interloper.events import EventRecorder
 from interloper_db import Store
 from interloper_db import engine as engine_module
 from interloper_db.crypto import make_cipher
-from interloper_db.models import Backfill, Component, ComponentRelation, Event, Execution, Quota, Run, Usage
+from interloper_db.models import Backfill, Component, ComponentRelation, Event, Execution, Quota, Run, Usage, table_of
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
@@ -68,7 +68,7 @@ def store() -> Iterator[Store]:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
     for model in (Component, ComponentRelation, Run, Backfill, Event, Execution, Quota, Usage):
-        model.__table__.create(eng)  # ty: ignore[missing-attribute]
+        table_of(model).create(eng)
     try:
         encrypt, decrypt = make_cipher("test-key")
         yield Store(catalog=_CATALOG, encrypt=encrypt, decrypt=decrypt)

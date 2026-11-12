@@ -24,6 +24,7 @@ from interloper_db.models import (
     Quota,
     Run,
     Usage,
+    table_of,
 )
 from interloper_db.store import Store
 from sqlalchemy import Engine, event
@@ -126,7 +127,7 @@ def toolkit_db() -> Iterator[Engine]:
     # Execution maps a Postgres view; its table definition doubles as the view's
     # schema, so SQLite gets it as a plain table the tests write rows into.
     for model in (Organisation, Component, ComponentRelation, Backfill, Run, Event, Execution, Quota, Usage):
-        model.__table__.create(eng)  # ty: ignore[missing-attribute]
+        table_of(model).create(eng)
     try:
         yield eng
     finally:
