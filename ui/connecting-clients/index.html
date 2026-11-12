@@ -2527,6 +2527,29 @@ refresh token that was already used is treated as theft: the whole chain it belo
 within 24 hours of registering, or when its last refresh token expired more than 30 days ago,
 and it holds no live refresh token and no code still to exchange. Its conversations go with it.
 The scheduler's reaper checks hourly. Clients an operator registered are never deleted this way.</p>
+<p>Credentials that can no longer be used are kept for a while, so an incident can still be traced,
+and then deleted by the same hourly pass:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>auth.credential_retention_days</code></td>
+<td><code>30</code></td>
+<td>Days a credential is kept once it expired or was revoked.</td>
+</tr>
+</tbody>
+</table>
+<p>It covers login sessions, personal access tokens, OAuth access tokens and authorization codes,
+each counted from its expiry or revocation. A refresh token is deleted with its whole chain, and
+only once the chain has ended: its newest token expired, or the chain was revoked. Until then the
+used tokens of a chain stay, so presenting one of them still revokes the chain. A personal access
+token that never expires and was not revoked is never deleted.</p>
 <h2 id="personal-access-tokens">Personal access tokens<a class="headerlink" href="#personal-access-tokens" title="Permanent link">&para;</a></h2>
 <p>A client that cannot run a browser flow (a script, a CI job, an older MCP client) takes a
 personal access token instead. Create one under <strong>Settings</strong>, <strong>Authentication</strong>, <strong>Personal

@@ -2869,6 +2869,12 @@
 <td>Days an OAuth refresh token stays valid, counted again from each rotation.</td>
 </tr>
 <tr>
+<td><code>credential_retention_days</code></td>
+<td><code>int</code></td>
+<td><code>30</code></td>
+<td>Days a session, personal or OAuth access token, authorization code or refresh token is kept once it expired or was revoked, before the reaper deletes it; a refresh token goes with its whole chain, once the chain has ended.</td>
+</tr>
+<tr>
 <td><code>super_admin_emails</code></td>
 <td><code>list[str]</code></td>
 <td><code>[]</code></td>
