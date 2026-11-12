@@ -19,6 +19,7 @@ from interloper.errors import ConfigError
 from interloper_db import RunStatus, Store
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, ComponentRelation, Event, Execution, Quota, Run, Usage
+from interloper_db.settings import QuotaSettings
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
@@ -269,11 +270,10 @@ class TestConfig:
 
 class TestQuotas:
     def test_exhausted_org_skips_run_but_advances_schedule(self, store: Store) -> None:
-        from types import SimpleNamespace
 
         from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, UsageLedger
 
-        store._quota_defaults = SimpleNamespace(max_successful_runs_per_month=1)
+        store._quota_defaults = QuotaSettings(max_successful_runs_per_month=1)
         with Session(store.engine) as session:
             ledger = UsageLedger(session)
             ledger.increment(_ORG, METRIC_SUCCESSFUL_RUNS, ledger.current_period(), used=1)
@@ -296,7 +296,6 @@ class TestQuotas:
         assert skipped.data == {"reason": "quota", "quota": "max_successful_runs_per_month", "limit": 1, "used": 1}
 
     def test_a_lookback_over_the_partition_limit_skips_the_firing(self, store: Store) -> None:
-        from types import SimpleNamespace
 
         store = _catalog_store()
         job_id = _job_targeting(
@@ -305,7 +304,7 @@ class TestQuotas:
             config={"cron": "0 * * * *", "enabled": True, "lookback": 3},
         )
         # Lowered after the job was saved: only the fire-time gate sees it.
-        store._quota_defaults = SimpleNamespace(max_backfill_partitions=2)
+        store._quota_defaults = QuotaSettings(max_backfill_partitions=2)
         before = _state(store, job_id)["next_run_at"]
         CronController(store=store)._tick()
 
@@ -319,12 +318,11 @@ class TestQuotas:
         assert "spans 3 partitions" in (skipped.message or "")
 
     def test_a_skipped_job_does_not_block_the_rest_of_the_batch(self, store: Store) -> None:
-        from types import SimpleNamespace
 
         store = _catalog_store()
         _job_targeting(store, "daily_source", config={"cron": "0 * * * *", "enabled": True, "lookback": 3})
         fits = _job_targeting(store, "hourly_source", config={"cron": "0 * * * *", "enabled": True, "lookback": 2})
-        store._quota_defaults = SimpleNamespace(max_backfill_partitions=2)
+        store._quota_defaults = QuotaSettings(max_backfill_partitions=2)
         CronController(store=store)._tick()
 
         with Session(store.engine) as session:

@@ -21,6 +21,7 @@ from sqlmodel import Session, col, select
 from interloper_db import BackfillStatus, ConflictError, NotFoundError, RunStatus
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, Event, Execution, Quota, Run, Usage
+from interloper_db.settings import QuotaSettings
 from interloper_db.store import BackfillQuery, Store
 
 _ORG_ID = uuid4()
@@ -181,11 +182,10 @@ class TestTargetOperations:
         assert all(run.billable is False for run in runs)
 
     def test_non_billable_backfill_skips_the_run_quota(self, store: Store):
-        from types import SimpleNamespace
 
         from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, UsageLedger
 
-        store._quota_defaults = SimpleNamespace(max_successful_runs_per_month=1)
+        store._quota_defaults = QuotaSettings(max_successful_runs_per_month=1)
         with Session(store.engine) as session:
             ledger = UsageLedger(session)
             ledger.increment(_ORG_ID, METRIC_SUCCESSFUL_RUNS, ledger.current_period(), used=1)

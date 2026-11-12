@@ -11,6 +11,7 @@ from uuid import uuid4
 import httpx2
 import interloper as il
 import pytest
+import sqlalchemy
 from interloper.settings import RunnerSettings, ServerSettings, TelemetrySettings
 from interloper_agent.settings import AgentSettings
 from interloper_db import Store
@@ -30,6 +31,8 @@ from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 
 from interloper_api.authorization import ClientMetadataFetcher
+from interloper_api.dependencies import State
+from interloper_api.routes.admin import AdminConfigResponse
 from interloper_api.settings import ApiSettings, AuthSettings, SmtpSettings
 
 PUBLIC_ADDRESS = "160.79.104.10"
@@ -159,6 +162,27 @@ def fake_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ApiSetting
     for section in sections:
         type(section).activate(section)
     return ApiSettings.get()
+
+
+@pytest.fixture
+def app_state(fake_settings: ApiSettings) -> State:
+    """The state ``create_app`` installs, over a store whose database is never connected to.
+
+    Optional slots are empty; ``dataclasses.replace`` fills one.
+
+    Args:
+        fake_settings: The settings the state carries.
+
+    Returns:
+        The state.
+    """
+    catalog = il.Catalog(components={})
+    return State(
+        store=Store(catalog, engine=sqlalchemy.create_engine("sqlite://")),
+        catalog=catalog,
+        settings=fake_settings,
+        admin_config=AdminConfigResponse.from_declared(features={}, catalog=catalog),
+    )
 
 
 @pytest.fixture

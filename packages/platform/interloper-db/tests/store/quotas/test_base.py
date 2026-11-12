@@ -5,7 +5,6 @@ from __future__ import annotations
 import datetime as dt
 from collections.abc import Callable
 from datetime import datetime
-from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
@@ -15,6 +14,7 @@ from sqlmodel import Session
 
 from interloper_db import QuotaExceededError
 from interloper_db.models import Component, Quota, Run
+from interloper_db.settings import QuotaSettings
 from interloper_db.store import Store
 from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, UsageLedger
 from interloper_db.store.quotas.definitions import QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH
@@ -23,8 +23,8 @@ UsageRows = Callable[[], dict[dt.date, tuple[int, int]]]
 RunFactory = Callable[..., Run]
 
 
-def _defaults(**limits: int | None) -> SimpleNamespace:
-    return SimpleNamespace(**limits)
+def _defaults(**limits: int | None) -> QuotaSettings:
+    return QuotaSettings.model_validate(limits)
 
 
 def _job(store: Store, org_id: UUID) -> UUID:

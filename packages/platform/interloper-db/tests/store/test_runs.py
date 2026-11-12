@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import datetime as dt
 from collections.abc import Iterator
-from types import SimpleNamespace
 from typing import Any, ClassVar
 from uuid import UUID, uuid4
 
@@ -36,6 +35,7 @@ from interloper_db.models import (
     RunStatus,
     Usage,
 )
+from interloper_db.settings import QuotaSettings
 from interloper_db.store import EventQuery, PageQuery, RunQuery, Store
 from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, UsageLedger
 from interloper_db.store.runs import partition_key_range, partition_keys_overlapping
@@ -1153,7 +1153,7 @@ class TestRunFilters:
 
 def _exhaust_quota(store: Store, limit: int = 1) -> None:
     """Give the org a run quota and a ledger already at it."""
-    store._quota_defaults = SimpleNamespace(max_successful_runs_per_month=limit)
+    store._quota_defaults = QuotaSettings(max_successful_runs_per_month=limit)
     with Session(store.engine) as session:
         ledger = UsageLedger(session)
         ledger.increment(_ORG_ID, METRIC_SUCCESSFUL_RUNS, ledger.current_period(), used=limit)
@@ -1417,7 +1417,7 @@ class TestClaimNext:
         assert _drain(store) == [ready.id]
 
     def test_dispatch_reserves_a_quota_slot(self, store: Store) -> None:
-        store._quota_defaults = SimpleNamespace(max_successful_runs_per_month=5)
+        store._quota_defaults = QuotaSettings(max_successful_runs_per_month=5)
         run = store.runs.create(_ORG_ID)
 
         assert _drain(store) == [run.id]
@@ -1630,7 +1630,7 @@ class TestCancel:
         assert canceled.error is None
 
     def test_cancel_releases_the_quota_reservation(self, store: Store) -> None:
-        store._quota_defaults = SimpleNamespace(max_successful_runs_per_month=5)
+        store._quota_defaults = QuotaSettings(max_successful_runs_per_month=5)
         run = store.runs.create(_ORG_ID)
         _drain(store)
 

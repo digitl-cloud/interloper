@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 from interloper_db import Audience
 
 from interloper_api.app import ORG_PREFIX, install_error_handlers
-from interloper_api.dependencies import State
+from interloper_api.dependencies import get_store
 from interloper_api.routes import websocket as websocket_module
 from interloper_api.routes.websocket import ConnectionManager
 
@@ -385,7 +385,7 @@ class FakeStore:
 
 @pytest.fixture
 def endpoint_client(monkeypatch: pytest.MonkeyPatch) -> Any:
-    """Mount the websocket route under the organisation prefix on an app whose state holds a fake store.
+    """Mount the websocket route under the organisation prefix on an app resolving a fake store.
 
     Args:
         monkeypatch: Fixture the manager swap below rides on.
@@ -396,7 +396,7 @@ def endpoint_client(monkeypatch: pytest.MonkeyPatch) -> Any:
 
     def build(store: FakeStore) -> TestClient:
         app = FastAPI()
-        app.state.interloper = State(store=store)  # ty: ignore[invalid-argument-type]
+        app.dependency_overrides[get_store] = lambda: store
         install_error_handlers(app)
         app.include_router(websocket_module.org_router, prefix=ORG_PREFIX)
         return TestClient(app)

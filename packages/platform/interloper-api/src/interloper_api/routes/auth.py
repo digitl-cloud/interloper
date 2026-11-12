@@ -15,10 +15,10 @@ from starlette.concurrency import run_in_threadpool
 
 from interloper_api.dependencies import (
     CurrentUserDep,
+    FeaturesDep,
     GoogleLoginDep,
     SessionUserDep,
     SettingsDep,
-    StateDep,
     StoreDep,
     get_org_scope,
 )
@@ -250,19 +250,19 @@ def logout(user: SessionUserDep, store: StoreDep) -> Response:
 
 
 @router.get("/me")
-def get_me(user: CurrentUserDep, store: StoreDep, state: StateDep) -> AuthUserResponse:
+def get_me(user: CurrentUserDep, store: StoreDep, features: FeaturesDep) -> AuthUserResponse:
     """Return the current user and the organisations they belong to.
 
     Args:
         user: The authenticated caller.
         store: The database store.
-        state: The application's state, read for the enabled features.
+        features: Optional-feature availability, reported back.
 
     Returns:
         The caller's profile, their memberships with the role in each, the
         organisation they last used, and the enabled feature flags.
     """
-    return AuthUserResponse.from_profile(user, store, state.features)
+    return AuthUserResponse.from_profile(user, store, features)
 
 
 # -- Profile -------------------------------------------------------------------
@@ -280,14 +280,14 @@ class UpdateMeRequest(BaseModel):
 
 
 @router.patch("/me")
-def update_me(body: UpdateMeRequest, user: CurrentUserDep, store: StoreDep, state: StateDep) -> AuthUserResponse:
+def update_me(body: UpdateMeRequest, user: CurrentUserDep, store: StoreDep, features: FeaturesDep) -> AuthUserResponse:
     """Update the current user's profile (display name, timezone).
 
     Args:
         body: The fields to change; omitted fields stay untouched.
         user: The authenticated caller.
         store: The database store.
-        state: The application's state, read for the enabled features.
+        features: Optional-feature availability, reported back.
 
     Returns:
         The caller as :func:`get_me` describes them, after the update.
@@ -301,7 +301,7 @@ def update_me(body: UpdateMeRequest, user: CurrentUserDep, store: StoreDep, stat
         except (KeyError, ValueError):
             raise HTTPException(status_code=422, detail=f"Unknown timezone {body.timezone!r}")
     profile = store.profiles.update(user.id, name=body.name, timezone=body.timezone)
-    return AuthUserResponse.from_profile(profile, store, state.features)
+    return AuthUserResponse.from_profile(profile, store, features)
 
 
 class LastOrganisationRequest(BaseModel):

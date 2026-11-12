@@ -13,6 +13,7 @@ from interloper.telemetry.propagation import child_process_env
 
 if TYPE_CHECKING:
     from interloper.settings import RunnerSettings, ServerSettings
+    from interloper_db import Store
     from interloper_db.models import Run
     from interloper_scheduler.settings import LauncherSettings, ReaperSettings
 from interloper_scheduler.launcher import Launcher
@@ -39,7 +40,7 @@ class KubernetesLauncher(Launcher):
         runner: RunnerSettings,
         reaper: ReaperSettings,
         catalog: Catalog | None,
-        store: Any | None = None,
+        store: Store | None = None,
     ) -> KubernetesLauncher:
         """Construct from scheduler settings (registry construction hook).
 

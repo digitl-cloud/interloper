@@ -8,7 +8,7 @@ from its own connection rather than from an ambient global.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import Depends, HTTPException
 from interloper.catalog import Catalog
@@ -19,6 +19,9 @@ from interloper_api.authorization import AuthorizationServer
 from interloper_api.login import GoogleLogin
 from interloper_api.settings import ApiSettings
 
+if TYPE_CHECKING:
+    from interloper_api.routes.admin import AdminConfigResponse
+
 
 @dataclass(frozen=True)
 class State:
@@ -27,24 +30,23 @@ class State:
     Attributes:
         store: The persistence layer every route reads and writes through.
         catalog: The component definitions the deployment ships.
-        settings: Every section the API reads; ``None`` on an app built without
-            them, whose routes then cannot read a configuration.
-        agent: The built assistant, when the agent routes are mounted.
-        features: Optional-feature availability, by feature name.
+        settings: Every section the API reads.
         admin_config: The secrets-redacted configuration snapshot the
             super-admin surface shows.
+        agent: The built assistant, when the agent routes are mounted.
+        features: Optional-feature availability, by feature name.
         authorization_server: The OAuth authorization server, or ``None`` on
             a deployment that cannot run one.
         google_login: The Google login, or ``None`` on a deployment that
             cannot run one.
     """
 
-    store: Store | None = None
-    catalog: Catalog | None = None
-    settings: ApiSettings | None = None
+    store: Store
+    catalog: Catalog
+    settings: ApiSettings
+    admin_config: AdminConfigResponse
     agent: Any | None = None
     features: dict[str, bool] = field(default_factory=dict)
-    admin_config: Any | None = None
     authorization_server: AuthorizationServer | None = None
     google_login: GoogleLogin | None = None
 
@@ -56,10 +58,9 @@ def get_state(connection: HTTPConnection) -> State:
         connection: The request or websocket being served.
 
     Returns:
-        The application's state; an app that installed none (a bare router
-        under test) holds every slot empty.
+        The state ``create_app`` installed on the application.
     """
-    return getattr(connection.app.state, "interloper", None) or State()
+    return connection.app.state.interloper
 
 
 StateDep = Annotated[State, Depends(get_state)]
@@ -73,12 +74,7 @@ def get_store(state: StateDep) -> Store:
 
     Returns:
         The store.
-
-    Raises:
-        RuntimeError: If the app was built without one.
     """
-    if state.store is None:
-        raise RuntimeError("Store not initialized: create_app() was given none")
     return state.store
 
 
@@ -90,12 +86,7 @@ def get_catalog(state: StateDep) -> Catalog:
 
     Returns:
         The catalog.
-
-    Raises:
-        RuntimeError: If the app was built without one.
     """
-    if state.catalog is None:
-        raise RuntimeError("Catalog not initialized: create_app() was given none")
     return state.catalog
 
 
@@ -107,13 +98,20 @@ def get_settings(state: StateDep) -> ApiSettings:
 
     Returns:
         The settings.
-
-    Raises:
-        RuntimeError: If the app was built without them.
     """
-    if state.settings is None:
-        raise RuntimeError("Settings not initialized: create_app() was given none")
     return state.settings
+
+
+def get_features(state: StateDep) -> dict[str, bool]:
+    """Optional-feature availability, by feature name.
+
+    Args:
+        state: The application's state.
+
+    Returns:
+        Whether each optional feature is available.
+    """
+    return state.features
 
 
 def get_agent(state: StateDep) -> Any:
@@ -171,6 +169,7 @@ def get_google_login(state: StateDep) -> GoogleLogin:
 StoreDep = Annotated[Store, Depends(get_store)]
 CatalogDep = Annotated[Catalog, Depends(get_catalog)]
 SettingsDep = Annotated[ApiSettings, Depends(get_settings)]
+FeaturesDep = Annotated[dict[str, bool], Depends(get_features)]
 AgentDep = Annotated[Any, Depends(get_agent)]
 AuthorizationServerDep = Annotated[AuthorizationServer, Depends(get_authorization_server)]
 GoogleLoginDep = Annotated[GoogleLogin, Depends(get_google_login)]
