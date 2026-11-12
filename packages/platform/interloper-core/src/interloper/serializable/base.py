@@ -534,9 +534,13 @@ class Serializable(BaseModel):
 
     ``Serializable`` declares no settings of its own, so a subclass may give
     a field any name: a schema's columns are its vendor's vocabulary.
+
+    ``extra="forbid"`` holds ``model_validate`` to the rule the constructor
+    enforces, and tells a type checker the constructor takes the declared
+    fields only.
     """
 
-    model_config = ConfigDict(arbitrary_types_allowed=True, ignored_types=(IgnoredDescriptor,))
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", ignored_types=(IgnoredDescriptor,))
 
     # -- Construction ----------------------------------------------------------
     def __init_subclass__(cls, **kwargs: Any) -> None:
@@ -554,8 +558,8 @@ class Serializable(BaseModel):
     def __init__(self, /, **data: Any) -> None:
         """Validate kwargs strictly against the model's fields.
 
-        Unknown kwargs are a loud error rather than pydantic's silent
-        ``extra="ignore"`` drop: a misnamed field would otherwise vanish.
+        An unknown kwarg is a ``TypeError``, as in any Python call, rather
+        than the ``ValidationError`` Pydantic would raise for it.
 
         Args:
             **data: Field values, keyed by field name. Every key must name a

@@ -174,7 +174,7 @@ class TestFunctionForm:
             return [rows]
 
         assert set(configured.model_fields) >= {"account_id", "region"}
-        instance = configured(account_id="acc-2")
+        instance = configured(account_id="acc-2")  # ty: ignore[unknown-argument]
         assert instance.account_id == "acc-2"
         assert instance.region == "eu"
 

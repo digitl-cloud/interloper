@@ -583,7 +583,7 @@ class TestBind:
 
     def test_unknown_kwarg_is_a_type_error(self):
         with pytest.raises(TypeError, match="unexpected"):
-            Widget(connection=Conn(api_secret="s"), nope=1)
+            Widget(connection=Conn(api_secret="s"), nope=1)  # ty: ignore[unknown-argument]
 
 
 class TestSetAttrRelations:
@@ -995,7 +995,7 @@ class TestStrictInitKwargs:
 
     def test_unknown_kwarg_raises(self):
         with pytest.raises(TypeError, match=r"unexpected keyword argument.*nope"):
-            FakeComponent(nope=1)  # type: ignore[call-arg]
+            FakeComponent(nope=1)  # ty: ignore[unknown-argument]
 
 
 class TestPublicApi:

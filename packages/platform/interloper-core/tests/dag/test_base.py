@@ -634,11 +634,15 @@ class TestSnapshotEdges:
 
     def test_a_snapshot_of_the_same_granularity_reads_it(self):
         snapshot = FakeSnapshot()
-        DAG(snapshot, self._reader(il.SnapshotPartitionConfig(column="date"))(entities=snapshot))
+        reader = self._reader(il.SnapshotPartitionConfig(column="date"))()
+        reader.bind("entities", snapshot)
+        DAG(snapshot, reader)
 
     def test_a_view_over_a_snapshot_is_allowed(self):
         snapshot = FakeSnapshot()
-        DAG(snapshot, self._reader(None, reads=False)(entities=snapshot))
+        reader = self._reader(None, reads=False)()
+        reader.bind("entities", snapshot)
+        DAG(snapshot, reader)
 
     @pytest.mark.parametrize(
         "partitioning",
@@ -649,8 +653,10 @@ class TestSnapshotEdges:
     )
     def test_an_asset_partitioned_another_way_cannot_read_it(self, partitioning: PartitionConfig):
         snapshot = FakeSnapshot()
+        reader = self._reader(partitioning)()
+        reader.bind("entities", snapshot)
         with pytest.raises(DAGError, match="accept different windows"):
-            DAG(snapshot, self._reader(partitioning)(entities=snapshot))
+            DAG(snapshot, reader)
 
     def test_a_run_of_any_window_is_valid_for_a_snapshot(self):
         DAG(FakeSnapshot()).check_window(il.TimePartition(dt.date(2026, 1, 1), il.TimeGranularity.MONTH).window)
@@ -1174,9 +1180,11 @@ def test_the_incompatible_partitioning_message_names_both_partitionings():
         return []
 
     upstream = daily(id="daily", destinations=[il.MemoryDestination()])
+    downstream = monthly(id="monthly", destinations=[il.MemoryDestination()])
+    downstream.bind("daily", upstream)
 
     with pytest.raises(DAGError, match=r"'daily' \(partitioned by day\).*'monthly' \(partitioned by month\)"):
-        il.DAG(upstream, monthly(id="monthly", destinations=[il.MemoryDestination()], daily=upstream))
+        il.DAG(upstream, downstream)
 
 
 class TestFromPaths:

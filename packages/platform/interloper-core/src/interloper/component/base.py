@@ -215,10 +215,10 @@ class Component(Serializable):
         through it, reconstruction binds references once the document is whole), so
         `validate_relations` is called at those boundaries, not here.
 
-        Unknown kwargs are a loud error rather than pydantic's silent
-        ``extra="ignore"`` drop: a misnamed field would otherwise vanish, and a
-        stale persisted config key surfaces as drift at load time, consistent
-        with the fail-closed drift checks.
+        An unknown kwarg is a ``TypeError``, as in any Python call: a
+        misnamed field never vanishes, and a stale persisted config key
+        surfaces as drift at load time, consistent with the fail-closed drift
+        checks.
 
         Args:
             **data: Field values and relation targets, keyed by field or

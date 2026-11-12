@@ -60,7 +60,9 @@ def _script() -> Any:
 
 def _dag() -> il.DAG:
     upstream = First(id="first", destinations=[il.MemoryDestination()])
-    return il.DAG(upstream, Second(id="second", destinations=[il.MemoryDestination()], first=upstream))
+    downstream = Second(id="second", destinations=[il.MemoryDestination()])
+    downstream.bind("first", upstream)
+    return il.DAG(upstream, downstream)
 
 
 class TestWalk:
@@ -415,7 +417,9 @@ class TestQueue:
 
     async def test_announces_ready_and_queued_operations_only(self) -> None:
         upstream = First(id="first", destinations=[il.MemoryDestination()], enabled=False)
-        dag = il.DAG(upstream, Second(id="second", destinations=[il.MemoryDestination()], first=upstream))
+        downstream = Second(id="second", destinations=[il.MemoryDestination()])
+        downstream.bind("first", upstream)
+        dag = il.DAG(upstream, downstream)
         events: list[Event] = []
 
         await ScriptedRunner(on_event=events.append).run(dag)
