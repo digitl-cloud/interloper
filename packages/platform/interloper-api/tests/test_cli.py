@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Iterator
+from datetime import timedelta
 from typing import Any
 
 import pytest
-from interloper.settings import AppSettings
+from interloper.settings import AppSettings, AuthSettings
 from interloper_db import Store
 
 from interloper_api import cli
@@ -51,7 +52,12 @@ def wiring(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     Returns:
         What the command handed each collaborator.
     """
-    recorded: dict[str, Any] = {}
+    store = object()
+    recorded: dict[str, Any] = {"store": store}
+
+    def store_from_settings(cls: Any, catalog: object = None, **lifetimes: timedelta) -> object:
+        recorded["lifetimes"] = lifetimes
+        return store
 
     def from_settings(cls: Any, settings: AppSettings, **kwargs: Any) -> object:
         recorded["server"] = (settings, kwargs)
@@ -59,7 +65,7 @@ def wiring(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
     monkeypatch.setattr(cli, "bootstrap", lambda dsn, **kwargs: recorded.setdefault("bootstrap", kwargs))
     monkeypatch.setattr(cli.Catalog, "from_settings", classmethod(lambda cls: cli.Catalog()))
-    monkeypatch.setattr(cli.Store, "from_settings", classmethod(lambda cls, catalog=None: object()))
+    monkeypatch.setattr(cli.Store, "from_settings", classmethod(store_from_settings))
     monkeypatch.setattr(cli.ApiServer, "from_settings", classmethod(from_settings))
     monkeypatch.setattr(cli.Supervisor, "run", lambda self: recorded.setdefault("ran", list(self.services)))
     return recorded
@@ -88,6 +94,22 @@ def test_no_create_tables_reaches_the_bootstrap(wiring: dict[str, Any]) -> None:
     cli._cmd_api(_parse("api", "--no-create-tables"))
 
     assert wiring["bootstrap"]["create_tables"] is False
+
+
+def test_the_api_serves_through_a_store_issuing_tokens_for_the_configured_lifetimes(wiring: dict[str, Any]) -> None:
+    """The store the API serves through issues sessions and OAuth tokens for the ``auth`` lifetimes."""
+    auth = AuthSettings(session_expiry_days=2, access_token_expiry_minutes=15, refresh_token_expiry_days=7)
+    AppSettings.activate(AppSettings(auth=auth))
+
+    cli._cmd_api(_parse("api"))
+
+    assert wiring["lifetimes"] == {
+        "session_expiry": timedelta(days=2),
+        "access_token_expiry": timedelta(minutes=15),
+        "refresh_token_expiry": timedelta(days=7),
+    }
+    _, kwargs = wiring["server"]
+    assert kwargs["store"] is wiring["store"]
 
 
 @pytest.fixture

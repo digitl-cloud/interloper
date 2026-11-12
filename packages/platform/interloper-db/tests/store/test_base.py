@@ -103,6 +103,9 @@ class TestFromSettings:
     def settings(self, monkeypatch: pytest.MonkeyPatch, component_db: Engine):
         """Wire settings and the process engine for ``from_settings``.
 
+        The settings carry only the sections the database package reads, so
+        a read of any other one, ``auth`` among them, fails the test.
+
         Args:
             monkeypatch: Fixture used to swap the settings and engine lookups.
             component_db: The in-memory engine ``from_settings`` should find.
@@ -117,13 +120,7 @@ class TestFromSettings:
             monkeypatch.setattr(
                 "interloper.settings.AppSettings.get",
                 classmethod(
-                    lambda cls: SimpleNamespace(
-                        secrets=SimpleNamespace(encryption_key=encryption_key),
-                        quota=quota,
-                        auth=SimpleNamespace(
-                            session_expiry_days=2, access_token_expiry_minutes=15, refresh_token_expiry_days=7
-                        ),
-                    )
+                    lambda cls: SimpleNamespace(secrets=SimpleNamespace(encryption_key=encryption_key), quota=quota)
                 ),
             )
             monkeypatch.setattr(base_module, "engine_from_settings", lambda: component_db)
@@ -173,19 +170,28 @@ class TestFromSettings:
         assert Store.from_settings()._quota_defaults is quota
 
     @pytest.mark.parametrize("keyed", [True, False])
-    def test_the_session_expiry_comes_from_the_auth_settings(self, settings, keyed: bool) -> None:
+    def test_the_given_token_lifetimes_reach_the_facets_that_issue_tokens(self, settings, keyed: bool) -> None:
         settings(Fernet.generate_key().decode() if keyed else None)
 
-        assert Store.from_settings().tokens._session_expiry == timedelta(days=2)
+        store = Store.from_settings(
+            session_expiry=timedelta(days=2),
+            access_token_expiry=timedelta(minutes=15),
+            refresh_token_expiry=timedelta(days=7),
+        )
+
+        assert store.tokens._session_expiry == timedelta(days=2)
+        assert store.tokens._access_token_expiry == timedelta(minutes=15)
+        assert store.oauth._refresh_token_expiry == timedelta(days=7)
 
     @pytest.mark.parametrize("keyed", [True, False])
-    def test_the_oauth_lifetimes_come_from_the_auth_settings(self, settings, keyed: bool) -> None:
+    def test_without_token_lifetimes_the_constructor_defaults_apply(self, settings, keyed: bool) -> None:
         settings(Fernet.generate_key().decode() if keyed else None)
 
         store = Store.from_settings()
 
-        assert store.tokens._access_token_expiry == timedelta(minutes=15)
-        assert store.oauth._refresh_token_expiry == timedelta(days=7)
+        assert store.tokens._session_expiry == timedelta(days=30)
+        assert store.tokens._access_token_expiry == timedelta(minutes=60)
+        assert store.oauth._refresh_token_expiry == timedelta(days=30)
 
     def test_the_engine_comes_from_the_process(self, settings, component_db: Engine) -> None:
         settings(None)

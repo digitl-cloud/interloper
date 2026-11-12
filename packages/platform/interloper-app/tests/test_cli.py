@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Iterator
+from datetime import timedelta
 from typing import Any
 
 import pytest
-from interloper.settings import AppSettings
+from interloper.settings import AppSettings, AuthSettings
 
 from interloper_app import cli
 
@@ -46,13 +47,18 @@ def wiring(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         monkeypatch: Fixture used to swap the collaborators.
 
     Returns:
-        What the bootstrap and the composition were handed.
+        What the bootstrap, the store and the composition were handed, and the store itself.
     """
-    recorded: dict[str, Any] = {}
+    store = object()
+    recorded: dict[str, Any] = {"store": store}
 
     class FakeApp:
         def run(self) -> None:
             recorded["ran"] = True
+
+    def store_from_settings(cls: Any, catalog: object = None, **lifetimes: timedelta) -> object:
+        recorded["lifetimes"] = lifetimes
+        return store
 
     def from_settings(cls: Any, settings: AppSettings, **kwargs: Any) -> FakeApp:
         recorded["settings"] = settings
@@ -61,7 +67,7 @@ def wiring(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
     monkeypatch.setattr(cli, "bootstrap", lambda dsn, **kwargs: recorded.setdefault("bootstrap", (dsn, kwargs)))
     monkeypatch.setattr(cli.Catalog, "from_settings", classmethod(lambda cls: cli.Catalog()))
-    monkeypatch.setattr(cli.Store, "from_settings", classmethod(lambda cls, catalog=None: object()))
+    monkeypatch.setattr(cli.Store, "from_settings", classmethod(store_from_settings))
     monkeypatch.setattr(cli.App, "from_settings", classmethod(from_settings))
     return recorded
 
@@ -165,6 +171,21 @@ class TestCmdApp:
         cli._cmd_app(_parse("app", "--dev", "--port", "9876", "--api"))
 
         assert (wiring["app"]["dev"], wiring["app"]["port"]) == (True, 9876)
+
+    def test_every_service_shares_a_store_issuing_tokens_for_the_configured_lifetimes(
+        self, wiring: dict[str, Any]
+    ) -> None:
+        auth = AuthSettings(session_expiry_days=2, access_token_expiry_minutes=15, refresh_token_expiry_days=7)
+        AppSettings.activate(AppSettings(auth=auth))
+
+        cli._cmd_app(_parse("app"))
+
+        assert wiring["lifetimes"] == {
+            "session_expiry": timedelta(days=2),
+            "access_token_expiry": timedelta(minutes=15),
+            "refresh_token_expiry": timedelta(days=7),
+        }
+        assert wiring["app"]["store"] is wiring["store"]
 
     def test_scheduler_only_run_needs_no_api(self, wiring: dict[str, Any]) -> None:
         cli._cmd_app(_parse("app", "--no-api", "--cron", "--reaper"))

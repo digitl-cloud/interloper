@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import pytest
@@ -21,6 +23,7 @@ from interloper_db import (
 
 from interloper_api.app import create_app, install_error_handlers
 from interloper_api.dependencies import get_store
+from interloper_api.routes import websocket as websocket_module
 
 _ORG = "00000000-0000-0000-0000-000000000000"
 
@@ -241,3 +244,59 @@ class TestCreateApp:
         assert app.state.interloper.store is store
         assert app.state.interloper.catalog is catalog
         assert app.state.interloper.settings is fake_settings
+
+
+class TestStartup:
+    """What the application does once, when it starts serving."""
+
+    @pytest.fixture
+    def listener(self, monkeypatch: pytest.MonkeyPatch) -> list[FastAPI]:
+        """Replace the realtime listener with one recording the applications it starts for.
+
+        Args:
+            monkeypatch: Fixture used to swap the listener.
+
+        Returns:
+            The applications the listener was started for, in order.
+        """
+        started: list[FastAPI] = []
+
+        @asynccontextmanager
+        async def realtime_lifespan(app: FastAPI) -> AsyncIterator[None]:
+            started.append(app)
+            yield
+
+        monkeypatch.setattr(websocket_module, "realtime_lifespan", realtime_lifespan)
+        return started
+
+    async def test_the_configured_super_admins_are_promoted(
+        self,
+        fake_settings: SimpleNamespace,
+        oauth_store: Store,
+        listener: list[FastAPI],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        fake_settings.agent.enabled = False
+        listed = oauth_store.profiles.upsert(google_id="g-boss", email="boss@example.com", name="Boss")
+        unlisted = oauth_store.profiles.upsert(google_id="g-other", email="other@example.com", name="Other")
+        app = create_app(store=oauth_store, settings=fake_settings)
+
+        with caplog.at_level("INFO", logger="interloper_api.app"):
+            async with app.router.lifespan_context(app):
+                assert oauth_store.profiles.get(listed.id).is_super_admin is True
+
+        assert oauth_store.profiles.get(unlisted.id).is_super_admin is False
+        assert f"Promoted profile {listed.id} to super-admin." in caplog.text
+        assert "boss@example.com" not in caplog.text
+        assert listener == [app]
+
+    async def test_an_app_built_without_a_store_still_starts_the_listener(
+        self, fake_settings: SimpleNamespace, listener: list[FastAPI]
+    ) -> None:
+        fake_settings.agent.enabled = False
+        app = create_app(settings=fake_settings)
+
+        async with app.router.lifespan_context(app):
+            pass
+
+        assert listener == [app]

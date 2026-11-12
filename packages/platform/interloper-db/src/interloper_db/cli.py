@@ -5,12 +5,10 @@ from __future__ import annotations
 import argparse
 import sys
 
-from interloper.catalog import Catalog
 from interloper.settings import AppSettings
 
 from interloper_db.engine import init_engine
 from interloper_db.provision import bootstrap, downgrade, drop_database, upgrade
-from interloper_db.store import Store
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -22,10 +20,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     db_parser = subparsers.add_parser("db", help="Database operations", description="Database operations.")
     db_subparsers = db_parser.add_subparsers(dest="db_command")
 
-    init_parser = db_subparsers.add_parser(
-        "init",
-        help="Ensure database, create tables, migrate to head, promote configured super-admins (idempotent)",
-    )
+    init_parser = db_subparsers.add_parser("init", help="Ensure database, create tables, migrate to head (idempotent)")
     init_parser.set_defaults(handler=_cmd_init)
 
     reset_parser = db_subparsers.add_parser("reset", help="Drop and recreate all tables")
@@ -44,21 +39,16 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
 
 def _cmd_init(args: argparse.Namespace) -> None:
-    """Bootstrap the database and promote the configured super-admins.
+    """Bootstrap the database: create it if missing, create its tables and migrate it to head.
 
-    Idempotent and concurrent-safe. ``auth.super_admin_emails`` is applied here
-    as well as at login, so a deployment shipping a new list promotes the
-    profiles that already exist without waiting for them to sign in again.
+    Idempotent and concurrent-safe.
 
     Args:
         args: Parsed CLI arguments; this subcommand takes none of its own.
     """
-    settings = AppSettings.get()
-    print(f"Bootstrapping the database at {settings.postgres.location}...")
-    engine = bootstrap(settings.postgres.dsn)
-    store = Store(catalog=Catalog(components={}), engine=engine)
-    for profile in store.profiles.promote_super_admins(settings.auth.super_admin_emails):
-        print(f"Promoted {profile.email} to super-admin.")
+    postgres = AppSettings.get().postgres
+    print(f"Bootstrapping the database at {postgres.location}...")
+    bootstrap(postgres.dsn)
     print("Done.")
 
 

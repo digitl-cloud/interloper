@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import interloper as il
 import pytest
-from interloper.settings import McpSettings, ServerSettings
+from interloper.settings import AuthSettings, McpSettings, ServerSettings
 from interloper_db import Store
 from interloper_db import engine as engine_module
 from interloper_db.models import (
@@ -51,7 +51,7 @@ def fake_settings() -> SimpleNamespace:
         ),
         runner=SimpleNamespace(type="async", config={"max_workers": 8, "env": "r-secret"}),
         agent=SimpleNamespace(enabled=True, model="google:gemini-2.5-flash"),
-        auth=SimpleNamespace(
+        auth=AuthSettings(
             allowed_domains=["digitlcloud.com"],
             super_admin_emails=["boss@example.com"],
             google_client_id="cid",

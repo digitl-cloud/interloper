@@ -223,7 +223,7 @@ def _sign_in(account: GoogleAccount, destination: str, store: Store, auth_config
         httponly=True,
         samesite="lax",
         secure=auth_config.cookie_secure,
-        max_age=auth_config.session_expiry_days * 86400,
+        max_age=int(auth_config.session_expiry.total_seconds()),
         path="/",
     )
     return response

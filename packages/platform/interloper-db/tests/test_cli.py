@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from interloper.settings import AppSettings, AuthSettings, PostgresSettings
+from interloper.settings import AppSettings, PostgresSettings
 
 from interloper_db import cli as db_command
 
@@ -40,45 +40,12 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> dict[str, list[Any]]:
         "drop_database": [],
         "upgrade": [],
         "downgrade": [],
-        "promote_super_admins": [],
     }
-    engine_ = object()
-
-    class RecordingStore:
-        """Store stand-in whose profiles facet records the emails it is asked to promote."""
-
-        def __init__(self, *, catalog: object, engine: object) -> None:
-            """Check the store is bound to the bootstrapped engine.
-
-            Args:
-                catalog: The empty catalog the command builds.
-                engine: The engine the command built the store on.
-            """
-            assert engine is engine_
-            self.profiles = self
-
-        def promote_super_admins(self, emails: list[str]) -> list[SimpleNamespace]:
-            """Record the emails and promote every one of them.
-
-            Args:
-                emails: The configured super-admin emails.
-
-            Returns:
-                One promoted profile stand-in per email.
-            """
-            recorded["promote_super_admins"].append(list(emails))
-            return [SimpleNamespace(email=email) for email in emails]
-
-    def bootstrap(dsn: str, **kwargs: Any) -> object:
-        recorded["bootstrap"].append((dsn, kwargs))
-        return engine_
-
-    monkeypatch.setattr(db_command, "bootstrap", bootstrap)
+    monkeypatch.setattr(db_command, "bootstrap", lambda dsn, **kwargs: recorded["bootstrap"].append((dsn, kwargs)))
     monkeypatch.setattr(db_command, "init_engine", lambda dsn: recorded["init_engine"].append(dsn))
     monkeypatch.setattr(db_command, "drop_database", lambda dsn: recorded["drop_database"].append(dsn))
     monkeypatch.setattr(db_command, "upgrade", lambda revision: recorded["upgrade"].append(revision))
     monkeypatch.setattr(db_command, "downgrade", lambda revision: recorded["downgrade"].append(revision))
-    monkeypatch.setattr(db_command, "Store", RecordingStore)
     return recorded
 
 
@@ -136,21 +103,16 @@ class TestInit:
         assert calls["bootstrap"] == [(AppSettings.get().postgres.dsn, {})]
         assert "Done." in capsys.readouterr().out
 
-    def test_promotes_the_configured_super_admins(
-        self,
-        calls: dict[str, list[Any]],
-        capsys: pytest.CaptureFixture[str],
-        monkeypatch: pytest.MonkeyPatch,
+    def test_reads_the_postgres_settings_alone(
+        self, calls: dict[str, list[Any]], monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        settings = AppSettings(auth=AuthSettings(super_admin_emails=["ada@example.com", "bob@example.com"]))
-        monkeypatch.setattr(AppSettings, "_active", settings)
+        # Any other section, auth among them, is absent: reading it would raise.
+        postgres = PostgresSettings(host="db", database="x")
+        monkeypatch.setattr(AppSettings, "_active", SimpleNamespace(postgres=postgres))
 
         db_command._cmd_init(_parse("db", "init"))
 
-        assert calls["promote_super_admins"] == [["ada@example.com", "bob@example.com"]]
-        out = capsys.readouterr().out
-        assert "Promoted ada@example.com to super-admin." in out
-        assert "Promoted bob@example.com to super-admin." in out
+        assert calls["bootstrap"] == [(postgres.dsn, {})]
 
     def test_init_never_prints_the_password(
         self,

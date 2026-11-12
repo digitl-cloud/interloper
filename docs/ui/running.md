@@ -121,7 +121,7 @@ The file is not interpolated: a field left out of a block is read from its `INTE
 variable, which is where secrets go. `INTERLOPER_ENCRYPTION_KEY` is required: resource configs are
 encrypted at rest, and the Google login signs the cookie it keeps between Google's two legs with a key
 derived from it, so every replica can finish a login another one started. Login is Google OAuth. `allowed_domains` restricts who may sign up; `super_admin_emails`
-bootstraps platform administrators, promoted by `interloper db init` and at login (promote-only). Once
+bootstraps platform administrators, promoted when the API starts and at login (promote-only). Once
 one exists, super-admins grant and revoke the access from the admin portal's Users page, and
 register the OAuth clients of apps that cannot register themselves on its OAuth clients page (see
 [Connecting clients](connecting-clients.md#registering-a-client-yourself)). In-house OAuth app credentials for connectors live in

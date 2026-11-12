@@ -18,6 +18,7 @@ import httpx2
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from interloper.settings import AuthSettings
 from interloper_db import NotFoundError, Page
 from joserfc import jwt
 from joserfc.jwk import KeySet, RSAKey
@@ -157,8 +158,8 @@ class FakeStore:
         return "token"
 
 
-def _auth_config(super_admin_emails: list[str], allowed_domains: list[str]) -> SimpleNamespace:
-    return SimpleNamespace(
+def _auth_config(super_admin_emails: list[str], allowed_domains: list[str]) -> AuthSettings:
+    return AuthSettings(
         cookie_secure=False,
         session_expiry_days=1,
         super_admin_emails=super_admin_emails,
