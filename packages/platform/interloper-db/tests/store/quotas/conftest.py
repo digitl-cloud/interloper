@@ -15,7 +15,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
 
 from interloper_db import engine as engine_module
-from interloper_db.models import Backfill, Component, Event, Execution, Quota, Run, Usage
+from interloper_db.models import Backfill, Component, Event, Execution, Quota, Run, Usage, table_of
 from interloper_db.store import Store
 
 _ORG_ID = uuid4()
@@ -50,7 +50,7 @@ def store() -> Iterator[Store]:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
     for model in (Component, Backfill, Run, Event, Execution, Quota, Usage):
-        model.__table__.create(engine)  # ty: ignore[missing-attribute]
+        table_of(model).create(engine)
     try:
         yield Store(catalog=il.Catalog(components={}), engine=engine)
     finally:

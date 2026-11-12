@@ -9,7 +9,7 @@ from uuid import uuid4
 import interloper as il
 import pytest
 from interloper_db import engine as engine_module
-from interloper_db.models import Backfill, Component, ComponentRelation, Event, Execution, Quota, Run, Usage
+from interloper_db.models import Backfill, Component, ComponentRelation, Event, Execution, Quota, Run, Usage, table_of
 from interloper_db.store import Store
 from interloper_toolkit import ToolkitContext
 from sqlalchemy import Engine, event
@@ -47,7 +47,7 @@ def agent_db() -> Iterator[Engine]:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
     for model in (Component, ComponentRelation, Backfill, Run, Event, Execution, Quota, Usage):
-        model.__table__.create(eng)  # ty: ignore[missing-attribute]
+        table_of(model).create(eng)
     try:
         yield eng
     finally:

@@ -22,6 +22,7 @@ from interloper_db.models import (
     Run,
     Token,
     UserOrganisation,
+    table_of,
 )
 from interloper_db.store import Store
 from sqlalchemy import Engine, event
@@ -59,7 +60,7 @@ def mcp_db() -> Iterator[Engine]:
         Backfill,
         Run,
     ):
-        model.__table__.create(eng)  # ty: ignore[missing-attribute]
+        table_of(model).create(eng)
     try:
         yield eng
     finally:

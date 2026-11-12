@@ -20,7 +20,7 @@ from sqlmodel import Session, col, select
 
 from interloper_db import BackfillStatus, ConflictError, NotFoundError, RunStatus
 from interloper_db import engine as engine_module
-from interloper_db.models import Backfill, Component, Event, Execution, Quota, Run, Usage
+from interloper_db.models import Backfill, Component, Event, Execution, Quota, Run, Usage, table_of
 from interloper_db.settings import QuotaSettings
 from interloper_db.store import BackfillQuery, Store
 
@@ -66,7 +66,7 @@ def store() -> Iterator[Store]:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
     for model in (Backfill, Component, Run, Event, Execution, Quota, Usage):
-        model.__table__.create(engine)  # ty: ignore[missing-attribute]
+        table_of(model).create(engine)
     try:
         yield Store(catalog=il.Catalog(components={}), engine=engine)
     finally:

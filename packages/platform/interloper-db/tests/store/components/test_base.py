@@ -15,7 +15,7 @@ from sqlalchemy import Engine, event
 from sqlmodel import Session, select
 
 from interloper_db import ComponentDriftError, HydrationError, InUseError, NotFoundError
-from interloper_db.models import Component
+from interloper_db.models import Component, table_of
 from interloper_db.settings import QuotaSettings
 from interloper_db.store import ComponentQuery, RelationQuery, Store
 from interloper_db.store.components import ComponentStatus
@@ -1153,7 +1153,7 @@ class TestJobReschedule:
 
 class TestUpdatedAt:
     def test_update_refreshes_updated_at(self, store: Store):
-        assert Component.__table__.c.updated_at.onupdate is not None  # ty: ignore[missing-attribute]
+        assert table_of(Component).c.updated_at.onupdate is not None
         row = store.components.create(_ORG, kind="job", key="cron_job", name="J", config={"cron": "0 0 * * *"})
         updated = store.components.update(row.id, name="renamed")
         assert updated.updated_at is not None

@@ -20,7 +20,7 @@ from sqlmodel import col, select
 from interloper_db import NotFoundError, PageQuery
 from interloper_db import engine as engine_module
 from interloper_db.crypto import hash_token
-from interloper_db.models import Audience, Organisation, Profile, Token, TokenKind, UserOrganisation
+from interloper_db.models import Audience, Organisation, Profile, Token, TokenKind, UserOrganisation, table_of
 from interloper_db.session import save, session_scope
 from interloper_db.store import Store
 from interloper_db.store.tokens import TOKEN_PREFIX_LEN, TokenStore
@@ -45,7 +45,7 @@ def token_db() -> Iterator[Engine]:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
     for model in (Profile, Organisation, UserOrganisation, Token):
-        model.__table__.create(eng)  # ty: ignore[missing-attribute]
+        table_of(model).create(eng)
     try:
         yield eng
     finally:

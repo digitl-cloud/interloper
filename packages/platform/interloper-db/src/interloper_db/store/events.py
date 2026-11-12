@@ -23,7 +23,7 @@ from sqlalchemy import Engine
 from sqlmodel import col, select
 
 from interloper_db.errors import NotFoundError
-from interloper_db.models import Component, Event, Execution, Run
+from interloper_db.models import Component, Event, Execution, Run, table_of
 from interloper_db.session import commit, dialect_insert, session_scope
 from interloper_db.store.page import Page, PageQuery
 
@@ -124,7 +124,7 @@ class EventStore:
             return []
         values = [{name: getattr(row, name) for name in Event.model_fields} for row in rows]
         with session_scope(self._engine) as session:
-            table = Event.__table__  # ty: ignore[missing-attribute]
+            table = table_of(Event)
             statement = (
                 dialect_insert(session)(table)
                 .values(values)
