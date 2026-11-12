@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 from interloper.settings import AppSettings, AuthSettings
 from interloper_db import Store
+from interloper_db.crypto import hash_token
 
 from interloper_api import cli
 
@@ -206,3 +207,32 @@ def test_clients_delete_refuses_an_unknown_or_dynamic_client(clients: Store) -> 
         _run("delete", dynamic.client_id)
 
     assert clients.oauth.get_client(dynamic.client_id) is not None
+
+
+def test_clients_rotate_prints_a_new_secret(clients: Store, capsys: pytest.CaptureFixture[str]) -> None:
+    """``oauth rotate`` replaces the secret and prints the new one once."""
+    client, old = clients.oauth.register_client(
+        "Slack", ["https://slack.example.com/cb"], registered_by="operator", confidential=True
+    )
+    assert old is not None
+
+    _run("rotate", client.client_id)
+
+    printed = capsys.readouterr().out
+    new = next(word for word in printed.split() if word.startswith("ilc_"))
+    stored = clients.oauth.get_client(client.client_id)
+    assert stored is not None
+    assert stored.secret_hash == hash_token(new)
+    assert old not in printed
+
+
+def test_clients_rotate_refuses_an_unknown_or_dynamic_client(clients: Store) -> None:
+    """Only an operator client's secret is rotated here."""
+    dynamic, _ = clients.oauth.register_client(
+        "Connector", ["https://connector.example.com/cb"], registered_by="dynamic", confidential=True
+    )
+
+    with pytest.raises(SystemExit, match="no-such-client"):
+        _run("rotate", "no-such-client")
+    with pytest.raises(SystemExit, match=dynamic.client_id):
+        _run("rotate", dynamic.client_id)

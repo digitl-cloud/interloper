@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 from datetime import datetime, timedelta, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from alembic.migration import MigrationContext
@@ -194,6 +194,45 @@ class TestClients:
         assert store.oauth.delete_client(client.client_id, registered_by="operator") is None
 
         assert store.oauth.get_client(client.client_id) is not None
+
+    def test_rotate_secret_replaces_the_hash(self, store: Store):
+        client, old = store.oauth.register_client(
+            "Slack", ["https://slack.example.com/cb"], registered_by="operator", confidential=True
+        )
+        assert old is not None
+
+        rotated = store.oauth.rotate_secret(client.client_id)
+
+        assert rotated is not None
+        rotated_client, new = rotated
+        assert new.startswith("ilc_") and new != old
+        stored = store.oauth.get_client(client.client_id)
+        assert stored is not None
+        assert stored.secret_hash == hash_token(new) == rotated_client.secret_hash
+
+    def test_rotating_leaves_the_clients_grants_untouched(self, store: Store, profile: Profile):
+        client, _ = store.oauth.register_client(
+            "Slack", ["https://slack.example.com/cb"], registered_by="operator", confidential=True
+        )
+        refresh = store.oauth.issue_refresh(profile.id, client.client_id, Audience.API, family_id=uuid4())
+        access = store.tokens.create_access(profile.id, client.client_id, Audience.API)
+
+        assert store.oauth.rotate_secret(client.client_id) is not None
+
+        assert store.tokens.resolve(access, Audience.API) is not None
+        assert store.oauth.rotate_refresh(refresh, client.client_id) is not None
+
+    def test_rotate_secret_refuses_a_public_unknown_or_otherwise_registered_client(
+        self, store: Store, client: OAuthClient
+    ):
+        dynamic, _ = store.oauth.register_client(
+            "Connector", ["https://connector.example.com/cb"], registered_by="dynamic", confidential=True
+        )
+
+        assert store.oauth.rotate_secret(client.client_id) is None
+        assert store.oauth.rotate_secret("no-such-client") is None
+        assert store.oauth.rotate_secret(dynamic.client_id, registered_by="operator") is None
+        assert store.oauth.get_client(dynamic.client_id) == dynamic
 
 
 class TestCodes:

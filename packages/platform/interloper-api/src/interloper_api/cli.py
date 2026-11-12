@@ -156,6 +156,40 @@ class OAuthDeleteCommand(Command):
         print(f"Deleted {client.name} ({client.client_id}) and revoked its tokens.")
 
 
+class OAuthRotateCommand(Command):
+    """Replace a client's secret and print the new one.
+
+    The old secret stops working at once; tokens the client holds are untouched, so no user has to authorise it
+    again. The new secret is printed once and cannot be recovered.
+    """
+
+    def add_arguments(self, parser: argparse.ArgumentParser) -> None:
+        """Declare the client whose secret to replace.
+
+        Args:
+            parser: The command's own parser.
+        """
+        parser.add_argument("client_id", help="The client id `oauth list` shows")
+
+    def run(self, args: argparse.Namespace) -> None:
+        """Replace an operator client's secret and print the new one.
+
+        Args:
+            args: The parsed command line: ``client_id``.
+
+        Raises:
+            SystemExit: When no operator client has that id.
+        """
+        rotated = Store.from_settings(catalog=Catalog()).oauth.rotate_secret(args.client_id, registered_by="operator")
+        if rotated is None:
+            raise SystemExit(f"No operator client {args.client_id}.")
+        client, secret = rotated
+        print(f"Rotated the secret of {client.name}; the old one no longer works.")
+        print(f"client_id:     {client.client_id}")
+        print(f"client_secret: {secret}")
+        print("Store the secret now: it is not stored and cannot be shown again.")
+
+
 class OAuthCommand(Command):
     """Manage operator-registered OAuth clients.
 
@@ -168,4 +202,5 @@ class OAuthCommand(Command):
         "create": OAuthCreateCommand,
         "list": OAuthListCommand,
         "delete": OAuthDeleteCommand,
+        "rotate": OAuthRotateCommand,
     }
