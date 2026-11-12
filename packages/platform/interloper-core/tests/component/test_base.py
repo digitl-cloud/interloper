@@ -611,6 +611,12 @@ class TestSetAttrRelations:
             widget.connection = None  # ty: ignore[invalid-assignment]
         assert widget.connection is connection
 
+    def test_assigning_a_single_component_to_a_many_relation_raises(self):
+        widget = Widget(connection=Conn(api_secret="s"))
+        with pytest.raises(TypeError, match="many-valued"):
+            widget.destinations = Dest(connection=Conn(api_secret="a"))  # ty: ignore[invalid-assignment]
+        assert widget.destinations == []
+
     def test_assigning_duplicates_collapses_them(self):
         widget = Widget(connection=Conn(api_secret="s"))
         dest = Dest(connection=Conn(api_secret="a"))

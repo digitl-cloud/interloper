@@ -663,10 +663,6 @@ class TestDestinations:
         destination = FakeDestination()
         assert FakeAsset(destinations=[destination]).destinations == [destination]
 
-    def test_a_single_destination_is_wrapped_in_a_list(self):
-        destination = FakeDestination()
-        assert FakeAsset(destinations=destination).destinations == [destination]  # ty: ignore[invalid-argument-type]
-
     def test_several_destinations_are_kept_in_order(self):
         destinations: list[il.Destination] = [FakeDestination(), FakeOtherDestination()]
         assert FakeAsset(destinations=destinations).destinations == destinations
@@ -884,7 +880,7 @@ class TestReconfiguration:
         first, second = FakeDestination(), FakeOtherDestination()
         asset = FakeAsset(destinations=[first])
 
-        reconfigured = asset(destinations=second)
+        reconfigured = asset(destinations=[second])
 
         assert reconfigured.destinations == [second]
         assert asset.destinations == [first]

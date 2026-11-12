@@ -181,8 +181,8 @@ class Source(Component, Workload):
         - ``dict[str, dict]``: an override map keyed by asset key, where
           each value is the ``init`` payload for that asset.  The source
           is the unit of reconstruction: for every entry in
-          ``asset_types`` we build ``asset_class(**overrides)``, defaulting
-          unmapped keys to a bare ``asset_class()``.
+          ``asset_types`` the map names we build ``asset_class(**overrides)``;
+          an asset the map leaves out is left out of the source.
 
         This is what ``Source.to_spec()`` emits and what
         ``Spec.reconstruct()`` hands back in after the walker has resolved
@@ -235,7 +235,7 @@ class Source(Component, Workload):
             if asset.parent is not None and asset.parent is not self:
                 raise ConfigError(
                     f"Asset '{asset.key}' already belongs to source '{asset.parent.qualified_key}'; "
-                    f"give this source its overrides instead: assets={{'{asset.key}': {{...}}}}"
+                    f"give this source its own instance instead: assets=[{type(self).__name__}.{asset.key}(...)]"
                 )
             asset.parent = self
         self._check_locations()

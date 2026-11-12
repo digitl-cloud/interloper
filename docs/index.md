@@ -49,7 +49,7 @@ Materializing an asset runs it **and** writes the result to its destinations. Gi
 destination:
 
 ```py
-asset = greetings(destinations=il.CSVDestination(base_path="./data"))
+asset = greetings(destinations=[il.CSVDestination(base_path="./data")])
 asset.materialize()
 # ./data/greetings/data.csv
 ```
@@ -92,7 +92,7 @@ Two things happened here without any wiring:
 Assets are reachable as attributes on the instance:
 
 ```py
-shop = Shop(destinations=il.CSVDestination(base_path="./data"))
+shop = Shop(destinations=[il.CSVDestination(base_path="./data")])
 shop.users.run()
 shop.orders.materialize()
 ```

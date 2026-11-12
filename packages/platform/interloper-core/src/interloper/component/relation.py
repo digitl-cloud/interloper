@@ -392,6 +392,29 @@ class Relation(BaseModel):
             return self.target()
         return None
 
+    def targets_from(self, value: Any) -> tuple[Component, ...]:
+        """Read what a constructor kwarg or an assignment hands this relation.
+
+        Args:
+            value: ``None`` or an empty sequence for nothing, a list or tuple
+                of components, or a single component for a single-valued
+                relation.
+
+        Returns:
+            The components, in the order given.
+
+        Raises:
+            TypeError: If a single component is handed to a ``many`` relation,
+                which takes a list.
+        """
+        if value is None:
+            return ()
+        if isinstance(value, (list, tuple)):
+            return tuple(value)
+        if self.many:
+            raise TypeError(f"Relation '{self.name}' is many-valued: pass a list, [{type(value).__name__}(...)]")
+        return (value,)
+
     # -- Descriptor ------------------------------------------------------------
 
     @overload
@@ -432,8 +455,8 @@ class Relation(BaseModel):
 
         Args:
             instance: The component the assignment was made on.
-            value: ``None`` or an empty sequence clears the binding, a single
-                component binds it, a list or tuple binds every element.
+            value: ``None`` or an empty sequence clears the binding, a list or
+                tuple binds every element, and a single component binds a
+                single-valued relation (see `targets_from`).
         """
-        targets = tuple(value) if isinstance(value, (list, tuple)) else (() if value is None else (value,))
-        instance._replace_binding(self.name, targets)
+        instance._replace_binding(self.name, self.targets_from(value))

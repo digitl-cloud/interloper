@@ -94,7 +94,7 @@ Give the source a destination and materialize. Every asset without its own desti
 the source's:
 
 ```py
-source = OpenMeteo(destinations=il.CSVDestination(base_path="./data"))
+source = OpenMeteo(destinations=[il.CSVDestination(base_path="./data")])
 source.forecast.materialize()
 # ./data/open_meteo/forecast/data.csv
 ```
@@ -336,7 +336,7 @@ class OpenMeteo(il.Source):
 
 
 if __name__ == "__main__":
-    source = OpenMeteo(destinations=il.CSVDestination(base_path="./data"))
+    source = OpenMeteo(destinations=[il.CSVDestination(base_path="./data")])
     result = il.DAG(source).materialize(il.TimePartition(dt.date(2026, 1, 15)))
     print(result)
 ```

@@ -21,7 +21,7 @@ https://docs.interloper.dev/guide/partitioning/
    import datetime as dt
    import interloper as il
 
-   shop = Shop(destinations=il.CSVDestination(base_path="./data"))
+   shop = Shop(destinations=[il.CSVDestination(base_path="./data")])
    dag = il.DAG(shop)
 
    def on_event(event: il.Event) -> None:
