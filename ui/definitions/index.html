@@ -1852,14 +1852,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../extending/entry-points/" class="md-nav__link">
+      <a href="../../extending/extensions/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-  Entry points & registries
+  Extensions & registries
 
     
   </span>
@@ -2517,8 +2517,9 @@
 <h1 id="generated-from-definitions">Generated from definitions<a class="headerlink" href="#generated-from-definitions" title="Permanent link">&para;</a></h1>
 <p>The web UI contains no per-connector code. Every tile, wizard step, form field and status column
 is derived from the same component definitions the framework builds for the
-<a href="../../guide/catalog/">catalog</a>. Add a source or a connection to a package, register it with an
-entry point, and the UI knows how to list, create, configure, check and run it.</p>
+<a href="../../guide/catalog/">catalog</a>. Add a source or a connection to a package, declare it in the
+package's <a href="../../extending/extensions/">extension manifest</a>, and the UI knows how to list, create,
+configure, check and run it.</p>
 <p>This page follows the data from a component class to the screen.</p>
 <h2 id="from-class-to-catalog">From class to catalog<a class="headerlink" href="#from-class-to-catalog" title="Permanent link">&para;</a></h2>
 <p>Every component class describes itself through <code>definition()</code>: kind, key, import path, display

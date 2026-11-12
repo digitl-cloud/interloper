@@ -1758,14 +1758,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../entry-points/" class="md-nav__link">
+      <a href="../extensions/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-  Entry points & registries
+  Extensions & registries
 
     
   </span>
@@ -2474,8 +2474,9 @@ with the registry's error naming the registered keys. A destination that loads o
 converts everything to it in one line: BigQuery does <code>TableData.from_data(data).to("dataframe")</code>
 and has a single load path.</p>
 <h2 id="registering">Registering<a class="headerlink" href="#registering" title="Permanent link">&para;</a></h2>
-<div class="language-toml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">[project.entry-points.</span><span class="s2">"interloper.representations"</span><span class="k">]</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">arrow</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"my_package.arrow:ARROW_REPRESENTATION"</span>
+<p>In your package's <a href="../extensions/">extension manifest</a>:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">representations</span><span class="p">:</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_package.arrow:ARROW_REPRESENTATION</span>
 </span></code></pre></div>
 <p>The entry may point at an instance or a class. The registry keys it by the representation's own
 <code>key</code>. <code>TableData.from_data(data)</code> binds the first registered representation whose <code>matches</code>

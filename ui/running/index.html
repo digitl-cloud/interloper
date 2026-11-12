@@ -1802,14 +1802,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../extending/entry-points/" class="md-nav__link">
+      <a href="../../extending/extensions/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-  Entry points & registries
+  Extensions & registries
 
     
   </span>
@@ -2547,11 +2547,11 @@ needs is an install in a child image:</p>
 virtualenv at <code>/interloper/.venv</code>, which was built by uv and therefore has no <code>pip</code> of its own;
 a bare <code>pip install</code> would resolve to the base image's interpreter instead and land the package
 somewhere the app never looks, with no error to show for it.</p>
-<p>Anything installed this way registers itself: a package declaring components under the
-<code>interloper.components</code> entry point joins the catalog on the next start, with no change to the
-image's command. List what you want enabled under <code>catalog.include</code> and the deployment sees exactly
-that, as described in <a href="../../guide/catalog/">Catalog</a> and
-<a href="../../extending/entry-points/">Entry points &amp; registries</a>.</p>
+<p>Anything installed this way registers itself: a package declaring components in its manifest's
+<code>components</code> section joins the catalog on the next start, with no change to the image's command.
+List what you want enabled under <code>catalog.include</code> and the deployment sees exactly that, as
+described in <a href="../../guide/catalog/">Catalog</a> and
+<a href="../../extending/extensions/">Extensions &amp; registries</a>.</p>
 <p>The same recipe works on a loaded image when you want everything it ships plus your own
 components.</p>
 <h2 id="one-process-per-role">One process per role<a class="headerlink" href="#one-process-per-role" title="Permanent link">&para;</a></h2>

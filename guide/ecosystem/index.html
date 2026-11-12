@@ -1736,14 +1736,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../extending/entry-points/" class="md-nav__link">
+      <a href="../../extending/extensions/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-  Entry points & registries
+  Extensions & registries
 
     
   </span>
@@ -2449,79 +2449,81 @@ extensions).</p>
 <p>The core's one extra, <code>otel</code>, adds the OpenTelemetry SDK and exporters, as described in
 <a href="../telemetry/">Telemetry</a>.</p>
 <h2 id="framework-extensions">Framework extensions<a class="headerlink" href="#framework-extensions" title="Permanent link">&para;</a></h2>
+<p>Each package says what it brings in its <code>extension.yaml</code>, under the sections listed here; see
+<a href="../../extending/extensions/">Extensions &amp; registries</a>.</p>
 <table>
 <thead>
 <tr>
 <th>Package</th>
 <th>Provides</th>
-<th>Registers</th>
+<th>Manifest sections</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>interloper-pandas</code></td>
 <td><code>DataFrameRepresentation</code>, <code>DataFrameNormalizer</code>: assets may return pandas DataFrames, normalized and conformed natively.</td>
-<td><code>interloper.representations</code>: <code>dataframe</code></td>
+<td><code>representations</code>: <code>dataframe</code></td>
 </tr>
 <tr>
 <td><code>interloper-google-cloud</code></td>
 <td><code>GoogleCloudConnection</code>, <code>BigQueryDestination</code> (a <code>DatabaseDestination</code> with typed Parquet loads and time partitioning), <code>GCSDestination</code> (an <code>ObjectStoreDestination</code> over Cloud Storage: hive-partitioned Parquet, JSONL or CSV), <code>GoogleSheetsDestination</code> (a <code>DatabaseDestination</code> writing one tab per asset).</td>
-<td><code>interloper.components</code></td>
+<td><code>components</code></td>
 </tr>
 <tr>
 <td><code>interloper-duckdb</code></td>
 <td><code>DuckDBConnection</code>, <code>DuckDBDestination</code> (a <code>DatabaseDestination</code> writing typed tables to a local DuckDB file or a MotherDuck database, one schema per dataset).</td>
-<td><code>interloper.components</code></td>
+<td><code>components</code></td>
 </tr>
 <tr>
 <td><code>interloper-aws</code></td>
 <td><code>AWSConnection</code> (an access key pair, or boto3's default credential chain), <code>S3Destination</code> (an <code>ObjectStoreDestination</code> over Amazon S3: hive-partitioned Parquet, JSONL or CSV).</td>
-<td><code>interloper.components</code></td>
+<td><code>components</code></td>
 </tr>
 <tr>
 <td><code>interloper-azure</code></td>
 <td><code>AzureConnection</code> (a Microsoft Entra service principal), <code>FabricWarehouseDestination</code> (a <code>DatabaseDestination</code> over a Microsoft Fabric Warehouse's SQL endpoint: typed T-SQL DDL, one schema per dataset, atomic partition replaces in an explicit transaction, batched parameterised inserts).</td>
-<td><code>interloper.components</code></td>
+<td><code>components</code></td>
 </tr>
 <tr>
 <td><code>interloper-slack</code></td>
 <td><code>SlackConnection</code>, <code>SlackHook</code>: a notification hook posting run and backfill outcomes to a channel, with a link back to the app when <code>server.external_url</code> is set.</td>
-<td><code>interloper.components</code></td>
+<td><code>components</code></td>
 </tr>
 <tr>
 <td><code>interloper-sql</code></td>
 <td><code>IbisView</code>, <code>ibis_view</code>, <code>union</code>: portable views authored as Ibis expressions, compiled for the destination's dialect. With the <code>postgres</code> extra, <code>SQLConnection</code> and <code>SQLDestination</code>: a <code>DatabaseDestination</code> over SQLAlchemy Core, one table per asset with datasets as SQL schemas; PostgreSQL through psycopg, any other SQLAlchemy dialect whose driver is installed.</td>
-<td><code>interloper.components</code></td>
+<td><code>components</code></td>
 </tr>
 <tr>
 <td><code>interloper-snowflake</code></td>
 <td><code>SnowflakeConnection</code>, <code>SnowflakeDestination</code> (a <code>DatabaseDestination</code> with typed DDL, quoted case-preserving identifiers and atomic partition replaces through a staged Parquet <code>COPY INTO</code>).</td>
-<td><code>interloper.components</code></td>
+<td><code>components</code></td>
 </tr>
 <tr>
 <td><code>interloper-clickhouse</code></td>
 <td><code>ClickHouseConnection</code>, <code>ClickHouseDestination</code> (a <code>DatabaseDestination</code> writing <code>MergeTree</code> tables, one database per dataset, partitioned to match the asset and replaced atomically per partition through a staging table and <code>REPLACE PARTITION</code>; self-hosted servers and ClickHouse Cloud).</td>
-<td><code>interloper.components</code></td>
+<td><code>components</code></td>
 </tr>
 <tr>
 <td><code>interloper-databricks</code></td>
 <td><code>DatabricksConnection</code> (an OAuth service principal or a personal access token), <code>DatabricksDestination</code> (a <code>DatabaseDestination</code> writing Delta tables in Unity Catalog through a SQL warehouse: Parquet staged in a volume, each partition replaced by one atomic <code>INSERT ... REPLACE WHERE</code>).</td>
-<td><code>interloper.components</code></td>
+<td><code>components</code></td>
 </tr>
 <tr>
 <td><code>interloper-assets</code></td>
 <td>Ready-made sources and connections for advertising, analytics and commerce platforms (Facebook Ads, Google Ads, Bing Ads, Amazon Ads, LinkedIn, TikTok, Pinterest, Snapchat, Criteo, Search Console, and more), plus the <code>demo</code> source.</td>
-<td><code>interloper.components</code></td>
+<td><code>components</code></td>
 </tr>
 <tr>
 <td><code>interloper-docker</code></td>
 <td><code>DockerRunner</code>: each operation runs in a container, events stream back to the host.</td>
-<td><code>interloper.runners</code>: <code>docker</code>; <code>interloper.launchers</code>: <code>docker</code></td>
+<td><code>runners</code>: <code>docker</code>; <code>launchers</code>: <code>docker</code></td>
 </tr>
 <tr>
 <td><code>interloper-k8s</code></td>
 <td><code>KubernetesRunner</code>: each operation runs as a Kubernetes Job.</td>
-<td><code>interloper.runners</code>: <code>kubernetes</code>; <code>interloper.launchers</code>: <code>kubernetes</code></td>
+<td><code>runners</code>: <code>kubernetes</code>; <code>launchers</code>: <code>kubernetes</code></td>
 </tr>
 </tbody>
 </table>

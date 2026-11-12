@@ -1780,14 +1780,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../entry-points/" class="md-nav__link">
+      <a href="../extensions/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-  Entry points & registries
+  Extensions & registries
 
     
   </span>
@@ -2536,8 +2536,9 @@ per transition, each emitting its <code>OPERATION_*</code> event with a determin
 as satisfied predecessors. The transitions are not thread-safe: call them from the run's event loop only,
 never from a thread an <code>execute</code> hands work to.</p>
 <h2 id="registering">Registering<a class="headerlink" href="#registering" title="Permanent link">&para;</a></h2>
-<div class="language-toml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">[project.entry-points.</span><span class="s2">"interloper.runners"</span><span class="k">]</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">deadline</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"my_package.runner:DeadlineRunner"</span>
+<p>In your package's <a href="../extensions/">extension manifest</a>:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">runners</span><span class="p">:</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">deadline</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_package.runner:DeadlineRunner</span>
 </span></code></pre></div>
 <p><code>il.Runner.from_settings(settings.runner)</code> resolves <code>runner.type</code> in the <code>RUNNERS</code> registry and
 constructs the class with <code>runner.config</code>, so a registered runner is selectable from
@@ -2552,9 +2553,9 @@ with the run's token in <code>INTERLOPER_RUN_TOKEN</code>, the reaper's heartbea
 <code>server.internal_url</code> in <code>INTERLOPER_SERVER_INTERNAL_URL</code>. That process holds no database
 credentials: it loads what the
 run executes from the API (<code>RunSpec</code>: the DAG, connections resolved, its partition and its event
-metadata) and reports its events back there. Register a launcher in the <code>interloper.launchers</code>
-entry-point group and give it a <code>from_settings</code> classmethod, as the Docker and Kubernetes
-launchers do.</p>
+metadata) and reports its events back there. Register a launcher in the <code>launchers</code> section of
+your manifest and give it a <code>from_settings</code> classmethod, as the Docker and Kubernetes launchers
+do.</p>
 <h2 id="events-from-children">Events from children<a class="headerlink" href="#events-from-children" title="Permanent link">&para;</a></h2>
 <p>A run that executes each operation in a child process (the Docker and Kubernetes runners) still
 owns its operations' lifecycle: the host reports every start, retry and verdict, and the child

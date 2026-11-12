@@ -1662,14 +1662,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../extending/entry-points/" class="md-nav__link">
+      <a href="../../extending/extensions/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-  Entry points & registries
+  Extensions & registries
 
     
   </span>
@@ -5900,7 +5900,7 @@ deprecated whatever its source.</p>
 
 <a href="#interloper.component.base.KINDS" class="headerlink" title="Permanent link">&para;</a></h2>
 <div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">KINDS</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Registry&lt;/span&gt;" href="./#interloper.Registry">Registry</a></span><span class="p">[</span><span class="n"><span title="type">type</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Component&lt;/span&gt;" href="./#interloper.Component">Component</a></span><span class="p">]]</span> <span class="o">=</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Registry&lt;/span&gt;" href="./#interloper.Registry">Registry</a></span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n"><span title="interloper.component.base._KINDS_ENTRY_POINT">_KINDS_ENTRY_POINT</span></span><span class="p">,</span> <span class="n"><span title="interloper.registry.Registry(adopt)">adopt</span></span><span class="o">=</span><span class="n"><span title="interloper.component.base._adopt_kind">_adopt_kind</span></span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="s2">"kinds"</span><span class="p">,</span> <span class="n"><span title="interloper.registry.Registry(adopt)">adopt</span></span><span class="o">=</span><span class="n"><span title="interloper.component.base._adopt_kind">_adopt_kind</span></span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span>
 </span></code></pre></div>
 
@@ -5920,7 +5920,7 @@ deprecated whatever its source.</p>
 
 <a href="#interloper.Registry" class="headerlink" title="Permanent link">&para;</a></h2>
 <div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">Registry</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">group</span><span class="p">:</span> <span class="n"><span title="str">str</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">section</span><span class="p">:</span> <span class="n"><span title="str">str</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">adopt</span><span class="p">:</span> <span class="n"><span title="collections.abc.Callable">Callable</span></span><span class="p">[[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">],</span> <span class="n"><span title="tuple">tuple</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="interloper.registry.base.T">T</span></span><span class="p">]]</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="p">)</span>
@@ -5932,17 +5932,20 @@ deprecated whatever its source.</p>
 
 
 
-        <p>Name → object registry, optionally fed by an entry-point group.</p>
-<p>Entries register explicitly via <code>register</code>, or are loaded lazily
-from <em>group</em> on first lookup. Registration is first-wins and idempotent.
-<em>adopt</em> transforms a loaded entry into its <code>(name, object)</code> pair —
-the default keeps the entry name and object as declared.</p>
-<p>One installed package never takes the others down: an entry point that
-fails to load or adopt is skipped with a warning naming it. Without
-<em>adopt</em>, an entry's name is its key, so a lookup by name loads only the
-entry points declared under that name; a listing loads them all.</p>
+        <p>Name → object registry, optionally fed by a manifest section.</p>
+<p>Entries register explicitly via <code>register</code>, or are loaded lazily from
+<em>section</em> on first lookup. Registration is first-wins and idempotent; an
+entry a manifest declares under a name already taken is skipped with a
+warning naming both. <em>adopt</em> transforms a loaded entry into its
+<code>(name, object)</code> pair; the default keeps the entry's name and object
+as declared.</p>
+<p>One installed package never takes the others down: an entry that fails
+to load or adopt is skipped with a warning and recorded in
+<code>Manifests.failures</code>. Without <em>adopt</em>, an entry's name is its key, so a
+lookup by name loads only the entries declared under that name; a listing
+loads them all.</p>
 
-        <p>Initialize the registry.</p>
+        <p>Initialize the registry and claim its section.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -5958,15 +5961,15 @@ entry points declared under that name; a listing loads them all.</p>
       <tbody>
           <tr class="doc-section-item">
             <td>
-                <code>group</code>
+                <code>section</code>
             </td>
             <td>
                   <code><span title="str">str</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Entry-point group to load lazily; <code>None</code> for a purely
-code-registered registry.</p>
+                <p>The manifest section to load lazily; <code>None</code> for a
+purely code-registered registry.</p>
               </div>
             </td>
             <td>

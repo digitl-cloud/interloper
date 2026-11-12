@@ -1808,14 +1808,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../entry-points/" class="md-nav__link">
+      <a href="../extensions/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-  Entry points & registries
+  Extensions & registries
 
     
   </span>
@@ -2572,16 +2572,17 @@ beyond the base, so <code>Destination.definition()</code> returns a plain <code>
 <h3 id="kinds-and-anchors">Kinds and anchors<a class="headerlink" href="#kinds-and-anchors" title="Permanent link">&para;</a></h3>
 <p>Each kind has an <strong>anchor</strong>: the base-most class declaring it (<code>Connection</code> for every
 connection). <code>Component.anchor()</code> resolves it, and the <code>KINDS</code> registry maps kind names to
-anchors. Anchors are declared through the <code>interloper.kinds</code> entry-point group; the core
-declares <code>source</code>, <code>asset</code>, <code>destination</code>, <code>resource</code>, <code>connection</code>, <code>config</code>, <code>job</code> and
-<code>hook</code>. A new kind is a new anchor class and one entry-point line:</p>
+anchors. Anchors are declared in the <code>kinds</code> section of a package's
+<a href="../extensions/">extension manifest</a>; the core declares <code>source</code>, <code>asset</code>, <code>destination</code>,
+<code>resource</code>, <code>connection</code>, <code>config</code>, <code>job</code> and <code>hook</code>. A new kind is a new anchor class and one
+manifest line:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Report</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Component</span><span class="p">):</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span><span class="sd">"""A rendered document built from assets."""</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">inputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">il</span><span class="o">.</span><span class="n">Asset</span><span class="p">]</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"asset"</span><span class="p">,</span> <span class="n">many</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </span></code></pre></div>
-<div class="language-toml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">[project.entry-points.</span><span class="s2">"interloper.kinds"</span><span class="k">]</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">report</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"my_package.report:Report"</span>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">kinds</span><span class="p">:</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_package.report:Report</span>
 </span></code></pre></div>
 <p>A catalog containing a component of an unregistered kind raises <code>ConfigError</code>.</p>
 <h3 id="relations">Relations<a class="headerlink" href="#relations" title="Permanent link">&para;</a></h3>
@@ -2721,7 +2722,7 @@ as it was), duplicates collapse, and clearing a non-optional relation raises <co
 expose its value, <code>discriminator_field()</code> its name for callers holding a config without an
 instance; sources use it for per-instance table names. Two marked fields raise <code>TypeError</code>.</p>
 <h2 id="writing-a-kind">Writing a kind<a class="headerlink" href="#writing-a-kind" title="Permanent link">&para;</a></h2>
-<p>A kind is an anchor class plus one entry-point line. Everything above applies to it; this is the
+<p>A kind is an anchor class plus one manifest line. Everything above applies to it; this is the
 order in which it comes up.</p>
 <ol>
 <li>
@@ -2752,10 +2753,10 @@ order in which it comes up.</p>
 </span></code></pre></div>
 </li>
 <li>
-<p><strong>Register the anchor.</strong> One line in <code>pyproject.toml</code>; the catalog raises <code>ConfigError</code> for a
-   component whose kind it does not know.</p>
-<div class="language-toml highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">[project.entry-points.</span><span class="s2">"interloper.kinds"</span><span class="k">]</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">report</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"my_package.report:Report"</span>
+<p><strong>Register the anchor.</strong> One line in your package's <code>extension.yaml</code>; the catalog raises
+   <code>ConfigError</code> for a component whose kind it does not know.</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">kinds</span><span class="p">:</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_package.report:Report</span>
 </span></code></pre></div>
 </li>
 <li>
@@ -2783,10 +2784,10 @@ and anything else is a <code>TypeError</code> naming what is accepted. Nothing i
 functions, as <code>Asset</code> and <code>Source</code> do, overrides <code>body_from_function</code> to say what a function
 becomes.</p>
 <h2 id="definitions-in-the-catalog">Definitions in the catalog<a class="headerlink" href="#definitions-in-the-catalog" title="Permanent link">&para;</a></h2>
-<p>Every class reachable through the <code>interloper.components</code> entry point becomes a catalog entry
-through its <code>definition()</code>. Nothing is inferred or registered at import time: installation is
+<p>Every class reachable through a manifest's <code>components</code> section becomes a catalog entry through
+its <code>definition()</code>. Nothing is inferred or registered at import time: installation is
 registration, and the catalog contains exactly what was declared. See
-<a href="../../guide/catalog/">Catalog</a> and <a href="../entry-points/">Entry points</a>.</p>
+<a href="../../guide/catalog/">Catalog</a> and <a href="../extensions/">Extensions &amp; registries</a>.</p>
 
 
 

@@ -1758,14 +1758,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../extending/entry-points/" class="md-nav__link">
+      <a href="../../extending/extensions/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-  Entry points & registries
+  Extensions & registries
 
     
   </span>
@@ -2578,14 +2578,15 @@ override on a subclass:</p>
 <p><code>_token_request(params)</code> builds the POST in the provider's encoding. Requests are <code>httpx2.Request</code>
 objects; the caller owns the client and error handling.</p>
 <h2 id="registering-a-provider">Registering a provider<a class="headerlink" href="#registering-a-provider" title="Permanent link">&para;</a></h2>
-<p>Providers register through the <code>interloper.oauth_providers</code> entry-point group. The entry may
-point at an instance or at a class that constructs one:</p>
-<div class="language-toml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">[project.entry-points.</span><span class="s2">"interloper.oauth_providers"</span><span class="k">]</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">acme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"my_package.oauth:ACME"</span>
+<p>Providers register in the <code>oauth_providers</code> section of their package's
+<a href="../../extending/extensions/">extension manifest</a>. An entry may point at an instance or at a
+class that constructs one:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">oauth_providers</span><span class="p">:</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_package.oauth:ACME</span>
 </span></code></pre></div>
-<p>The registry keys the provider by its own <code>key</code>, not by the entry-point name. It loads lazily
-from installed-package metadata, so no import-order dependence exists. An <code>OAuthConfig</code>
-naming an unregistered provider without an explicit <code>auth_url</code> raises <code>ConfigError</code>.</p>
+<p>The registry keys the provider by its own <code>key</code>. It loads lazily from the installed packages'
+manifests, so no import-order dependence exists. An <code>OAuthConfig</code> naming an unregistered
+provider without an explicit <code>auth_url</code> raises <code>ConfigError</code>.</p>
 <h2 id="in-house-app-credentials">In-house app credentials<a class="headerlink" href="#in-house-app-credentials" title="Permanent link">&para;</a></h2>
 <p>Each provider's OAuth app is configured in the environment by its client id and secret:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>INTERLOPER_&lt;PROVIDER&gt;_CLIENT_ID
