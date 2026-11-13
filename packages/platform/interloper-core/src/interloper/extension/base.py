@@ -32,6 +32,7 @@ when its registry first needs it.
 
 One package never takes the others down: a manifest, section or entry that
 cannot be read is skipped with a warning and recorded in `Manifests.failures`.
+`Manifests.extensions` lists every package found, its manifest read or not.
 """
 
 from __future__ import annotations
@@ -46,7 +47,7 @@ from typing import Any
 
 import yaml
 
-from interloper.extension.entry import ExtensionEntry, ExtensionFailure
+from interloper.extension.entry import Extension, ExtensionEntry, ExtensionFailure
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,7 @@ class Manifests:
         """
         self._group = group
         self._packages: dict[str, str] = {}
+        self._extensions: list[Extension] = []
         self._entries: dict[str, list[ExtensionEntry]] = {}
         self._declared: list[tuple[str, str]] = []
         self._claimed: set[str] = set()
@@ -110,6 +112,16 @@ class Manifests:
         """
         self._read()
         return tuple(self._entries.get(section, ()))
+
+    def extensions(self) -> tuple[Extension, ...]:
+        """Every package the entry point names, whether its manifest could be read or not.
+
+        Returns:
+            The extensions, sorted by package; one whose manifest was skipped
+            carries no key.
+        """
+        self._read()
+        return tuple(sorted(self._extensions, key=lambda extension: extension.package))
 
     def unclaimed(self) -> tuple[tuple[str, str], ...]:
         """The sections declared in a manifest that no registry in this process claimed.
@@ -156,20 +168,23 @@ class Manifests:
             if self._loaded:
                 return
             for locator in entry_points(group=self._group):
-                self._add(locator.module)
+                self._add(locator.module, locator.dist.version if locator.dist else None)
             self._loaded = True
 
-    def _add(self, package: str) -> None:
+    def _add(self, package: str, version: str | None) -> None:
         """Add one package's manifest, skipping what cannot be read.
 
         Args:
             package: The import package that ships the manifest.
+            version: The version of the distribution naming it, or ``None``.
         """
         try:
-            key, sections = self._parse(package)
+            key, identity, sections = self._parse(package)
         except (ImportError, OSError, TypeError, ValueError, yaml.YAMLError) as error:
+            self._extensions.append(Extension(package, version))
             self.record(ExtensionFailure(package, None, None, str(error)))
             return
+        self._extensions.append(Extension(package, version, key, **identity))
         self._packages[key] = package
         for section, value in sections.items():
             try:
@@ -180,14 +195,15 @@ class Manifests:
             self._declared.append((package, section))
             self._entries.setdefault(section, []).extend(section_entries)
 
-    def _parse(self, package: str) -> tuple[str, dict[str, Any]]:
+    def _parse(self, package: str) -> tuple[str, dict[str, str], dict[str, Any]]:
         """Read one package's manifest and check its identity.
 
         Args:
             package: The import package that ships the manifest.
 
         Returns:
-            The manifest's key and its sections.
+            The manifest's key, the identity values it gives besides
+            (``name``, ``description``, ``icon``) and its sections.
 
         Raises:
             TypeError: If the manifest is not a mapping, or an identity value
@@ -205,14 +221,15 @@ class Manifests:
             raise ValueError(f"key {key!r} is not a lowercase identifier")
         if key in self._packages:
             raise ValueError(f"key '{key}' is already declared by package '{self._packages[key]}'")
-        for identity in ("name", "description", "icon"):
-            if not isinstance(document.get(identity, ""), str):
-                raise TypeError(f"{identity} is not a string")
+        identity = {name: document[name] for name in ("name", "description", "icon") if name in document}
+        for name, value in identity.items():
+            if not isinstance(value, str):
+                raise TypeError(f"{name} is not a string")
         sections = {section: value for section, value in document.items() if section not in IDENTITY_KEYS}
         for section in sections:
             if not isinstance(section, str):
                 raise TypeError(f"section name {section!r} is not a string")
-        return key, sections
+        return key, identity, sections
 
     def _locate(self, package: str) -> Path:
         """Find a package's manifest without importing the package.

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AdminConfig, AdminSettingsField } from '~/types/admin'
+import type { AdminConfig, AdminExtension, AdminSettingsField } from '~/types/admin'
 
 definePageMeta({ layout: 'admin', middleware: 'super-admin' })
 
@@ -38,7 +38,7 @@ interface ConfigRow {
     attrs?: { key: string, value: string }[]
     /** A list value, one entry per line. */
     items?: string[]
-    /** Catalog import paths, listed under the value. */
+    /** Code listed under the value: catalog import paths, load failures. */
     lines?: string[]
 }
 
@@ -94,9 +94,23 @@ function fieldRows(fields: AdminSettingsField[]): ConfigRow[] {
         })
 }
 
+/** One row per installed package: its version, whether everything it declares loaded, and what did not. */
+function extensionRow(extension: AdminExtension): ConfigRow {
+    return {
+        label: extension.name || extension.key || extension.package,
+        description: extension.description || undefined,
+        value: extension.version ?? 'unknown',
+        pill: extension.status === 'ok'
+            ? { label: 'Loaded', color: 'success' }
+            : { label: 'Failed', color: 'error' },
+        lines: extension.failures.map(({ section, entry, error }) =>
+            `${entry ? `${section}.${entry}` : section ?? 'manifest'}: ${error}`),
+    }
+}
+
 const sections = computed<ConfigSection[]>(() => {
     if (!config.value) return []
-    const { version, features, catalog } = config.value
+    const { version, features, catalog, extensions } = config.value
 
     const deploymentRows: ConfigRow[] = [
         { label: 'Version', value: version ?? 'unknown' },
@@ -118,6 +132,11 @@ const sections = computed<ConfigSection[]>(() => {
 
     return [
         { title: 'Deployment', rows: deploymentRows },
+        {
+            title: 'Extensions',
+            description: 'The installed packages, each with the version it runs and what failed to load.',
+            rows: extensions.map(extensionRow),
+        },
         { title: 'Catalog', rows: catalogRows.length ? catalogRows : [{ label: 'Catalog', value: 'empty' }] },
         ...config.value.sections.map(section => ({
             title: section.name,
@@ -137,8 +156,8 @@ const sections = computed<ConfigSection[]>(() => {
         <template #body>
             <div class="mx-auto flex w-full max-w-2xl flex-col gap-4 sm:gap-6">
                 <p class="text-sm text-muted">
-                    How this deployment is wired, read from the running instance: one card per settings section the
-                    installed packages declare. A secret shows only whether it is configured.
+                    How this deployment is wired, read from the running instance: the installed packages, then one
+                    card per settings section they declare. A secret shows only whether it is configured.
                 </p>
 
                 <div v-if="loading"
@@ -201,7 +220,7 @@ const sections = computed<ConfigSection[]>(() => {
                                                   :key="item"
                                                   class="break-all font-medium text-highlighted">{{ item }}</span>
                                         </div>
-                                        <div v-if="row.lines"
+                                        <div v-if="row.lines?.length"
                                              class="flex flex-col gap-1 sm:items-end">
                                             <span v-for="line in row.lines"
                                                   :key="line"

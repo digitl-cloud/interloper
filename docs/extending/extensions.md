@@ -68,6 +68,7 @@ needs it.
 | `cli` | an `interloper` command | the `Command` class | the `interloper` CLI |
 | `launchers` | a launcher | the class | the scheduler's queue worker |
 | `settings` | a settings section | the `Settings` class | its own `get()`; the admin configuration page; the settings reference |
+| `routes` | HTTP routes | a FastAPI `APIRouter` | the API, which mounts it under `/api/organisations/{org_id}/ext/<name>` |
 
 Core declares its own kinds, jobs, hooks, runners, representation, providers, commands and
 settings in its own manifest, the same way.
@@ -155,6 +156,53 @@ class StorageCommand(Command):
 
     commands: ClassVar[Mapping[str, type[Command]]] = {"backup": BackupCommand, "restore": RestoreCommand}
 ```
+
+## Routes
+
+A `routes` entry names a FastAPI `APIRouter`. Declared as a single import string, it is named
+by the extension's key, and the API mounts it under the organisation the request acts in:
+
+```yaml
+routes: acme_interloper.routes:router
+```
+
+```py
+from uuid import UUID
+
+from fastapi import APIRouter
+from interloper_api.dependencies import EditorDep, StoreDep, ViewerDep, load_authorized
+
+router = APIRouter()
+
+
+@router.get("/buckets/{bucket_id}")
+def get_bucket(bucket_id: UUID, store: StoreDep, scope: ViewerDep) -> dict:
+    bucket = load_authorized(store.components.get, bucket_id, scope, label="Bucket")
+    return {"id": str(bucket.id), "name": bucket.name}
+
+
+@router.post("/buckets")
+def create_bucket(scope: EditorDep) -> dict:
+    ...
+```
+
+`GET /api/organisations/{org_id}/ext/acme/buckets/{bucket_id}` reaches `get_bucket`. Every
+route of the router requires the viewer role in the organisation the path names, so a caller
+outside it reads the organisation as missing; a route that writes raises the floor with
+`EditorDep` or `AdminDep`. Keeping one organisation's data from another is the router's job:
+every row it stores carries the organisation's id, and a fetch by id goes through
+`load_authorized`, which answers a record of another organisation with the same 404 as a
+missing one.
+
+The routes reach Python in every deployment shape, since only `/api` goes to the API, and the
+package declaring them must be installed in the API's image.
+
+## The installed packages
+
+`GET /api/extensions` lists the installed packages that ship a manifest, the platform's own
+included, for any signed-in user: each one's key, name, description, icon, version and
+`status`, `ok` when everything it declares loaded and `failed` otherwise. The admin
+configuration page lists the same packages with what failed to load and why.
 
 ## When something does not load
 

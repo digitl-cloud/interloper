@@ -7,7 +7,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from interloper.catalog import Catalog
@@ -24,7 +24,7 @@ from interloper_db import (
 from starlette.concurrency import run_in_threadpool
 
 from interloper_api.authorization import AuthorizationServer, CrossOriginMiddleware
-from interloper_api.dependencies import State
+from interloper_api.dependencies import State, require_viewer
 from interloper_api.login import GoogleLogin
 from interloper_api.routes import (
     admin,
@@ -34,6 +34,7 @@ from interloper_api.routes import (
     backfills,
     components,
     executions,
+    extensions,
     health,
     oauth,
     organisations,
@@ -49,7 +50,8 @@ from interloper_api.settings import ApiSettings
 logger = logging.getLogger(__name__)
 
 #: Routers mounted under ``/api`` for every deployment: the caller's own, the
-#: organisation management and super-admin ones, a run's ingest, and the probes.
+#: organisation management and super-admin ones, the installed extensions, a
+#: run's ingest, and the probes.
 _ROUTERS: tuple[APIRouter, ...] = (
     auth.router,
     authorization.router,
@@ -58,13 +60,14 @@ _ROUTERS: tuple[APIRouter, ...] = (
     oauth.router,
     tokens.router,
     apps.router,
+    extensions.router,
     runs.router,
     health.router,
 )
 
 #: Routers acting in one organisation, mounted under ``/api/organisations/{org_id}``.
-#: The agent router is absent by design: it is optional and mounted by
-#: :func:`_mount_agent`.
+#: The agent's and the extensions' are absent by design: they are optional and
+#: mounted by :func:`_mount_agent` and :func:`_mount_extensions`.
 _ORG_ROUTERS: tuple[APIRouter, ...] = (
     organisations.org_router,
     catalog_routes.org_router,
@@ -185,8 +188,9 @@ def create_app(
 ) -> FastAPI:
     """Create the FastAPI application with all routes.
 
-    On startup the application promotes the configured super-admins and
-    starts the realtime listener.
+    The routes the installed packages declare mount under
+    ``/api/organisations/{org_id}/ext/<name>``. On startup the application
+    promotes the configured super-admins and starts the realtime listener.
 
     Args:
         store: The ``Store`` instance for persistence.
@@ -227,6 +231,7 @@ def create_app(
     for org_router in _ORG_ROUTERS:
         api.include_router(org_router, prefix=ORG_PREFIX)
     agent_model = _mount_agent(api, settings)
+    _mount_extensions(api)
     app.include_router(api)
     app.include_router(authorization.well_known_router)
 
@@ -292,6 +297,20 @@ def _mount_agent(api: APIRouter, settings: ApiSettings) -> str | None:
     api.include_router(agent_routes.router)
     api.include_router(agent_routes.org_router, prefix=ORG_PREFIX)
     return settings.agent.model
+
+
+def _mount_extensions(api: APIRouter) -> None:
+    """Mount every router the installed packages declare, the viewer role its floor.
+
+    A router that fails to load is skipped and recorded, so the listing and
+    the configuration page name it while every other one serves.
+
+    Args:
+        api: The ``/api`` router to mount onto.
+    """
+    for name, router in extensions.EXTENSION_ROUTERS.items():
+        api.include_router(router, prefix=f"{ORG_PREFIX}/ext/{name}", dependencies=[Depends(require_viewer)])
+        logger.info("Extension routes '%s' mounted at /api%s/ext/%s.", name, ORG_PREFIX, name)
 
 
 def _state(

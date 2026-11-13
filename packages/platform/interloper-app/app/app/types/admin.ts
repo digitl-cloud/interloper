@@ -35,11 +35,36 @@ export interface AdminSettingsSection {
     fields: AdminSettingsField[]
 }
 
+/** Something an installed package declares that was skipped: its manifest, a section or an entry. */
+export interface AdminExtensionFailure {
+    package: string
+    /** `null` when the whole manifest was skipped. */
+    section: string | null
+    /** `null` when a whole section or manifest was skipped. */
+    entry: string | null
+    error: string
+}
+
+/** One installed package that ships an extension manifest. */
+export interface AdminExtension {
+    package: string
+    /** `null` when its manifest could not be read. */
+    key: string | null
+    name: string
+    description: string
+    icon: string
+    version: string | null
+    /** `failed` when anything it declares was skipped. */
+    status: 'ok' | 'failed'
+    failures: AdminExtensionFailure[]
+}
+
 export interface AdminConfig {
     version: string | null
     features: Record<string, boolean>
     catalog: Record<string, string[]>
     sections: AdminSettingsSection[]
+    extensions: AdminExtension[]
 }
 
 /**
