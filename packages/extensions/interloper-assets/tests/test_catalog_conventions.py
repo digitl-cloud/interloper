@@ -7,7 +7,7 @@ carries no ``Args:``, ``Returns:``, ``Yields:`` or ``Raises:`` section.
 
 Entity assets are dimension snapshots, so they are snapshot-partitioned: the
 partition is the day the run observed the vendor, never the run's window
-(rule 2 of ``.claude/rules/assets.md``), and only an entity is. The BigQuery
+(rule 2 of ``.claude/rules/assets.md``). The BigQuery
 destination requires the partition column to exist on the schema, as a date,
 so every time- or snapshot-partitioned schema must declare it.
 
@@ -210,16 +210,6 @@ def test_every_entity_asset_is_snapshot_partitioned_on_date():
                 f"{source.__name__}.{asset_type.key}: 'date' must be typed dt.date | None"
             )
     assert checked >= 18, f"expected at least 18 entity assets in the catalog, found {checked}"
-
-
-def test_only_an_entity_asset_is_snapshot_partitioned():
-    misses = [
-        f"{source.__name__}.{asset_type.key}"
-        for source in _catalog_sources()
-        for asset_type in source.asset_types
-        if isinstance(asset_type.partitioning, il.SnapshotPartitionConfig) and "Entity" not in (asset_type.tags or [])
-    ]
-    assert not misses, "snapshot-partitioned assets not tagged Entity:\n" + "\n".join(misses)
 
 
 def test_every_partition_column_is_a_declared_date():

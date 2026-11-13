@@ -108,12 +108,9 @@ class FacebookInsights(il.Source):
                 row[column] = value
         return list(rows.values())
 
-    @il.asset(schema=PostsStats, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    @il.asset(schema=PostsStats, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Report"])
     async def posts_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-        """Lifetime insights of every Facebook Page post and story updated in the last 180 days, snapshotted daily.
-
-        Each partition holds the values as of the day it ran, so a backfilled partition carries today's totals.
-        """
+        """Lifetime insights of every Facebook Page post and story updated in the last 180 days, snapshotted daily."""
         since = context.partition_date - dt.timedelta(days=constants.POSTS_LOOKBACK_DAYS)
         until = context.partition_date + dt.timedelta(days=1)
         insights_field = f"insights.metric({','.join(constants.INSIGHTS_POST_METRICS)}){{name,values,id}}"

@@ -152,37 +152,24 @@ class InstagramInsights(il.Source):
         row: dict[str, Any] = {insight["name"]: insight.get("total_value", {}).get("value") for insight in insights}
         return [{**row, "date": context.partition_date}]
 
-    @il.asset(schema=FollowersStatsByCountry, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    @il.asset(schema=FollowersStatsByCountry, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Report"])
     async def followers_stats_by_country(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-        """Lifetime follower counts of the Instagram account by country.
-
-        Each partition holds the counts as of the day it ran, so a backfilled partition carries today's audience.
-        """
+        """Lifetime follower counts of the Instagram account by country."""
         return await self._follower_demographics(context.partition_date, ["country"])
 
-    @il.asset(schema=FollowersStatsByCity, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    @il.asset(schema=FollowersStatsByCity, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Report"])
     async def followers_stats_by_city(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-        """Lifetime follower counts of the Instagram account by city.
-
-        Each partition holds the counts as of the day it ran, so a backfilled partition carries today's audience.
-        """
+        """Lifetime follower counts of the Instagram account by city."""
         return await self._follower_demographics(context.partition_date, ["city"])
 
-    @il.asset(schema=FollowersStatsByAgeGender, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    @il.asset(schema=FollowersStatsByAgeGender, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Report"])
     async def followers_stats_by_age_gender(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-        """Lifetime follower counts of the Instagram account by gender and age bracket.
-
-        Each partition holds the counts as of the day it ran, so a backfilled partition carries today's audience.
-        """
+        """Lifetime follower counts of the Instagram account by gender and age bracket."""
         return await self._follower_demographics(context.partition_date, ["gender", "age"])
 
-    @il.asset(schema=MediaStats, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    @il.asset(schema=MediaStats, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Report"])
     async def media_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-        """Lifetime insights of Instagram posts and reels from the last 180 days and of live stories.
-
-        Snapshotted daily: each partition holds every media item's cumulative metrics as of the day it ran,
-        so a backfilled partition carries today's totals and today's live stories.
-        """
+        """Lifetime insights of Instagram posts and reels from the last 180 days and of live stories."""
         client = self.connection.client
         fields = ",".join(constants.MEDIA_STATS_FIELDS)
         since = context.partition_date - dt.timedelta(days=constants.MEDIA_LOOKBACK_DAYS)

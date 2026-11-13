@@ -158,7 +158,7 @@ class LinkedinOrganic(il.Source):
             url = href if href.startswith("http") else f"{constants.API_URL}{href}"
 
     # -- STATISTICS ------------------------------------------------------------
-    @il.asset(schema=FollowersStats, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    @il.asset(schema=FollowersStats, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Report"])
     async def followers_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Lifetime follower counts of the organization page by function, geography, industry, seniority and more.
 
