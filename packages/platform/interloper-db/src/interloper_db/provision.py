@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from time import sleep
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Engine
@@ -61,18 +62,18 @@ def create_all(engine: Engine | None = None) -> None:
     eng = engine or get_engine()
     # Stable arbitrary bigint — only this provisioning routine uses it.
     PROVISION_LOCK_KEY = 0x1A7E_5C8E_A7E1_5C8E
-    with eng.connect() as lock_conn:
-        # Waiting out a sibling's migrations must not trip the engine's statement timeout.
-        lock_conn.execute(text("SET statement_timeout = 0"))
-        lock_conn.execute(text("SELECT pg_advisory_lock(:k)"), {"k": PROVISION_LOCK_KEY})
+    # A migration's CREATE INDEX CONCURRENTLY waits out every older transaction, so the lock is held outside one
+    # and polled for: a sibling blocked in pg_advisory_lock would hold a snapshot the holder's build waits out.
+    with eng.connect().execution_options(isolation_level="AUTOCOMMIT") as lock_connection:
+        while not lock_connection.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": PROVISION_LOCK_KEY}).scalar():
+            sleep(1)
         try:
             # Tables a migration creates with database objects of their own (a trigger) are Alembic's to create.
             tables = [table for table in SQLModel.metadata.sorted_tables if not table.info.get("migration_owned")]
             SQLModel.metadata.create_all(eng, tables=tables)
             upgrade(engine=eng)
         finally:
-            lock_conn.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": PROVISION_LOCK_KEY})
-            lock_conn.commit()
+            lock_connection.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": PROVISION_LOCK_KEY})
 
 
 def ensure_database(dsn: str) -> None:

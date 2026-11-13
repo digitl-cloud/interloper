@@ -27,18 +27,30 @@ from interloper_db.provision import (
 
 
 class FakeConnection:
-    """Records every statement executed against it, plus commits."""
+    """Records every statement executed against it, plus its execution options."""
 
     def __init__(self, rows: list[Any] | None = None) -> None:
         """Set up the fake.
 
         Args:
-            rows: Results ``fetchone`` hands back in order; an exhausted
-                queue yields ``None``, standing in for "no such row".
+            rows: Results ``fetchone`` and ``scalar`` hand back in order; an
+                exhausted queue yields ``None``, standing in for "no such row".
         """
         self.statements: list[tuple[str, dict[str, Any] | None]] = []
-        self.commits = 0
+        self.options: dict[str, Any] = {}
         self._rows = list(rows or [])
+
+    def execution_options(self, **options: Any) -> Self:
+        """Record execution options, as SQLAlchemy sets them on the connection in place.
+
+        Args:
+            **options: The options set.
+
+        Returns:
+            This connection.
+        """
+        self.options.update(options)
+        return self
 
     def execute(self, statement: Any, params: dict[str, Any] | None = None) -> FakeConnection:
         """Record a statement and return self as its result proxy.
@@ -61,9 +73,13 @@ class FakeConnection:
         """
         return self._rows.pop(0) if self._rows else None
 
-    def commit(self) -> None:
-        """Record a commit."""
-        self.commits += 1
+    def scalar(self) -> Any:
+        """Pop the next queued row as a scalar.
+
+        Returns:
+            The next row, or ``None`` once the queue is empty.
+        """
+        return self.fetchone()
 
     def __enter__(self) -> Self:
         """Enter the context.
@@ -220,7 +236,7 @@ class TestCreateAll:
         """
         from sqlmodel import SQLModel
 
-        connection = FakeConnection()
+        connection = FakeConnection(rows=[True])
         engine = FakeEngine(connection)
         created: dict[str, Any] = {}
         upgrades: list[Any] = []
@@ -239,9 +255,9 @@ class TestCreateAll:
         create_all(harness["engine"])
 
         sql = _sql(harness["connection"])
-        assert "pg_advisory_lock" in sql
+        assert "pg_try_advisory_lock" in sql
         assert "pg_advisory_unlock" in sql
-        assert sql.index("pg_advisory_lock") < sql.index("pg_advisory_unlock")
+        assert sql.index("pg_try_advisory_lock") < sql.index("pg_advisory_unlock")
 
     def test_the_lock_and_unlock_share_one_key(self, harness: dict[str, Any]) -> None:
         create_all(harness["engine"])
@@ -249,10 +265,28 @@ class TestCreateAll:
         keys = {params["k"] for _statement, params in harness["connection"].statements if params}
         assert len(keys) == 1
 
-    def test_the_unlock_is_committed(self, harness: dict[str, Any]) -> None:
+    def test_the_lock_is_held_outside_a_transaction(self, harness: dict[str, Any]) -> None:
+        # A migration's CREATE INDEX CONCURRENTLY waits out every older transaction, the lock holder's included.
         create_all(harness["engine"])
 
-        assert harness["connection"].commits == 1
+        assert harness["connection"].options == {"isolation_level": "AUTOCOMMIT"}
+
+    def test_a_taken_lock_is_polled_until_free(self, harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
+        # A sibling blocked in pg_advisory_lock would hold a snapshot the holder's CREATE INDEX CONCURRENTLY waits out.
+        connection = FakeConnection(rows=[False, False, True])
+        harness["engine"].connection = connection
+        upgrades_while_waiting: list[int] = []
+        monkeypatch.setattr(
+            provision_module, "sleep", lambda seconds: upgrades_while_waiting.append(len(harness["upgrades"]))
+        )
+
+        create_all(harness["engine"])
+
+        sql = _sql(connection)
+        assert sql.count("pg_try_advisory_lock") == 3
+        assert "pg_advisory_lock" not in sql
+        assert upgrades_while_waiting == [0, 0]
+        assert len(harness["upgrades"]) == 1
 
     def test_alembic_runs_after_the_tables_exist(self, harness: dict[str, Any]) -> None:
         create_all(harness["engine"])
