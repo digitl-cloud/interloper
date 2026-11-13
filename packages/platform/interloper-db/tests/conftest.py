@@ -30,7 +30,6 @@ from interloper_db.models import (
     Organisation,
     Profile,
     Quota,
-    RefreshToken,
     Run,
     Token,
     Usage,
@@ -87,7 +86,7 @@ def auth_db() -> Iterator[Engine]:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
     auth_models = (Profile, Identity, Organisation, UserOrganisation, Invitation, Token)
-    oauth_models = (OAuthClient, AuthorizationCode, RefreshToken)
+    oauth_models = (OAuthClient, AuthorizationCode)
     org_data_models = (Component, ComponentRelation, Backfill, Run, Event, Quota, Usage, Conversation)
     for model in auth_models + oauth_models + org_data_models:
         table_of(model).create(eng)

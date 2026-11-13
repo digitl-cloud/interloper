@@ -88,9 +88,9 @@ from interloper_db import (
     NotFoundError,
     OAuthClient,
     Profile,
-    RefreshToken,
     Store,
     Token,
+    TokenKind,
 )
 from interloper_db.crypto import derive_fernet_key, hash_token
 from starlette.middleware.cors import CORSMiddleware
@@ -511,10 +511,10 @@ class Credential(TokenMixin):
     """A refresh or access token, as the refresh grant and the revocation endpoint check it.
 
     Attributes:
-        row: The stored refresh token, or the ``tokens`` row of an access token.
+        row: The token's ``tokens`` row, of kind ``refresh`` or ``access``.
     """
 
-    row: RefreshToken | Token
+    row: Token
 
     def check_client(self, client: Client) -> bool:
         """Whether the token was issued to a client.
@@ -803,7 +803,7 @@ class Revocation(RevocationEndpoint):
             request: The revocation request.
         """
         store = self.server.store
-        if isinstance(token.row, RefreshToken):
+        if token.row.kind == TokenKind.REFRESH:
             store.oauth.revoke_family(token.row)
         else:
             store.tokens.revoke(token.row.id)

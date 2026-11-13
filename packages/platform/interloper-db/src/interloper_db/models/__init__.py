@@ -23,7 +23,7 @@ from interloper_db.models.auth import Identity, Invitation, Organisation, Profil
 from interloper_db.models.columns import table_of
 from interloper_db.models.components import Component, ComponentRelation
 from interloper_db.models.conversations import Conversation
-from interloper_db.models.oauth import AuthorizationCode, OAuthClient, RefreshToken
+from interloper_db.models.oauth import AuthorizationCode, OAuthClient
 from interloper_db.models.quotas import Quota, Usage
 from interloper_db.models.runs import (
     ACTIVE_BACKFILL_STATUSES,
@@ -59,7 +59,6 @@ __all__ = [
     "Overdue",
     "Profile",
     "Quota",
-    "RefreshToken",
     "Role",
     "Run",
     "RunStatus",

@@ -4,8 +4,9 @@ interloper is its own authorization server. A client is registered once
 (dynamically, or by an operator for a confidential backend), or names itself
 by the https URL of its own metadata document, kept here as last read; a user's
 approval gives it a single-use authorization code, exchanged for an access
-token (a ``tokens`` row of kind ``access``) and a refresh token, which
-rotates on every use. Every secret is stored as its SHA-256 hash only.
+token and a refresh token, which rotates on every use; both are ``tokens``
+rows, of kinds ``access`` and ``refresh``. Every secret is stored as its
+SHA-256 hash only.
 
 A refresh token belongs to a family: the chain of rotations that started
 with one authorization code. The code carries the family id its first
@@ -68,20 +69,4 @@ class AuthorizationCode(SQLModel, table=True):
     resource: str
     expires_at: datetime = SQLField(sa_column=Column(TZDateTime, nullable=False))
     used_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
-    created_at: datetime | None = timestamp_column()
-
-
-class RefreshToken(SQLModel, table=True):
-    """A client's long-lived credential for a user, replaced on every use."""
-
-    __tablename__: ClassVar[str] = "oauth_refresh_tokens"
-
-    token_hash: str = SQLField(primary_key=True)
-    family_id: UUID = SQLField(index=True)
-    client_id: str = SQLField(foreign_key="oauth_clients.client_id")
-    user_id: UUID = SQLField(foreign_key="profiles.id", index=True)
-    resource: str
-    expires_at: datetime = SQLField(sa_column=Column(TZDateTime, nullable=False))
-    rotated_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
-    revoked_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     created_at: datetime | None = timestamp_column()

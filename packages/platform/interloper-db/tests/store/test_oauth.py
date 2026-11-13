@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import Engine, inspect, update
+from sqlalchemy import Engine, inspect, text, update
 from sqlmodel import col, select
 
 from interloper_db.crypto import hash_token
@@ -20,14 +20,13 @@ from interloper_db.models import (
     Conversation,
     OAuthClient,
     Profile,
-    RefreshToken,
     Token,
     TokenKind,
 )
 from interloper_db.session import session_scope
 from interloper_db.store import Store
 
-OAUTH_TABLES = {"oauth_clients", "oauth_authorization_codes", "oauth_refresh_tokens"}
+MIGRATION_018_TABLES = {"oauth_clients", "oauth_authorization_codes", "oauth_refresh_tokens"}
 
 
 @pytest.fixture
@@ -298,8 +297,8 @@ def _expire_refresh(auth_db: Engine, client: OAuthClient, ago: timedelta) -> Non
     """
     with session_scope(auth_db) as session:
         session.connection().execute(
-            update(RefreshToken)
-            .where(col(RefreshToken.client_id) == client.client_id)
+            update(Token)
+            .where(col(Token.client_id) == client.client_id, col(Token.kind) == TokenKind.REFRESH)
             .values(expires_at=datetime.now(UTC) - ago)
         )
         session.commit()
@@ -473,6 +472,8 @@ class TestRefreshTokens:
         assert successor is not None
         assert successor.family_id == rotated.family_id
         assert successor.token_hash == hash_token(new)
+        assert successor.kind == TokenKind.REFRESH
+        assert successor.expires_at is not None
         assert before + timedelta(days=30) <= successor.expires_at
         assert new != old
 
@@ -534,7 +535,9 @@ class TestRefreshTokens:
         raw = store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP)
         with session_scope(auth_db) as session:
             session.connection().execute(
-                update(RefreshToken).values(expires_at=datetime.now(UTC) - timedelta(seconds=1))
+                update(Token)
+                .where(col(Token.kind) == TokenKind.REFRESH)
+                .values(expires_at=datetime.now(UTC) - timedelta(seconds=1))
             )
             session.commit()
 
@@ -569,6 +572,7 @@ class TestIssueTokens:
         old = store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP)
         rotated = store.oauth.rotate_refresh(old, client.client_id)
         assert rotated is not None
+        assert rotated.family_id is not None
         assert store.oauth.rotate_refresh(old, client.client_id) is None
 
         assert store.oauth.issue_tokens(profile.id, client.client_id, Audience.MCP, rotated.family_id) is None
@@ -577,7 +581,9 @@ class TestIssueTokens:
             live_access = session.exec(
                 select(Token).where(col(Token.kind) == TokenKind.ACCESS, col(Token.revoked_at).is_(None))
             ).all()
-            live_refresh = session.exec(select(RefreshToken).where(col(RefreshToken.revoked_at).is_(None))).all()
+            live_refresh = session.exec(
+                select(Token).where(col(Token.kind) == TokenKind.REFRESH, col(Token.revoked_at).is_(None))
+            ).all()
         assert live_access == []
         assert live_refresh == []
         assert store.oauth.authorised_clients(profile.id) == []
@@ -635,8 +641,8 @@ class TestAuthorisedClients:
         store.oauth.issue_refresh(profile.id, expired.client_id, Audience.MCP)
         with session_scope(auth_db) as session:
             session.connection().execute(
-                update(RefreshToken)
-                .where(col(RefreshToken.client_id) == expired.client_id)
+                update(Token)
+                .where(col(Token.client_id) == expired.client_id, col(Token.kind) == TokenKind.REFRESH)
                 .values(expires_at=datetime.now(UTC) - timedelta(seconds=1))
             )
             session.commit()
@@ -742,9 +748,7 @@ def _set_refresh(auth_db: Engine, raw: str, **values: Any) -> None:
         **values: The columns to set.
     """
     with session_scope(auth_db) as session:
-        session.connection().execute(
-            update(RefreshToken).where(col(RefreshToken.token_hash) == hash_token(raw)).values(**values)
-        )
+        session.connection().execute(update(Token).where(col(Token.token_hash) == hash_token(raw)).values(**values))
         session.commit()
 
 
@@ -895,11 +899,11 @@ class TestMigration:
         with auth_db.begin() as connection:
             with Operations.context(MigrationContext.configure(connection)):
                 module.downgrade()
-            assert not OAUTH_TABLES & set(inspect(connection).get_table_names())
+            assert not MIGRATION_018_TABLES & set(inspect(connection).get_table_names())
             with Operations.context(MigrationContext.configure(connection)):
                 module.upgrade()
                 module.upgrade()
-            assert OAUTH_TABLES <= set(inspect(connection).get_table_names())
+            assert MIGRATION_018_TABLES <= set(inspect(connection).get_table_names())
             code_indexes = {index["name"] for index in inspect(connection).get_indexes("oauth_authorization_codes")}
             assert "ix_oauth_authorization_codes_user_id" in code_indexes
 
@@ -916,3 +920,34 @@ class TestMigration:
         refresh = store.oauth.issue_refresh(profile.id, client.client_id, Audience.API, family_id=consumed.family_id)
         assert store.oauth.rotate_refresh(refresh, client.client_id) is not None
         assert store.oauth.get_client(client.client_id) is not None
+
+    def test_migration_023_keeps_every_grant_and_its_state_through_a_downgrade_and_upgrade(
+        self, store: Store, profile: Profile, client: OAuthClient, auth_db: Engine
+    ):
+        module = importlib.import_module("interloper_db.migrations.versions.023_refresh_tokens_are_tokens")
+        rotated = store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP)
+        retired = store.oauth.rotate_refresh(rotated, client.client_id)
+        assert retired is not None
+        newest = store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP, family_id=retired.family_id)
+        other_family = store.oauth.issue_refresh(profile.id, client.client_id, Audience.API)
+        session_cookie = store.tokens.create_session(profile.id)
+
+        with auth_db.begin() as connection:
+            with Operations.context(MigrationContext.configure(connection)):
+                module.downgrade()
+            moved_back = connection.execute(text("SELECT token_hash, family_id, rotated_at FROM oauth_refresh_tokens"))
+            by_hash = {row.token_hash: row for row in moved_back}
+            assert set(by_hash) == {hash_token(rotated), hash_token(newest), hash_token(other_family)}
+            assert by_hash[hash_token(rotated)].family_id == by_hash[hash_token(newest)].family_id
+            assert by_hash[hash_token(rotated)].rotated_at is not None
+            assert connection.execute(text("SELECT count(*) FROM tokens WHERE kind = 'refresh'")).scalar() == 0
+            token_columns = {column["name"] for column in inspect(connection).get_columns("tokens")}
+            assert not {"family_id", "rotated_at"} & token_columns
+            with Operations.context(MigrationContext.configure(connection)):
+                module.upgrade()
+            assert "oauth_refresh_tokens" not in inspect(connection).get_table_names()
+
+        assert store.tokens.resolve(session_cookie, Audience.APP) is not None
+        assert store.oauth.rotate_refresh(other_family, client.client_id) is not None
+        assert store.oauth.rotate_refresh(rotated, client.client_id) is None
+        assert store.oauth.rotate_refresh(newest, client.client_id) is None

@@ -1,4 +1,4 @@
-"""Tokens: the bearer secrets a user authenticates with, one row per secret."""
+"""Tokens: the bearer secrets that stand for a user, one row per secret."""
 
 from datetime import datetime
 from enum import StrEnum
@@ -14,6 +14,9 @@ from interloper_db.models.columns import TZDateTime, timestamp_column
 class TokenKind(StrEnum):
     """What issued a token, which decides the surfaces that accept it.
 
+    No surface accepts a refresh token: only the authorization server's token
+    endpoint takes one, to issue the grant's next pair.
+
     The column stores the value, so a row read back carries the plain string,
     which compares equal to its member.
     """
@@ -21,6 +24,7 @@ class TokenKind(StrEnum):
     SESSION = "session"
     PERSONAL = "personal"
     ACCESS = "access"
+    REFRESH = "refresh"
 
 
 class Audience(StrEnum):
@@ -79,6 +83,10 @@ class Token(SQLModel, table=True):
     Migration 015 renamed ``personal_access_tokens`` to this table, keeping
     the hashes, which is why ``create_all`` skips it (see the
     ``migration_owned`` marker).
+
+    An OAuth refresh token is a row too, the only kind with a ``family_id``
+    and a ``rotated_at`` (see :mod:`interloper_db.store.oauth`); migration
+    023 moved them in from ``oauth_refresh_tokens``.
     """
 
     __tablename__: ClassVar[str] = "tokens"
@@ -96,9 +104,11 @@ class Token(SQLModel, table=True):
     client_id: str | None = None
     name: str | None = None
     resource: str | None = None
+    family_id: UUID | None = SQLField(default=None, index=True)
     token_prefix: str
     token_hash: str = SQLField(index=True, unique=True)
     expires_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     last_used_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
+    rotated_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     revoked_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     created_at: datetime | None = timestamp_column()

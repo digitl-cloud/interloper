@@ -6,6 +6,8 @@ one yields the holder, and the caller reads the holder's live role in the
 organisation it acts in, so a role change or removal applies at once. A
 login session is a token too, the one the app's cookie carries, and so is
 an OAuth access token, which a client holds for the surface it was issued for.
+OAuth refresh tokens are rows here as well, but the OAuth facet issues,
+rotates and purges them, and no surface resolves one.
 """
 
 from __future__ import annotations
@@ -264,8 +266,10 @@ class TokenStore:
     def purge(self, *, ended_for: timedelta) -> int:
         """Delete the tokens that expired or were revoked more than ``ended_for`` ago.
 
-        Every kind goes the same way: sessions, personal tokens and OAuth
-        access tokens. A token that never expires and was never revoked is kept.
+        Sessions, personal tokens and OAuth access tokens go the same way. A
+        token that never expires and was never revoked is kept. Refresh
+        tokens are left to the OAuth facet's purge, which deletes a family
+        whole once it ended, so a replay of any of its tokens is caught until then.
 
         Args:
             ended_for: How long a token is kept once it expired or was revoked.
@@ -274,7 +278,9 @@ class TokenStore:
             The number of tokens deleted.
         """
         cutoff = datetime.now(UTC) - ended_for
-        statement = delete(Token).where((col(Token.expires_at) < cutoff) | (col(Token.revoked_at) < cutoff))
+        statement = delete(Token).where(
+            col(Token.kind) != TokenKind.REFRESH, (col(Token.expires_at) < cutoff) | (col(Token.revoked_at) < cutoff)
+        )
         with session_scope(self._engine) as session:
             deleted = session.connection().execute(statement).rowcount
             commit(session)
