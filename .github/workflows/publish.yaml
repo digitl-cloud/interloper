@@ -142,9 +142,9 @@ jobs:
   #
   # Pushed as an OCI artifact beside the images it deploys, carrying the same
   # version, so the chart needs no index file and no GitHub Pages. Stable
-  # releases only — RC chart versions would clutter the registry. Chart
-  # `version`/`appVersion` are bumped by semantic-release, so the checked-out
-  # tag is ready to ship.
+  # releases only — RC chart versions would clutter the registry. The chart
+  # is packaged at the tag's version whatever Chart.yaml says, so a stamp the
+  # release missed can never publish the previous version again.
   # ────────────────────────────────────────────────────────────────────
   helm:
     name: Helm chart
@@ -171,7 +171,9 @@ jobs:
             helm registry login ghcr.io --username '${{ github.actor }}' --password-stdin
 
       - name: Package & Push
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
         run: |
           owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
-          helm package chart/interloper --destination dist
-          helm push "dist/interloper-${{ needs.resolve.outputs.version }}.tgz" "oci://ghcr.io/${owner}/charts"
+          helm package chart/interloper --destination dist --version "$VERSION" --app-version "$VERSION"
+          helm push "dist/interloper-${VERSION}.tgz" "oci://ghcr.io/${owner}/charts"
