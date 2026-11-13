@@ -7,7 +7,7 @@ description: |
   Kubernetes launcher.
 type: application
 version: 0.132.0
-appVersion: "0.132.0"
+appVersion: "0.133.0"
 home: https://github.com/digitlcloud/interloper
 sources:
   - https://github.com/digitlcloud/interloper

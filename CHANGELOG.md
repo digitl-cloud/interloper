@@ -2,6 +2,129 @@
 
 <!-- version list -->
 
+## v0.133.0 (2026-11-13)
+
+### Bug Fixes
+
+- **api**: Close an open realtime socket once its caller loses access
+  ([`6e857aa`](https://github.com/digitl-cloud/interloper/commit/6e857aa03b045597a900fd2c583431787a10f34c))
+
+- **assets**: Facebook star schema clicks are link clicks
+  ([`a9719c1`](https://github.com/digitl-cloud/interloper/commit/a9719c1936eae9e045fe52d52d00fc9bcc5605fe))
+
+- **chart**: Route /mcp and the protected-resource metadata in the Ingress
+  ([`d72ca4d`](https://github.com/digitl-cloud/interloper/commit/d72ca4d1bce2851d5ecace07d8d12c47e4470740))
+
+- **core**: Read a relation's fallback through its attribute
+  ([`472e56b`](https://github.com/digitl-cloud/interloper/commit/472e56bc241775b5a71fe5f67080e080327beac1))
+
+- **core**: Read an asset class off a source as its own type
+  ([`23ba3d6`](https://github.com/digitl-cloud/interloper/commit/23ba3d6b1b356457cb0f2ff1488f94ccb87917d6))
+
+- **core**: Refuse unknown fields in model_validate too
+  ([`d54f0bc`](https://github.com/digitl-cloud/interloper/commit/d54f0bcf98f8ed471e459bc0e26b6b795bc6d807))
+
+- **core**: Store a component setting as its declared type
+  ([`bcf231b`](https://github.com/digitl-cloud/interloper/commit/bcf231b2131a79e294a9fb1d0f01f7ca56d11327))
+
+- **db**: Hold the provisioning lock outside a transaction
+  ([`d18e406`](https://github.com/digitl-cloud/interloper/commit/d18e4067cf2d398a533c9d948143b6dff11f25c0))
+
+- **db**: Keep the migration session settings out of the pool
+  ([`ac76415`](https://github.com/digitl-cloud/interloper/commit/ac7641526aef023a27290c7874faa478ba7e05ce))
+
+- **db**: Migrate the engine provision is given
+  ([`94a0cfd`](https://github.com/digitl-cloud/interloper/commit/94a0cfd08f62ac1be4bed2423e6b72aee8618adb))
+
+### Chores
+
+- Report unused type ignores and scope the attribute-override exemption
+  ([`8244f8d`](https://github.com/digitl-cloud/interloper/commit/8244f8dcf6756c890b89f94fda1dddb596c26f7a))
+
+- Require Python 3.11
+  ([`3a50d6f`](https://github.com/digitl-cloud/interloper/commit/3a50d6f2c544bf201e6138e87edbd9e3bf5013ce))
+
+- **api**: Silence the RetryPromptPart deprecation on every Python
+  ([`62f6066`](https://github.com/digitl-cloud/interloper/commit/62f6066deffcd256f578af56a95982471c19e1ee))
+
+- **deps**: Upgrade every Python, frontend and tooling dependency
+  ([`d1a82f9`](https://github.com/digitl-cloud/interloper/commit/d1a82f946e88d4c28ee2320891ffb35257758a0d))
+
+### Continuous Integration
+
+- Run semantic-release through its action again
+  ([`1ee332d`](https://github.com/digitl-cloud/interloper/commit/1ee332dee47a61c215393d4b6dfac58919b31864))
+
+### Features
+
+- Packages register through an extension manifest
+  ([`2730a43`](https://github.com/digitl-cloud/interloper/commit/2730a432eff848e94f6bc3f0ba8b69c385218941))
+
+- **agent**: The agent is opt-in and names its model
+  ([`61301ef`](https://github.com/digitl-cloud/interloper/commit/61301ef7daf649444284d751a958cc1ddc56500e))
+
+- **api**: Accept OAuth clients identified by a client ID metadata document
+  ([`b9639af`](https://github.com/digitl-cloud/interloper/commit/b9639af2cd505aacbdd83f8c91e3666c3de63165))
+
+- **api**: Rotate an operator OAuth client's secret
+  ([`f180f28`](https://github.com/digitl-cloud/interloper/commit/f180f28cc96a7e09d605117f0ab926b9a434337c))
+
+- **app**: Consolidate the UI onto one design system
+  ([`27d30b1`](https://github.com/digitl-cloud/interloper/commit/27d30b1ec22b7cbb80604c6e91990f9bc95b9434))
+
+- **assets**: Facebook star schema publishes campaign and ad set budgets
+  ([`3925a28`](https://github.com/digitl-cloud/interloper/commit/3925a282a326c127492396e0913ad98b3fb8b418))
+
+- **core**: Let an empty il.Relation() take its target from its annotation
+  ([`c067508`](https://github.com/digitl-cloud/interloper/commit/c067508c332b89c41ab4df9c05ff1267507e9ff1))
+
+- **scheduler**: Delete OAuth clients nobody uses
+  ([`ade3bec`](https://github.com/digitl-cloud/interloper/commit/ade3bec359bf31ac2e397479c7ed7125c399779f))
+
+- **scheduler**: Purge credentials that ended past a retention window
+  ([`7ffd90e`](https://github.com/digitl-cloud/interloper/commit/7ffd90e93cc424f58f0e8f778ce754781a00dbd8))
+
+### Refactoring
+
+- Each package declares its own settings sections
+  ([`6de0543`](https://github.com/digitl-cloud/interloper/commit/6de0543f95371f7ca9abaefc88d7cf98e93ff9b7))
+
+- Let the narrowing the code already does reach the type checker
+  ([`97b6b09`](https://github.com/digitl-cloud/interloper/commit/97b6b09a514300745e62e62258e5a74c6fbdc0c1))
+
+- **api**: Read partition row counts off an Asset, not a duck type
+  ([`fb976de`](https://github.com/digitl-cloud/interloper/commit/fb976decf2463ad8abb7e1b235d408050c52339e))
+
+- **api**: Require the email logo URL and freeze the email
+  ([`ef606bb`](https://github.com/digitl-cloud/interloper/commit/ef606bb7d06202ff5447185150ed0010592bc701))
+
+- **api**: Require the store, catalog and settings the app runs on
+  ([`13fa867`](https://github.com/digitl-cloud/interloper/commit/13fa867a43c2a822171a96a17d2cab0661cab9ef))
+
+- **core**: A many-valued relation takes a list
+  ([`afc4c3a`](https://github.com/digitl-cloud/interloper/commit/afc4c3a726d7c2b7f7625c8448d71dedecb2b943))
+
+- **core**: Freeze Partition and type each window's partitions
+  ([`54cddd4`](https://github.com/digitl-cloud/interloper/commit/54cddd4ec1ea09fdb882f189ef6e320b3372331c))
+
+- **db**: Address JSON paths through col()
+  ([`9e097a5`](https://github.com/digitl-cloud/interloper/commit/9e097a51b4e48b69c658332fc9995f8bce38b127))
+
+- **db**: Read a model's table through one typed helper
+  ([`048aa7c`](https://github.com/digitl-cloud/interloper/commit/048aa7ca14b92fa4c3962a0ceff458f471623939))
+
+- **db**: Run every statement through session.exec
+  ([`8fed61c`](https://github.com/digitl-cloud/interloper/commit/8fed61ce09e1a07012f949e66149246600f6128d))
+
+### Testing
+
+- Type the fakes as what they stand in for
+  ([`aa7d65e`](https://github.com/digitl-cloud/interloper/commit/aa7d65e28b9254ea91c92dc503ff3c5d0208b7b5))
+
+- **k8s**: Cover a Job the API server returns without a uid
+  ([`ba97f20`](https://github.com/digitl-cloud/interloper/commit/ba97f20a8c5a32927fd73a89eb363b2616affd22))
+
+
 ## v0.132.0 (2026-11-12)
 
 ### Bug Fixes
