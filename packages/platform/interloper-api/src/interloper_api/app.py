@@ -194,8 +194,8 @@ def create_app(
         settings: Every section the API reads; with them, the factory also
             builds the secrets-redacted snapshot of every declared section
             for the super-admin ``/admin/config`` view. The agent routes
-            mount only when enabled (or with no settings) and the ``agent``
-            extra is installed.
+            mount only when they enable the agent and the ``agent`` extra
+            is installed.
         cors_origins: Allowed CORS origins. Only needed in dev mode for direct
             WebSocket connections that bypass the Vite proxy.
         **kwargs: Additional kwargs forwarded to ``FastAPI()``.
@@ -226,11 +226,11 @@ def create_app(
         api.include_router(router)
     for org_router in _ORG_ROUTERS:
         api.include_router(org_router, prefix=ORG_PREFIX)
-    agent_available = _mount_agent(api, settings)
+    agent_model = _mount_agent(api, settings)
     app.include_router(api)
     app.include_router(authorization.well_known_router)
 
-    app.state.interloper = _state(store, catalog, settings, agent_available=agent_available, google_login=google_login)
+    app.state.interloper = _state(store, catalog, settings, agent_model=agent_model, google_login=google_login)
 
     oauth.log_provider_status()
 
@@ -266,22 +266,21 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         yield
 
 
-def _mount_agent(api: APIRouter, settings: ApiSettings | None) -> bool:
-    """Mount the optional agent routes, reporting whether they are available.
+def _mount_agent(api: APIRouter, settings: ApiSettings | None) -> str | None:
+    """Mount the optional agent routes when the settings enable the agent.
 
     The conversation routes go under the organisation prefix, the tool list outside it.
 
     Args:
         api: The ``/api`` router to mount onto.
-        settings: The API's settings, or ``None`` to mount whenever the
-            extra is installed.
+        settings: The API's settings, or ``None`` for an app without the agent.
 
     Returns:
-        True when the agent routes are mounted.
+        The model the mounted agent runs on, or ``None`` when the routes are not mounted.
     """
-    if settings is not None and settings.agent is not None and not settings.agent.enabled:
-        logger.info("Agent routes not mounted: disabled via settings.")
-        return False
+    if settings is None or settings.agent is None or not settings.agent.enabled:
+        logger.info("Agent routes not mounted: the agent is not enabled (agent.enabled).")
+        return None
 
     try:
         from interloper_api.routes import agent as agent_routes
@@ -290,11 +289,11 @@ def _mount_agent(api: APIRouter, settings: ApiSettings | None) -> bool:
             "Agent routes not mounted: the 'agent' extra is not installed "
             "(install interloper-api[agent]); /agent endpoints will return 404."
         )
-        return False
+        return None
 
     api.include_router(agent_routes.router)
     api.include_router(agent_routes.org_router, prefix=ORG_PREFIX)
-    return True
+    return settings.agent.model
 
 
 def _state(
@@ -302,7 +301,7 @@ def _state(
     catalog: Catalog | None,
     settings: ApiSettings | None,
     *,
-    agent_available: bool,
+    agent_model: str | None,
     google_login: GoogleLogin | None,
 ) -> State:
     """Build the state the request dependencies read back.
@@ -312,21 +311,21 @@ def _state(
         catalog: Catalog instance, or ``None``.
         settings: The API's settings, or ``None`` for neither an
             authorization server nor an admin config snapshot.
-        agent_available: Whether the agent routes mounted, recorded as a
-            feature flag and in the admin config snapshot.
+        agent_model: The model the mounted agent runs on, or ``None`` when
+            the agent routes are not mounted; recorded as a feature flag and
+            in the admin config snapshot.
         google_login: The Google login, already installed on the app, or
             ``None``.
 
     Returns:
         The state.
     """
-    features = {"agent": agent_available}
+    features = {"agent": agent_model is not None}
     agent = None
-    if agent_available:
+    if agent_model is not None:
         from interloper_agent import build_agent
-        from interloper_agent.settings import AgentSettings
 
-        agent = build_agent((settings.agent if settings and settings.agent else AgentSettings.get()).model)
+        agent = build_agent(agent_model)
     if settings is None:
         return State(store=store, catalog=catalog, agent=agent, features=features)
     return State(

@@ -18,6 +18,9 @@ field by field.
     {{- fail (printf "extraConfig.%s is not allowed — this section is chart-managed; set the root-level `%s` value instead" $key $key) -}}
   {{- end -}}
 {{- end -}}
+{{- if and .Values.agent.enabled (not .Values.agent.model) -}}
+  {{- fail "agent.model is required when agent.enabled is true: name a pydantic-ai provider:model" -}}
+{{- end -}}
 {{- $cfg := deepCopy .Values.extraConfig -}}
 {{- $agent := dict "enabled" .Values.agent.enabled -}}
 {{- with .Values.agent.model -}}
