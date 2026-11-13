@@ -22,6 +22,7 @@ from interloper_db import engine as engine_module
 from interloper_db.models import (
     AuthorizationCode,
     Conversation,
+    Identity,
     OAuthClient,
     Organisation,
     Profile,
@@ -154,7 +155,6 @@ def fake_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ApiSetting
             super_admin_emails=["boss@example.com"],
             google_client_id="cid",
             google_client_secret="oauth-secret",
-            google_redirect_uri="https://app/api/auth/google/callback",
             session_expiry_days=30,
             access_token_expiry_minutes=60,
             cookie_secure=True,
@@ -239,6 +239,7 @@ def oauth_store() -> Iterator[Store]:
 
     for model in (
         Profile,
+        Identity,
         Organisation,
         UserOrganisation,
         Token,

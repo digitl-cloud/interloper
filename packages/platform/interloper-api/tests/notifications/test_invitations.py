@@ -14,7 +14,7 @@ _LOGO_URL = "https://app.example.com/logo-email.png"
 
 
 def _profile(name: str | None) -> Profile:
-    return Profile(email="ada@example.com", name=name, google_id="g-ada")
+    return Profile(email="ada@example.com", name=name)
 
 
 def _invitation() -> Invitation:

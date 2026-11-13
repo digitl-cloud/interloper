@@ -18,7 +18,9 @@ from interloper_db.store import PageQuery, Store
 
 
 def _member(store: Store) -> tuple[UUID, UUID]:
-    profile = store.profiles.upsert(google_id=f"g-{uuid4().hex}", email=f"{uuid4().hex}@example.com", name="U")
+    profile = store.profiles.upsert(
+        issuer="https://accounts.google.com", subject=f"g-{uuid4().hex}", email=f"{uuid4().hex}@example.com", name="U"
+    )
     org = store.organisations.create(name="Acme", creator_id=profile.id)
     return org.id, profile.id
 

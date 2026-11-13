@@ -5,7 +5,7 @@ data providers. The flow:
 
 1. ``GET /auth/oauth/authorize`` validates the client's request and sends the
    browser to the app's consent page, ``/authorize?request=<sealed>``. With no
-   session, the Google login runs first and returns to the authorize call, so
+   session, the login page runs first and returns to the authorize call, so
    the request is always sealed for the user who will decide on it.
 2. The page reads ``GET /auth/oauth/consent`` and posts the user's decision
    to ``POST /auth/oauth/consent``, both on the session cookie alone; the
@@ -142,7 +142,7 @@ def authorize(
 
     Returns:
         A redirect to the app's consent page carrying the request sealed for
-        the session's user; to the Google login, returning here, when no
+        the session's user; to the login page, returning here, when no
         session resolves; to the client with the error once its redirect URI
         is validated; a 400 before that, and whenever the metadata document
         a client id URL names cannot be read or is invalid.
@@ -156,7 +156,7 @@ def authorize(
     user = session_user(store, session_token)
     if user is None:
         login = urlencode({"redirect": f"{AUTHORIZE_PATH}?{request.url.query}"})
-        return RedirectResponse(f"/api/auth/google?{login}", status_code=302)
+        return RedirectResponse(f"/login?{login}", status_code=302)
     consent = urlencode({"request": server.seal(oauth_request, user.id)})
     return RedirectResponse(f"/authorize?{consent}", status_code=302)
 

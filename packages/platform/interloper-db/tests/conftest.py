@@ -24,6 +24,7 @@ from interloper_db.models import (
     ComponentRelation,
     Conversation,
     Event,
+    Identity,
     Invitation,
     OAuthClient,
     Organisation,
@@ -85,7 +86,7 @@ def auth_db() -> Iterator[Engine]:
         # Dashless hex to match how SQLAlchemy's Uuid type binds values on SQLite.
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    auth_models = (Profile, Organisation, UserOrganisation, Invitation, Token)
+    auth_models = (Profile, Identity, Organisation, UserOrganisation, Invitation, Token)
     oauth_models = (OAuthClient, AuthorizationCode, RefreshToken)
     org_data_models = (Component, ComponentRelation, Backfill, Run, Event, Quota, Usage, Conversation)
     for model in auth_models + oauth_models + org_data_models:

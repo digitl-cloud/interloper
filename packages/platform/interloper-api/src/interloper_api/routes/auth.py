@@ -1,4 +1,4 @@
-"""Authentication routes: Google login, the login session, and the caller's own profile."""
+"""Authentication routes: signing in through a provider, the login session, and the caller's own profile."""
 
 from __future__ import annotations
 
@@ -16,13 +16,14 @@ from starlette.concurrency import run_in_threadpool
 from interloper_api.dependencies import (
     CurrentUserDep,
     FeaturesDep,
-    GoogleLoginDep,
+    LoginProviderDep,
     SessionUserDep,
     SettingsDep,
+    StateDep,
     StoreDep,
     get_org_scope,
 )
-from interloper_api.login import GoogleAccount, LoginError
+from interloper_api.login import Account, LoginError, LoginProvider
 from interloper_api.routes.organisations import OrganisationResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -39,7 +40,8 @@ def _signup_allowed(email: str, auth_config: Any, store: Store) -> bool:
     super-admin, or hold a pending invitation.
 
     Args:
-        email: The Google-verified address of the account signing in.
+        email: The address the identity provider verified for the account
+            signing in.
         auth_config: The resolved auth configuration.
         store: The database store.
 
@@ -138,35 +140,77 @@ class AuthUserResponse(BaseModel):
         )
 
 
-@router.get("/google")
-async def google_login(request: Request, login: GoogleLoginDep, redirect: str | None = None) -> RedirectResponse:
-    """Send the browser to Google's account picker.
+class LoginProviderResponse(BaseModel):
+    """A sign-in provider the login page offers.
+
+    Attributes:
+        name: The provider's name in the login routes.
+        label: The provider's name as the login page shows it.
+    """
+
+    name: str
+    label: str
+
+    @classmethod
+    def from_provider(cls, provider: LoginProvider) -> LoginProviderResponse:
+        """Describe a provider the deployment offers.
+
+        Args:
+            provider: The provider.
+
+        Returns:
+            The response model.
+        """
+        return cls(name=provider.name, label=provider.label)
+
+
+@router.get("/providers")
+def list_login_providers(state: StateDep) -> list[LoginProviderResponse]:
+    """List the sign-in providers this deployment offers, for the login page.
+
+    Answers without a credential: the login page asks before anyone signs in.
+
+    Args:
+        state: The application's state, holding the providers.
+
+    Returns:
+        The providers, in the order the login page shows them; empty when the
+        deployment offers none.
+    """
+    if state.login is None:
+        return []
+    return [LoginProviderResponse.from_provider(provider) for provider in state.login.providers.values()]
+
+
+@router.get("/{provider}/login")
+async def login(request: Request, provider: LoginProviderDep, redirect: str | None = None) -> RedirectResponse:
+    """Send the browser to the provider's account picker.
 
     Args:
         request: The login request, whose session keeps the login's state.
-        login: The Google login.
+        provider: The provider the path names.
         redirect: App-relative destination to return to once the login
             completes, defaulting to the app root.
 
     Returns:
-        A redirect to Google, or to the login page when Google cannot be
-        reached.
+        A redirect to the provider, or to the login page when the provider
+        cannot be reached.
     """
     try:
-        return await login.redirect(request, redirect or "/")
+        return await provider.redirect(request, redirect or "/")
     except LoginError as error:
         return RedirectResponse(url=f"/login?error={error.reason}", status_code=302)
 
 
-@router.get("/google/callback")
-async def google_callback(
-    request: Request, login: GoogleLoginDep, store: StoreDep, settings: SettingsDep
+@router.get("/{provider}/callback")
+async def login_callback(
+    request: Request, provider: LoginProviderDep, store: StoreDep, settings: SettingsDep
 ) -> RedirectResponse:
-    """Complete the Google login and open a login session.
+    """Complete the provider's login and open a login session.
 
     Args:
-        request: Google's callback, carrying the code and ``state``.
-        login: The Google login.
+        request: The provider's callback, carrying the code and ``state``.
+        provider: The provider the path names.
         store: The database store.
         settings: The settings, whose ``auth`` holds the signup and session
             policy.
@@ -177,17 +221,17 @@ async def google_callback(
         allowed.
     """
     try:
-        account, destination = await login.complete(request)
+        account, destination = await provider.complete(request)
     except LoginError as error:
         return RedirectResponse(url=f"/login?error={error.reason}", status_code=302)
     return await run_in_threadpool(_sign_in, account, destination, store, settings.auth)
 
 
-def _sign_in(account: GoogleAccount, destination: str, store: Store, auth_config: Any) -> RedirectResponse:
-    """Open a login session for the account Google proved.
+def _sign_in(account: Account, destination: str, store: Store, auth_config: Any) -> RedirectResponse:
+    """Open a login session for the account the provider proved.
 
     Args:
-        account: The verified Google account.
+        account: The verified account.
         destination: The destination the login asked for; honoured only when
             it is app-relative, otherwise the app root is used.
         store: The database store.
@@ -199,13 +243,14 @@ def _sign_in(account: GoogleAccount, destination: str, store: Store, auth_config
     """
     # Gate signup only: existing profiles always sign in, a first login must
     # pass the allowlist before a profile is created.
-    if not store.profiles.get_by_google_id(account.google_id) and not _signup_allowed(
+    if not store.profiles.get_by_identity(account.issuer, account.subject) and not _signup_allowed(
         account.email, auth_config, store
     ):
         return RedirectResponse(url="/login?error=signup_not_allowed", status_code=302)
 
     profile = store.profiles.upsert(
-        google_id=account.google_id,
+        issuer=account.issuer,
+        subject=account.subject,
         email=account.email,
         name=account.name,
         avatar_url=account.avatar_url,
@@ -271,8 +316,8 @@ def get_me(user: CurrentUserDep, store: StoreDep, features: FeaturesDep) -> Auth
 class UpdateMeRequest(BaseModel):
     """User-editable profile fields; omitted fields stay untouched.
 
-    Email is absent by design: it is Google-managed and refreshed at every
-    login, so an edit here would be silently reverted.
+    Email is absent by design: the identity provider manages it and every
+    login refreshes it, so an edit here would be silently reverted.
     """
 
     name: str | None = Field(default=None, min_length=1, max_length=200)

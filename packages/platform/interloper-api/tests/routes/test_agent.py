@@ -28,6 +28,7 @@ from interloper_db.models import (
     ComponentRelation,
     Conversation,
     Event,
+    Identity,
     OAuthClient,
     Organisation,
     Profile,
@@ -78,6 +79,7 @@ def agent_db() -> Iterator[Engine]:
 
     models = (
         Profile,
+        Identity,
         Organisation,
         UserOrganisation,
         Token,
@@ -129,7 +131,9 @@ def member(store: Store) -> Member:
     Returns:
         The member.
     """
-    profile = store.profiles.upsert(google_id="g-1", email="ada@example.com", name="Ada")
+    profile = store.profiles.upsert(
+        issuer="https://accounts.google.com", subject="g-1", email="ada@example.com", name="Ada"
+    )
     org = store.organisations.create(name="Acme", creator_id=profile.id)
     return Member(profile=profile, org_id=org.id)
 
@@ -241,7 +245,9 @@ class TestConversationLifecycle:
         ]
 
     def test_another_members_conversation_is_not_found(self, store: Store, member: Member):
-        other = store.profiles.upsert(google_id="g-2", email="bob@example.com", name="Bob")
+        other = store.profiles.upsert(
+            issuer="https://accounts.google.com", subject="g-2", email="bob@example.com", name="Bob"
+        )
         theirs = store.conversations.create(member.org_id, other.id)
         client = _client(store, member, _echo_agent())
 

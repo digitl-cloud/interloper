@@ -1,12 +1,13 @@
-"""Tests for ``interloper_api.routes.auth``: Google login, the login session, and the caller's own profile.
+"""Tests for ``interloper_api.routes.auth``: signing in, the login session, and the caller's own profile.
 
-Google is faked at the HTTP transport (its discovery document, its keys and a
+Logins run against Google, faked at the HTTP transport (its discovery document, its keys and a
 token endpoint that signs real ID tokens), so the login runs Authlib's own
 checks end to end; a lightweight fake store records what the callback does.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import time
 from types import SimpleNamespace
@@ -23,8 +24,8 @@ from joserfc import jwt
 from joserfc.jwk import KeySet, RSAKey
 
 from interloper_api.app import install_error_handlers
-from interloper_api.dependencies import State, get_caller, get_features, get_google_login, get_settings, get_store
-from interloper_api.login import SESSION_COOKIE, SESSION_MAX_AGE, SESSION_PATH, GoogleLogin
+from interloper_api.dependencies import State, get_caller, get_features, get_login_provider, get_settings, get_store
+from interloper_api.login import SESSION_COOKIE, SESSION_MAX_AGE, SESSION_PATH, GoogleProvider, Login
 from interloper_api.routes import auth as auth_module
 from interloper_api.settings import AuthSettings
 
@@ -33,7 +34,8 @@ AUTHORIZATION_ENDPOINT = f"{ISSUER}/o/oauth2/v2/auth"
 TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 JWKS_URI = "https://www.googleapis.com/oauth2/v3/certs"
 CLIENT_ID = "client-id"
-REDIRECT_URI = "http://testserver/api/auth/google/callback"
+PUBLIC_URL = "http://testserver"
+REDIRECT_URI = f"{PUBLIC_URL}/api/auth/google/callback"
 ENCRYPTION_KEY = "test-encryption-key"
 GOOGLE_KEY = RSAKey.generate_key(2048, parameters={"kid": "google"})
 FORGED_KEY = RSAKey.generate_key(2048, parameters={"kid": "google"})
@@ -131,14 +133,14 @@ class FakeStore:
         self.upserted: dict[str, Any] | None = None
         self.sessions_created: list[UUID] = []
         self.profiles = SimpleNamespace(
-            get_by_google_id=self._get_profile_by_google_id,
+            get_by_identity=self._get_profile_by_identity,
             upsert=self._upsert_profile,
             set_super_admin=self._set_super_admin,
         )
         self.tokens = SimpleNamespace(create_session=self._create_session)
         self.invitations = SimpleNamespace(has_pending=self._has_pending_invitation)
 
-    def _get_profile_by_google_id(self, google_id: str) -> SimpleNamespace | None:
+    def _get_profile_by_identity(self, issuer: str, subject: str) -> SimpleNamespace | None:
         return self.profile if self.exists else None
 
     def _has_pending_invitation(self, email: str) -> bool:
@@ -175,7 +177,7 @@ def _client(
     *,
     encryption_key: str = ENCRYPTION_KEY,
 ) -> TestClient:
-    """Serve the auth routes at their real path, with a login talking to ``google``.
+    """Serve the auth routes at their real path, with a Google provider talking to ``google``.
 
     Args:
         store: The fake store.
@@ -187,23 +189,37 @@ def _client(
     Returns:
         A client that does not follow redirects.
     """
-    login = GoogleLogin(
+    provider = GoogleProvider(
         client_id=CLIENT_ID,
         client_secret="client-secret",
-        redirect_uri=REDIRECT_URI,
-        encryption_key=encryption_key,
-        cookie_secure=False,
+        public_url=PUBLIC_URL,
         transport=httpx2.MockTransport(google.handle),
     )
     app = FastAPI()
     install_error_handlers(app)
-    login.install(app)
+    Login([provider], encryption_key=encryption_key, cookie_secure=False).install(app)
     app.include_router(auth_module.router, prefix="/api")
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_google_login] = lambda: login
+    app.dependency_overrides[get_login_provider] = lambda: provider
     app.dependency_overrides[get_settings] = lambda: SimpleNamespace(
         auth=_auth_config(super_admin_emails or [], allowed_domains or [])
     )
+    return TestClient(app, follow_redirects=False)
+
+
+def _state_client(state: State) -> TestClient:
+    """Serve the auth routes over ``state``, with no dependency overridden.
+
+    Args:
+        state: The application's state.
+
+    Returns:
+        A client that does not follow redirects.
+    """
+    app = FastAPI()
+    app.state.interloper = state
+    install_error_handlers(app)
+    app.include_router(auth_module.router, prefix="/api")
     return TestClient(app, follow_redirects=False)
 
 
@@ -218,7 +234,7 @@ def _start(client: TestClient, google: FakeGoogle, destination: str | None = Non
     Returns:
         The callback's query parameters.
     """
-    response = client.get("/api/auth/google", params={"redirect": destination} if destination else None)
+    response = client.get("/api/auth/google/login", params={"redirect": destination} if destination else None)
     query = parse_qs(urlsplit(response.headers["location"]).query)
     google.nonce = query["nonce"][0]
     return {"code": "c", "state": query["state"][0]}
@@ -286,7 +302,8 @@ def test_signup_allowed_for_listed_domain(google: FakeGoogle) -> None:
     assert response.status_code == 302
     assert response.headers["location"] == "/"
     assert store.upserted == {
-        "google_id": "google-1",
+        "issuer": ISSUER,
+        "subject": "google-1",
         "email": "Boss@Example.com",
         "name": "Boss",
         "avatar_url": None,
@@ -412,11 +429,30 @@ def test_update_me_rejects_empty_name() -> None:
 # -- Login redirect ------------------------------------------------------------
 
 
-class TestGoogleLogin:
-    """``GET /auth/google``: hands the browser to Google's account picker."""
+class TestListLoginProviders:
+    """``GET /auth/providers``: what the login page offers."""
+
+    def test_lists_the_providers_the_deployment_offers(self, app_state: State) -> None:
+        provider = GoogleProvider(client_id=CLIENT_ID, client_secret="client-secret", public_url=PUBLIC_URL)
+        login = Login([provider], encryption_key=ENCRYPTION_KEY, cookie_secure=False)
+
+        response = _state_client(dataclasses.replace(app_state, login=login)).get("/api/auth/providers")
+
+        assert response.status_code == 200
+        assert response.json() == [{"name": "google", "label": "Google"}]
+
+    def test_a_deployment_without_a_login_offers_none(self, app_state: State) -> None:
+        response = _state_client(app_state).get("/api/auth/providers")
+
+        assert response.status_code == 200
+        assert response.json() == []
+
+
+class TestLogin:
+    """``GET /auth/{provider}/login``: hands the browser to the provider's account picker."""
 
     def test_redirects_with_the_configured_client_scopes_and_pkce(self, google: FakeGoogle) -> None:
-        response = _client(FakeStore(), google).get("/api/auth/google")
+        response = _client(FakeStore(), google).get("/api/auth/google/login")
 
         assert response.status_code == 302
         location = response.headers["location"]
@@ -432,7 +468,7 @@ class TestGoogleLogin:
         assert "access_type" not in query
 
     def test_the_session_cookie_is_short_lived_httponly_and_scoped_to_the_login(self, google: FakeGoogle) -> None:
-        response = _client(FakeStore(), google).get("/api/auth/google")
+        response = _client(FakeStore(), google).get("/api/auth/google/login")
 
         cookie = response.headers["set-cookie"]
         assert cookie.startswith(f"{SESSION_COOKIE}=")
@@ -449,24 +485,30 @@ class TestGoogleLogin:
     def test_an_unreachable_google_lands_on_the_login_page(self, google: FakeGoogle) -> None:
         google.discovery_status = 503
 
-        response = _client(FakeStore(), google).get("/api/auth/google")
+        response = _client(FakeStore(), google).get("/api/auth/google/login")
 
         assert response.status_code == 302
         assert response.headers["location"] == "/login?error=login_failed"
 
-    def test_a_deployment_without_a_login_answers_503(self, app_state: State) -> None:
-        app = FastAPI()
-        app.state.interloper = app_state
-        install_error_handlers(app)
-        app.include_router(auth_module.router, prefix="/api")
+    @pytest.mark.parametrize("route", ["login", "callback"])
+    def test_a_provider_the_deployment_does_not_offer_answers_404(self, app_state: State, route: str) -> None:
+        provider = GoogleProvider(client_id=CLIENT_ID, client_secret="client-secret", public_url=PUBLIC_URL)
+        login = Login([provider], encryption_key=ENCRYPTION_KEY, cookie_secure=False)
+        client = _state_client(dataclasses.replace(app_state, login=login))
 
-        response = TestClient(app, follow_redirects=False).get("/api/auth/google")
+        response = client.get(f"/api/auth/okta/{route}")
 
-        assert response.status_code == 503
-        assert response.json()["detail"] == "Google login not configured"
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Unknown sign-in provider 'okta'"
+
+    def test_a_deployment_without_a_login_answers_404(self, app_state: State) -> None:
+        response = _state_client(app_state).get("/api/auth/google/login")
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Unknown sign-in provider 'google'"
 
 
-class TestGoogleCallbackFailures:
+class TestCallbackFailures:
     """Every way a login can fail lands on the login page, with no session."""
 
     @pytest.mark.parametrize(
@@ -527,7 +569,7 @@ class TestGoogleCallbackFailures:
         assert google.token_requests == []
 
 
-class TestGoogleCallbackSession:
+class TestCallbackSession:
     """A successful login lands a session cookie and honours the return destination."""
 
     def test_the_session_cookie_is_set_httponly(self, google: FakeGoogle) -> None:
@@ -570,7 +612,7 @@ class TestGoogleCallbackSession:
         assert "expires=Thu, 01 Jan 1970" in login_cookie
 
 
-class TestGoogleCallbackState:
+class TestCallbackState:
     """A callback is honoured only in the browser that started the login, on any replica."""
 
     def test_a_callback_without_a_login_in_flight_is_refused(self, google: FakeGoogle) -> None:

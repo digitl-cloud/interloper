@@ -44,7 +44,7 @@ Every facet keeps the same error contract. Anything addressed by primary key
 when the row is absent, so the caller writes the happy path and the API turns
 one exception into one 404. Returning ``None`` is reserved for lookups where
 absence is an ordinary answer rather than a failure: resolving a token,
-a Google id, or an invitation token, where "no match" is what the caller asked.
+an identity, or an invitation token, where "no match" is what the caller asked.
 A mutation that is deliberately idempotent (revoking a revoked token, re-adding
 an existing member) says so in its own docstring.
 """

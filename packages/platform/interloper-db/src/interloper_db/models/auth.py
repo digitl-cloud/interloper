@@ -81,9 +81,11 @@ class UserOrganisation(SQLModel, table=True):
 
 
 class Profile(SQLModel, table=True):
-    """An authenticated user profile (Google OAuth).
+    """A person who signs in to the app.
 
-    ``organisations`` reads the organisations the profile is a member of.
+    How they sign in is an :class:`Identity`, one per identity provider; the
+    profile holds who they are. ``organisations`` reads the organisations the
+    profile is a member of.
     """
 
     __tablename__: ClassVar[str] = "profiles"
@@ -95,7 +97,6 @@ class Profile(SQLModel, table=True):
     )
     email: str
     name: str | None = None
-    google_id: str = SQLField(index=True, unique=True)
     avatar_url: str | None = None
     timezone: str | None = None
     is_super_admin: bool = SQLField(default=False, sa_column_kwargs={"server_default": text("false")})
@@ -105,6 +106,23 @@ class Profile(SQLModel, table=True):
     organisations: list["Organisation"] = Relationship(
         link_model=UserOrganisation, sa_relationship_kwargs={"viewonly": True}
     )
+
+
+class Identity(SQLModel, table=True):
+    """A way a profile signs in: the subject an identity provider names the person by.
+
+    An OpenID Connect provider names a person by its issuer and a subject that
+    is unique within it, so the pair identifies the person whatever their
+    address becomes; a profile has one identity per provider it signs in
+    through.
+    """
+
+    __tablename__: ClassVar[str] = "identities"
+
+    issuer: str = SQLField(primary_key=True)
+    subject: str = SQLField(primary_key=True)
+    profile_id: UUID = SQLField(foreign_key="profiles.id", index=True)
+    created_at: datetime | None = timestamp_column()
 
 
 class Organisation(SQLModel, table=True):

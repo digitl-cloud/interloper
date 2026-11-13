@@ -13,14 +13,14 @@ from interloper_db.store import PageQuery, Store
 
 class TestRole:
     def test_the_creator_is_an_admin(self, store: Store):
-        profile = store.profiles.upsert(google_id="g1", email="ada@x")
+        profile = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
         org = store.organisations.create(name="Acme", creator_id=profile.id)
 
         assert store.members.role(org.id, profile.id) == "admin"
 
     def test_a_non_member_has_no_role(self, store: Store):
-        profile = store.profiles.upsert(google_id="g1", email="ada@x")
-        other = store.profiles.upsert(google_id="g2", email="bob@x")
+        profile = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
+        other = store.profiles.upsert(issuer="https://accounts.google.com", subject="g2", email="bob@x")
         org = store.organisations.create(name="Acme", creator_id=profile.id)
 
         assert store.members.role(org.id, other.id) is None
@@ -28,8 +28,8 @@ class TestRole:
 
 class TestList:
     def test_members_are_listed_with_their_roles(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
-        bob = store.profiles.upsert(google_id="g2", email="bob@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
+        bob = store.profiles.upsert(issuer="https://accounts.google.com", subject="g2", email="bob@x")
         org = store.organisations.create(name="Acme", creator_id=ada.id)
         store.members.add(org.id, bob.id, "editor")
 
@@ -50,8 +50,8 @@ class TestCountByOrg:
     """Member counts for many organisations in one query."""
 
     def test_counts_members_per_organisation(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
-        bob = store.profiles.upsert(google_id="g2", email="bob@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
+        bob = store.profiles.upsert(issuer="https://accounts.google.com", subject="g2", email="bob@x")
         busy = store.organisations.create(name="Busy", creator_id=ada.id)
         store.members.add(busy.id, bob.id, "viewer")
         quiet = store.organisations.create(name="Quiet", creator_id=ada.id)
@@ -60,14 +60,14 @@ class TestCountByOrg:
 
     def test_an_organisation_with_no_members_is_absent(self, store: Store):
         # A soft-deleted org has its memberships purged but stays in the ledger.
-        profile = store.profiles.upsert(google_id="g1", email="ada@x")
+        profile = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
         org = store.organisations.create(name="Acme", creator_id=profile.id)
         store.organisations.delete(org.id)
 
         assert store.members.count_by_org([org.id]) == {}
 
     def test_only_the_asked_organisations_are_counted(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
         asked = store.organisations.create(name="Asked", creator_id=ada.id)
         store.organisations.create(name="Other", creator_id=ada.id)
 
@@ -79,15 +79,15 @@ class TestCountByOrg:
 
 class TestAdd:
     def test_adding_a_member_reports_whether_it_was_new(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
-        bob = store.profiles.upsert(google_id="g2", email="bob@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
+        bob = store.profiles.upsert(issuer="https://accounts.google.com", subject="g2", email="bob@x")
         org = store.organisations.create(name="Acme", creator_id=ada.id)
 
         assert store.members.add(org.id, bob.id, "viewer") is True
         assert store.members.add(org.id, bob.id, "viewer") is False
 
     def test_an_unknown_role_is_refused(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
         org = store.organisations.create(name="Acme", creator_id=ada.id)
 
         with pytest.raises(ConfigError, match="Unknown role 'owner'"):
@@ -96,8 +96,8 @@ class TestAdd:
 
 class TestUpdate:
     def test_a_role_can_be_changed(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
-        bob = store.profiles.upsert(google_id="g2", email="bob@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
+        bob = store.profiles.upsert(issuer="https://accounts.google.com", subject="g2", email="bob@x")
         org = store.organisations.create(name="Acme", creator_id=ada.id)
         store.members.add(org.id, bob.id, "viewer")
 
@@ -106,8 +106,8 @@ class TestUpdate:
         assert store.members.role(org.id, bob.id) == "admin"
 
     def test_returns_the_membership_with_its_profile(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
-        bob = store.profiles.upsert(google_id="g2", email="bob@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
+        bob = store.profiles.upsert(issuer="https://accounts.google.com", subject="g2", email="bob@x")
         org = store.organisations.create(name="Acme", creator_id=ada.id)
         store.members.add(org.id, bob.id, "viewer")
 
@@ -120,7 +120,7 @@ class TestUpdate:
         assert membership.profile.email == "bob@x"
 
     def test_changing_a_non_members_role_raises(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
         org = store.organisations.create(name="Acme", creator_id=ada.id)
         stranger = uuid4()
 
@@ -128,7 +128,7 @@ class TestUpdate:
             store.members.update(org.id, stranger, "admin")
 
     def test_an_unknown_role_is_refused(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
         org = store.organisations.create(name="Acme", creator_id=ada.id)
 
         with pytest.raises(ConfigError, match="Unknown role 'owner'"):
@@ -138,8 +138,8 @@ class TestUpdate:
 
 class TestDelete:
     def test_a_member_can_be_removed(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
-        bob = store.profiles.upsert(google_id="g2", email="bob@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
+        bob = store.profiles.upsert(issuer="https://accounts.google.com", subject="g2", email="bob@x")
         org = store.organisations.create(name="Acme", creator_id=ada.id)
         store.members.add(org.id, bob.id, "viewer")
 
@@ -148,7 +148,7 @@ class TestDelete:
         assert store.members.role(org.id, bob.id) is None
 
     def test_removing_a_non_member_raises(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
         org = store.organisations.create(name="Acme", creator_id=ada.id)
         stranger = uuid4()
 

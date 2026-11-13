@@ -133,7 +133,9 @@ class TestExtensionRoutes:
 
     @pytest.fixture
     def viewer(self, oauth_store: Store) -> tuple[Profile, Organisation]:
-        profile = oauth_store.profiles.upsert(google_id="g-viewer", email="viewer@example.com", name="Viewer")
+        profile = oauth_store.profiles.upsert(
+            issuer="https://accounts.google.com", subject="g-viewer", email="viewer@example.com", name="Viewer"
+        )
         organisation = oauth_store.organisations.create("Acme")
         oauth_store.members.add(organisation.id, profile.id, "viewer")
         return profile, organisation
@@ -300,13 +302,13 @@ class TestCreateApp:
 
         assert app.state.interloper.features == {"agent": True}
 
-    def test_a_configured_google_login_keeps_its_session(self, fake_settings: ApiSettings, oauth_store: Store) -> None:
+    def test_a_configured_login_keeps_its_session(self, fake_settings: ApiSettings, oauth_store: Store) -> None:
         app = create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings)
 
-        assert app.state.interloper.google_login is not None
+        assert app.state.interloper.login is not None
         assert any("SessionMiddleware" in getattr(m.cls, "__name__", "") for m in app.user_middleware)
 
-    def test_without_an_encryption_key_google_login_is_unavailable(
+    def test_without_an_encryption_key_no_login_is_offered(
         self,
         fake_settings: ApiSettings,
         caplog: pytest.LogCaptureFixture,
@@ -317,9 +319,9 @@ class TestCreateApp:
         with caplog.at_level("WARNING", logger="interloper_api.app"):
             app = create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings)
 
-        assert "Google login unavailable: INTERLOPER_ENCRYPTION_KEY is not configured" in caplog.text
+        assert "Sign-in unavailable: INTERLOPER_ENCRYPTION_KEY is not configured" in caplog.text
         assert not any("SessionMiddleware" in getattr(m.cls, "__name__", "") for m in app.user_middleware)
-        assert TestClient(app).get("/api/auth/google", follow_redirects=False).status_code == 503
+        assert TestClient(app).get("/api/auth/google/login", follow_redirects=False).status_code == 404
 
     def test_the_store_catalog_and_settings_are_installed(self, fake_settings: ApiSettings, oauth_store: Store) -> None:
         catalog = Catalog(components={})
@@ -362,8 +364,12 @@ class TestStartup:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         AgentSettings.get().enabled = False
-        listed = oauth_store.profiles.upsert(google_id="g-boss", email="boss@example.com", name="Boss")
-        unlisted = oauth_store.profiles.upsert(google_id="g-other", email="other@example.com", name="Other")
+        listed = oauth_store.profiles.upsert(
+            issuer="https://accounts.google.com", subject="g-boss", email="boss@example.com", name="Boss"
+        )
+        unlisted = oauth_store.profiles.upsert(
+            issuer="https://accounts.google.com", subject="g-other", email="other@example.com", name="Other"
+        )
         app = create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings)
 
         with caplog.at_level("INFO", logger="interloper_api.app"):

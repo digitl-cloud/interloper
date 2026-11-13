@@ -20,7 +20,16 @@ from sqlmodel import col, select
 from interloper_db import NotFoundError, PageQuery
 from interloper_db import engine as engine_module
 from interloper_db.crypto import hash_token
-from interloper_db.models import Audience, Organisation, Profile, Token, TokenKind, UserOrganisation, table_of
+from interloper_db.models import (
+    Audience,
+    Identity,
+    Organisation,
+    Profile,
+    Token,
+    TokenKind,
+    UserOrganisation,
+    table_of,
+)
 from interloper_db.session import save, session_scope
 from interloper_db.store import Store
 from interloper_db.store.tokens import TOKEN_PREFIX_LEN, TokenStore
@@ -44,7 +53,7 @@ def token_db() -> Iterator[Engine]:
         dbapi_connection.execute("PRAGMA foreign_keys=ON")
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    for model in (Profile, Organisation, UserOrganisation, Token):
+    for model in (Profile, Identity, Organisation, UserOrganisation, Token):
         table_of(model).create(eng)
     try:
         yield eng
@@ -70,7 +79,9 @@ def profile(store: Store) -> Profile:
     Returns:
         The profile.
     """
-    return store.profiles.upsert(google_id="g-user", email="user@example.com", name="User")
+    return store.profiles.upsert(
+        issuer="https://accounts.google.com", subject="g-user", email="user@example.com", name="User"
+    )
 
 
 def _insert(profile: Profile, raw: str, kind: TokenKind, resource: str | None = None) -> Token:
@@ -243,7 +254,9 @@ class TestSessions:
         assert before + timedelta(days=2) <= expires_at <= datetime.now(UTC) + timedelta(days=2)
 
     def test_revoke_sessions_ends_every_session_of_the_user_only(self, store: Store, profile: Profile):
-        other = store.profiles.upsert(google_id="g-other", email="other@example.com", name="Other")
+        other = store.profiles.upsert(
+            issuer="https://accounts.google.com", subject="g-other", email="other@example.com", name="Other"
+        )
         first = store.tokens.create_session(profile.id)
         second = store.tokens.create_session(profile.id)
         theirs = store.tokens.create_session(other.id)
@@ -321,7 +334,9 @@ class TestSessions:
 
 class TestListAndRevoke:
     def test_list_returns_the_users_personal_tokens(self, store: Store, profile: Profile):
-        other = store.profiles.upsert(google_id="g-other", email="other@example.com", name="Other")
+        other = store.profiles.upsert(
+            issuer="https://accounts.google.com", subject="g-other", email="other@example.com", name="Other"
+        )
         store.tokens.create_personal(profile.id, "a", None)
         store.tokens.create_personal(profile.id, "b", None)
         store.tokens.create_personal(other.id, "c", None)

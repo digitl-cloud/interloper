@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 
 class AuthSettings(Settings):
-    """Authentication settings: Google OAuth and the session cookie.
+    """Authentication settings: the sign-in providers and the session cookie.
 
     The list fields take a comma-separated string from the environment
     (``INTERLOPER_AUTH_SUPER_ADMIN_EMAILS=a@x.com,b@x.com``) or a list from
@@ -31,7 +31,6 @@ class AuthSettings(Settings):
 
     public: ClassVar[frozenset[str]] = frozenset(
         {
-            "google_redirect_uri",
             "cookie_secure",
             "session_expiry_days",
             "access_token_expiry_minutes",
@@ -41,11 +40,12 @@ class AuthSettings(Settings):
         }
     )
 
-    google_client_id: str = Field(default="", description="Google OAuth web client id.")
-    google_client_secret: str = Field(default="", description="Google OAuth web client secret.")
-    google_redirect_uri: str = Field(
-        default="", description="Redirect URI registered on the Google OAuth client (`/api/auth/google/callback`)."
+    google_client_id: str = Field(
+        default="",
+        description="Google OAuth web client id; its authorised redirect URI is "
+        "`<server.external_url>/api/auth/google/callback`.",
     )
+    google_client_secret: str = Field(default="", description="Google OAuth web client secret.")
     cookie_secure: bool = Field(default=True, description="Send the session cookie over HTTPS only.")
     session_expiry_days: int = Field(default=30, description="Days a session stays valid.")
     access_token_expiry_minutes: int = Field(default=60, description="Minutes an OAuth access token stays valid.")
@@ -54,7 +54,7 @@ class AuthSettings(Settings):
     )
     super_admin_emails: Annotated[list[str], NoDecode] = Field(
         default_factory=list,
-        description="Google emails promoted to platform-wide super-admin when the API starts and on login; "
+        description="Emails promoted to platform-wide super-admin when the API starts and on login; "
         "promotion only, removing an email never demotes.",
     )
     allowed_domains: Annotated[list[str], NoDecode] = Field(

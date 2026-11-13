@@ -25,7 +25,7 @@ from starlette.concurrency import run_in_threadpool
 
 from interloper_api.authorization import AuthorizationServer, CrossOriginMiddleware
 from interloper_api.dependencies import State, require_viewer
-from interloper_api.login import GoogleLogin
+from interloper_api.login import Login
 from interloper_api.routes import (
     admin,
     apps,
@@ -221,9 +221,9 @@ def create_app(
         )
     # Added last, so it answers a client-facing endpoint's preflight before the policy above can refuse it.
     app.add_middleware(CrossOriginMiddleware)
-    google_login = _google_login(settings)
-    if google_login is not None:
-        google_login.install(app)
+    login = _login(settings)
+    if login is not None:
+        login.install(app)
 
     api = APIRouter(prefix="/api")
     for router in _ROUTERS:
@@ -235,7 +235,7 @@ def create_app(
     app.include_router(api)
     app.include_router(authorization.well_known_router)
 
-    app.state.interloper = _state(store, catalog, settings, agent_model=agent_model, google_login=google_login)
+    app.state.interloper = _state(store, catalog, settings, agent_model=agent_model, login=login)
 
     oauth.log_provider_status()
 
@@ -319,7 +319,7 @@ def _state(
     settings: ApiSettings,
     *,
     agent_model: str | None,
-    google_login: GoogleLogin | None,
+    login: Login | None,
 ) -> State:
     """Build the state the request dependencies read back.
 
@@ -330,8 +330,8 @@ def _state(
         agent_model: The model the mounted agent runs on, or ``None`` when
             the agent routes are not mounted; recorded as a feature flag and
             in the admin config snapshot.
-        google_login: The Google login, already installed on the app, or
-            ``None``.
+        login: The sign-in providers offered, already installed on the
+            app, or ``None``.
 
     Returns:
         The state.
@@ -350,25 +350,25 @@ def _state(
         agent=agent,
         features=features,
         authorization_server=_authorization_server(store, settings),
-        google_login=google_login,
+        login=login,
     )
 
 
-def _google_login(settings: ApiSettings) -> GoogleLogin | None:
-    """Build the Google login, when the deployment can run one.
+def _login(settings: ApiSettings) -> Login | None:
+    """Offer the sign-in providers the deployment configures, when it can run a login.
 
     Args:
         settings: The API's settings.
 
     Returns:
-        The login, or ``None`` without a Google client or without an
-        encryption key (which signs the cookie the login keeps between
-        Google's two legs).
+        The login, or ``None`` without a configured provider or without an
+        encryption key (which signs the cookie a login keeps between its two
+        legs).
     """
-    google_login = GoogleLogin.from_settings(settings)
-    if google_login is None and settings.auth.google_client_id and not settings.encryption.key:
-        logger.warning("Google login unavailable: INTERLOPER_ENCRYPTION_KEY is not configured.")
-    return google_login
+    login = Login.from_settings(settings)
+    if login is None and not settings.encryption.key:
+        logger.warning("Sign-in unavailable: INTERLOPER_ENCRYPTION_KEY is not configured.")
+    return login
 
 
 def _authorization_server(store: Store, settings: ApiSettings) -> AuthorizationServer | None:

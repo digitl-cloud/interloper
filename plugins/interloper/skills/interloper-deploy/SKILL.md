@@ -26,7 +26,6 @@ and https://docs.interloper.dev/ui/running/
      database: interloper          # password: INTERLOPER_POSTGRES_PASSWORD
 
    auth:
-     google_redirect_uri: https://interloper.example.com/api/auth/google/callback
      allowed_domains: [example.com]
      super_admin_emails: [ops@example.com]
      cookie_secure: true           # needs TLS in front of the app
@@ -34,6 +33,7 @@ and https://docs.interloper.dev/ui/running/
    server:
      host: 0.0.0.0
      port: 3000
+     external_url: https://interloper.example.com   # login callbacks and OAuth links are built on it
 
    launcher:
      type: in_process              # runs execute inside the worker; docker / kubernetes launch a container per run
@@ -57,7 +57,7 @@ and https://docs.interloper.dev/ui/running/
    ```sh
    INTERLOPER_POSTGRES_PASSWORD=...
    INTERLOPER_ENCRYPTION_KEY=...                 # any strong secret string; derived to a Fernet key, encrypts stored credentials
-   INTERLOPER_AUTH_GOOGLE_CLIENT_ID=...          # Google OAuth web client; authorised redirect URI = auth.google_redirect_uri
+   INTERLOPER_AUTH_GOOGLE_CLIENT_ID=...          # Google OAuth web client; authorised redirect URI = <server.external_url>/api/auth/google/callback
    INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET=...
    INTERLOPER_FACEBOOK_CLIENT_ID=...             # in-house app so users get "Sign in with Facebook" on connections
    INTERLOPER_FACEBOOK_CLIENT_SECRET=...

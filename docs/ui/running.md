@@ -109,7 +109,6 @@ postgres:
 auth:
   google_client_id: ...
   google_client_secret: ...
-  google_redirect_uri: https://app.example.com/api/auth/google/callback
   allowed_domains: [example.com]
 
 catalog:

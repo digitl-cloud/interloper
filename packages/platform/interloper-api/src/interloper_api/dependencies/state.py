@@ -16,7 +16,7 @@ from interloper_db import Store
 from starlette.requests import HTTPConnection
 
 from interloper_api.authorization import AuthorizationServer
-from interloper_api.login import GoogleLogin
+from interloper_api.login import Login, LoginProvider
 from interloper_api.settings import ApiSettings
 
 if TYPE_CHECKING:
@@ -37,8 +37,8 @@ class State:
         features: Optional-feature availability, by feature name.
         authorization_server: The OAuth authorization server, or ``None`` on
             a deployment that cannot run one.
-        google_login: The Google login, or ``None`` on a deployment that
-            cannot run one.
+        login: The sign-in providers offered, or ``None`` on a deployment
+            that offers none.
     """
 
     store: Store
@@ -48,7 +48,7 @@ class State:
     agent: Any | None = None
     features: dict[str, bool] = field(default_factory=dict)
     authorization_server: AuthorizationServer | None = None
-    google_login: GoogleLogin | None = None
+    login: Login | None = None
 
 
 def get_state(connection: HTTPConnection) -> State:
@@ -148,22 +148,23 @@ def get_authorization_server(state: StateDep) -> AuthorizationServer:
     return state.authorization_server
 
 
-def get_google_login(state: StateDep) -> GoogleLogin:
-    """The Google login.
+def get_login_provider(provider: str, state: StateDep) -> LoginProvider:
+    """The sign-in provider the path names.
 
     Args:
+        provider: The provider's name, from the path.
         state: The application's state.
 
     Returns:
-        The login.
+        The provider.
 
     Raises:
-        HTTPException: 503 when the deployment runs none (no Google client or
-            no encryption key).
+        HTTPException: 404 when the deployment does not offer it (no client
+            configured for it, or no encryption key).
     """
-    if state.google_login is None:
-        raise HTTPException(status_code=503, detail="Google login not configured")
-    return state.google_login
+    if state.login is None or provider not in state.login.providers:
+        raise HTTPException(status_code=404, detail=f"Unknown sign-in provider {provider!r}")
+    return state.login.providers[provider]
 
 
 StoreDep = Annotated[Store, Depends(get_store)]
@@ -172,4 +173,4 @@ SettingsDep = Annotated[ApiSettings, Depends(get_settings)]
 FeaturesDep = Annotated[dict[str, bool], Depends(get_features)]
 AgentDep = Annotated[Any, Depends(get_agent)]
 AuthorizationServerDep = Annotated[AuthorizationServer, Depends(get_authorization_server)]
-GoogleLoginDep = Annotated[GoogleLogin, Depends(get_google_login)]
+LoginProviderDep = Annotated[LoginProvider, Depends(get_login_provider)]

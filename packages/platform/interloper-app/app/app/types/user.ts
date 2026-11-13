@@ -11,3 +11,9 @@ export interface User {
     last_organisation_id: string | null
     features: Record<string, boolean>
 }
+
+/** A sign-in provider the deployment offers. */
+export interface LoginProvider {
+    name: string
+    label: string
+}

@@ -27,11 +27,11 @@ function refusal(err: unknown): string {
     return errorDetail(err) ?? 'This authorisation request can no longer be answered; start again from the application.'
 }
 
-/** Handle a failed consent call: log in again on 401, show the reason otherwise. */
+/** Handle a failed consent call: sign in again on 401, show the reason otherwise. */
 function fail(err: unknown) {
     const { status, statusCode } = err as { status?: number, statusCode?: number }
     if ((status ?? statusCode) === 401) {
-        userStore.signIn(route.fullPath)
+        navigateTo({ path: '/login', query: { redirect: route.fullPath } })
         return
     }
     errorMessage.value = refusal(err)

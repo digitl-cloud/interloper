@@ -26,6 +26,7 @@ from interloper_db.models import (
     ComponentRelation,
     Event,
     Execution,
+    Identity,
     Invitation,
     Organisation,
     Profile,
@@ -79,7 +80,7 @@ def store() -> Iterator[Store]:
     def _sqlite_uuid(dbapi_connection: Any, _record: Any) -> None:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    tenant = (Organisation, Profile, UserOrganisation, Invitation, Token)
+    tenant = (Organisation, Profile, Identity, UserOrganisation, Invitation, Token)
     for model in (*tenant, Component, ComponentRelation, Backfill, Run, Event, Execution, Quota, Usage):
         table_of(model).create(engine)
     try:
@@ -365,7 +366,9 @@ class TestFeed:
     """The organisation's activity feed, derived from the rows that exist."""
 
     def test_composes_and_sorts_the_derived_feed(self, store: Store):
-        admin = store.profiles.upsert(google_id="g-act", email="act@example.com", name="Act Min")
+        admin = store.profiles.upsert(
+            issuer="https://accounts.google.com", subject="g-act", email="act@example.com", name="Act Min"
+        )
         org = store.organisations.create(name="Busy", creator_id=admin.id)
         store.members.add(org.id, admin.id, "admin")
         store.invitations.create(org.id, email="new@example.com", role="viewer", invited_by=admin.id)
@@ -392,14 +395,18 @@ class TestFeed:
         assert runs.subject == "2"  # only the successful runs, aggregated per day
 
     def test_limit_caps_the_feed(self, store: Store):
-        admin = store.profiles.upsert(google_id="g-cap", email="cap@example.com", name="Cap")
+        admin = store.profiles.upsert(
+            issuer="https://accounts.google.com", subject="g-cap", email="cap@example.com", name="Cap"
+        )
         org = store.organisations.create(name="Capped", creator_id=admin.id)
         store.members.add(org.id, admin.id, "admin")
 
         assert len(store.insights.feed(org.id, PageQuery(limit=1)).items) == 1
 
     def test_the_feed_is_windowed_over_its_whole_length(self, store: Store):
-        admin = store.profiles.upsert(google_id="g-page", email="page@example.com", name="Pager")
+        admin = store.profiles.upsert(
+            issuer="https://accounts.google.com", subject="g-page", email="page@example.com", name="Pager"
+        )
         org = store.organisations.create(name="Paged", creator_id=admin.id)
         store.invitations.create(org.id, email="a@example.com", role="viewer", invited_by=admin.id)
         store.invitations.create(org.id, email="b@example.com", role="viewer", invited_by=admin.id)
@@ -412,7 +419,9 @@ class TestFeed:
         assert second.items == whole.items[1:3]
 
     def test_a_deleted_organisation_keeps_its_feed_ending_in_the_deletion(self, store: Store):
-        admin = store.profiles.upsert(google_id="g-gone", email="gone@example.com", name="Gone")
+        admin = store.profiles.upsert(
+            issuer="https://accounts.google.com", subject="g-gone", email="gone@example.com", name="Gone"
+        )
         org = store.organisations.create(name="Gone", creator_id=admin.id)
         store.organisations.delete(org.id)
 

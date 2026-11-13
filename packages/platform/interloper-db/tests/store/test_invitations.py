@@ -19,7 +19,7 @@ class TestCreateListGetDelete:
     """Creation, listing, lookup and deletion, all within an organisation."""
 
     def test_a_created_invitation_carries_a_token(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
         org = store.organisations.create(name="Acme", creator_id=ada.id)
 
         invitation = store.invitations.create(org.id, email="new@x", role="editor", invited_by=ada.id)
@@ -29,7 +29,7 @@ class TestCreateListGetDelete:
         assert invitation.role == "editor"
 
     def test_invitations_are_listed_per_organisation(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
         mine = store.organisations.create(name="Mine", creator_id=ada.id)
         theirs = store.organisations.create(name="Theirs", creator_id=ada.id)
         store.invitations.create(mine.id, email="a@x", role="viewer", invited_by=ada.id)
@@ -44,7 +44,7 @@ class TestCreateListGetDelete:
         assert store.invitations.list(uuid4(), PageQuery()).items == []
 
     def test_another_organisations_invitation_reads_as_missing(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
         mine = store.organisations.create(name="Mine", creator_id=ada.id)
         theirs = store.organisations.create(name="Theirs", creator_id=ada.id)
         invitation = store.invitations.create(theirs.id, email="new@x", role="viewer", invited_by=ada.id)
@@ -54,7 +54,7 @@ class TestCreateListGetDelete:
         assert len(store.invitations.list(theirs.id, PageQuery()).items) == 1
 
     def test_an_invitation_can_be_deleted(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
         org = store.organisations.create(name="Acme", creator_id=ada.id)
         invitation = store.invitations.create(org.id, email="new@x", role="viewer", invited_by=ada.id)
 
@@ -69,7 +69,7 @@ class TestCreateListGetDelete:
             store.invitations.delete(missing, org_id=uuid4())
 
     def test_an_unknown_role_is_refused(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
         org = store.organisations.create(name="Acme", creator_id=ada.id)
 
         with pytest.raises(ConfigError, match="Unknown role 'owner'"):
@@ -81,8 +81,8 @@ class TestReissue:
     """A fresh link for the same address and role, the old one revoked."""
 
     def test_the_old_token_stops_working(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
-        bob = store.profiles.upsert(google_id="g2", email="bob@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
+        bob = store.profiles.upsert(issuer="https://accounts.google.com", subject="g2", email="bob@x")
         org = store.organisations.create(name="Acme", creator_id=ada.id)
         original = store.invitations.create(org.id, email="bob@x", role="editor", invited_by=ada.id)
 
@@ -94,8 +94,8 @@ class TestReissue:
         assert store.members.role(org.id, bob.id) == "editor"
 
     def test_keeps_the_address_and_role_under_a_new_id(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
-        carol = store.profiles.upsert(google_id="g3", email="carol@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
+        carol = store.profiles.upsert(issuer="https://accounts.google.com", subject="g3", email="carol@x")
         org = store.organisations.create(name="Acme", creator_id=ada.id)
         original = store.invitations.create(org.id, email="bob@x", role="editor", invited_by=ada.id)
 
@@ -108,7 +108,7 @@ class TestReissue:
         assert [invitation.id for invitation in store.invitations.list(org.id, PageQuery()).items] == [reissued.id]
 
     def test_another_organisations_invitation_reads_as_missing(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
         mine = store.organisations.create(name="Mine", creator_id=ada.id)
         theirs = store.organisations.create(name="Theirs", creator_id=ada.id)
         invitation = store.invitations.create(theirs.id, email="new@x", role="viewer", invited_by=ada.id)
@@ -120,8 +120,12 @@ class TestReissue:
 
 class TestAccept:
     def test_accept_adds_membership_and_returns_usable_org(self, store: Store):
-        admin = store.profiles.upsert(google_id="g-admin", email="admin@example.com", name="Admin")
-        invitee = store.profiles.upsert(google_id="g-invitee", email="new@example.com", name="New")
+        admin = store.profiles.upsert(
+            issuer="https://accounts.google.com", subject="g-admin", email="admin@example.com", name="Admin"
+        )
+        invitee = store.profiles.upsert(
+            issuer="https://accounts.google.com", subject="g-invitee", email="new@example.com", name="New"
+        )
         org = store.organisations.create(name="Acme", creator_id=admin.id)
         invitation = store.invitations.create(org.id, email=invitee.email, role="editor", invited_by=admin.id)
 
@@ -137,13 +141,15 @@ class TestAccept:
         assert store.invitations.list(org.id, PageQuery()).items == []
 
     def test_accept_invalid_token_returns_none(self, store: Store):
-        invitee = store.profiles.upsert(google_id="g-invitee", email="new@example.com", name="New")
+        invitee = store.profiles.upsert(
+            issuer="https://accounts.google.com", subject="g-invitee", email="new@example.com", name="New"
+        )
 
         assert store.invitations.accept("no-such-token", invitee.id) is None
 
     def test_an_expired_invitation_is_refused_and_swept(self, store: Store, auth_db: Engine):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
-        bob = store.profiles.upsert(google_id="g2", email="bob@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
+        bob = store.profiles.upsert(issuer="https://accounts.google.com", subject="g2", email="bob@x")
         org = store.organisations.create(name="Acme", creator_id=ada.id)
         invitation = store.invitations.create(org.id, email="bob@x", role="viewer", invited_by=ada.id)
         with SQLSession(auth_db) as session:
@@ -158,8 +164,8 @@ class TestAccept:
         assert store.invitations.list(org.id, PageQuery()).items == []
 
     def test_accepting_twice_leaves_one_membership(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
-        bob = store.profiles.upsert(google_id="g2", email="bob@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
+        bob = store.profiles.upsert(issuer="https://accounts.google.com", subject="g2", email="bob@x")
         org = store.organisations.create(name="Acme", creator_id=ada.id)
         first = store.invitations.create(org.id, email="bob@x", role="viewer", invited_by=ada.id)
         store.invitations.accept(first.token, bob.id)
@@ -184,7 +190,9 @@ class TestHasPending:
         Returns:
             The created invitation.
         """
-        admin = store.profiles.upsert(google_id="g-admin", email="admin@example.com", name="Admin")
+        admin = store.profiles.upsert(
+            issuer="https://accounts.google.com", subject="g-admin", email="admin@example.com", name="Admin"
+        )
         org = store.organisations.create(name="Acme", creator_id=admin.id)
         return store.invitations.create(org.id, email=email, role="viewer", invited_by=admin.id)
 

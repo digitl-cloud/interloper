@@ -65,7 +65,9 @@ def test_several_memberships_require_naming(store: Store, catalog: il.Catalog, s
 
 
 def test_non_member_refused(store: Store, catalog: il.Catalog, seeded: dict[str, Any]):
-    stranger = store.profiles.upsert(google_id="g-stranger", email="stranger@example.com")
+    stranger = store.profiles.upsert(
+        issuer="https://accounts.google.com", subject="g-stranger", email="stranger@example.com"
+    )
     other = _second_org(store, stranger)
     _act_as(store, catalog, seeded["profile"])
 
@@ -86,7 +88,7 @@ def test_malformed_organisation_refused(store: Store, catalog: il.Catalog, seede
 
 
 def test_super_admin_any_org_as_admin(store: Store, catalog: il.Catalog, seeded: dict[str, Any]):
-    admin = store.profiles.upsert(google_id="g-root", email="root@example.com")
+    admin = store.profiles.upsert(issuer="https://accounts.google.com", subject="g-root", email="root@example.com")
     store.profiles.set_super_admin(admin.id, value=True)
     _act_as(store, catalog, admin)
 
@@ -98,7 +100,7 @@ def test_super_admin_any_org_as_admin(store: Store, catalog: il.Catalog, seeded:
 
 
 def test_super_admin_refused_on_a_deleted_organisation(store: Store, catalog: il.Catalog, seeded: dict[str, Any]):
-    admin = store.profiles.upsert(google_id="g-root", email="root@example.com")
+    admin = store.profiles.upsert(issuer="https://accounts.google.com", subject="g-root", email="root@example.com")
     store.profiles.set_super_admin(admin.id, value=True)
     with Session(engine_module.get_engine()) as session:
         org = session.get(Organisation, seeded["org"].id)
@@ -112,7 +114,7 @@ def test_super_admin_refused_on_a_deleted_organisation(store: Store, catalog: il
 
 
 def test_super_admin_without_memberships_must_name(store: Store, catalog: il.Catalog, seeded: dict[str, Any]):
-    admin = store.profiles.upsert(google_id="g-root", email="root@example.com")
+    admin = store.profiles.upsert(issuer="https://accounts.google.com", subject="g-root", email="root@example.com")
     store.profiles.set_super_admin(admin.id, value=True)
     _act_as(store, catalog, admin)
 
@@ -125,7 +127,7 @@ def test_super_admin_without_memberships_must_name(store: Store, catalog: il.Cat
 
 def test_member_removed_is_refused_next_call(store: Store, catalog: il.Catalog, seeded: dict[str, Any]):
     org, profile = seeded["org"], seeded["profile"]
-    keeper = store.profiles.upsert(google_id="g-keeper", email="keeper@example.com")
+    keeper = store.profiles.upsert(issuer="https://accounts.google.com", subject="g-keeper", email="keeper@example.com")
     store.members.add(org.id, keeper.id, "admin")
     _act_as(store, catalog, profile)
     assert isinstance(get_ctx(str(org.id)), ToolkitContext)

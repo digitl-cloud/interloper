@@ -1,8 +1,9 @@
-"""Profile persistence: who a person is.
+"""Profile persistence: who a person is, and the identities they sign in with.
 
-A profile is an identity (Google OAuth). The tokens proving it, login
-sessions among them, are :mod:`~interloper_db.store.tokens`; what it may do, and in which
-organisation, is :mod:`~interloper_db.store.members`.
+A profile is found by an identity, the issuer and subject an identity provider
+names the person by. The tokens proving it, login sessions among them, are
+:mod:`~interloper_db.store.tokens`; what it may do, and in which organisation,
+is :mod:`~interloper_db.store.members`.
 """
 
 from __future__ import annotations
@@ -13,10 +14,18 @@ from uuid import UUID
 
 from sqlalchemy import Engine, delete, func
 from sqlalchemy.orm import selectinload
-from sqlmodel import col, select
+from sqlmodel import Session, col, select
 
 from interloper_db.errors import NotFoundError
-from interloper_db.models import AuthorizationCode, Invitation, Profile, RefreshToken, Token, UserOrganisation
+from interloper_db.models import (
+    AuthorizationCode,
+    Identity,
+    Invitation,
+    Profile,
+    RefreshToken,
+    Token,
+    UserOrganisation,
+)
 from interloper_db.session import commit, save, session_scope
 from interloper_db.store.page import Page, PageQuery
 
@@ -61,20 +70,21 @@ class ProfileStore:
                 raise NotFoundError(f"Profile {profile_id} not found")
             return db_profile
 
-    def get_by_google_id(self, google_id: str) -> Profile | None:
-        """Get a profile by its Google OAuth subject identifier.
+    def get_by_identity(self, issuer: str, subject: str) -> Profile | None:
+        """Get the profile an identity signs in to.
 
         Absence is an ordinary answer here (a first login), so it reads as
         ``None`` rather than raising.
 
         Args:
-            google_id: Google OAuth subject identifier.
+            issuer: The identity provider's issuer identifier.
+            subject: The subject the provider names the person by.
 
         Returns:
-            The profile, or ``None`` when no profile carries that identifier.
+            The profile, or ``None`` when no profile has that identity.
         """
         with session_scope(self._engine) as session:
-            return session.exec(select(Profile).where(Profile.google_id == google_id)).first()
+            return self._by_identity(session, issuer, subject)
 
     def list(self, query: ProfileQuery) -> Page[Profile]:
         """List profiles, oldest first, each with the organisations it belongs to.
@@ -98,15 +108,19 @@ class ProfileStore:
     def upsert(
         self,
         *,
-        google_id: str,
+        issuer: str,
+        subject: str,
         email: str,
         name: str | None = None,
         avatar_url: str | None = None,
     ) -> Profile:
-        """Create or update a profile by Google ID.
+        """Create or update the profile an identity signs in to.
+
+        A new identity creates a new profile with it, in one commit.
 
         Args:
-            google_id: Google OAuth subject identifier.
+            issuer: The identity provider's issuer identifier.
+            subject: The subject the provider names the person by.
             email: User email.
             name: Display name. Only fills an empty profile — a name the user
                 set themselves (:meth:`update`) survives logins.
@@ -116,7 +130,7 @@ class ProfileStore:
             The upserted Profile row.
         """
         with session_scope(self._engine) as session:
-            db_profile = session.exec(select(Profile).where(Profile.google_id == google_id)).first()
+            db_profile = self._by_identity(session, issuer, subject)
             if db_profile:
                 db_profile.email = email
                 if name is not None and not db_profile.name:
@@ -124,7 +138,10 @@ class ProfileStore:
                 if avatar_url is not None:
                     db_profile.avatar_url = avatar_url
             else:
-                db_profile = Profile(email=email, name=name, google_id=google_id, avatar_url=avatar_url)
+                db_profile = Profile(email=email, name=name, avatar_url=avatar_url)
+                session.add(db_profile)
+                session.flush()
+                session.add(Identity(issuer=issuer, subject=subject, profile_id=db_profile.id))
             save(session, db_profile)
             return db_profile
 
@@ -206,9 +223,10 @@ class ProfileStore:
     def delete(self, profile_id: UUID) -> None:
         """Delete a profile and everything anchored to it.
 
-        Removes the user's tokens (login sessions among them), the OAuth
-        codes and refresh tokens issued for them, organisation
-        memberships, and the invitations they sent, then the profile row.
+        Removes the user's identities, their tokens (login sessions among
+        them), the OAuth codes and refresh tokens issued for them,
+        organisation memberships, and the invitations they sent, then the
+        profile row.
 
         Args:
             profile_id: Profile UUID.
@@ -216,6 +234,7 @@ class ProfileStore:
         with session_scope(self._engine) as session:
             db_profile = self.get(profile_id)
             for statement in (
+                delete(Identity).where(col(Identity.profile_id) == profile_id),
                 delete(Token).where(col(Token.user_id) == profile_id),
                 delete(AuthorizationCode).where(col(AuthorizationCode.user_id) == profile_id),
                 delete(RefreshToken).where(col(RefreshToken.user_id) == profile_id),
@@ -225,3 +244,24 @@ class ProfileStore:
                 session.connection().execute(statement)
             session.delete(db_profile)
             commit(session)
+
+    # -- Internals -------------------------------------------------------------
+
+    @staticmethod
+    def _by_identity(session: Session, issuer: str, subject: str) -> Profile | None:
+        """Read the profile an identity signs in to, in the caller's session.
+
+        Args:
+            session: The session to read in.
+            issuer: The identity provider's issuer identifier.
+            subject: The subject the provider names the person by.
+
+        Returns:
+            The profile, or ``None`` when no profile has that identity.
+        """
+        statement = (
+            select(Profile)
+            .join(Identity, col(Identity.profile_id) == col(Profile.id))
+            .where(Identity.issuer == issuer, Identity.subject == subject)
+        )
+        return session.exec(statement).first()
