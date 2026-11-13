@@ -15,6 +15,7 @@ CAMPAIGN_REPORT_COLUMNS = (
     "campaign_id",
     "impressions",
     "clicks",
+    "inline_link_clicks",
     "spend",
     "account_currency",
     "actions_purchase",
@@ -30,6 +31,7 @@ AD_REPORT_COLUMNS = (
     "impression_device",
     "impressions",
     "clicks",
+    "inline_link_clicks",
     "reach",
     "spend",
     "account_currency",
@@ -107,13 +109,14 @@ class FacebookAdsStarSchema(il.Source):
 
     The campaign fact unions each account's campaign report at campaign and
     day grain, with purchases under the account's attribution setting; the ad
-    fact keeps the ad report's placement breakdown. Each dimension takes its
-    rows from the entity snapshot where one is collected, else from the
-    report, else from the fact's own keys, so every key a fact carries
-    resolves. Every bound upstream's table must exist, or the view fails when
-    it is created. Views are recreated on every run, so they follow the
-    accounts bound to them; an account added to the organisation is absent
-    until it is bound.
+    fact keeps the ad report's placement breakdown. Both facts count link
+    clicks as clicks, like every other platform, and every click as
+    all_clicks. Each dimension takes its rows from the entity snapshot where
+    one is collected, else from the report, else from the fact's own keys, so
+    every key a fact carries resolves. Every bound upstream's table must
+    exist, or the view fails when it is created. Views are recreated on every
+    run, so they follow the accounts bound to them; an account added to the
+    organisation is absent until it is bound.
     """
 
     @ibis_view(
@@ -133,11 +136,12 @@ class FacebookAdsStarSchema(il.Source):
             account_id=rows["account_id"],
             campaign_id=rows["campaign_id"],
             impressions=rows["impressions"],
-            clicks=rows["clicks"],
+            clicks=rows["inline_link_clicks"],
             cost=rows["spend"],
             currency=rows["account_currency"],
             purchases=rows["actions_purchase"].cast("int64"),
             revenue=rows["action_values_purchase"].cast("float64"),
+            all_clicks=rows["clicks"],
         )
         # the campaign report is broken down by placement, so reach (people, not additive across
         # rows) cannot be summed back to the campaign and stays on the ad fact only
@@ -148,6 +152,7 @@ class FacebookAdsStarSchema(il.Source):
             currency=rows["currency"].max(),
             purchases=rows["purchases"].sum(),
             revenue=rows["revenue"].sum(),
+            all_clicks=rows["all_clicks"].sum(),
         )
         return summed.select(
             "date",
@@ -159,6 +164,7 @@ class FacebookAdsStarSchema(il.Source):
             "currency",
             purchases=summed["purchases"],
             revenue=summed["revenue"],
+            all_clicks=summed["all_clicks"],
         )
 
     @ibis_view(
@@ -180,7 +186,8 @@ class FacebookAdsStarSchema(il.Source):
             platform_position=rows["platform_position"],
             impression_device=rows["impression_device"],
             impressions=rows["impressions"],
-            clicks=rows["clicks"],
+            clicks=rows["inline_link_clicks"],
+            all_clicks=rows["clicks"],
             reach=rows["reach"],
             cost=rows["spend"],
             currency=rows["account_currency"],
