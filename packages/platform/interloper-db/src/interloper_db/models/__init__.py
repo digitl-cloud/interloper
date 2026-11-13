@@ -19,7 +19,7 @@ Key design decisions:
   models so that ``create_all()`` provisions everything in one shot.
 """
 
-from interloper_db.models.auth import Invitation, Organisation, Profile, Role, UserOrganisation
+from interloper_db.models.auth import Identity, Invitation, Organisation, Profile, Role, UserOrganisation
 from interloper_db.models.columns import table_of
 from interloper_db.models.components import Component, ComponentRelation
 from interloper_db.models.conversations import Conversation
@@ -52,6 +52,7 @@ __all__ = [
     "Conversation",
     "Event",
     "Execution",
+    "Identity",
     "Invitation",
     "OAuthClient",
     "Organisation",

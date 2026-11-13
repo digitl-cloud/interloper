@@ -8,7 +8,7 @@ from interloper_api.notifications import SuperAdminPromotionEmail
 
 
 def _profile(name: str | None, email: str) -> Profile:
-    return Profile(email=email, name=name, google_id=f"g-{email}")
+    return Profile(email=email, name=name)
 
 
 def _email(promoted_name: str = "Ada Lovelace", promoted_by: str = "Grace Hopper") -> SuperAdminPromotionEmail:

@@ -274,7 +274,8 @@ smtp: {}
 #   user: "no-reply@example.com"
 
 # Auth config (OAuth client ID; the client secret goes in
-# secrets.googleClientSecret). super_admin_emails bootstraps the first
+# secrets.googleClientSecret). The Google client's authorised redirect URI is
+# <externalUrl>/api/auth/google/callback. super_admin_emails bootstraps the first
 # platform super-admin(s): listed users are promoted whenever the api starts
 # and when they log in (promote-only: removing an email never demotes).
 # allowed_domains restricts signup to the listed email domains (plus

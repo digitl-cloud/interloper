@@ -37,7 +37,9 @@ def profile(store: Store) -> Profile:
     Returns:
         The profile.
     """
-    return store.profiles.upsert(google_id="g-user", email="user@example.com", name="User")
+    return store.profiles.upsert(
+        issuer="https://accounts.google.com", subject="g-user", email="user@example.com", name="User"
+    )
 
 
 @pytest.fixture
@@ -84,7 +86,9 @@ class _Conversations:
         """
         self._store = store
         other_client, _ = store.oauth.register_client("Other", ["http://localhost/cb"], registered_by="dynamic")
-        other_user = store.profiles.upsert(google_id="g-other", email="other@example.com", name="Other")
+        other_user = store.profiles.upsert(
+            issuer="https://accounts.google.com", subject="g-other", email="other@example.com", name="Other"
+        )
         org_id = store.organisations.create(name="Acme", creator_id=profile.id).id
         self.ended = store.conversations.create(org_id, profile.id, client.client_id).id
         self.other_client = store.conversations.create(org_id, profile.id, other_client.client_id).id
@@ -581,7 +585,9 @@ class TestIssueTokens:
 
 class TestAuthorisedClients:
     def test_revoke_client_for_user_kills_refresh_and_access(self, store: Store, profile: Profile, client: OAuthClient):
-        other_user = store.profiles.upsert(google_id="g-other", email="other@example.com", name="Other")
+        other_user = store.profiles.upsert(
+            issuer="https://accounts.google.com", subject="g-other", email="other@example.com", name="Other"
+        )
         refresh = store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP)
         access = store.tokens.create_access(profile.id, client.client_id, Audience.MCP)
         theirs = store.oauth.issue_refresh(other_user.id, client.client_id, Audience.MCP)
@@ -595,7 +601,9 @@ class TestAuthorisedClients:
         assert store.tokens.resolve(personal, Audience.MCP) is not None
 
     def test_revoke_client_for_user_burns_unspent_codes(self, store: Store, profile: Profile, client: OAuthClient):
-        other_user = store.profiles.upsert(google_id="g-other", email="other@example.com", name="Other")
+        other_user = store.profiles.upsert(
+            issuer="https://accounts.google.com", subject="g-other", email="other@example.com", name="Other"
+        )
         mine = _issue_code(store, profile, client)
         theirs = _issue_code(store, other_user, client)
 

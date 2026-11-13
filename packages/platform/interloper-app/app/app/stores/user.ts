@@ -35,9 +35,9 @@ export const useUserStore = defineStore('user', () => {
         setDisplayTimeZone(user.value.timezone)
     }
 
-    function signIn(redirect?: string) {
+    function signIn(provider: string, redirect?: string) {
         const params = redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''
-        window.location.href = `/api/auth/google${params}`
+        window.location.href = `/api/auth/${encodeURIComponent(provider)}/login${params}`
     }
 
     async function signOut() {

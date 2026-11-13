@@ -26,6 +26,7 @@ from interloper_db.models import (
     ComponentRelation,
     Event,
     Execution,
+    Identity,
     Organisation,
     Profile,
     Quota,
@@ -145,7 +146,19 @@ def engine() -> Iterator[Engine]:
         dbapi_connection.execute("PRAGMA foreign_keys=ON")
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    models = (Profile, Organisation, UserOrganisation, Component, ComponentRelation, Backfill, Run, Event, Quota, Usage)
+    models = (
+        Profile,
+        Identity,
+        Organisation,
+        UserOrganisation,
+        Component,
+        ComponentRelation,
+        Backfill,
+        Run,
+        Event,
+        Quota,
+        Usage,
+    )
     for model in (*models, Execution):
         table_of(model).create(engine)
     try:
@@ -179,7 +192,9 @@ def member(store: Store) -> SimpleNamespace:
     Returns:
         The profile and organisation ids the routes resolve.
     """
-    profile = store.profiles.upsert(google_id="g-1", email="ada@example.com", name="Ada")
+    profile = store.profiles.upsert(
+        issuer="https://accounts.google.com", subject="g-1", email="ada@example.com", name="Ada"
+    )
     org = store.organisations.create(name="Acme", creator_id=profile.id)
     return SimpleNamespace(id=profile.id, org_id=org.id, email="ada@example.com", is_super_admin=False)
 

@@ -53,7 +53,6 @@ x-interloper-env: &interloper-env
   # (`make compose-*` forwards them); the rest default for local http.
   INTERLOPER_AUTH_GOOGLE_CLIENT_ID: ${INTERLOPER_AUTH_GOOGLE_CLIENT_ID:-}
   INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET: ${INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET:-}
-  INTERLOPER_AUTH_GOOGLE_REDIRECT_URI: ${INTERLOPER_AUTH_GOOGLE_REDIRECT_URI:-http://localhost:3000/api/auth/google/callback}
   INTERLOPER_AUTH_COOKIE_SECURE: ${INTERLOPER_AUTH_COOKIE_SECURE:-false}
 
 # The api image (core + db + assets + api) is enough to run both the API and the

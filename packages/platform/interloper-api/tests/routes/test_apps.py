@@ -37,7 +37,9 @@ def user(oauth_store: Store, client: TestClient) -> Profile:
     Returns:
         The profile.
     """
-    profile = oauth_store.profiles.upsert(google_id="g-user", email="user@example.com", name="User")
+    profile = oauth_store.profiles.upsert(
+        issuer="https://accounts.google.com", subject="g-user", email="user@example.com", name="User"
+    )
     client.cookies.set("session_token", oauth_store.tokens.create_session(profile.id))
     return profile
 
@@ -61,7 +63,9 @@ def test_lists_clients_with_live_refresh(client: TestClient, oauth_store: Store,
     _grant(oauth_store, user, live)
     _grant(oauth_store, user, revoked)
     oauth_store.oauth.revoke_client_for_user(user.id, revoked)
-    other = oauth_store.profiles.upsert(google_id="g-other", email="other@example.com", name="Other")
+    other = oauth_store.profiles.upsert(
+        issuer="https://accounts.google.com", subject="g-other", email="other@example.com", name="Other"
+    )
     _grant(oauth_store, other, others)
 
     response = client.get(PREFIX)
@@ -123,7 +127,9 @@ def test_revoking_an_app_twice_or_one_never_approved_is_a_no_op(client: TestClie
 def test_revoke_spares_other_users(client: TestClient, oauth_store: Store, user: Profile):
     client_id = _app(oauth_store, "Claude Code")
     _grant(oauth_store, user, client_id)
-    other = oauth_store.profiles.upsert(google_id="g-other", email="other@example.com", name="Other")
+    other = oauth_store.profiles.upsert(
+        issuer="https://accounts.google.com", subject="g-other", email="other@example.com", name="Other"
+    )
     other_access, _ = _grant(oauth_store, other, client_id)
 
     assert client.delete(f"{PREFIX}/{client_id}").status_code == 204

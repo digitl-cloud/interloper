@@ -155,7 +155,9 @@ class TestDeleteOrganisation:
         session.commit()
 
     def test_purges_payload_but_keeps_the_ledger(self, store: Store, auth_db: Engine):
-        admin = store.profiles.upsert(google_id="g-admin", email="admin@example.com", name="Admin")
+        admin = store.profiles.upsert(
+            issuer="https://accounts.google.com", subject="g-admin", email="admin@example.com", name="Admin"
+        )
         org = store.organisations.create(name="Doomed", creator_id=admin.id)
         keeper = store.organisations.create(name="Keeper", creator_id=admin.id)
         store.members.add(org.id, admin.id, "admin")
@@ -220,7 +222,7 @@ class TestUpdate:
     """Renaming, and the soft-delete guard on it."""
 
     def test_renames_the_organisation(self, store: Store):
-        profile = store.profiles.upsert(google_id="g1", email="ada@x")
+        profile = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
         org = store.organisations.create(name="Acme", creator_id=profile.id)
 
         renamed = store.organisations.update(org.id, name="Acme Corp")
@@ -236,7 +238,7 @@ class TestUpdate:
 
     def test_a_soft_deleted_organisation_reads_as_missing(self, store: Store):
         # The ledger row survives the delete, but it is not writable.
-        profile = store.profiles.upsert(google_id="g1", email="ada@x")
+        profile = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
         org = store.organisations.create(name="Acme", creator_id=profile.id)
         store.organisations.delete(org.id)
 
@@ -248,8 +250,8 @@ class TestList:
     """Every organisation, or one profile's, with soft-deleted ones opt-in."""
 
     def test_lists_every_organisation(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
-        bob = store.profiles.upsert(google_id="g2", email="bob@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
+        bob = store.profiles.upsert(issuer="https://accounts.google.com", subject="g2", email="bob@x")
         store.organisations.create(name="First", creator_id=ada.id)
         store.organisations.create(name="Second", creator_id=bob.id)
 
@@ -259,7 +261,7 @@ class TestList:
         assert page.total == 2
 
     def test_soft_deleted_organisations_are_hidden_by_default(self, store: Store):
-        profile = store.profiles.upsert(google_id="g1", email="ada@x")
+        profile = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
         live = store.organisations.create(name="Live", creator_id=profile.id)
         gone = store.organisations.create(name="Gone", creator_id=profile.id)
         store.organisations.delete(gone.id)
@@ -277,8 +279,8 @@ class TestList:
         assert page.total == 0
 
     def test_lists_only_the_users_organisations(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
-        bob = store.profiles.upsert(google_id="g2", email="bob@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
+        bob = store.profiles.upsert(issuer="https://accounts.google.com", subject="g2", email="bob@x")
         mine = store.organisations.create(name="Mine", creator_id=ada.id)
         store.organisations.create(name="Theirs", creator_id=bob.id)
 
@@ -288,12 +290,12 @@ class TestList:
         assert page.total == 1
 
     def test_a_user_with_no_memberships_gets_an_empty_page(self, store: Store):
-        profile = store.profiles.upsert(google_id="g1", email="ada@x")
+        profile = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
 
         assert store.organisations.list(OrganisationQuery(user_id=profile.id)).items == []
 
     def test_a_users_soft_deleted_organisation_is_opt_in(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
         org = store.organisations.create(name="Acme", creator_id=ada.id)
         store.organisations.delete(org.id)
 
@@ -302,7 +304,7 @@ class TestList:
         assert store.organisations.list(OrganisationQuery(user_id=ada.id, include_deleted=True)).items == []
 
     def test_a_window_reports_the_whole_count(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
+        ada = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
         for name in ("A", "B", "C"):
             store.organisations.create(name=name, creator_id=ada.id)
 

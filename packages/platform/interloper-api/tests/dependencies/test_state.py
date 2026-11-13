@@ -17,10 +17,13 @@ from interloper_api.dependencies import (
     get_authorization_server,
     get_catalog,
     get_features,
-    get_google_login,
+    get_login_provider,
     get_settings,
     get_store,
 )
+from interloper_api.login import GoogleProvider, Login
+
+_LOGIN_SESSION: dict[str, Any] = {"encryption_key": "key", "cookie_secure": False}
 
 
 def _client(state: State) -> TestClient:
@@ -62,9 +65,9 @@ def _client(state: State) -> TestClient:
     def authorization_server(server: Annotated[Any, Depends(get_authorization_server)]) -> dict[str, Any]:
         return {"same": server is state.authorization_server}
 
-    @app.get("/google-login")
-    def google_login(login: Annotated[Any, Depends(get_google_login)]) -> dict[str, Any]:
-        return {"same": login is state.google_login}
+    @app.get("/login/{provider}")
+    def login_provider(provider: Annotated[Any, Depends(get_login_provider)]) -> dict[str, Any]:
+        return {"same": state.login is not None and provider is state.login.providers.get("google")}
 
     return TestClient(app, raise_server_exceptions=False)
 
@@ -78,12 +81,18 @@ class TestInstalledSlots:
 
     @pytest.mark.parametrize(
         ("slot", "path"),
-        [("agent", "/agent"), ("authorization_server", "/authorization-server"), ("google_login", "/google-login")],
+        [("agent", "/agent"), ("authorization_server", "/authorization-server")],
     )
     def test_an_optional_slot_reads_back(self, app_state: State, slot: str, path: str) -> None:
         state = dataclasses.replace(app_state, **{slot: object()})
 
         assert _client(state).get(path).json() == {"same": True}
+
+    def test_the_login_provider_the_path_names_reads_back(self, app_state: State) -> None:
+        login = Login([GoogleProvider(client_id="cid", client_secret="s", public_url="https://app")], **_LOGIN_SESSION)
+        state = dataclasses.replace(app_state, login=login)
+
+        assert _client(state).get("/login/google").json() == {"same": True}
 
     def test_the_features_read_back(self, app_state: State) -> None:
         state = dataclasses.replace(app_state, features={"agent": True})
@@ -111,11 +120,19 @@ class TestMissingSlots:
         assert response.status_code == 503
         assert response.json()["detail"] == "OAuth authorization server not configured"
 
-    def test_a_missing_google_login_is_a_503(self, app_state: State) -> None:
-        response = _client(app_state).get("/google-login")
+    def test_a_missing_login_is_a_404(self, app_state: State) -> None:
+        response = _client(app_state).get("/login/google")
 
-        assert response.status_code == 503
-        assert response.json()["detail"] == "Google login not configured"
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Unknown sign-in provider 'google'"
+
+    def test_a_provider_the_login_does_not_offer_is_a_404(self, app_state: State) -> None:
+        login = Login([GoogleProvider(client_id="cid", client_secret="s", public_url="https://app")], **_LOGIN_SESSION)
+
+        response = _client(dataclasses.replace(app_state, login=login)).get("/login/okta")
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Unknown sign-in provider 'okta'"
 
     def test_features_default_to_none_enabled(self, app_state: State) -> None:
         assert app_state.features == {}

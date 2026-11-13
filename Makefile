@@ -155,14 +155,14 @@ INTERLOPER_DEV_USER_EMAIL ?= admin@dev.local
 INTERLOPER_DEV_USER_GOOGLE_ID ?=
 
 # Google OAuth for the app login (the /auth flow). Put your client id + secret
-# in .env (they're secrets). The redirect URI must be registered on the OAuth
-# client in Google Cloud; cookie_secure=false lets the session cookie stick over
-# local http. e.g. in .env:
+# in .env (they're secrets). The OAuth client in Google Cloud must list
+# <INTERLOPER_SERVER_EXTERNAL_URL>/api/auth/google/callback, so
+# http://localhost:3000/api/auth/google/callback here, as an authorised redirect
+# URI; cookie_secure=false lets the session cookie stick over local http. e.g. in .env:
 #   INTERLOPER_AUTH_GOOGLE_CLIENT_ID=...apps.googleusercontent.com
 #   INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET=...
 INTERLOPER_AUTH_GOOGLE_CLIENT_ID ?=
 INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET ?=
-INTERLOPER_AUTH_GOOGLE_REDIRECT_URI ?= http://localhost:3000/api/auth/google/callback
 INTERLOPER_AUTH_COOKIE_SECURE ?= false
 
 DEV_ENV := INTERLOPER_POSTGRES_HOST=localhost \
@@ -178,7 +178,6 @@ DEV_ENV := INTERLOPER_POSTGRES_HOST=localhost \
            INTERLOPER_DEV_USER_GOOGLE_ID=$(INTERLOPER_DEV_USER_GOOGLE_ID) \
            INTERLOPER_AUTH_GOOGLE_CLIENT_ID=$(INTERLOPER_AUTH_GOOGLE_CLIENT_ID) \
            INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET=$(INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET) \
-           INTERLOPER_AUTH_GOOGLE_REDIRECT_URI=$(INTERLOPER_AUTH_GOOGLE_REDIRECT_URI) \
            INTERLOPER_AUTH_COOKIE_SECURE=$(INTERLOPER_AUTH_COOKIE_SECURE)
 
 dev-db:
@@ -211,7 +210,6 @@ COMPOSE_ENV := INTERLOPER_DEV_USER_EMAIL=$(INTERLOPER_DEV_USER_EMAIL) \
                INTERLOPER_DEV_USER_GOOGLE_ID=$(INTERLOPER_DEV_USER_GOOGLE_ID) \
                INTERLOPER_AUTH_GOOGLE_CLIENT_ID=$(INTERLOPER_AUTH_GOOGLE_CLIENT_ID) \
                INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET=$(INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET) \
-               INTERLOPER_AUTH_GOOGLE_REDIRECT_URI=$(INTERLOPER_AUTH_GOOGLE_REDIRECT_URI) \
                INTERLOPER_AUTH_COOKIE_SECURE=$(INTERLOPER_AUTH_COOKIE_SECURE)
 
 compose-up:

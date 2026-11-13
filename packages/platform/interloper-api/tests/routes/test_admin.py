@@ -893,7 +893,9 @@ class TestOAuthClients:
         client_id = client.post(
             "/admin/oauth-clients", json={"name": "Slack", "redirect_uris": ["https://slack.example.com/cb"]}
         ).json()["id"]
-        user = oauth_store.profiles.upsert(google_id="g-user", email="user@example.com", name="User")
+        user = oauth_store.profiles.upsert(
+            issuer="https://accounts.google.com", subject="g-user", email="user@example.com", name="User"
+        )
         organisation = oauth_store.organisations.create(name="Acme", creator_id=user.id)
         access = oauth_store.tokens.create_access(user.id, client_id, Audience.API)
         refresh = oauth_store.oauth.issue_refresh(user.id, client_id, Audience.API)

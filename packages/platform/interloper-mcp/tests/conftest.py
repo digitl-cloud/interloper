@@ -17,6 +17,7 @@ from interloper_db.models import (
     Backfill,
     Component,
     ComponentRelation,
+    Identity,
     Organisation,
     Profile,
     Run,
@@ -52,6 +53,7 @@ def mcp_db() -> Iterator[Engine]:
 
     for model in (
         Profile,
+        Identity,
         Organisation,
         UserOrganisation,
         Token,
@@ -85,7 +87,9 @@ def seeded(store: Store) -> dict[str, Any]:
     Returns:
         The seeded ids and the raw token, keyed for the tests to read.
     """
-    profile = store.profiles.upsert(google_id="g-user", email="user@example.com", name="User")
+    profile = store.profiles.upsert(
+        issuer="https://accounts.google.com", subject="g-user", email="user@example.com", name="User"
+    )
     org = store.organisations.create(name="Acme", creator_id=profile.id)
     _, raw_token = store.tokens.create_personal(profile.id, "test")
 

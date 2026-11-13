@@ -9,11 +9,13 @@ import pytest
 from interloper_db import Audience, NotFoundError
 from interloper_db.store import ProfileQuery, Store
 
+GOOGLE = "https://accounts.google.com"
+
 
 class TestList:
     def test_lists_profiles_with_their_organisations(self, store: Store):
-        admin = store.profiles.upsert(google_id="g-admin", email="admin@example.com", name="Admin")
-        loner = store.profiles.upsert(google_id="g-loner", email="loner@example.com", name="Loner")
+        admin = store.profiles.upsert(issuer=GOOGLE, subject="g-admin", email="admin@example.com", name="Admin")
+        loner = store.profiles.upsert(issuer=GOOGLE, subject="g-loner", email="loner@example.com", name="Loner")
         org_a = store.organisations.create(name="Acme", creator_id=admin.id)
         org_b = store.organisations.create(name="Beta", creator_id=admin.id)
         store.members.add(org_a.id, admin.id, "admin")
@@ -28,7 +30,7 @@ class TestList:
 
     def test_a_window_reports_the_whole_count(self, store: Store):
         for index in range(3):
-            store.profiles.upsert(google_id=f"g-{index}", email=f"user{index}@example.com")
+            store.profiles.upsert(issuer=GOOGLE, subject=f"g-{index}", email=f"user{index}@example.com")
 
         page = store.profiles.list(ProfileQuery(limit=2))
 
@@ -36,8 +38,8 @@ class TestList:
         assert page.total == 3
 
     def test_filters_on_the_super_admin_flag(self, store: Store):
-        admin = store.profiles.upsert(google_id="g-admin", email="admin@example.com")
-        member = store.profiles.upsert(google_id="g-member", email="member@example.com")
+        admin = store.profiles.upsert(issuer=GOOGLE, subject="g-admin", email="admin@example.com")
+        member = store.profiles.upsert(issuer=GOOGLE, subject="g-member", email="member@example.com")
         store.profiles.set_super_admin(admin.id, value=True)
 
         super_admins = store.profiles.list(ProfileQuery(super_admin=True, limit=None))
@@ -49,8 +51,8 @@ class TestList:
 
 class TestDelete:
     def test_deletes_profile_and_everything_anchored_to_it(self, store: Store):
-        admin = store.profiles.upsert(google_id="g-admin", email="admin@example.com", name="Admin")
-        keeper = store.profiles.upsert(google_id="g-keeper", email="keeper@example.com", name="Keeper")
+        admin = store.profiles.upsert(issuer=GOOGLE, subject="g-admin", email="admin@example.com", name="Admin")
+        keeper = store.profiles.upsert(issuer=GOOGLE, subject="g-keeper", email="keeper@example.com", name="Keeper")
         org = store.organisations.create(name="Acme", creator_id=admin.id)
         store.members.add(org.id, admin.id, "admin")
         store.members.add(org.id, keeper.id, "viewer")
@@ -77,7 +79,9 @@ class TestDelete:
         assert not store.invitations.has_pending("new@example.com")
         assert store.members.role(org.id, admin.id) is None
         assert store.oauth.authorised_clients(admin.id) == []
+        assert store.profiles.get_by_identity(GOOGLE, "g-admin") is None
         # Other users' data is untouched.
+        assert store.profiles.get_by_identity(GOOGLE, "g-keeper") is not None
         assert store.profiles.get(keeper.id).id == keeper.id
         assert store.tokens.resolve(keeper_token, Audience.APP) is not None
         assert store.members.role(org.id, keeper.id) == "viewer"
@@ -87,22 +91,55 @@ class TestDelete:
             store.profiles.delete(uuid4())
 
 
-class TestGetByGoogleId:
-    def test_returns_matching_profile(self, store: Store):
-        profile = store.profiles.upsert(google_id="g-1", email="user@example.com", name="User")
+class TestGetByIdentity:
+    def test_returns_the_profile_the_identity_signs_in_to(self, store: Store):
+        profile = store.profiles.upsert(issuer=GOOGLE, subject="g-1", email="user@example.com", name="User")
 
-        found = store.profiles.get_by_google_id("g-1")
+        found = store.profiles.get_by_identity(GOOGLE, "g-1")
 
         assert found is not None
         assert found.id == profile.id
 
     def test_returns_none_when_absent(self, store: Store):
-        assert store.profiles.get_by_google_id("g-missing") is None
+        assert store.profiles.get_by_identity(GOOGLE, "g-missing") is None
+
+    def test_the_same_subject_from_another_issuer_is_another_person(self, store: Store):
+        store.profiles.upsert(issuer=GOOGLE, subject="s-1", email="user@example.com")
+
+        assert store.profiles.get_by_identity("https://login.example.com", "s-1") is None
+
+
+class TestUpsertIdentity:
+    """A first login creates a profile with its identity; later ones find it."""
+
+    def test_a_new_identity_creates_a_profile_with_it(self, store: Store):
+        assert store.profiles.get_by_identity(GOOGLE, "g-new") is None
+
+        profile = store.profiles.upsert(issuer=GOOGLE, subject="g-new", email="new@example.com")
+
+        found = store.profiles.get_by_identity(GOOGLE, "g-new")
+        assert found is not None
+        assert found.id == profile.id
+
+    def test_a_known_identity_updates_its_profile(self, store: Store):
+        first = store.profiles.upsert(issuer=GOOGLE, subject="g-1", email="old@example.com")
+
+        again = store.profiles.upsert(issuer=GOOGLE, subject="g-1", email="new@example.com")
+
+        assert again.id == first.id
+        assert store.profiles.list(ProfileQuery(limit=None)).total == 1
+
+    def test_each_issuer_signs_in_its_own_profile(self, store: Store):
+        google = store.profiles.upsert(issuer=GOOGLE, subject="s-1", email="user@example.com")
+
+        other = store.profiles.upsert(issuer="https://login.example.com", subject="s-1", email="user@example.com")
+
+        assert other.id != google.id
 
 
 class TestUpdate:
     def test_updates_name_and_timezone_independently(self, store: Store):
-        profile = store.profiles.upsert(google_id="g-upd", email="upd@example.com", name="Google Name")
+        profile = store.profiles.upsert(issuer=GOOGLE, subject="g-upd", email="upd@example.com", name="Google Name")
 
         renamed = store.profiles.update(profile.id, name="Custom Name")
         assert renamed.name == "Custom Name"
@@ -113,7 +150,7 @@ class TestUpdate:
         assert zoned.timezone == "Europe/Berlin"
 
     def test_records_the_last_organisation_leaving_the_rest(self, store: Store):
-        profile = store.profiles.upsert(google_id="g-last", email="last@example.com", name="Name")
+        profile = store.profiles.upsert(issuer=GOOGLE, subject="g-last", email="last@example.com", name="Name")
         org = store.organisations.create(name="Acme", creator_id=profile.id)
 
         updated = store.profiles.update(profile.id, last_organisation_id=org.id)
@@ -126,17 +163,17 @@ class TestUpdate:
             store.profiles.update(uuid4(), name="Ghost")
 
     def test_user_set_name_survives_login_upsert(self, store: Store):
-        profile = store.profiles.upsert(google_id="g-keep", email="keep@example.com", name="Google Name")
+        profile = store.profiles.upsert(issuer=GOOGLE, subject="g-keep", email="keep@example.com", name="Google Name")
         store.profiles.update(profile.id, name="Custom Name")
 
-        relogged = store.profiles.upsert(google_id="g-keep", email="keep@example.com", name="Google Name")
+        relogged = store.profiles.upsert(issuer=GOOGLE, subject="g-keep", email="keep@example.com", name="Google Name")
 
         assert relogged.name == "Custom Name"
 
     def test_login_upsert_fills_an_empty_name(self, store: Store):
-        store.profiles.upsert(google_id="g-fill", email="fill@example.com")
+        store.profiles.upsert(issuer=GOOGLE, subject="g-fill", email="fill@example.com")
 
-        filled = store.profiles.upsert(google_id="g-fill", email="fill@example.com", name="Google Name")
+        filled = store.profiles.upsert(issuer=GOOGLE, subject="g-fill", email="fill@example.com", name="Google Name")
 
         assert filled.name == "Google Name"
 
@@ -145,7 +182,7 @@ class TestSetSuperAdmin:
     """Platform-wide privilege, toggled by id."""
 
     def test_promotes_a_profile(self, store: Store):
-        profile = store.profiles.upsert(google_id="g1", email="ada@x")
+        profile = store.profiles.upsert(issuer=GOOGLE, subject="g1", email="ada@x")
 
         promoted = store.profiles.set_super_admin(profile.id, value=True)
 
@@ -153,7 +190,7 @@ class TestSetSuperAdmin:
         assert store.profiles.get(profile.id).is_super_admin is True
 
     def test_demotes_when_asked(self, store: Store):
-        profile = store.profiles.upsert(google_id="g1", email="ada@x")
+        profile = store.profiles.upsert(issuer=GOOGLE, subject="g1", email="ada@x")
         store.profiles.set_super_admin(profile.id, value=True)
 
         store.profiles.set_super_admin(profile.id, value=False)
@@ -161,7 +198,7 @@ class TestSetSuperAdmin:
         assert store.profiles.get(profile.id).is_super_admin is False
 
     def test_returns_the_profile_with_its_organisations(self, store: Store):
-        profile = store.profiles.upsert(google_id="g1", email="ada@x")
+        profile = store.profiles.upsert(issuer=GOOGLE, subject="g1", email="ada@x")
         org = store.organisations.create(name="Acme", creator_id=profile.id)
 
         promoted = store.profiles.set_super_admin(profile.id, value=True)
@@ -179,9 +216,9 @@ class TestPromoteSuperAdmins:
     """Bulk, promote-only bootstrap from a list of emails."""
 
     def test_promotes_the_listed_profiles_case_insensitively(self, store: Store):
-        ada = store.profiles.upsert(google_id="g-ada", email="Ada@Example.com")
-        bob = store.profiles.upsert(google_id="g-bob", email="bob@example.com")
-        eve = store.profiles.upsert(google_id="g-eve", email="eve@example.com")
+        ada = store.profiles.upsert(issuer=GOOGLE, subject="g-ada", email="Ada@Example.com")
+        bob = store.profiles.upsert(issuer=GOOGLE, subject="g-bob", email="bob@example.com")
+        eve = store.profiles.upsert(issuer=GOOGLE, subject="g-eve", email="eve@example.com")
 
         promoted = store.profiles.promote_super_admins(["ada@example.com", "BOB@example.com"])
 
@@ -190,7 +227,7 @@ class TestPromoteSuperAdmins:
         assert store.profiles.get(eve.id).is_super_admin is False
 
     def test_returns_only_the_profiles_it_promoted(self, store: Store):
-        ada = store.profiles.upsert(google_id="g-ada", email="ada@example.com")
+        ada = store.profiles.upsert(issuer=GOOGLE, subject="g-ada", email="ada@example.com")
         store.profiles.set_super_admin(ada.id, value=True)
 
         assert store.profiles.promote_super_admins(["ada@example.com"]) == []
@@ -200,32 +237,32 @@ class TestPromoteSuperAdmins:
         assert store.profiles.promote_super_admins(["ghost@example.com"]) == []
 
     def test_an_empty_list_promotes_nobody(self, store: Store):
-        store.profiles.upsert(google_id="g-ada", email="ada@example.com")
+        store.profiles.upsert(issuer=GOOGLE, subject="g-ada", email="ada@example.com")
 
         assert store.profiles.promote_super_admins([]) == []
 
 
 class TestUpsertAvatar:
-    """The login upsert refreshes Google-managed fields."""
+    """The login upsert refreshes the fields the identity provider manages."""
 
     def test_a_new_avatar_replaces_the_old_one(self, store: Store):
-        profile = store.profiles.upsert(google_id="g1", email="ada@x", avatar_url="https://a/1.png")
+        profile = store.profiles.upsert(issuer=GOOGLE, subject="g1", email="ada@x", avatar_url="https://a/1.png")
 
-        store.profiles.upsert(google_id="g1", email="ada@x", avatar_url="https://a/2.png")
+        store.profiles.upsert(issuer=GOOGLE, subject="g1", email="ada@x", avatar_url="https://a/2.png")
 
         assert store.profiles.get(profile.id).avatar_url == "https://a/2.png"
 
     def test_an_omitted_avatar_leaves_the_stored_one(self, store: Store):
-        profile = store.profiles.upsert(google_id="g1", email="ada@x", avatar_url="https://a/1.png")
+        profile = store.profiles.upsert(issuer=GOOGLE, subject="g1", email="ada@x", avatar_url="https://a/1.png")
 
-        store.profiles.upsert(google_id="g1", email="ada@x")
+        store.profiles.upsert(issuer=GOOGLE, subject="g1", email="ada@x")
 
         assert store.profiles.get(profile.id).avatar_url == "https://a/1.png"
 
     def test_the_email_is_refreshed_on_every_login(self, store: Store):
-        # Google owns the address; a change there must land.
-        profile = store.profiles.upsert(google_id="g1", email="old@x")
+        # The identity provider owns the address; a change there must land.
+        profile = store.profiles.upsert(issuer=GOOGLE, subject="g1", email="old@x")
 
-        store.profiles.upsert(google_id="g1", email="new@x")
+        store.profiles.upsert(issuer=GOOGLE, subject="g1", email="new@x")
 
         assert store.profiles.get(profile.id).email == "new@x"

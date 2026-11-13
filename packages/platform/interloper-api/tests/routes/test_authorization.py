@@ -44,7 +44,9 @@ def user(oauth_store: Store, client: TestClient) -> Profile:
     Returns:
         The profile.
     """
-    profile = oauth_store.profiles.upsert(google_id="g-user", email="user@example.com", name="User")
+    profile = oauth_store.profiles.upsert(
+        issuer="https://accounts.google.com", subject="g-user", email="user@example.com", name="User"
+    )
     client.cookies.set("session_token", oauth_store.tokens.create_session(profile.id))
     return profile
 
@@ -348,7 +350,7 @@ def test_authorize_without_a_session_logs_in_first(client: TestClient):
 
     assert response.status_code == 302
     login = urlsplit(response.headers["location"])
-    assert login.path == "/api/auth/google"
+    assert login.path == "/login"
     return_path = _query(response.headers["location"])["redirect"]
     assert urlsplit(return_path).path == f"{PREFIX}/authorize"
     assert _query(return_path) == _authorize_params(client_id)
@@ -389,7 +391,9 @@ def test_consent_answers_the_session_cookie_only(client: TestClient, oauth_store
 def test_consent_refuses_a_request_sealed_for_another_user(client: TestClient, oauth_store: Store, user: Profile):
     client_id = _register(client)["client_id"]
     sealed = _sealed(client, client_id)
-    other = oauth_store.profiles.upsert(google_id="g-other", email="other@example.com", name="Other")
+    other = oauth_store.profiles.upsert(
+        issuer="https://accounts.google.com", subject="g-other", email="other@example.com", name="Other"
+    )
     client.cookies.set("session_token", oauth_store.tokens.create_session(other.id))
 
     assert client.get(f"{PREFIX}/consent", params={"request": sealed}).status_code == 400
