@@ -8,6 +8,7 @@ import interloper as il
 from interloper.errors import ConfigError
 from interloper_sql import ibis_view, latest, union
 
+from interloper_assets.facebook_ads import constants
 from interloper_assets.facebook_ads.star_schema import schemas
 
 CAMPAIGN_REPORT_COLUMNS = (
@@ -97,6 +98,49 @@ def _budget_type(table: ibis.Table) -> ir.Value:
     return ibis.ifelse(table["daily_budget"] > 0, "daily", lifetime)
 
 
+def _minor_budget(table: ibis.Table) -> ir.Value:
+    """The budget a Facebook campaign or ad set sets, as Facebook sends it: in 1/offset of the currency.
+
+    The daily budget when set, else the lifetime budget, the same one
+    ``_budget_type`` names. Used by the campaign and ad set dimensions, which
+    convert it with ``_budget`` once each row's account is known.
+
+    Args:
+        table: A campaigns or ad sets entity table.
+
+    Returns:
+        An integer column, NULL when neither budget is set.
+    """
+    lifetime = ibis.ifelse(table["lifetime_budget"] > 0, table["lifetime_budget"], ibis.null("int64"))
+    return ibis.ifelse(table["daily_budget"] > 0, table["daily_budget"], lifetime)
+
+
+def _budget(rows: ibis.Table, dim_accounts: il.Upstream) -> ibis.Table:
+    """Replace ``minor_budget`` with ``budget``, in the account's currency, placed before ``budget_type``.
+
+    Facebook's amounts are integers in 1/offset of the currency, and the
+    offset depends on the currency (100 for EUR, 1 for JPY), so the budget is
+    divided by the offset of the account's currency. A currency that is
+    unknown, or absent from Facebook's table, gives no budget rather than a
+    guessed one. Used by the campaign and ad set dimensions.
+
+    Args:
+        rows: Dimension rows with ``account_id`` and ``minor_budget``.
+        dim_accounts: The account dimension, which knows each account's currency.
+
+    Returns:
+        The rows with ``budget`` in place of ``minor_budget``.
+    """
+    accounts = dim_accounts.data
+    offsets = accounts.select(
+        offset_account_id=accounts["account_id"],
+        offset=accounts["currency"].substitute(constants.CURRENCY_OFFSETS, else_=ibis.null("int64")),
+    )
+    rows = rows.left_join(offsets, rows["account_id"] == offsets["offset_account_id"])
+    rows = rows.mutate(budget=rows["minor_budget"] / rows["offset"])
+    return rows.drop("minor_budget", "offset_account_id", "offset").relocate("budget", before="budget_type")
+
+
 @il.source(
     tags=["Analytics"],
     icon="logos:facebook",
@@ -113,7 +157,9 @@ class FacebookAdsStarSchema(il.Source):
     clicks as clicks, like every other platform, and every click as
     all_clicks. Each dimension takes its rows from the entity snapshot where
     one is collected, else from the report, else from the fact's own keys, so
-    every key a fact carries resolves. Every bound upstream's table must
+    every key a fact carries resolves. Budgets, which Facebook sends in
+    hundredths of most currencies but whole yen or won, are given in the
+    account's currency using its own offset. Every bound upstream's table must
     exist, or the view fails when it is created. Views are recreated on every
     run, so they follow the accounts bound to them; an account added to the
     organisation is absent until it is bound.
@@ -267,7 +313,9 @@ class FacebookAdsStarSchema(il.Source):
             )
         },
     )
-    def dim_campaigns(self, campaigns: list[il.Upstream], fact_campaign_performance: il.Upstream) -> ibis.Table:
+    def dim_campaigns(
+        self, campaigns: list[il.Upstream], fact_campaign_performance: il.Upstream, dim_accounts: il.Upstream
+    ) -> ibis.Table:
         """One row per campaign, from its latest entity row, else its latest report, else the facts."""
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
@@ -279,6 +327,7 @@ class FacebookAdsStarSchema(il.Source):
                 status=table["status"],
                 objective=table["objective"],
                 campaign_type=table["buying_type"],
+                minor_budget=_minor_budget(table),
                 budget_type=_budget_type(table),
                 start_date=_local_date(table["start_time"]),
                 end_date=_local_date(table["stop_time"]),
@@ -301,6 +350,7 @@ class FacebookAdsStarSchema(il.Source):
                 status=ibis.null("string"),
                 objective=days["objective"],
                 campaign_type=ibis.null("string"),
+                minor_budget=ibis.null("int64"),
                 budget_type=ibis.null("string"),
                 start_date=ibis.null("date"),
                 end_date=ibis.null("date"),
@@ -320,6 +370,7 @@ class FacebookAdsStarSchema(il.Source):
                 status=ibis.null("string"),
                 objective=ibis.null("string"),
                 campaign_type=ibis.null("string"),
+                minor_budget=ibis.null("int64"),
                 budget_type=ibis.null("string"),
                 start_date=ibis.null("date"),
                 end_date=ibis.null("date"),
@@ -336,7 +387,8 @@ class FacebookAdsStarSchema(il.Source):
             from_fact(fact_campaign_performance.data),
             distinct=False,
         )
-        return latest(rows, "campaign_id", rows["priority"].asc(), rows["as_of_date"].desc()).drop("priority")
+        campaigns = latest(rows, "campaign_id", rows["priority"].asc(), rows["as_of_date"].desc()).drop("priority")
+        return _budget(campaigns, dim_accounts)
 
     @ibis_view(
         schema=schemas.DimAdGroups,
@@ -347,7 +399,11 @@ class FacebookAdsStarSchema(il.Source):
         },
     )
     def dim_ad_groups(
-        self, adsets: list[il.Upstream], ads_stats: list[il.Upstream], fact_ad_performance: il.Upstream
+        self,
+        adsets: list[il.Upstream],
+        ads_stats: list[il.Upstream],
+        fact_ad_performance: il.Upstream,
+        dim_accounts: il.Upstream,
     ) -> ibis.Table:
         """One row per ad set with its schedule and status: its entity row, else the ad report, else the facts."""
 
@@ -359,6 +415,7 @@ class FacebookAdsStarSchema(il.Source):
                 account_id=ibis.literal(_account(upstream)),
                 ad_group_name=table["name"],
                 status=table["status"],
+                minor_budget=_minor_budget(table),
                 budget_type=_budget_type(table),
                 start_date=_local_date(table["start_time"]),
                 end_date=_local_date(table["end_time"]),
@@ -379,6 +436,7 @@ class FacebookAdsStarSchema(il.Source):
                 account_id=ibis.literal(_account(upstream)),
                 ad_group_name=days["ad_group_name"],
                 status=ibis.null("string"),
+                minor_budget=ibis.null("int64"),
                 budget_type=ibis.null("string"),
                 start_date=ibis.null("date"),
                 end_date=ibis.null("date"),
@@ -398,6 +456,7 @@ class FacebookAdsStarSchema(il.Source):
                 account_id=days["account_id"],
                 ad_group_name=ibis.null("string"),
                 status=ibis.null("string"),
+                minor_budget=ibis.null("int64"),
                 budget_type=ibis.null("string"),
                 start_date=ibis.null("date"),
                 end_date=ibis.null("date"),
@@ -413,7 +472,8 @@ class FacebookAdsStarSchema(il.Source):
             from_fact(fact_ad_performance.data),
             distinct=False,
         )
-        return latest(rows, "ad_group_id", rows["priority"].asc(), rows["as_of_date"].desc()).drop("priority")
+        ad_groups = latest(rows, "ad_group_id", rows["priority"].asc(), rows["as_of_date"].desc()).drop("priority")
+        return _budget(ad_groups, dim_accounts)
 
     @ibis_view(
         schema=schemas.DimAds,

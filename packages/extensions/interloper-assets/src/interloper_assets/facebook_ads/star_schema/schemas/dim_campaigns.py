@@ -11,6 +11,11 @@ class DimCampaigns(Schema):
     status: str | None = Field(default=None, description="Configured status, known from the entity rows only.")
     objective: str | None = Field(default=None, description="Campaign objective.")
     campaign_type: str | None = Field(default=None, description="Buying type (AUCTION, RESERVED), entity rows only.")
+    budget: float | None = Field(
+        default=None,
+        description="Daily budget when set, else lifetime budget, in the account currency; NULL for none, when "
+        "the account's currency is unknown, or on rows not built from the entity.",
+    )
     budget_type: str | None = Field(
         default=None, description="daily or lifetime, by which budget the campaign sets; entity rows only."
     )

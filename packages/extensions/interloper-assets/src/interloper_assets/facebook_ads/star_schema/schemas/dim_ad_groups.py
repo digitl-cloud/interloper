@@ -10,6 +10,11 @@ class DimAdGroups(Schema):
     account_id: str | None = Field(default=None, description="Ad account the ad set belongs to.")
     ad_group_name: str | None = Field(default=None, description="Ad set name.")
     status: str | None = Field(default=None, description="Configured status; entity rows only.")
+    budget: float | None = Field(
+        default=None,
+        description="Daily budget when set, else lifetime budget, in the account currency; NULL for none, when "
+        "the account's currency is unknown, or on rows not built from the entity.",
+    )
     budget_type: str | None = Field(
         default=None, description="daily or lifetime, by which budget the ad set sets; entity rows only."
     )

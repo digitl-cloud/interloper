@@ -43,13 +43,14 @@ def _seed(
     two_entities: bool = False,
     accounts_entity: bool = False,
     adsets_entity: bool = False,
+    currency: str = "EUR",
 ) -> None:
     client = warehouse.connection.client
     client.execute("CREATE SCHEMA IF NOT EXISTS facebook_ads")
     client.execute(
         f"CREATE TABLE facebook_ads.ad_accounts__{account_id} AS SELECT "
-        f"DATE '2026-09-30' AS date, '{account_id}' AS account_id, 'Acct from entity' AS name, 'EUR' AS currency, "
-        f"'Europe/Berlin' AS timezone_name WHERE {'TRUE' if accounts_entity else 'FALSE'}"
+        f"DATE '2026-09-30' AS date, '{account_id}' AS account_id, 'Acct from entity' AS name, "
+        f"'{currency}' AS currency, 'Europe/Berlin' AS timezone_name WHERE {'TRUE' if accounts_entity else 'FALSE'}"
     )
     client.execute(
         f"CREATE TABLE facebook_ads.adsets__{account_id} AS SELECT "
@@ -62,7 +63,7 @@ def _seed(
     client.execute(
         f"CREATE TABLE facebook_ads.ads_stats__{account_id} AS SELECT "
         f"DATE '2026-10-01' AS date_start, '{account_id}' AS account_id, 'Acct {account_id}' AS account_name, "
-        f"'EUR' AS account_currency, 'c{account_id}' AS campaign_id, 'Camp from stats' AS campaign_name, "
+        f"'{currency}' AS account_currency, 'c{account_id}' AS campaign_id, 'Camp from stats' AS campaign_name, "
         "'s1' AS adset_id, 'Set' AS adset_name, 'a1' AS ad_id, 'Ad' AS ad_name, "
         "'facebook' AS publisher_platform, 'feed' AS platform_position, 'mobile' AS impression_device, "
         "100 AS impressions, 10 AS clicks, 4 AS inline_link_clicks, 80 AS reach, 12.5 AS spend, 2 AS actions_purchase, "
@@ -70,10 +71,10 @@ def _seed(
     )
     client.execute(
         f"CREATE TABLE facebook_ads.campaigns_stats__{account_id} AS SELECT * FROM (VALUES "
-        f"(DATE '2026-10-01', {account_id}, 'Acct {account_id}', 'EUR', 'c{account_id}', 'Camp from report', "
+        f"(DATE '2026-10-01', {account_id}, 'Acct {account_id}', '{currency}', 'c{account_id}', 'Camp from report', "
         "'OUTCOME_SALES', 100, 10, 4, 80, 12.5, 2, 40.0)"
         + (
-            f", (DATE '2026-10-01', {account_id}, 'Acct {account_id}', 'EUR', 'c{account_id}', "
+            f", (DATE '2026-10-01', {account_id}, 'Acct {account_id}', '{currency}', 'c{account_id}', "
             "'Camp from report renamed', CAST(NULL AS VARCHAR), 50, 5, 2, 20, 2.5, 1, 10.0)"
             if two_report_rows
             else ""
@@ -108,7 +109,7 @@ def _seed(
     if extra_fact_campaign:
         client.execute(
             f"INSERT INTO facebook_ads.campaigns_stats__{account_id} SELECT "
-            f"DATE '2026-10-01', {account_id}, 'Acct {account_id}', 'EUR', 'c999', 'Camp from facts', "
+            f"DATE '2026-10-01', {account_id}, 'Acct {account_id}', '{currency}', 'c999', 'Camp from facts', "
             "'OUTCOME_SALES', 1, 1, 1, 1, 1.0, 0, 0.0"
         )
 
@@ -144,8 +145,6 @@ class TestWiring:
     def test_views_omit_what_facebook_does_not_fill(self):
         for fact in (schemas.FactCampaignPerformance, schemas.FactAdPerformance):
             assert "conversions" not in fact.model_fields and "conversion_value" not in fact.model_fields
-        assert "budget" not in schemas.DimCampaigns.model_fields
-        assert "budget" not in schemas.DimAdGroups.model_fields
         assert "spend" not in schemas.FactAdPerformance.model_fields
 
     def test_views_are_unpartitioned_and_tagged(self):
@@ -331,6 +330,36 @@ class TestOnDuckDB:
                 "as_of_date": dt.date(2026, 9, 30),
             }
         ]
+
+    def test_campaign_budgets_are_in_each_account_currency_whatever_its_minor_unit(self, warehouse):
+        euros, yen = _account("111", warehouse), _account("222", warehouse)
+        _seed(warehouse, "111", campaigns_entity=True, two_entities=True)
+        _seed(warehouse, "222", campaigns_entity=True, currency="JPY")
+        _materialize(warehouse, euros, yen)
+        campaigns = {row["campaign_id"]: row["budget"] for row in _rows(warehouse, "dim_campaigns")}
+        assert campaigns == {"c111": 10.0, "c111b": 50.0, "c222": 1000.0}
+
+    @pytest.mark.parametrize(("currency", "budget"), [("EUR", 90.0), ("JPY", 9000.0)])
+    def test_ad_set_budgets_are_in_the_account_currency(self, warehouse, currency: str, budget: float):
+        first = _account("111", warehouse)
+        _seed(warehouse, "111", campaigns_entity=False, adsets_entity=True, currency=currency)
+        _materialize(warehouse, first)
+        [row] = _rows(warehouse, "dim_ad_groups")
+        assert row["budget"] == budget
+
+    def test_a_currency_facebook_does_not_list_gives_no_budget(self, warehouse):
+        first = _account("111", warehouse)
+        _seed(warehouse, "111", campaigns_entity=True, currency="XXX")
+        _materialize(warehouse, first)
+        [row] = _rows(warehouse, "dim_campaigns")
+        assert (row["budget_type"], row["budget"]) == ("daily", None)
+
+    def test_a_campaign_without_an_entity_row_has_no_budget(self, warehouse):
+        first = _account("111", warehouse)
+        _seed(warehouse, "111", campaigns_entity=False)
+        _materialize(warehouse, first)
+        [row] = _rows(warehouse, "dim_campaigns")
+        assert row["budget"] is None
 
     def test_a_zero_budget_is_the_budget_the_ad_set_does_not_use(self, warehouse):
         # Facebook sends 0, not null, for an ad set's unused budget
