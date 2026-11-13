@@ -2449,16 +2449,23 @@
 
 
 <h1 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h1>
-<p><code>AppSettings</code> is the runtime configuration the CLI and the platform read. It loads from three
-sources: an <code>interloper.yaml</code> in the working directory, environment variables, field defaults. Every section has its own environment prefix.</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.settings</span><span class="w"> </span><span class="kn">import</span> <span class="n">AppSettings</span>
+<p>The CLI and the platform read their configuration as <strong>settings sections</strong>, each declared by the
+package whose behaviour it configures: core declares <code>runner</code>, <code>otel</code>, <code>log</code>, <code>catalog</code>, <code>run</code>
+and <code>server</code>, the database package <code>postgres</code>, <code>encryption</code> and <code>quota</code>, the API <code>auth</code> and <code>smtp</code>,
+the scheduler <code>cron</code>, <code>renewal</code>, <code>worker</code>, <code>reaper</code> and <code>launcher</code>, the agent <code>agent</code> and the MCP
+server <code>mcp</code>. Every section and field is listed in <a href="../../reference/settings/">Settings</a>.</p>
+<p>A section loads from three sources, highest first: environment variables, its block of
+<code>interloper.yaml</code> in the working directory, field defaults. A section class reads itself:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.settings</span><span class="w"> </span><span class="kn">import</span> <span class="n">RunnerSettings</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">settings</span> <span class="o">=</span> <span class="n">AppSettings</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>          <span class="c1"># the active settings, or freshly loaded ones</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">settings</span><span class="o">.</span><span class="n">runner</span><span class="o">.</span><span class="n">type</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">RunnerSettings</span><span class="o">.</span><span class="n">get</span><span class="p">()</span><span class="o">.</span><span class="n">type</span>   <span class="c1"># the section this process runs with, loaded on the first read</span>
 </span></code></pre></div>
-<p><code>AppSettings.activate(settings)</code> pins an instance for the current process (the CLI does this);
-<code>clear_active()</code> releases it.</p>
-<p>Every top-level key is a section. In <code>interloper.yaml</code> a section is a mapping under its key; in the environment every field is <code>INTERLOPER_&lt;SECTION&gt;_&lt;FIELD&gt;</code> in upper case (<code>INTERLOPER_RUNNER_TYPE</code>), and a list takes comma-separated values (<code>INTERLOPER_CATALOG_INCLUDE=my_package.sources.Shop,my_package.sources.Finance</code>). The framework reads <code>runner</code>, <code>otel</code>, <code>log</code>, <code>catalog</code>, <code>run</code> and <code>server</code>; the other sections configure the platform packages. Every section and field is listed in <a href="../../reference/settings/">Settings</a>.</p>
+<p>A section is loaded once per process and kept. <code>RunnerSettings.activate(settings)</code> makes another
+instance the one every later <code>get()</code> returns (a command does this to apply its flags), and
+<code>Settings.clear_active()</code> forgets every section, so the next read loads it again.</p>
+<p>In <code>interloper.yaml</code> a section is a mapping under its name; in the environment every field is
+<code>INTERLOPER_&lt;SECTION&gt;_&lt;FIELD&gt;</code> in upper case (<code>INTERLOPER_RUNNER_TYPE</code>), and a list takes
+comma-separated values (<code>INTERLOPER_CATALOG_INCLUDE=my_package.sources.Shop,my_package.sources.Finance</code>).</p>
 <h2 id="yaml-example">YAML example<a class="headerlink" href="#yaml-example" title="Permanent link">&para;</a></h2>
 <div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># interloper.yaml</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nt">runner</span><span class="p">:</span>
@@ -2475,11 +2482,13 @@ sources: an <code>interloper.yaml</code> in the working directory, environment v
 </span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_package.sources.Shop</span>
 </span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_package.sources.Finance</span>
 </span></code></pre></div>
-<p>Within a section, a field present in the YAML wins over its environment variable, and the
-environment fills the fields the YAML leaves out: <code>runner: {type: serial}</code> with
-<code>INTERLOPER_RUNNER_TYPE=async</code> resolves to <code>serial</code>, while <code>INTERLOPER_POSTGRES_PASSWORD</code> completes a
-<code>postgres:</code> block that omits the password. The YAML is not interpolated, so secrets belong in the
-environment, not in <code>${VAR}</code> placeholders.</p>
+<p>The environment beats the file for every field, and the file fills the fields the environment
+leaves out: <code>runner: {type: serial}</code> with <code>INTERLOPER_RUNNER_TYPE=async</code> resolves to <code>async</code>, while
+<code>INTERLOPER_POSTGRES_PASSWORD</code> completes a <code>postgres:</code> block that omits the password. The YAML is
+not interpolated, so secrets belong in the environment, not in <code>${VAR}</code> placeholders.</p>
+<p>One file serves every role, so a block no installed package declares is ignored: the API's
+process reads no <code>launcher</code> block when the scheduler is not installed beside it. An unknown field
+inside a declared block is still an error wherever the package declaring it is installed.</p>
 <h2 id="other-environment-variables">Other environment variables<a class="headerlink" href="#other-environment-variables" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
