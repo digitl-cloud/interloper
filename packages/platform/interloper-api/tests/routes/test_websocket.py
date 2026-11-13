@@ -19,6 +19,7 @@ import pytest
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.testclient import TestClient
 from interloper_db import Audience
+from sqlalchemy.engine import make_url
 from starlette.types import Message
 
 from interloper_api.app import ORG_PREFIX, install_error_handlers
@@ -158,22 +159,24 @@ class StopListener(Exception):
     """Raised from a patched call to break the listener's infinite loops."""
 
 
-class FakeCursor:
-    """Context-managed cursor recording the statements it was given."""
+class FakeConnection:
+    """psycopg connection stand-in serving a fixed queue of notifications."""
 
-    def __init__(self, executed: list[str]) -> None:
+    def __init__(self, notifies: list[Any], executed: list[str]) -> None:
         """Set up the fake.
 
         Args:
+            notifies: Notifications ``notifies`` yields, in order.
             executed: Shared list the executed SQL is appended to.
         """
+        self._notifies = notifies
         self._executed = executed
 
     def __enter__(self) -> Self:
         """Enter the context.
 
         Returns:
-            This cursor.
+            This connection.
         """
         return self
 
@@ -192,39 +195,17 @@ class FakeCursor:
         """
         self._executed.append(statement)
 
+    def notifies(self) -> Iterator[Any]:
+        """Yield the queued notifications, then fail as a dropped connection does.
 
-class FakeConnection:
-    """psycopg2 connection stand-in serving a fixed queue of notifications."""
+        Yields:
+            Each queued notification.
 
-    def __init__(self, notifies: list[Any], executed: list[str]) -> None:
-        """Set up the fake.
-
-        Args:
-            notifies: Notifications ``poll`` makes available, drained in order.
-            executed: Shared list the executed SQL is appended to.
+        Raises:
+            StopListener: Once the queue is drained, ending the pass.
         """
-        self.notifies = notifies
-        self.isolation_level: int | None = None
-        self._executed = executed
-
-    def set_isolation_level(self, level: int) -> None:
-        """Record the isolation level.
-
-        Args:
-            level: The level psycopg2 was asked for.
-        """
-        self.isolation_level = level
-
-    def cursor(self) -> FakeCursor:
-        """Return a context-managed cursor.
-
-        Returns:
-            The fake cursor.
-        """
-        return FakeCursor(self._executed)
-
-    def poll(self) -> None:
-        """Accept the poll; notifications are pre-loaded."""
+        yield from self._notifies
+        raise StopListener("one pass only")
 
 
 @pytest.fixture
@@ -243,31 +224,29 @@ def listener_loop() -> Iterator[asyncio.AbstractEventLoop]:
 def listener_harness(monkeypatch: pytest.MonkeyPatch, listener_loop: asyncio.AbstractEventLoop) -> Any:
     """Drive ``_start_notify_listener`` through exactly one pass, then stop it.
 
-    ``select`` succeeds once and raises on the second call, so the notify
-    queue is drained once; the retry arm's ``time.sleep`` then raises to
-    unwind the otherwise infinite outer loop.
+    The connection yields its notifications and then fails, so the queue is
+    drained once; the retry arm's ``time.sleep`` then raises to unwind the
+    otherwise infinite outer loop.
 
     Args:
-        monkeypatch: Fixture used to swap psycopg2, select and sleep.
+        monkeypatch: Fixture used to swap psycopg, the scheduling and sleep.
         listener_loop: The loop the listener is handed.
 
     Returns:
         A callable taking the notification payloads and returning the
-        recorded connection, SQL and scheduled broadcasts.
+        recorded connect arguments, SQL and scheduled broadcasts.
     """
 
     def run(payloads: list[str]) -> dict[str, Any]:
         notifies = [SimpleNamespace(payload=payload) for payload in payloads]
         executed: list[str] = []
         connection = FakeConnection(notifies, executed)
+        connects: list[dict[str, Any]] = []
         scheduled: list[tuple[str, dict[str, object]]] = []
-        selects = {"count": 0}
 
-        def fake_select(*args: object) -> tuple[list[object], list[object], list[object]]:
-            selects["count"] += 1
-            if selects["count"] > 1:
-                raise StopListener("one pass only")
-            return [connection], [], []
+        def fake_connect(dsn: str, **kwargs: Any) -> FakeConnection:
+            connects.append({"dsn": dsn, **kwargs})
+            return connection
 
         def fake_schedule(coroutine: Any, loop: Any) -> None:
             # The manager coroutine is not awaited here; close it so Python
@@ -278,15 +257,14 @@ def listener_harness(monkeypatch: pytest.MonkeyPatch, listener_loop: asyncio.Abs
         def fake_sleep(seconds: float) -> None:
             raise StopListener(f"retry after {seconds}s")
 
-        monkeypatch.setattr(websocket_module.psycopg2, "connect", lambda dsn: connection)
-        monkeypatch.setattr(websocket_module._select, "select", fake_select)
+        monkeypatch.setattr(websocket_module.psycopg, "connect", fake_connect)
         monkeypatch.setattr(websocket_module.asyncio, "run_coroutine_threadsafe", fake_schedule)
         monkeypatch.setattr(websocket_module, "time", SimpleNamespace(sleep=fake_sleep))
 
         with pytest.raises(StopListener):
             websocket_module._start_notify_listener("postgresql://x", listener_loop)
 
-        return {"connection": connection, "executed": executed, "scheduled": scheduled}
+        return {"connects": connects, "executed": executed, "scheduled": scheduled}
 
     return run
 
@@ -298,7 +276,8 @@ class TestNotifyListener:
         result = listener_harness([])
 
         assert result["executed"] == ["LISTEN table_changes"]
-        assert result["connection"].isolation_level is not None
+        # LISTEN only takes effect once committed, and notifications arrive only outside a transaction.
+        assert result["connects"] == [{"dsn": "postgresql://x", "autocommit": True}]
 
     def test_a_notification_is_broadcast_to_its_org(self, listener_harness: Any) -> None:
         payload = json.dumps({"org_id": str(_ORG_ID), "table": "runs", "op": "INSERT", "record": {"id": 1}})
@@ -352,13 +331,13 @@ class TestNotifyListener:
         listener_loop: asyncio.AbstractEventLoop,
     ) -> None:
         # This thread is the only realtime path, so nothing may escape it.
-        def failing_connect(dsn: str) -> None:
+        def failing_connect(dsn: str, **kwargs: Any) -> None:
             raise OSError("postgres is down")
 
         def fake_sleep(seconds: float) -> None:
             raise StopListener("retry")
 
-        monkeypatch.setattr(websocket_module.psycopg2, "connect", failing_connect)
+        monkeypatch.setattr(websocket_module.psycopg, "connect", failing_connect)
         monkeypatch.setattr(websocket_module, "time", SimpleNamespace(sleep=fake_sleep))
 
         with caplog.at_level("ERROR", logger="interloper_api.routes.websocket"), pytest.raises(StopListener):
@@ -371,7 +350,7 @@ class TestNotifyListener:
 class TestRealtimeLifespan:
     """Startup arms the listener thread from the already-initialized engine."""
 
-    async def test_starts_a_daemon_thread_with_the_unmasked_dsn(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_starts_a_daemon_thread_with_the_unmasked_libpq_dsn(self, monkeypatch: pytest.MonkeyPatch) -> None:
         started: list[dict[str, Any]] = []
 
         class FakeThread:
@@ -381,9 +360,7 @@ class TestRealtimeLifespan:
             def start(self) -> None:
                 started[-1]["started"] = True
 
-        engine = SimpleNamespace(
-            url=SimpleNamespace(render_as_string=lambda hide_password: "postgresql://user:pw@host/db")
-        )
+        engine = SimpleNamespace(url=make_url("postgresql+psycopg://user:p%40ss@host:5432/db"))
         monkeypatch.setattr("interloper_db.get_engine", lambda: engine)
         monkeypatch.setattr(websocket_module.threading, "Thread", FakeThread)
 
@@ -394,8 +371,8 @@ class TestRealtimeLifespan:
         assert started[0]["name"] == "NotifyListener"
         assert started[0]["daemon"] is True
         assert started[0]["started"] is True
-        # str(engine.url) would mask the password as '***'; psycopg2 needs it.
-        assert started[0]["args"][0] == "postgresql://user:pw@host/db"
+        # libpq refuses the driver name, and str(engine.url) would mask the password as '***'.
+        assert started[0]["args"][0] == "postgresql://user:p%40ss@host:5432/db"
 
 
 class FakeStore:

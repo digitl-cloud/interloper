@@ -365,16 +365,16 @@ class TestEnsureDatabase:
     def test_it_connects_to_the_maintenance_database(self, maintenance: Any) -> None:
         record = maintenance()
 
-        ensure_database("postgresql://user:pw@host:5432/interloper")
+        ensure_database("postgresql+psycopg://user:pw@host:5432/interloper")
 
-        assert record["dsn"] == "postgresql://user:pw@host:5432/postgres"
+        assert record["dsn"] == "postgresql+psycopg://user:pw@host:5432/postgres"
         # CREATE DATABASE cannot run inside a transaction.
         assert record["kwargs"]["isolation_level"] == "AUTOCOMMIT"
 
     def test_a_missing_database_is_created(self, maintenance: Any) -> None:
         record = maintenance(rows=[])
 
-        ensure_database("postgresql://host/interloper")
+        ensure_database("postgresql+psycopg://host/interloper")
 
         sql = _sql(record["connection"])
         assert "SELECT 1 FROM pg_database" in sql
@@ -383,18 +383,18 @@ class TestEnsureDatabase:
     def test_an_existing_database_is_left_alone(self, maintenance: Any) -> None:
         record = maintenance(rows=[(1,)])
 
-        ensure_database("postgresql://host/interloper")
+        ensure_database("postgresql+psycopg://host/interloper")
 
         assert "CREATE DATABASE" not in _sql(record["connection"])
 
     def test_the_engine_is_disposed(self, maintenance: Any) -> None:
         record = maintenance()
 
-        ensure_database("postgresql://host/interloper")
+        ensure_database("postgresql+psycopg://host/interloper")
 
         assert record["engine"].disposed == 1
 
-    @pytest.mark.parametrize("dsn", ["postgresql://host", "postgresql://host/"])
+    @pytest.mark.parametrize("dsn", ["postgresql+psycopg://host", "postgresql+psycopg://host/"])
     def test_a_dsn_naming_no_database_is_a_no_op(self, maintenance: Any, dsn: str) -> None:
         record = maintenance()
 
@@ -409,7 +409,7 @@ class TestDropDatabase:
     def test_active_connections_are_terminated_before_the_drop(self, maintenance: Any) -> None:
         record = maintenance()
 
-        drop_database("postgresql://host/interloper")
+        drop_database("postgresql+psycopg://host/interloper")
 
         sql = _sql(record["connection"])
         assert "pg_terminate_backend" in sql
@@ -420,26 +420,26 @@ class TestDropDatabase:
         # Otherwise the statement kills the connection issuing it.
         record = maintenance()
 
-        drop_database("postgresql://host/interloper")
+        drop_database("postgresql+psycopg://host/interloper")
 
         assert "pid <> pg_backend_pid()" in _sql(record["connection"])
 
     def test_it_connects_to_the_maintenance_database(self, maintenance: Any) -> None:
         record = maintenance()
 
-        drop_database("postgresql://user:pw@host:5432/interloper")
+        drop_database("postgresql+psycopg://user:pw@host:5432/interloper")
 
-        assert record["dsn"] == "postgresql://user:pw@host:5432/postgres"
+        assert record["dsn"] == "postgresql+psycopg://user:pw@host:5432/postgres"
         assert record["kwargs"]["isolation_level"] == "AUTOCOMMIT"
 
     def test_the_engine_is_disposed(self, maintenance: Any) -> None:
         record = maintenance()
 
-        drop_database("postgresql://host/interloper")
+        drop_database("postgresql+psycopg://host/interloper")
 
         assert record["engine"].disposed == 1
 
-    @pytest.mark.parametrize("dsn", ["postgresql://host", "postgresql://host/"])
+    @pytest.mark.parametrize("dsn", ["postgresql+psycopg://host", "postgresql+psycopg://host/"])
     def test_a_dsn_naming_no_database_is_a_no_op(self, maintenance: Any, dsn: str) -> None:
         record = maintenance()
 
@@ -463,8 +463,8 @@ class TestBootstrap:
         monkeypatch.setattr(provision_module, "init_engine", init_engine)
         monkeypatch.setattr(provision_module, "create_all", lambda bound: calls.append(("create", bound)))
 
-        assert provision_module.bootstrap("postgresql://db/x", statement_timeout=30) is engine
-        assert calls == [("ensure", "postgresql://db/x"), ("init", 30), ("create", engine)]
+        assert provision_module.bootstrap("postgresql+psycopg://db/x", statement_timeout=30) is engine
+        assert calls == [("ensure", "postgresql+psycopg://db/x"), ("init", 30), ("create", engine)]
 
     def test_create_tables_false_skips_the_tables(self, monkeypatch: pytest.MonkeyPatch) -> None:
         created: list[Any] = []
@@ -472,6 +472,6 @@ class TestBootstrap:
         monkeypatch.setattr(provision_module, "init_engine", lambda dsn, statement_timeout=None: object())
         monkeypatch.setattr(provision_module, "create_all", created.append)
 
-        provision_module.bootstrap("postgresql://db/x", create_tables=False)
+        provision_module.bootstrap("postgresql+psycopg://db/x", create_tables=False)
 
         assert created == []

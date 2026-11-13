@@ -11,9 +11,9 @@ requires-python = ">=3.11"
 dependencies = [
     "interloper-core",
     "sqlmodel>=0.0.27",
-    # 2.1 makes psycopg 3 the postgresql:// driver and is refused by opentelemetry-instrumentation-sqlalchemy.
+    # opentelemetry-instrumentation-sqlalchemy refuses 2.1.
     "sqlalchemy>=2.0.0,<2.1",
-    "psycopg2-binary>=2.9.0",
+    "psycopg[binary]>=3.1",
     "alembic>=1.18.4",
     "cryptography>=43.0.0",
 ]
