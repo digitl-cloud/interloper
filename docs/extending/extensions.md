@@ -69,6 +69,7 @@ needs it.
 | `launchers` | a launcher | the class | the scheduler's queue worker |
 | `settings` | a settings section | the `Settings` class | its own `get()`; the admin configuration page; the settings reference |
 | `routes` | HTTP routes | a FastAPI `APIRouter` | the API, which mounts it under `/api/organisations/{org_id}/ext/<name>` |
+| `ui` | a prebuilt UI | an `interloper_api.UIBundle` | the API, which serves it under `/api/ext/<name>/ui/<digest>/` |
 
 Core declares its own kinds, jobs, hooks, runners, representation, providers, commands and
 settings in its own manifest, the same way.
@@ -197,11 +198,47 @@ missing one.
 The routes reach Python in every deployment shape, since only `/api` goes to the API, and the
 package declaring them must be installed in the API's image.
 
+## UI
+
+A `ui` entry names a `UIBundle`: the output directory of the extension's build, whatever built
+it, shipped inside its package. The host imports the entry, an ES module, and adds the
+stylesheets beside it.
+
+```yaml
+ui: acme_interloper.ui:UI
+```
+
+```py
+# acme_interloper/ui.py
+from pathlib import Path
+
+from interloper_api import UIBundle
+
+UI = UIBundle(Path(__file__).parent / "dist", entry="index.js", css=["index.css"])
+```
+
+`entry` defaults to `index.js` and `css` to none, for an entry that adds its own styles. A
+Vite build names them itself: declared with `UIBundle.from_vite(Path(__file__).parent /
+"dist")`, the bundle reads its entry and the stylesheets of the entry and of every chunk it
+imports from the build's Vite manifest (`build.manifest: true`), so the entry may carry a
+content hash in its name. Either way, a package installed without its build fails to load and
+shows as failed, like any other entry.
+
+Whatever the bundler, the chunks the entry loads must be addressed relative to it (Vite's
+`base: './'`), since the bundle is served under a path of its own: `/api/ext/acme/ui/<digest>/`,
+`<digest>` being the hash of every file of the directory. A rebuild that changes any file
+changes every URL, so each file is cached for good whatever its name. The files are served to
+anyone, as the SPA's own are: they hold code, and the data the code reads goes through the
+authenticated routes. `/api` is the one prefix that reaches the API in every deployment shape
+(the dev server's proxy, the single-process app, nginx), so the bundle is served the same way
+in each, and the package must be installed in the API's image.
+
 ## The installed packages
 
 `GET /api/extensions` lists the installed packages that ship a manifest, the platform's own
-included, for any signed-in user: each one's key, name, description, icon, version and
-`status`, `ok` when everything it declares loaded and `failed` otherwise. The admin
+included, for any signed-in user: each one's key, name, description, icon, version,
+`status`, `ok` when everything it declares loaded and `failed` otherwise, and `ui`, the URLs of
+its UI's entry module and stylesheets, or `null`. The admin
 configuration page lists the same packages with what failed to load and why.
 
 ## When something does not load

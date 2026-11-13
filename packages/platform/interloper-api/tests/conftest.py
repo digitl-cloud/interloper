@@ -193,10 +193,10 @@ def app_state(fake_settings: ApiSettings) -> State:
 
 @pytest.fixture
 def load_extensions(install: Callable[..., None], monkeypatch: pytest.MonkeyPatch) -> Callable[[], Manifests]:
-    """Show the API the packages ``install`` writes as the only installed ones, their routes loaded.
+    """Show the API the packages ``install`` writes as the only installed ones, their routes and UIs loaded.
 
     Only the API's own reads are pointed at them, the listing, the config
-    snapshot and the routes registry; every other registry keeps the
+    snapshot and the routes and UI registries; every other registry keeps the
     installation's manifests, so one first loaded during the test is not left
     holding throwaway entries.
 
@@ -206,18 +206,21 @@ def load_extensions(install: Callable[..., None], monkeypatch: pytest.MonkeyPatc
 
     Returns:
         A function reading the installed packages' manifests and loading their
-        routes, which returns the manifests.
+        routes and UIs, which returns the manifests.
     """
 
     def load() -> Manifests:
         manifests = Manifests()
         routers = Registry("routes", adopt=extensions_module._adopt_router)
+        bundles = Registry("ui", adopt=extensions_module._adopt_bundle)
         with monkeypatch.context() as scoped:
             scoped.setattr(registry_base, "MANIFESTS", manifests)
             routers.keys()
+            bundles.keys()
         monkeypatch.setattr(extensions_module, "MANIFESTS", manifests)
         monkeypatch.setattr(admin_module, "MANIFESTS", manifests)
         monkeypatch.setattr(extensions_module, "EXTENSION_ROUTERS", routers)
+        monkeypatch.setattr(extensions_module, "UI_BUNDLES", bundles)
         return manifests
 
     return load

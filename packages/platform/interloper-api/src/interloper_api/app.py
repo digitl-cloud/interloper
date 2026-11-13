@@ -189,8 +189,9 @@ def create_app(
     """Create the FastAPI application with all routes.
 
     The routes the installed packages declare mount under
-    ``/api/organisations/{org_id}/ext/<name>``. On startup the application
-    promotes the configured super-admins and starts the realtime listener.
+    ``/api/organisations/{org_id}/ext/<name>``, their UI bundles under
+    ``/api/ext/<name>/ui/<digest>``. On startup the application promotes the
+    configured super-admins and starts the realtime listener.
 
     Args:
         store: The ``Store`` instance for persistence.
@@ -231,7 +232,7 @@ def create_app(
     for org_router in _ORG_ROUTERS:
         api.include_router(org_router, prefix=ORG_PREFIX)
     agent_model = _mount_agent(api, settings)
-    _mount_extensions(api)
+    _mount_extensions(app, api)
     app.include_router(api)
     app.include_router(authorization.well_known_router)
 
@@ -299,18 +300,24 @@ def _mount_agent(api: APIRouter, settings: ApiSettings) -> str | None:
     return settings.agent.model
 
 
-def _mount_extensions(api: APIRouter) -> None:
-    """Mount every router the installed packages declare, the viewer role its floor.
+def _mount_extensions(app: FastAPI, api: APIRouter) -> None:
+    """Mount what the installed packages declare: their routers, the viewer role their floor, and their UI bundles.
 
-    A router that fails to load is skipped and recorded, so the listing and
-    the configuration page name it while every other one serves.
+    A router or bundle that fails to load is skipped and recorded, so the
+    listing and the configuration page name it while every other one serves.
 
     Args:
-        api: The ``/api`` router to mount onto.
+        app: The application the bundles' files are served from, outside
+            every authenticated route.
+        api: The ``/api`` router the routers are mounted onto.
     """
     for name, router in extensions.EXTENSION_ROUTERS.items():
         api.include_router(router, prefix=f"{ORG_PREFIX}/ext/{name}", dependencies=[Depends(require_viewer)])
         logger.info("Extension routes '%s' mounted at /api%s/ext/%s.", name, ORG_PREFIX, name)
+    for name, bundle in extensions.UI_BUNDLES.items():
+        path = extensions.UI_PATH.format(name=name, digest=bundle.digest)
+        app.mount(path, extensions.BundleFiles(bundle), name=f"ext-ui-{name}")
+        logger.info("Extension UI '%s' served at %s.", name, path)
 
 
 def _state(
