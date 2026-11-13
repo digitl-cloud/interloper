@@ -2,6 +2,41 @@
 
 <!-- version list -->
 
+## v0.134.0 (2026-11-13)
+
+### Bug Fixes
+
+- **assets**: Snapshot-partition reports of lifetime totals
+  ([`f07c688`](https://github.com/digitl-cloud/interloper/commit/f07c68858e2c25ffbcf8fd990e7e37c25d706e90))
+
+- **core**: Collect relations from lazily evaluated class annotations
+  ([`7aa376d`](https://github.com/digitl-cloud/interloper/commit/7aa376d86d9cf69eeaaa66a968e11c39c9c0c251))
+
+- **db**: Hold SQLAlchemy below 2.1
+  ([`ee8da3a`](https://github.com/digitl-cloud/interloper/commit/ee8da3a330e9c6d6995281c8df7edb6b217f9c0e))
+
+- **db**: Reserve a quota slot against the row the upsert writes
+  ([`1741867`](https://github.com/digitl-cloud/interloper/commit/17418670442ba25f2e4053b49f66091ea0089911))
+
+### Build System
+
+- Move the images to Python 3.14
+  ([`cabfb04`](https://github.com/digitl-cloud/interloper/commit/cabfb0458a73e1eab80766edb17f78276bd61c8e))
+
+- Stamp the chart version past semantic-release 10.7.0
+  ([`d3405d2`](https://github.com/digitl-cloud/interloper/commit/d3405d2738392968cd3ec65b79a11747b4a0b124))
+
+### Continuous Integration
+
+- Package the chart at the release tag's version
+  ([`4e3bef7`](https://github.com/digitl-cloud/interloper/commit/4e3bef73d4e19ac5c3c5478565faa6244a28ee14))
+
+### Features
+
+- **api**: Mount extension routes and list the installed extensions
+  ([`e313237`](https://github.com/digitl-cloud/interloper/commit/e3132377866541eb332773b4ce0576dd6dbc335f))
+
+
 ## v0.133.0 (2026-11-13)
 
 ### Bug Fixes

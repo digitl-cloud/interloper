@@ -5,9 +5,9 @@ description: |
   pipelines.  Deploys the scheduler (cron + queue worker + reaper), the
   API, and the frontend, with optional Postgres and RBAC for the
   Kubernetes launcher.
-version: 0.133.0
+version: 0.134.0
 type: application
-appVersion: "0.133.0"
+appVersion: "0.134.0"
 home: https://github.com/digitlcloud/interloper
 sources:
   - https://github.com/digitlcloud/interloper
