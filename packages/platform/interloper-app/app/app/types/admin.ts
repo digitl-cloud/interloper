@@ -45,6 +45,14 @@ export interface AdminExtensionFailure {
     error: string
 }
 
+/** Where an extension's UI is loaded from, as the API serves it. */
+export interface ExtensionUI {
+    /** URL of the entry module. */
+    entry: string
+    /** URLs of the stylesheets the entry needs. */
+    css: string[]
+}
+
 /** One installed package that ships an extension manifest. */
 export interface AdminExtension {
     package: string
@@ -56,6 +64,8 @@ export interface AdminExtension {
     version: string | null
     /** `failed` when anything it declares was skipped. */
     status: 'ok' | 'failed'
+    /** `null` when it ships no UI, or its UI failed to load. */
+    ui: ExtensionUI | null
     failures: AdminExtensionFailure[]
 }
 

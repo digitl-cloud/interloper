@@ -68,6 +68,10 @@ List what you want enabled under `catalog.include` and the deployment sees exact
 described in [Catalog](../guide/catalog.md) and
 [Extensions & registries](../extending/extensions.md).
 
+An extension that ships routes or a UI goes into the **api** image: the API mounts its routes
+and serves its UI bundle, and the frontend image only proxies `/api` to it. Install it in the
+scheduler or core image as well when it also brings components that run there.
+
 The same recipe works on a loaded image when you want everything it ships plus your own
 components.
 
