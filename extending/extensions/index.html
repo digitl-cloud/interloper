@@ -1775,6 +1775,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#routes" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Routes
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-installed-packages" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        The installed packages
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#when-something-does-not-load" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2602,6 +2624,12 @@ needs it.</p>
 <td>the <code>Settings</code> class</td>
 <td>its own <code>get()</code>; the admin configuration page; the settings reference</td>
 </tr>
+<tr>
+<td><code>routes</code></td>
+<td>HTTP routes</td>
+<td>a FastAPI <code>APIRouter</code></td>
+<td>the API, which mounts it under <code>/api/organisations/{org_id}/ext/&lt;name&gt;</code></td>
+</tr>
 </tbody>
 </table>
 <p>Core declares its own kinds, jobs, hooks, runners, representation, providers, commands and
@@ -2672,6 +2700,43 @@ inside <code>run</code>: <code>interloper --help</code> builds every command.</p
 </span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
 </span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="n">commands</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">type</span><span class="p">[</span><span class="n">Command</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"backup"</span><span class="p">:</span> <span class="n">BackupCommand</span><span class="p">,</span> <span class="s2">"restore"</span><span class="p">:</span> <span class="n">RestoreCommand</span><span class="p">}</span>
 </span></code></pre></div>
+<h2 id="routes">Routes<a class="headerlink" href="#routes" title="Permanent link">&para;</a></h2>
+<p>A <code>routes</code> entry names a FastAPI <code>APIRouter</code>. Declared as a single import string, it is named
+by the extension's key, and the API mounts it under the organisation the request acts in:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nt">routes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme_interloper.routes:router</span>
+</span></code></pre></div>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">uuid</span><span class="w"> </span><span class="kn">import</span> <span class="n">UUID</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">fastapi</span><span class="w"> </span><span class="kn">import</span> <span class="n">APIRouter</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper_api.dependencies</span><span class="w"> </span><span class="kn">import</span> <span class="n">EditorDep</span><span class="p">,</span> <span class="n">StoreDep</span><span class="p">,</span> <span class="n">ViewerDep</span><span class="p">,</span> <span class="n">load_authorized</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="n">router</span> <span class="o">=</span> <span class="n">APIRouter</span><span class="p">()</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="nd">@router</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/buckets/</span><span class="si">{bucket_id}</span><span class="s2">"</span><span class="p">)</span>
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">get_bucket</span><span class="p">(</span><span class="n">bucket_id</span><span class="p">:</span> <span class="n">UUID</span><span class="p">,</span> <span class="n">store</span><span class="p">:</span> <span class="n">StoreDep</span><span class="p">,</span> <span class="n">scope</span><span class="p">:</span> <span class="n">ViewerDep</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>    <span class="n">bucket</span> <span class="o">=</span> <span class="n">load_authorized</span><span class="p">(</span><span class="n">store</span><span class="o">.</span><span class="n">components</span><span class="o">.</span><span class="n">get</span><span class="p">,</span> <span class="n">bucket_id</span><span class="p">,</span> <span class="n">scope</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"Bucket"</span><span class="p">)</span>
+</span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">"id"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">bucket</span><span class="o">.</span><span class="n">id</span><span class="p">),</span> <span class="s2">"name"</span><span class="p">:</span> <span class="n">bucket</span><span class="o">.</span><span class="n">name</span><span class="p">}</span>
+</span><span id="__span-8-13"><a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a>
+</span><span id="__span-8-14"><a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a>
+</span><span id="__span-8-15"><a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="nd">@router</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s2">"/buckets"</span><span class="p">)</span>
+</span><span id="__span-8-16"><a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a><span class="k">def</span><span class="w"> </span><span class="nf">create_bucket</span><span class="p">(</span><span class="n">scope</span><span class="p">:</span> <span class="n">EditorDep</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+</span><span id="__span-8-17"><a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a>    <span class="o">...</span>
+</span></code></pre></div>
+<p><code>GET /api/organisations/{org_id}/ext/acme/buckets/{bucket_id}</code> reaches <code>get_bucket</code>. Every
+route of the router requires the viewer role in the organisation the path names, so a caller
+outside it reads the organisation as missing; a route that writes raises the floor with
+<code>EditorDep</code> or <code>AdminDep</code>. Keeping one organisation's data from another is the router's job:
+every row it stores carries the organisation's id, and a fetch by id goes through
+<code>load_authorized</code>, which answers a record of another organisation with the same 404 as a
+missing one.</p>
+<p>The routes reach Python in every deployment shape, since only <code>/api</code> goes to the API, and the
+package declaring them must be installed in the API's image.</p>
+<h2 id="the-installed-packages">The installed packages<a class="headerlink" href="#the-installed-packages" title="Permanent link">&para;</a></h2>
+<p><code>GET /api/extensions</code> lists the installed packages that ship a manifest, the platform's own
+included, for any signed-in user: each one's key, name, description, icon, version and
+<code>status</code>, <code>ok</code> when everything it declares loaded and <code>failed</code> otherwise. The admin
+configuration page lists the same packages with what failed to load and why.</p>
 <h2 id="when-something-does-not-load">When something does not load<a class="headerlink" href="#when-something-does-not-load" title="Permanent link">&para;</a></h2>
 <p>One package never takes the others down. A manifest that cannot be read, a section of another
 shape and an entry that fails to import are each skipped with a warning naming the package,
@@ -2681,27 +2746,27 @@ warning.</p>
 <p><code>interloper extensions check</code> imports every entry of every installed manifest and names each
 manifest, section or entry that fails, and each section no registry reads, which is usually a
 misspelt section name. It exits non-zero when it names anything:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>$<span class="w"> </span>interloper<span class="w"> </span>extensions<span class="w"> </span>check
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>package<span class="w"> </span><span class="s1">'acme_interloper'</span>,<span class="w"> </span>section<span class="w"> </span><span class="s1">'runner'</span>:<span class="w"> </span>no<span class="w"> </span>registry<span class="w"> </span>reads<span class="w"> </span>this<span class="w"> </span>section
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>Checked<span class="w"> </span><span class="m">48</span><span class="w"> </span>entries<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="m">8</span><span class="w"> </span>sections:<span class="w"> </span><span class="m">1</span><span class="w"> </span>problem<span class="o">(</span>s<span class="o">)</span>.
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>$<span class="w"> </span>interloper<span class="w"> </span>extensions<span class="w"> </span>check
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>package<span class="w"> </span><span class="s1">'acme_interloper'</span>,<span class="w"> </span>section<span class="w"> </span><span class="s1">'runner'</span>:<span class="w"> </span>no<span class="w"> </span>registry<span class="w"> </span>reads<span class="w"> </span>this<span class="w"> </span>section
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>Checked<span class="w"> </span><span class="m">48</span><span class="w"> </span>entries<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="m">8</span><span class="w"> </span>sections:<span class="w"> </span><span class="m">1</span><span class="w"> </span>problem<span class="o">(</span>s<span class="o">)</span>.
 </span></code></pre></div>
 <h2 id="the-registry-primitive">The registry primitive<a class="headerlink" href="#the-registry-primitive" title="Permanent link">&para;</a></h2>
 <p>Every registry is an instance of <code>il.Registry</code>: a lazily-populated name-to-object mapping,
 optionally fed by one manifest section:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">interloper</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">il</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.oauth</span><span class="w"> </span><span class="kn">import</span> <span class="n">PROVIDERS</span>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.representation</span><span class="w"> </span><span class="kn">import</span> <span class="n">REPRESENTATIONS</span>
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.runner</span><span class="w"> </span><span class="kn">import</span> <span class="n">RUNNERS</span>
-</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>
-</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="n">il</span><span class="o">.</span><span class="n">KINDS</span><span class="p">[</span><span class="s2">"connection"</span><span class="p">]</span>          <span class="c1"># the anchor class; KeyError with the available names on a miss</span>
-</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="n">PROVIDERS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"google"</span><span class="p">)</span>         <span class="c1"># None on a miss</span>
-</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="s2">"dataframe"</span> <span class="ow">in</span> <span class="n">REPRESENTATIONS</span>
-</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="n">RUNNERS</span><span class="o">.</span><span class="n">keys</span><span class="p">(),</span> <span class="n">RUNNERS</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="nb">len</span><span class="p">(</span><span class="n">RUNNERS</span><span class="p">)</span>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">interloper</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">il</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.oauth</span><span class="w"> </span><span class="kn">import</span> <span class="n">PROVIDERS</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.representation</span><span class="w"> </span><span class="kn">import</span> <span class="n">REPRESENTATIONS</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.runner</span><span class="w"> </span><span class="kn">import</span> <span class="n">RUNNERS</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="n">il</span><span class="o">.</span><span class="n">KINDS</span><span class="p">[</span><span class="s2">"connection"</span><span class="p">]</span>          <span class="c1"># the anchor class; KeyError with the available names on a miss</span>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="n">PROVIDERS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"google"</span><span class="p">)</span>         <span class="c1"># None on a miss</span>
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="s2">"dataframe"</span> <span class="ow">in</span> <span class="n">REPRESENTATIONS</span>
+</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="n">RUNNERS</span><span class="o">.</span><span class="n">keys</span><span class="p">(),</span> <span class="n">RUNNERS</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="nb">len</span><span class="p">(</span><span class="n">RUNNERS</span><span class="p">)</span>
 </span></code></pre></div>
 <p>A package that wants extensions of its own builds one, naming its section:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">Registry</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="n">WIDGETS</span><span class="p">:</span> <span class="n">Registry</span><span class="p">[</span><span class="nb">type</span><span class="p">[</span><span class="n">Widget</span><span class="p">]]</span> <span class="o">=</span> <span class="n">Registry</span><span class="p">(</span><span class="s2">"acme_widgets"</span><span class="p">)</span>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">Registry</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="n">WIDGETS</span><span class="p">:</span> <span class="n">Registry</span><span class="p">[</span><span class="nb">type</span><span class="p">[</span><span class="n">Widget</span><span class="p">]]</span> <span class="o">=</span> <span class="n">Registry</span><span class="p">(</span><span class="s2">"acme_widgets"</span><span class="p">)</span>
 </span></code></pre></div>
 <p>Registration is first-wins and idempotent. Loading happens once, on first lookup, serialized
 across threads so concurrent first lookups never observe a half-populated registry, and a failed
@@ -2709,8 +2774,8 @@ read retries on the next lookup. An <code>adopt</code> transform lets a registry
 own <code>key</code> rather than the declared name, which is why providers and representations are found
 under their declared keys.</p>
 <p>Code can also register explicitly, for tests or dynamic composition:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.runner</span><span class="w"> </span><span class="kn">import</span> <span class="n">RUNNERS</span>
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="n">RUNNERS</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"fake"</span><span class="p">,</span> <span class="n">FakeRunner</span><span class="p">)</span>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.runner</span><span class="w"> </span><span class="kn">import</span> <span class="n">RUNNERS</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="n">RUNNERS</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"fake"</span><span class="p">,</span> <span class="n">FakeRunner</span><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="kinds-versus-components">Kinds versus components<a class="headerlink" href="#kinds-versus-components" title="Permanent link">&para;</a></h2>
 <p><code>kinds</code> says what kinds exist; <code>components</code> says what classes exist. Kind anchors are framework,
