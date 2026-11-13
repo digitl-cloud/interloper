@@ -3751,7 +3751,8 @@ a field its kind does not declare.</p>
 
 
 <a href="#interloper.Partition" class="headerlink" title="Permanent link">&para;</a></h2>
-
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">Partition</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">)</span>
+</span></code></pre></div>
 
     <div class="doc doc-contents first">
             <p class="doc doc-class-bases">
@@ -3760,11 +3761,35 @@ a field its kind does not declare.</p>
 
 
         <p>The storage unit: one slice of a partitioned asset, named by its key.</p>
-<p>Concrete kinds are frozen dataclasses carrying the partition's <code>value</code> (a period start for
-a time partition, a declared string for a list one); the base declares the contract and
-types that one attribute every kind carries, so <code>context.partition.value</code> reads without
-narrowing. <code>str(partition)</code> is the key, which is what reaches destination paths, run rows
-and filters.</p>
+<p>Concrete kinds narrow the partition's <code>value</code> (a period start for a time partition, a
+declared string for a list one); the base declares the contract and types that one
+attribute every kind carries, so <code>context.partition.value</code> reads without narrowing.
+<code>str(partition)</code> is the key, which is what reaches destination paths, run rows and
+filters.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="interloper.Partition.value">value</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The partition's value.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 

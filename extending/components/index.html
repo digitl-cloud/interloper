@@ -2642,17 +2642,26 @@ which is what a fallback is built from. Neither is a constructor argument.</p>
 declaration, and <code>ComponentIdentity.satisfies</code> the one place a declared key is compared to a
 concrete component. An asset's key is source-local, so a bare key is scoped to the owner's
 source; every other kind is keyed globally by its catalog key.</p>
-<p><strong>Three declaration forms</strong>, in increasing precedence, all merged at class creation:</p>
+<p><strong>Declaration forms</strong>, all merged at class creation (for one name, a <code>relations</code> entry wins over
+the class body):</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Widget</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Component</span><span class="p">):</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">connection</span><span class="p">:</span> <span class="n">PostgresConnection</span>                                   <span class="c1"># an annotation naming a class</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">config</span><span class="p">:</span> <span class="n">WidgetConfig</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="n">WidgetConfig</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># a typed Relation attribute</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="n">relations</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"cache"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="n">Cache</span><span class="p">)}</span>                        <span class="c1"># what the decorators emit</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">connection</span><span class="p">:</span> <span class="n">PostgresConnection</span>                                    <span class="c1"># an annotation naming a class</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">config</span><span class="p">:</span> <span class="n">WidgetConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">()</span>                       <span class="c1"># a Relation taking its target from the annotation</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="n">cache</span><span class="p">:</span> <span class="n">Cache</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="n">Cache</span><span class="p">,</span> <span class="n">on_delete</span><span class="o">=</span><span class="s2">"detach"</span><span class="p">)</span>             <span class="c1"># a Relation naming its target</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="n">relations</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"store"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"destination"</span><span class="p">,</span> <span class="s2">"warehouse"</span><span class="p">)}</span>    <span class="c1"># what the decorators emit</span>
 </span></code></pre></div>
+<p>A bare annotation is the shorthand: it says only what fills the relation, and <code>X | None</code> makes
+it optional. An empty <code>il.Relation()</code> declares the same relation and carries anything else
+(<code>optional</code>, <code>on_delete</code>, <code>default</code>); an <code>il.Relation(...)</code> naming its target or its kind and key
+needs no annotation at all, though one types the constructor keyword and the attribute.</p>
+<p>A type checker reads a bare annotation as a required constructor keyword, since it knows nothing
+of the relations collected here. Give a relation a component is built without, one left to its
+fallback, a default (<code>= il.Relation()</code>) so the type checker agrees.</p>
 <p>The map merges over every base's, so a subclass entry replaces the inherited one of the same
 name and nothing an ancestor declared is lost. Each entry is copied, stamped with its name and
 installed under it: a <code>Relation</code> is its own descriptor, so <code>Widget.connection</code> is the
-declaration and <code>widget.connection</code> what is bound to it. An annotated relation is dropped from
-the class's annotations before pydantic collects its fields, so a relation is never also a
+declaration and <code>widget.connection</code> what it resolves to. A relation's annotation is dropped
+from the class's annotations before pydantic collects its fields, so a relation is never also a
 field. The two collectors read the annotations against different namespaces (the declaring
 module here, the full defining scope in pydantic), so an annotation naming a component class
 that ends up a plain field, and one that resolves nowhere at all, are both <code>TypeError</code> at class
@@ -2680,7 +2689,7 @@ definition rather than a component silently missing a relation.</p>
 </tr>
 <tr>
 <td><code>resolve(name)</code></td>
-<td>What a reader gets: the own binding, else what the owner holds under the same name and this relation accepts, else the relation's fallback for a single-valued relation and an empty list for a <code>many</code> one. Attribute access reads the same, without the fallback. Fallbacks are never bound.</td>
+<td>What a reader gets: the own binding, else what the owner holds under the same name and this relation accepts, else the relation's fallback for a single-valued relation and an empty list for a <code>many</code> one. Attribute access reads the same. A fallback is built by each read that needs it and never bound.</td>
 </tr>
 <tr>
 <td><code>validate_relations(nodes=None)</code></td>
@@ -2752,14 +2761,14 @@ order in which it comes up.</p>
 <li>
 <p><strong>Declare relations for what fills the component.</strong> An annotation naming a component class is
    the shorthand; an <code>il.Relation</code> value is where anything else is said (a key filter, <code>many</code>,
-   <code>optional</code>, <code>on_delete</code>). The relation name is the constructor keyword, the attribute, and
+   <code>optional</code>, <code>on_delete</code>), taking its target from the annotation when it names none. The relation name is the constructor keyword, the attribute, and
    what persistence and the UI call the link.</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Report</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Component</span><span class="p">):</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">    </span><span class="sd">"""A rendered document built from assets."""</span>
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
 </span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">title</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">InputField</span><span class="p">()</span>
 </span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="n">inputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">il</span><span class="o">.</span><span class="n">Asset</span><span class="p">]</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"asset"</span><span class="p">,</span> <span class="n">many</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="n">storage</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Destination</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="n">storage</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Destination</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"destination"</span><span class="p">)</span>
 </span></code></pre></div>
 </li>
 <li>

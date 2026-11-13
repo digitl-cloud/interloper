@@ -2614,7 +2614,8 @@ what UIs render forms and pickers from.</p>
 </tbody>
 </table>
 <p>The value is <code>il.Maturity</code> or its string, set through the decorator or as a class attribute
-(<code>maturity = "alpha"</code>); anything else is a <code>TypeError</code> where it is written. It is
+(<code>maturity = "alpha"</code>), and the class stores it as <code>il.Maturity</code> either way; anything else is a
+<code>TypeError</code> where it is written. It is
 informational: a component behaves the same at every level, and the app shows a Deprecated, Alpha
 or Beta badge wherever the component is offered or listed.</p>
 <p>An asset's definition carries the less mature of its own and its source's maturity, so an alpha

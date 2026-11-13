@@ -2548,6 +2548,10 @@ as <code>self</code>. An asset declares a resource of its own, like <code>config
 does not hold; declaring <code>connection: ShopConnection</code> on the asset as well is legal, and the
 asset <a href="#reading-through-the-source">reads the source's instance</a>, but it says twice what the
 source says once.</p>
+<p>A type checker reads that bare annotation as a required constructor keyword, since it knows
+nothing of relations. When a source is meant to be built without one, its connection left to the
+environment, give the relation a default: <code>connection: ShopConnection = il.Relation()</code> declares
+the same relation, its target taken from the annotation.</p>
 <h2 id="explicit-relations">Explicit relations<a class="headerlink" href="#explicit-relations" title="Permanent link">&para;</a></h2>
 <p><code>il.Relation</code> is what says anything beyond "a resource of this class fills this name". Use it on
 the decorator, keyed by parameter name, or as a typed class attribute:</p>
@@ -2575,20 +2579,21 @@ destination cannot be deleted while a component consumes it.</p>
 relation that holds no binding, <code>resolve(name)</code> falls back, in order:</p>
 <ol>
 <li><code>default()</code>, when the relation declares one.</li>
-<li>A fresh instance of the target class, when it is a <code>Resource</code>: its required fields come from
+<li>An instance of the target class, when it is a <code>Resource</code>: its required fields come from
    the environment, so a credential nobody bound is still constructible where it is read.</li>
-<li>A fresh instance of the target class, when every one of its fields is defaulted.</li>
+<li>An instance of the target class, when every one of its fields is defaulted.</li>
 <li><code>None</code>.</li>
 </ol>
 <p>A <code>many</code> relation never falls back: <code>resolve(name)</code> on it is exactly <code>bound(name)</code>, an empty list
 when nothing is bound.</p>
 <p>A fallback is never bound, so an explicit binding, or one read through the owning source,
 always wins over it, and <code>to_spec()</code> never carries an auto-instantiated component. Attribute
-access reads bindings only, the asset's own or its source's: <code>asset.connection</code> is <code>None</code> while
-neither holds one, where the same relation injected into <code>data()</code> goes through <code>resolve()</code> and
-receives the fallback. Because a resource is built at the
-moment it is read, a credential that is neither bound nor in the environment surfaces as a
-pydantic validation error from the read that needed it, not at build time.</p>
+access is the same read as <code>resolve()</code>: <code>self.connection</code> in a method asset gets the fallback
+while nothing is bound, exactly as a <code>connection</code> parameter of <code>data()</code> does. Each such read
+builds its own instance, so a method reading an unbound connection several times reads it once
+into a local. Because a resource is built at the moment it is read, a credential that is neither
+bound nor in the environment surfaces as a pydantic validation error from the read that needed
+it, not at build time.</p>
 <h2 id="relations-on-sources-and-destinations">Relations on sources and destinations<a class="headerlink" href="#relations-on-sources-and-destinations" title="Permanent link">&para;</a></h2>
 <p>Components other than assets declare the same relations, and are constructed with them by name:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">dest</span> <span class="o">=</span> <span class="n">WarehouseDestination</span><span class="p">(</span><span class="n">connection</span><span class="o">=</span><span class="n">WarehouseConnection</span><span class="p">(</span><span class="o">...</span><span class="p">))</span>

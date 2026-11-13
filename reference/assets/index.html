@@ -3030,7 +3030,7 @@ upstream asset of the parameter's name:</p>
 
 
 <a href="#interloper.Asset.dataset" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">dataset</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x79462c35ee10</span><span class="o">&gt;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">dataset</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x732a555bd6a0</span><span class="o">&gt;</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3098,7 +3098,7 @@ set and bound, else the first bound destination.</p>
 
 
 <a href="#interloper.Asset.default_destination_key" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">default_destination_key</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x79462e317590</span><span class="o">&gt;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">default_destination_key</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x732a55916db0</span><span class="o">&gt;</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3147,14 +3147,18 @@ target and <code>detach</code> letting it through and dropping the binding.
 resolved without an explicit binding.</p>
 <p>A relation is also its own descriptor: <code>Component._collect</code> installs
 the stamped copy under the relation's name, so the class attribute reads
-as the declaration and the instance attribute as what is bound to it, and
-assignment rebinds it.</p>
-<p>The declaration form the framework writes pairs the relation with the
-annotation of what fills it
+as the declaration and the instance attribute as what the relation
+resolves to, and assignment rebinds it.</p>
+<p>A relation is declared by an annotation naming the component class that
+fills it (<code>connection: PostgresConnection</code>), or by a <code>Relation</code> value
+paired with the annotation of what fills it: an empty <code>Relation()</code>
+takes its kind, key and target from that annotation and adds the flags it
+is given, one naming its target or kind needs none
 (<code>destinations: list[Destination] = Relation("destination", many=True)</code>).
-The <code>TYPE_CHECKING</code> <code>__new__</code> is what makes that form check: the type
-checker reads a Pydantic field of the annotated type, so the constructor
-kwarg and the instance attribute are both typed, while the runtime sees a
+The <code>TYPE_CHECKING</code> <code>__new__</code> is what makes a value check: the type
+checker reads a Pydantic field of the annotated type with a default, so
+the constructor kwarg is optional and both it and the instance attribute
+are typed, while the runtime sees a
 <code>Relation</code> (Pydantic ignores it, and <code>Component._collect</code> drops the
 annotation before fields are collected).</p>
 <p>Two attributes are not declared but derived. <code>name</code> is stamped from the
@@ -3179,7 +3183,7 @@ dumps.</p>
 
 
 <a href="#interloper.Asset.enabled" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">enabled</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x79462c6f03b0</span><span class="o">&gt;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">enabled</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x732a557eb2f0</span><span class="o">&gt;</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3280,7 +3284,7 @@ errors defaults to 'strict'.</p>
 
 
 <a href="#interloper.Asset.materialization_strategy" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">materialization_strategy</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x79462e08c380</span><span class="o">&gt;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">materialization_strategy</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x732a558ff170</span><span class="o">&gt;</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3303,7 +3307,7 @@ read is the effective value.</p>
 
 
 <a href="#interloper.Asset.model_config" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">model_config</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'arbitrary_types_allowed'</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">'ignored_types'</span><span class="p">:</span> <span class="p">(</span><span class="o">&lt;</span><span class="k">class</span><span class="w"> </span><span class="err">'</span><span class="nc">interloper</span><span class="o">.</span><span class="n">serializable</span><span class="o">.</span><span class="n">base</span><span class="o">.</span><span class="n">IgnoredDescriptor</span><span class="s1">'&gt;, &lt;class '</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">relation</span><span class="o">.</span><span class="n">Relation</span><span class="s1">'&gt;)}</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">model_config</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'arbitrary_types_allowed'</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">'extra'</span><span class="p">:</span> <span class="s1">'forbid'</span><span class="p">,</span> <span class="s1">'ignored_types'</span><span class="p">:</span> <span class="p">(</span><span class="o">&lt;</span><span class="k">class</span><span class="w"> </span><span class="err">'</span><span class="nc">interloper</span><span class="o">.</span><span class="n">serializable</span><span class="o">.</span><span class="n">base</span><span class="o">.</span><span class="n">IgnoredDescriptor</span><span class="s1">'&gt;, &lt;class '</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">relation</span><span class="o">.</span><span class="n">Relation</span><span class="s1">'&gt;)}</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3331,7 +3335,7 @@ dict(**kwargs) -&gt; new dictionary initialized with the name=value pairs
 
 
 <a href="#interloper.Asset.normalizer" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">normalizer</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x79462c6ff530</span><span class="o">&gt;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">normalizer</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x732a555bd340</span><span class="o">&gt;</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3392,7 +3396,7 @@ dict(**kwargs) -&gt; new dictionary initialized with the name=value pairs
 
 
 <a href="#interloper.Asset.retry" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">retry</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x79462c6fd5b0</span><span class="o">&gt;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">retry</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x732a55915250</span><span class="o">&gt;</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3438,7 +3442,7 @@ ever parents an asset, so the cast is safe.</p>
 
 
 <a href="#interloper.Asset.start" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">start</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x79462c64da60</span><span class="o">&gt;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">start</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x732a555bcd40</span><span class="o">&gt;</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">

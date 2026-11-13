@@ -2636,12 +2636,14 @@ configuration fields:</p>
 class form is preferred for anything configurable.</p>
 <h2 id="instances">Instances<a class="headerlink" href="#instances" title="Permanent link">&para;</a></h2>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">source</span> <span class="o">=</span> <span class="n">FacebookAds</span><span class="p">(</span><span class="n">account_id</span><span class="o">=</span><span class="s2">"act_123"</span><span class="p">)</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">source</span> <span class="o">=</span> <span class="n">FacebookAds</span><span class="p">(</span><span class="n">account_id</span><span class="o">=</span><span class="s2">"act_123"</span><span class="p">,</span> <span class="n">destinations</span><span class="o">=</span><span class="n">BigQueryDestination</span><span class="p">(</span><span class="o">...</span><span class="p">))</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">source</span> <span class="o">=</span> <span class="n">FacebookAds</span><span class="p">(</span><span class="n">account_id</span><span class="o">=</span><span class="s2">"act_123"</span><span class="p">,</span> <span class="n">destinations</span><span class="o">=</span><span class="p">[</span><span class="n">BigQueryDestination</span><span class="p">(</span><span class="o">...</span><span class="p">)])</span>
 </span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">source</span> <span class="o">=</span> <span class="n">FacebookAds</span><span class="p">(</span><span class="n">account_id</span><span class="o">=</span><span class="s2">"act_123"</span><span class="p">,</span> <span class="n">connection</span><span class="o">=</span><span class="n">FacebookAdsConnection</span><span class="p">(</span><span class="o">...</span><span class="p">))</span>
 </span></code></pre></div>
-<p>Every declared relation is a constructor keyword under its own name; a list binds several
-targets, <code>None</code> binds nothing. Attribute access reads what is bound (<code>source.connection</code>), and
-<code>bind</code>, <code>unbind</code> and assignment change it afterwards.</p>
+<p>Every declared relation is a constructor keyword under its own name: a many-valued relation
+(<code>destinations</code>) takes a list, a single-valued one (<code>connection</code>) a component, and <code>None</code> binds
+nothing. A single component given to a many-valued relation is a <code>TypeError</code> naming the list
+form. Attribute access reads what the relation resolves to (<code>source.connection</code>, its fallback
+while nothing is bound), and <code>bind</code>, <code>unbind</code> and assignment change it afterwards.</p>
 <p>Assets are attributes, under their key:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">FacebookAds</span><span class="o">.</span><span class="n">campaigns</span>          <span class="c1"># the asset definition (class)</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">source</span><span class="o">.</span><span class="n">campaigns</span>               <span class="c1"># the live asset instance owned by this source</span>
@@ -2654,7 +2656,7 @@ checker cannot see it. An asset class belongs to one source: listing it in a sec
 <code>TypeError</code> at definition.</p>
 <h3 id="reconfiguring">Reconfiguring<a class="headerlink" href="#reconfiguring" title="Permanent link">&para;</a></h3>
 <p>Calling an instance returns a copy with the named changes applied; the original is untouched:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">staging</span> <span class="o">=</span> <span class="n">source</span><span class="p">(</span><span class="n">destinations</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">CSVDestination</span><span class="p">(</span><span class="n">base_path</span><span class="o">=</span><span class="s2">"./staging"</span><span class="p">))</span>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">staging</span> <span class="o">=</span> <span class="n">source</span><span class="p">(</span><span class="n">destinations</span><span class="o">=</span><span class="p">[</span><span class="n">il</span><span class="o">.</span><span class="n">CSVDestination</span><span class="p">(</span><span class="n">base_path</span><span class="o">=</span><span class="s2">"./staging"</span><span class="p">)])</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">read_only</span> <span class="o">=</span> <span class="n">source</span><span class="p">(</span><span class="n">enabled</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </span></code></pre></div>
 <p>The rule is the one every component follows: naming a field or a relation changes it, leaving it
@@ -2665,9 +2667,11 @@ destinations they read are shared.</p>
 <p>A source built with <code>enabled=False</code> makes every one of its assets read-only: they stay in a run
 as dependencies, so wiring still validates and their stored output is still readable. An asset
 can also be disabled alone (<code>source.campaigns(enabled=False)</code>). To build a source with only some
-of its assets, pass the <code>assets</code> override map, which is what the platform persists:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">source</span> <span class="o">=</span> <span class="n">FacebookAds</span><span class="p">(</span><span class="n">account_id</span><span class="o">=</span><span class="s2">"act_123"</span><span class="p">,</span> <span class="n">assets</span><span class="o">=</span><span class="p">{</span><span class="s2">"campaigns"</span><span class="p">:</span> <span class="p">{},</span> <span class="s2">"ads_stats"</span><span class="p">:</span> <span class="p">{}})</span>
+of its assets, give it those assets, each built from its class:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">source</span> <span class="o">=</span> <span class="n">FacebookAds</span><span class="p">(</span><span class="n">account_id</span><span class="o">=</span><span class="s2">"act_123"</span><span class="p">,</span> <span class="n">assets</span><span class="o">=</span><span class="p">[</span><span class="n">FacebookAds</span><span class="o">.</span><span class="n">campaigns</span><span class="p">(),</span> <span class="n">FacebookAds</span><span class="o">.</span><span class="n">ads_stats</span><span class="p">()])</span>
 </span></code></pre></div>
+<p>What the platform persists is the same choice as an override map keyed by asset key
+(<code>{"campaigns": {}, "ads_stats": {}}</code>), which a source rebuilt from its spec reads back.</p>
 <h2 id="what-assets-read-through-their-source">What assets read through their source<a class="headerlink" href="#what-assets-read-through-their-source" title="Permanent link">&para;</a></h2>
 <p>An asset never holds a copy of its source's settings or bindings: it reads what it leaves unset
 through the source, on every read, so a change to the source reaches its assets at once.</p>

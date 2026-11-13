@@ -3415,10 +3415,13 @@ normalizers are <code>Serializable</code>; catalog citizens extend <code>Compone
 which adds kind, identity and relations on top.</p>
 <p><code>Serializable</code> declares no settings of its own, so a subclass may give
 a field any name: a schema's columns are its vendor's vocabulary.</p>
+<p><code>extra="forbid"</code> holds <code>model_validate</code> to the rule the constructor
+enforces, and tells a type checker the constructor takes the declared
+fields only.</p>
 
         <p>Validate kwargs strictly against the model's fields.</p>
-<p>Unknown kwargs are a loud error rather than pydantic's silent
-<code>extra="ignore"</code> drop: a misnamed field would otherwise vanish.</p>
+<p>An unknown kwarg is a <code>TypeError</code>, as in any Python call, rather
+than the <code>ValidationError</code> Pydantic would raise for it.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -3502,7 +3505,7 @@ field declared on the model.</p>
 
 
 <a href="#interloper.Serializable.model_config" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">model_config</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'arbitrary_types_allowed'</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">'ignored_types'</span><span class="p">:</span> <span class="p">(</span><span class="o">&lt;</span><span class="k">class</span><span class="w"> </span><span class="err">'</span><span class="nc">interloper</span><span class="o">.</span><span class="n">serializable</span><span class="o">.</span><span class="n">base</span><span class="o">.</span><span class="n">IgnoredDescriptor</span><span class="s1">'&gt;,)}</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">model_config</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'arbitrary_types_allowed'</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">'extra'</span><span class="p">:</span> <span class="s1">'forbid'</span><span class="p">,</span> <span class="s1">'ignored_types'</span><span class="p">:</span> <span class="p">(</span><span class="o">&lt;</span><span class="k">class</span><span class="w"> </span><span class="err">'</span><span class="nc">interloper</span><span class="o">.</span><span class="n">serializable</span><span class="o">.</span><span class="n">base</span><span class="o">.</span><span class="n">IgnoredDescriptor</span><span class="s1">'&gt;,)}</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
