@@ -984,9 +984,11 @@ class Component(Serializable):
         for base in reversed(cls.__mro__[1:]):
             inherited.update(getattr(base, "relations", None) or {})
 
-        # The live dict, not inspect.get_annotations()'s copy: relation names are
-        # popped from it below so pydantic never sees them as fields.
-        annotations: dict[str, Any] = cls.__dict__.get("__annotations__", {})  # noqa: RUF063
+        # The class's own dict, not inspect.get_annotations()'s copy: relation names
+        # are popped from it below so pydantic never sees them as fields. From 3.14
+        # the class namespace holds no __annotations__ until this read evaluates and
+        # caches them, and pydantic reads that cache.
+        annotations: dict[str, Any] = cls.__annotations__
         module = sys.modules.get(cls.__module__)
         namespace = vars(module) if module else {}
 
