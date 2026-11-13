@@ -154,6 +154,12 @@ class TestResolve:
         assert store.tokens.resolve("ila_api", Audience.MCP) is None
         assert store.tokens.resolve("ila_api", Audience.APP) is None
 
+    def test_refresh_token_resolves_on_no_surface(self, store: Store, profile: Profile):
+        _insert(profile, "ilr_refresh", TokenKind.REFRESH, resource=Audience.MCP.value)
+
+        for audience in Audience:
+            assert store.tokens.resolve("ilr_refresh", audience) is None
+
     def test_expired_revoked_unknown_refused(self, store: Store, profile: Profile):
         past = datetime.now(UTC) - timedelta(seconds=1)
         _, expired = store.tokens.create_personal(profile.id, "expired", past)
@@ -457,6 +463,15 @@ class TestPurge:
         assert store.tokens.purge(ended_for=RETENTION) == 0
 
         assert len(self._remaining(token_db)) == 2
+
+    def test_a_refresh_token_is_left_to_the_oauth_purge(self, store: Store, profile: Profile, token_db: Engine):
+        refresh = _insert(profile, "ilr_ended", TokenKind.REFRESH, resource=Audience.MCP.value)
+        long_ago = datetime.now(UTC) - RETENTION - timedelta(days=1)
+        self._set(token_db, refresh.id, expires_at=long_ago, revoked_at=long_ago)
+
+        assert store.tokens.purge(ended_for=RETENTION) == 0
+
+        assert self._remaining(token_db) == {refresh.id}
 
     def test_a_token_revoked_recently_but_expired_long_ago_is_deleted(
         self, store: Store, profile: Profile, token_db: Engine

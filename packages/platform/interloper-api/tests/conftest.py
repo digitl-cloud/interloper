@@ -26,7 +26,6 @@ from interloper_db.models import (
     OAuthClient,
     Organisation,
     Profile,
-    RefreshToken,
     Token,
     UserOrganisation,
     table_of,
@@ -248,7 +247,6 @@ def oauth_store() -> Iterator[Store]:
         Token,
         OAuthClient,
         AuthorizationCode,
-        RefreshToken,
         Conversation,
     ):
         table_of(model).create(engine)
