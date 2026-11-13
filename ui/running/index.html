@@ -2562,6 +2562,9 @@ somewhere the app never looks, with no error to show for it.</p>
 List what you want enabled under <code>catalog.include</code> and the deployment sees exactly that, as
 described in <a href="../../guide/catalog/">Catalog</a> and
 <a href="../../extending/extensions/">Extensions &amp; registries</a>.</p>
+<p>An extension that ships routes or a UI goes into the <strong>api</strong> image: the API mounts its routes
+and serves its UI bundle, and the frontend image only proxies <code>/api</code> to it. Install it in the
+scheduler or core image as well when it also brings components that run there.</p>
 <p>The same recipe works on a loaded image when you want everything it ships plus your own
 components.</p>
 <h2 id="one-process-per-role">One process per role<a class="headerlink" href="#one-process-per-role" title="Permanent link">&para;</a></h2>
