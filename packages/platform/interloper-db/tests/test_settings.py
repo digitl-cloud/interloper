@@ -2,6 +2,7 @@
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy.engine import make_url
 
 from interloper_db.settings import EncryptionSettings, PostgresSettings, QuotaSettings
 
@@ -56,7 +57,12 @@ def test_dsn_escapes_user_and_password():
     """Reserved characters in the credentials do not break the connection string."""
     settings = PostgresSettings(user="me@corp", password="p@ss:w/rd%", host="db", port=5432, database="interloper")
 
-    assert settings.dsn == "postgresql://me%40corp:p%40ss%3Aw%2Frd%25@db:5432/interloper"
+    assert settings.dsn == "postgresql+psycopg://me%40corp:p%40ss%3Aw%2Frd%25@db:5432/interloper"
+
+
+def test_dsn_names_the_psycopg_driver():
+    """A bare ``postgresql://`` would let a SQLAlchemy release pick the driver; 2.1 switched it silently."""
+    assert make_url(PostgresSettings().dsn).drivername == "postgresql+psycopg"
 
 
 def test_location_names_the_target_without_credentials():

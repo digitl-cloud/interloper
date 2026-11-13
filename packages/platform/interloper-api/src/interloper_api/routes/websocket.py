@@ -16,15 +16,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import select as _select
 import threading
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from uuid import UUID
 
-import psycopg2
-import psycopg2.extensions
+import psycopg
 from fastapi import APIRouter, Cookie, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from interloper_db import Store
 from starlette.concurrency import run_in_threadpool
@@ -101,36 +99,27 @@ def _start_notify_listener(dsn: str, loop: asyncio.AbstractEventLoop) -> None:
     """Background thread: listens for PostgreSQL NOTIFY and dispatches to WebSocket clients.
 
     Args:
-        dsn: PostgreSQL connection string.
+        dsn: libpq connection string of the database to listen on.
         loop: The asyncio event loop to schedule coroutines on.
     """
     while True:
         try:
-            connection = psycopg2.connect(dsn)
-            connection.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+            with psycopg.connect(dsn, autocommit=True) as connection:
+                connection.execute("LISTEN table_changes")
+                logger.info("[Realtime] NOTIFY listener started")
 
-            with connection.cursor() as cursor:
-                cursor.execute("LISTEN table_changes")
-
-            logger.info("[Realtime] NOTIFY listener started")
-
-            while True:
-                readable, _, _ = _select.select([connection], [], [], 1.0)
-                if readable:
-                    connection.poll()
-                    while connection.notifies:
-                        notify = connection.notifies.pop(0)
-                        try:
-                            payload = json.loads(notify.payload)
-                            org_id = str(payload["org_id"])
-                            message = {
-                                "table": payload["table"],
-                                "event": payload["op"],
-                                "record": payload.get("record"),
-                            }
-                            asyncio.run_coroutine_threadsafe(_manager.broadcast(org_id, message), loop)
-                        except (json.JSONDecodeError, KeyError) as e:
-                            logger.warning("[Realtime] Invalid NOTIFY payload: %s", e)
+                for notify in connection.notifies():
+                    try:
+                        payload = json.loads(notify.payload)
+                        org_id = str(payload["org_id"])
+                        message = {
+                            "table": payload["table"],
+                            "event": payload["op"],
+                            "record": payload.get("record"),
+                        }
+                        asyncio.run_coroutine_threadsafe(_manager.broadcast(org_id, message), loop)
+                    except (json.JSONDecodeError, KeyError) as e:
+                        logger.warning("[Realtime] Invalid NOTIFY payload: %s", e)
         except Exception as e:  # noqa: BLE001
             # This thread is the only realtime path; letting anything escape
             # would end it for the life of the process, so every failure is
@@ -154,8 +143,8 @@ async def realtime_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from interloper_db import get_engine
 
     engine = get_engine()
-    # str(engine.url) masks the password as '***' — psycopg2 needs the real one.
-    dsn = engine.url.render_as_string(hide_password=False)
+    # libpq refuses SQLAlchemy's driver name, and str(engine.url) would mask the password as '***'.
+    dsn = engine.url.set(drivername="postgresql").render_as_string(hide_password=False)
 
     loop = asyncio.get_running_loop()
     thread = threading.Thread(

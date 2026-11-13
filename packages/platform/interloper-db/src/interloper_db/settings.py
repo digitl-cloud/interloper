@@ -28,13 +28,16 @@ class PostgresSettings(Settings):
 
     @property
     def dsn(self) -> str:
-        """The PostgreSQL connection string, user and password percent-encoded.
+        """The SQLAlchemy URL of the database, user and password percent-encoded.
+
+        The URL names the psycopg 3 driver: a bare ``postgresql://`` leaves the choice to SQLAlchemy, whose
+        default changed between releases.
 
         Returns:
-            ``postgresql://user:password@host:port/database``.
+            ``postgresql+psycopg://user:password@host:port/database``.
         """
         credentials = f"{quote(self.user, safe='')}:{quote(self.password, safe='')}"
-        return f"postgresql://{credentials}@{self.host}:{self.port}/{self.database}"
+        return f"postgresql+psycopg://{credentials}@{self.host}:{self.port}/{self.database}"
 
     @property
     def location(self) -> str:

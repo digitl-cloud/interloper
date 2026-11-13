@@ -15,7 +15,8 @@ def init_engine(dsn: str | None = None, statement_timeout: float | None = None, 
     """Initialize the global database engine.
 
     Args:
-        dsn: PostgreSQL connection string. Falls back to ``DATABASE_URL`` env var.
+        dsn: SQLAlchemy URL of the database, naming its driver (``postgresql+psycopg://``). Falls back to the
+            ``DATABASE_URL`` env var.
         statement_timeout: Seconds after which the server cancels a running statement. Sent as the libpq
             ``statement_timeout`` connection option, merged into any ``connect_args`` passed. ``None`` leaves the
             server default; other backends (SQLite) ignore it.

@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 
 import interloper as il
-import psycopg2
+import psycopg
 from interloper_db import init_engine
 from interloper_db.engine import get_engine
 from interloper_db.models import Organisation, Profile
@@ -108,21 +108,30 @@ def main() -> None:
         store.runs.create(org_id, component_id=flaky_job.id, partition_key="2026-09-02")
         store.runs.create(org_id, component_id=monthly_job.id, partition_key="2026-08")
         print("runs queued; waiting for the worker")
-        _wait_and_backdate(postgres.dsn)
+        _wait_and_backdate(postgres)
 
     (HERE / "session_token").write_text(store.tokens.create_session(user_id))
     print("session minted")
 
 
-def _wait_and_backdate(dsn: str) -> None:
+def _wait_and_backdate(postgres: PostgresSettings) -> None:
     """Wait for every run to finish, then spread them over the last 22 hours.
 
     The runs all execute within a minute, which makes the timeline a single
     cluster of bars; shifting each run (and its events) back by a distinct
     offset gives the screenshot a day of history. Relative durations are kept.
+
+    Args:
+        postgres: The database the runs are in.
     """
-    connection = psycopg2.connect(dsn)
-    connection.autocommit = True
+    connection = psycopg.connect(
+        host=postgres.host,
+        port=postgres.port,
+        user=postgres.user,
+        password=postgres.password,
+        dbname=postgres.database,
+        autocommit=True,
+    )
     cursor = connection.cursor()
     for _ in range(120):
         cursor.execute("select count(*) from runs where status in ('queued', 'pending', 'dispatched', 'running')")
