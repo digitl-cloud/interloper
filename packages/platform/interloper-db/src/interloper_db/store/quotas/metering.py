@@ -146,9 +146,11 @@ class UsageLedger:
                 set_={"reserved": table.c.reserved + 1},
                 where=(table.c.used + table.c.reserved < limit),
             )
+            # Read the written row back: psycopg 3 reports no rowcount for an upsert under SQLAlchemy 2.1.
+            .returning(table.c.reserved)
         )
-        result = self._session.exec(statement)
-        return now if result.rowcount == 1 else None
+        written = self._session.exec(statement).first()
+        return now if written is not None else None
 
     def settle_run(self, db_run: Run, *, success: bool) -> None:
         """Charge or release a completing run's usage.

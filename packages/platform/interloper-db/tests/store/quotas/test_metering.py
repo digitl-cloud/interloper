@@ -9,6 +9,7 @@ from uuid import UUID
 
 import pytest
 from interloper.utils import month_start
+from sqlalchemy.engine import CursorResult
 from sqlmodel import Session
 
 from interloper_db.models import Run
@@ -31,6 +32,25 @@ class TestIncrementUsage:
     def test_unknown_metric_rejected(self, store: Store, org_id: UUID):
         with Session(store.engine) as session, pytest.raises(ValueError, match="Unknown usage metric"):
             UsageLedger(session).increment(org_id, "sucessful_runs", dt.date(2026, 8, 1), used=1)
+
+
+class TestReserve:
+    def test_admits_up_to_the_limit_when_the_driver_reports_no_rowcount(
+        self,
+        store: Store,
+        org_id: UUID,
+        usage_rows: UsageRows,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """The reservation holds when the driver reports -1, as psycopg 3 does for an upsert under SQLAlchemy 2.1."""
+        monkeypatch.setattr(CursorResult, "rowcount", property(lambda self: -1))
+        with Session(store.engine) as session:
+            ledger = UsageLedger(session)
+            outcomes = [ledger.reserve(org_id, METRIC_SUCCESSFUL_RUNS, limit=2) is not None for _ in range(3)]
+            session.commit()
+        assert outcomes == [True, True, False]
+        (counts,) = usage_rows().values()
+        assert counts == (0, 2)
 
 
 class TestSettleRunUsage:
