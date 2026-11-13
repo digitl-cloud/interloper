@@ -2952,7 +2952,7 @@
 </table>
 <h2 id="interloper-api"><code>interloper-api</code><a class="headerlink" href="#interloper-api" title="Permanent link">&para;</a></h2>
 <h3 id="auth"><code>auth</code><a class="headerlink" href="#auth" title="Permanent link">&para;</a></h3>
-<p>Authentication settings: Google OAuth and the session cookie. Prefix <code>INTERLOPER_AUTH_</code>.</p>
+<p>Authentication settings: the sign-in providers and the session cookie. Prefix <code>INTERLOPER_AUTH_</code>.</p>
 <table>
 <thead>
 <tr>
@@ -2967,19 +2967,13 @@
 <td><code>google_client_id</code></td>
 <td><code>str</code></td>
 <td><code>''</code></td>
-<td>Google OAuth web client id.</td>
+<td>Google OAuth web client id; its authorised redirect URI is <code>&lt;server.external_url&gt;/api/auth/google/callback</code>.</td>
 </tr>
 <tr>
 <td><code>google_client_secret</code></td>
 <td><code>str</code></td>
 <td><code>''</code></td>
 <td>Google OAuth web client secret.</td>
-</tr>
-<tr>
-<td><code>google_redirect_uri</code></td>
-<td><code>str</code></td>
-<td><code>''</code></td>
-<td>Redirect URI registered on the Google OAuth client (<code>/api/auth/google/callback</code>).</td>
 </tr>
 <tr>
 <td><code>cookie_secure</code></td>
@@ -3009,7 +3003,7 @@
 <td><code>super_admin_emails</code></td>
 <td><code>list[str]</code></td>
 <td><code>[]</code></td>
-<td>Google emails promoted to platform-wide super-admin when the API starts and on login; promotion only, removing an email never demotes.</td>
+<td>Emails promoted to platform-wide super-admin when the API starts and on login; promotion only, removing an email never demotes.</td>
 </tr>
 <tr>
 <td><code>allowed_domains</code></td>
