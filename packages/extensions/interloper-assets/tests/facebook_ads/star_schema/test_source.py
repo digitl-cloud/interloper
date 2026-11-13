@@ -65,21 +65,21 @@ def _seed(
         f"'EUR' AS account_currency, 'c{account_id}' AS campaign_id, 'Camp from stats' AS campaign_name, "
         "'s1' AS adset_id, 'Set' AS adset_name, 'a1' AS ad_id, 'Ad' AS ad_name, "
         "'facebook' AS publisher_platform, 'feed' AS platform_position, 'mobile' AS impression_device, "
-        "100 AS impressions, 10 AS clicks, 80 AS reach, 12.5 AS spend, 2 AS actions_purchase, "
+        "100 AS impressions, 10 AS clicks, 4 AS inline_link_clicks, 80 AS reach, 12.5 AS spend, 2 AS actions_purchase, "
         "40.0 AS action_values_purchase"
     )
     client.execute(
         f"CREATE TABLE facebook_ads.campaigns_stats__{account_id} AS SELECT * FROM (VALUES "
         f"(DATE '2026-10-01', {account_id}, 'Acct {account_id}', 'EUR', 'c{account_id}', 'Camp from report', "
-        "'OUTCOME_SALES', 100, 10, 80, 12.5, 2, 40.0)"
+        "'OUTCOME_SALES', 100, 10, 4, 80, 12.5, 2, 40.0)"
         + (
             f", (DATE '2026-10-01', {account_id}, 'Acct {account_id}', 'EUR', 'c{account_id}', "
-            "'Camp from report renamed', CAST(NULL AS VARCHAR), 50, 5, 20, 2.5, 1, 10.0)"
+            "'Camp from report renamed', CAST(NULL AS VARCHAR), 50, 5, 2, 20, 2.5, 1, 10.0)"
             if two_report_rows
             else ""
         )
         + ") AS t(date_start, account_id, account_name, account_currency, campaign_id, campaign_name, objective, "
-        "impressions, clicks, reach, spend, actions_purchase, action_values_purchase)"
+        "impressions, clicks, inline_link_clicks, reach, spend, actions_purchase, action_values_purchase)"
     )
     collected = "TRUE" if campaigns_entity else "FALSE"
     client.execute(
@@ -109,7 +109,7 @@ def _seed(
         client.execute(
             f"INSERT INTO facebook_ads.campaigns_stats__{account_id} SELECT "
             f"DATE '2026-10-01', {account_id}, 'Acct {account_id}', 'EUR', 'c999', 'Camp from facts', "
-            "'OUTCOME_SALES', 1, 1, 1, 1.0, 0, 0.0"
+            "'OUTCOME_SALES', 1, 1, 1, 1, 1.0, 0, 0.0"
         )
 
 
@@ -180,9 +180,18 @@ class TestOnDuckDB:
         assert len(rows) == len({(row["date"], row["account_id"], row["campaign_id"]) for row in rows}) == 2
         [row] = [row for row in rows if row["account_id"] == "111"]
         assert (row["date"], row["campaign_id"]) == (DAY, "c111")
-        assert (row["impressions"], row["clicks"], row["cost"], row["currency"]) == (150, 15, 15.0, "EUR")
+        assert (row["impressions"], row["cost"], row["currency"]) == (150, 15.0, "EUR")
         assert (row["purchases"], row["revenue"]) == (3, 50.0)
         assert "reach" not in row
+
+    def test_clicks_are_link_clicks_and_every_click_is_kept_apart(self, warehouse):
+        first = _account("111", warehouse)
+        _seed(warehouse, "111", campaigns_entity=False, two_report_rows=True)
+        _materialize(warehouse, first)
+        [campaign] = _rows(warehouse, "fact_campaign_performance")
+        assert (campaign["clicks"], campaign["all_clicks"]) == (6, 15)
+        [ad] = _rows(warehouse, "fact_ad_performance")
+        assert (ad["clicks"], ad["all_clicks"]) == (4, 10)
 
     def test_the_ad_fact_keeps_the_placement_grain_without_names(self, warehouse):
         first = _account("111", warehouse)
@@ -364,11 +373,11 @@ class TestOnDuckDB:
         client = warehouse.connection.client
         client.execute(
             "INSERT INTO facebook_ads.campaigns_stats__111 SELECT DATE '2026-10-01', 111, 'Acct 111', 'EUR', NULL, "
-            "NULL, NULL, 0, 0, 0, 0.0, 0, 0.0"
+            "NULL, NULL, 0, 0, 0, 0, 0.0, 0, 0.0"
         )
         client.execute(
             "INSERT INTO facebook_ads.ads_stats__111 SELECT DATE '2026-10-01', '111', 'Acct 111', 'EUR', NULL, NULL, "
-            "NULL, NULL, NULL, NULL, 'facebook', 'feed', 'mobile', 5, 1, 4, 1.0, 0, 0.0"
+            "NULL, NULL, NULL, NULL, 'facebook', 'feed', 'mobile', 5, 1, 1, 4, 1.0, 0, 0.0"
         )
         _materialize(warehouse, first)
         keys = {

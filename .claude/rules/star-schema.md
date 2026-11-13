@@ -33,7 +33,7 @@ What the platform fills is decided by the implementation, not by what is bound: 
 | `account_id` | `str` | the account, see rule 4 |
 | `campaign_id` | `str` | the campaign |
 | `impressions` | `int` | times the ads were shown |
-| `clicks` | `int` | clicks on the ads |
+| `clicks` | `int` | clicks towards the advertiser's destination (link clicks), comparable across platforms; a platform that also counts engagement clicks publishes them as the extra `all_clicks` |
 | `cost` | `float` | amount spent, in `currency` |
 | `currency` | `str` | ISO code of every amount in the row |
 | `conversions` | `int` | the platform's own primary conversion metric, vendor-defined; the description names the vendor metric and its attribution window |

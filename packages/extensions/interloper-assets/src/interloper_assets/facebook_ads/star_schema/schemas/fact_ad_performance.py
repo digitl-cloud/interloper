@@ -16,7 +16,14 @@ class FactAdPerformance(Schema):
     platform_position: str | None = Field(default=None, description="Placement on the platform (feed, story, ...).")
     impression_device: str | None = Field(default=None, description="Device the ad was shown on.")
     impressions: int | None = Field(default=None, description="Times the ad was shown.")
-    clicks: int | None = Field(default=None, description="Clicks on the ad.")
+    clicks: int | None = Field(
+        default=None, description="Link clicks on the ad, towards the advertiser's destination (inline_link_clicks)."
+    )
+    all_clicks: int | None = Field(
+        default=None,
+        description="Every click on the ad, Ads Manager's Clicks (all): link clicks plus profile clicks, "
+        "reactions, comments, shares and media opens.",
+    )
     reach: int | None = Field(default=None, description="People who saw the ad; not additive across days.")
     cost: float | None = Field(default=None, description="Amount spent, in the account currency.")
     currency: str | None = Field(default=None, description="Currency of every amount in the row.")
