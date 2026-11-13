@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from interloper.extension import ExtensionEntry, ExtensionFailure, Manifests
+from interloper.extension import Extension, ExtensionEntry, ExtensionFailure, Manifests
 from interloper.extension import base as extension_base
 from interloper.registry import Registry
 
@@ -143,6 +143,36 @@ class TestFailures:
         assert "Skipping package 'acme_ext', section 'runners', entry 'ray': failed to load: ImportError: no ray" in (
             caplog.text
         )
+
+
+class TestExtensions:
+    def test_each_package_is_listed_as_its_manifest_says_it_is_sorted_by_package(self, install):
+        install("other_ext", "manifest_version: 1\nkey: other\n")
+        install("acme_ext", ACME)
+
+        assert Manifests().extensions() == (
+            Extension("acme_ext", None, "acme", "Acme", "Acme things: runners and widgets.", "i-lucide-box"),
+            Extension("other_ext", None, "other"),
+        )
+
+    def test_a_package_whose_manifest_cannot_be_read_is_listed_without_a_key(self, install):
+        install("bare_ext", None)
+        install("taken_ext", "manifest_version: 1\nkey: bare\n")
+        install("copy_ext", "manifest_version: 1\nkey: bare\n")
+
+        assert Manifests().extensions() == (
+            Extension("bare_ext", None),
+            Extension("copy_ext", None),
+            Extension("taken_ext", None, "bare"),
+        )
+
+    def test_the_version_is_the_distribution_naming_the_package(self, install):
+        install("acme_ext", ACME)
+        locator = mock.Mock(module="acme_ext", dist=mock.Mock(version="1.2.3"))
+        with mock.patch.object(extension_base, "entry_points", return_value=[locator]):
+            (extension,) = Manifests().extensions()
+
+        assert extension.version == "1.2.3"
 
 
 class TestUnclaimed:

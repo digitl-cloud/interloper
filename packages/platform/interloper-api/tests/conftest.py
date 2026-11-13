@@ -12,6 +12,9 @@ import httpx2
 import interloper as il
 import pytest
 import sqlalchemy
+from interloper.extension import Manifests
+from interloper.registry import Registry
+from interloper.registry import base as registry_base
 from interloper.settings import RunnerSettings, ServerSettings, TelemetrySettings
 from interloper_agent.settings import AgentSettings
 from interloper_db import Store
@@ -33,6 +36,8 @@ from sqlalchemy.pool import StaticPool
 
 from interloper_api.authorization import ClientMetadataFetcher
 from interloper_api.dependencies import State
+from interloper_api.routes import admin as admin_module
+from interloper_api.routes import extensions as extensions_module
 from interloper_api.routes.admin import AdminConfigResponse
 from interloper_api.settings import ApiSettings, AuthSettings, SmtpSettings
 
@@ -184,6 +189,38 @@ def app_state(fake_settings: ApiSettings) -> State:
         settings=fake_settings,
         admin_config=AdminConfigResponse.from_declared(features={}, catalog=catalog),
     )
+
+
+@pytest.fixture
+def load_extensions(install: Callable[..., None], monkeypatch: pytest.MonkeyPatch) -> Callable[[], Manifests]:
+    """Show the API the packages ``install`` writes as the only installed ones, their routes loaded.
+
+    Only the API's own reads are pointed at them, the listing, the config
+    snapshot and the routes registry; every other registry keeps the
+    installation's manifests, so one first loaded during the test is not left
+    holding throwaway entries.
+
+    Args:
+        install: Writes the throwaway packages, before the manifests are loaded.
+        monkeypatch: Points the API's reads at them for the test.
+
+    Returns:
+        A function reading the installed packages' manifests and loading their
+        routes, which returns the manifests.
+    """
+
+    def load() -> Manifests:
+        manifests = Manifests()
+        routers = Registry("routes", adopt=extensions_module._adopt_router)
+        with monkeypatch.context() as scoped:
+            scoped.setattr(registry_base, "MANIFESTS", manifests)
+            routers.keys()
+        monkeypatch.setattr(extensions_module, "MANIFESTS", manifests)
+        monkeypatch.setattr(admin_module, "MANIFESTS", manifests)
+        monkeypatch.setattr(extensions_module, "EXTENSION_ROUTERS", routers)
+        return manifests
+
+    return load
 
 
 @pytest.fixture

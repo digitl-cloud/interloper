@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from interloper.catalog import Catalog
 from interloper.component import ComponentDefinition
+from interloper.extension import ExtensionFailure
 from interloper.settings import SETTINGS, Settings
 from interloper_db import NotFoundError, OrganisationQuery, Page, PageQuery, ProfileQuery, Store, UsageQuery
 from interloper_db.crypto import hash_token
@@ -320,6 +321,23 @@ def test_config_snapshot_reports_hydrated_catalog_by_kind(fake_settings: ApiSett
     )
     snapshot = admin_module.AdminConfigResponse.from_declared(features={"agent": True}, catalog=catalog)
     assert snapshot.catalog == {"destination": ["bigquery", "csv"], "source": ["demo"]}
+
+
+def test_config_snapshot_lists_the_installed_packages_with_their_own_failures(
+    fake_settings: ApiSettings, install, load_extensions
+) -> None:
+    install("acme_ext", "manifest_version: 1\nkey: acme\nname: Acme\n")
+    install("bare_ext", None)
+    manifests = load_extensions()
+    manifests.record(ExtensionFailure("acme_ext", "routes", "acme", "failed to load: ImportError: boom"))
+
+    snapshot = admin_module.AdminConfigResponse.from_declared(features={"agent": True}, catalog=Catalog())
+
+    acme, bare = snapshot.extensions
+    assert (acme.key, acme.name, acme.status) == ("acme", "Acme", "failed")
+    assert acme.failures == [ExtensionFailure("acme_ext", "routes", "acme", "failed to load: ImportError: boom")]
+    assert (bare.package, bare.key, bare.status) == ("bare_ext", None, "failed")
+    assert bare.failures == [ExtensionFailure("bare_ext", None, None, "package 'bare_ext' ships no extension.yaml")]
 
 
 def test_config_snapshot_leaves_the_version_unknown_without_an_installed_package(

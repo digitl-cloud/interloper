@@ -1,10 +1,33 @@
-"""The records a manifest yields: one entry per declared import string, one failure per thing skipped."""
+"""What manifests yield: one extension per package, one entry per import string, one failure per thing skipped."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from importlib.metadata import EntryPoint
 from typing import Any
+
+
+@dataclass(frozen=True)
+class Extension:
+    """One package the ``interloper.extensions`` entry point names, as its manifest says what it is.
+
+    Attributes:
+        package: The import package that ships the manifest.
+        version: The version of the distribution declaring the entry point, or
+            ``None`` when the entry point names no distribution.
+        key: The manifest's ``key``, or ``None`` when the manifest could not be
+            read; its failure, recorded under the package, says why.
+        name: The manifest's ``name``, empty when it gives none.
+        description: The manifest's ``description``, empty when it gives none.
+        icon: The manifest's ``icon``, empty when it gives none.
+    """
+
+    package: str
+    version: str | None
+    key: str | None = None
+    name: str = ""
+    description: str = ""
+    icon: str = ""
 
 
 @dataclass(frozen=True)

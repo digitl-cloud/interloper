@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import datetime as dt
 import inspect
+from collections.abc import Iterable
 from datetime import datetime
 from importlib import metadata
 from typing import Annotated, Any
@@ -21,6 +22,7 @@ from uuid import UUID
 from authlib.oauth2.rfc7591 import InvalidRedirectURIError
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from interloper.catalog import Catalog
+from interloper.extension import MANIFESTS, Extension, ExtensionFailure
 from interloper.settings import SETTINGS, Settings
 from interloper_db import Organisation, OrganisationQuery, Page, PageQuery, Profile, ProfileQuery, UsageQuery
 from interloper_db.models import OAuthClient
@@ -32,6 +34,7 @@ from interloper_api.authorization import CLIENT_NAME_MAX_LENGTH, Client
 from interloper_api.dependencies import SettingsDep, StateDep, StoreDep, SuperAdminDep
 from interloper_api.notifications import SuperAdminPromotionEmail
 from interloper_api.routes.apps import AppResponse
+from interloper_api.routes.extensions import ExtensionResponse
 from interloper_api.routes.organisations import CreateOrganisationRequest
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -246,6 +249,26 @@ class AdminSettingsSection(BaseModel):
         return True, value
 
 
+class AdminExtension(ExtensionResponse):
+    """One installed package that ships a manifest, with everything skipped of it and why."""
+
+    failures: list[ExtensionFailure]
+
+    @classmethod
+    def from_extension(cls, extension: Extension, failures: Iterable[ExtensionFailure]) -> AdminExtension:
+        """Describe an installed package with its own failures.
+
+        Args:
+            extension: The package, as its manifest says what it is.
+            failures: Everything skipped so far, every package's.
+
+        Returns:
+            The package and the failures that are its own, in the order they happened.
+        """
+        own = [failure for failure in failures if failure.package == extension.package]
+        return cls(**ExtensionResponse.from_extension(extension, own).model_dump(), failures=own)
+
+
 # One set of quota limits, keyed by quota key; null means unlimited (or unset,
 # for overrides). Derived from the ``QUOTAS`` registry rather than declared
 # field-by-field, so registering a quota surfaces it here — and in the frontend,
@@ -364,6 +387,7 @@ class AdminConfigResponse(BaseModel):
     features: dict[str, bool]
     catalog: dict[str, list[str]]
     sections: list[AdminSettingsSection]
+    extensions: list[AdminExtension]
 
     @classmethod
     def from_declared(cls, features: dict[str, bool], catalog: Catalog) -> AdminConfigResponse:
@@ -375,7 +399,10 @@ class AdminConfigResponse(BaseModel):
         cannot be imported is left out. The catalog is reported from the
         hydrated ``Catalog`` (the enabled components, their dependencies and
         the framework's own), not the ``catalog.include`` setting, which only
-        holds the explicitly configured import paths.
+        holds the explicitly configured import paths. The extensions are the
+        installed packages with what was skipped of them by the time the
+        snapshot is built, which ``create_app`` does once the catalog is
+        hydrated and the extension routes are mounted.
 
         Args:
             features: Optional-feature flags keyed by feature name.
@@ -393,11 +420,13 @@ class AdminConfigResponse(BaseModel):
             settings_class = SETTINGS.get(name)
             if settings_class is not None:
                 sections.append(AdminSettingsSection.from_settings(name, entry.extension, settings_class.get()))
+        failures = MANIFESTS.failures
         return cls(
             version=version,
             features=features,
             catalog=_catalog_by_kind(catalog),
             sections=sections,
+            extensions=[AdminExtension.from_extension(extension, failures) for extension in MANIFESTS.extensions()],
         )
 
 

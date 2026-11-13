@@ -18,11 +18,14 @@ from interloper_db import (
     HydrationError,
     InUseError,
     NotFoundError,
+    Organisation,
+    Profile,
     QuotaExceededError,
     Store,
 )
 
 from interloper_api.app import create_app, install_error_handlers
+from interloper_api.dependencies import get_caller
 from interloper_api.routes import websocket as websocket_module
 from interloper_api.settings import ApiSettings
 
@@ -92,6 +95,91 @@ def test_organisation_routes_are_gone_from_the_top_level(fake_settings: ApiSetti
     app = create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings)
 
     assert TestClient(app).get(path).status_code == 404
+
+
+ACME_ROUTES = """\
+from fastapi import APIRouter
+
+from interloper_api.dependencies import EditorDep, ViewerDep
+
+router = APIRouter()
+
+
+@router.get("/scope")
+def scope(scope: ViewerDep) -> dict:
+    return {"organisation": str(scope.organisation.id), "role": scope.role}
+
+
+@router.get("/open")
+def open_route() -> dict:
+    return {}
+
+
+@router.post("/write")
+def write(scope: EditorDep) -> dict:
+    return {}
+"""
+
+
+class TestExtensionRoutes:
+    """A router an installed package declares answers in the organisations its caller belongs to."""
+
+    @pytest.fixture
+    def app(self, install, load_extensions, fake_settings: ApiSettings, oauth_store: Store) -> FastAPI:
+        install("acme_ext", "manifest_version: 1\nkey: acme\nroutes: acme_ext.routes:router\n", routes=ACME_ROUTES)
+        install("broken_ext", "manifest_version: 1\nkey: broken\nroutes: broken_ext.routes:router\n")
+        load_extensions()
+        return create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings)
+
+    @pytest.fixture
+    def viewer(self, oauth_store: Store) -> tuple[Profile, Organisation]:
+        profile = oauth_store.profiles.upsert(google_id="g-viewer", email="viewer@example.com", name="Viewer")
+        organisation = oauth_store.organisations.create("Acme")
+        oauth_store.members.add(organisation.id, profile.id, "viewer")
+        return profile, organisation
+
+    def test_a_member_reaches_the_routes_under_the_organisation_and_extension_key(self, app: FastAPI, viewer):
+        profile, organisation = viewer
+        app.dependency_overrides[get_caller] = lambda: profile
+
+        response = TestClient(app).get(f"/api/organisations/{organisation.id}/ext/acme/scope")
+
+        assert response.status_code == 200
+        assert response.json() == {"organisation": str(organisation.id), "role": "viewer"}
+
+    def test_every_route_requires_membership_even_one_declaring_no_role(self, app: FastAPI, viewer, oauth_store):
+        profile, _ = viewer
+        other = oauth_store.organisations.create("Other")
+        app.dependency_overrides[get_caller] = lambda: profile
+        client = TestClient(app)
+
+        assert client.get(f"/api/organisations/{other.id}/ext/acme/open").status_code == 404
+        assert client.get(f"/api/organisations/{other.id}/ext/acme/scope").status_code == 404
+
+    def test_a_route_raising_the_floor_refuses_a_viewer(self, app: FastAPI, viewer):
+        profile, organisation = viewer
+        app.dependency_overrides[get_caller] = lambda: profile
+
+        assert TestClient(app).post(f"/api/organisations/{organisation.id}/ext/acme/write").status_code == 403
+
+    def test_an_anonymous_caller_is_refused(self, app: FastAPI):
+        assert TestClient(app).get(f"/api/organisations/{_ORG}/ext/acme/open").status_code == 401
+
+    def test_a_router_that_fails_to_load_is_reported_while_the_others_serve(self, app: FastAPI, viewer):
+        profile, organisation = viewer
+        app.dependency_overrides[get_caller] = lambda: profile
+        client = TestClient(app)
+
+        assert client.get(f"/api/organisations/{organisation.id}/ext/acme/open").status_code == 200
+        assert client.get(f"/api/organisations/{organisation.id}/ext/broken/open").status_code == 404
+        assert {item["key"]: item["status"] for item in client.get("/api/extensions").json()} == {
+            "acme": "ok",
+            "broken": "failed",
+        }
+        broken = next(item for item in app.state.interloper.admin_config.extensions if item.key == "broken")
+        (failure,) = broken.failures
+        assert (failure.section, failure.entry) == ("routes", "broken")
+        assert "No module named 'broken_ext.routes'" in failure.error
 
 
 class TestErrorHandlers:
