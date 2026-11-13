@@ -51,15 +51,15 @@ def main() -> None:
     ensure("destination", "memory_destination", "Scratch memory")
 
     demo = components["Demo Data"]
-    store.components.update(demo.id, relations={"destination": [(csv_dest.id, "")]})
+    store.components.update(demo.id, relations={"destinations": [csv_dest.id]})
     flaky = ensure(
         "source",
         "demo_source",
         "Demo Flaky",
         config={"hello": "chaos", "random_failure_probability": 0.35, "dataset": "demo_flaky"},
-        relations={"destination": [(csv_dest.id, "")]},
+        relations={"destinations": [csv_dest.id]},
     )
-    monthly = ensure("source", "demo_monthly_source", "Demo Monthly", relations={"destination": [(csv_dest.id, "")]})
+    monthly = ensure("source", "demo_monthly_source", "Demo Monthly", relations={"destinations": [csv_dest.id]})
 
     daily_job = components["Demo Daily"]
     monthly_job = ensure(
@@ -67,14 +67,14 @@ def main() -> None:
         "cron_job",
         "Demo Monthly Rollup",
         config={"cron": "0 7 1 * *", "timezone": "Europe/Berlin", "lookback": 1, "offset": 1, "enabled": True},
-        relations={"target": [(monthly.id, "")]},
+        relations={"targets": [monthly.id]},
     )
     flaky_job = ensure(
         "job",
         "cron_job",
         "Demo Flaky Nightly",
         config={"cron": "30 2 * * *", "timezone": "UTC", "lookback": 3, "offset": 1, "enabled": True},
-        relations={"target": [(flaky.id, "")]},
+        relations={"targets": [flaky.id]},
     )
     ensure(
         "hook",
@@ -86,14 +86,14 @@ def main() -> None:
             "events": ["run_failed"],
             "enabled": True,
         },
-        relations={"watch": [(flaky_job.id, ""), (daily_job.id, "")]},
+        relations={"watches": [flaky_job.id, daily_job.id]},
     )
     ensure(
         "hook",
         "trigger_hook",
         "Roll up after daily",
         config={"events": ["run_completed"], "enabled": True},
-        relations={"watch": [(daily_job.id, "")], "target": [(monthly_job.id, "")]},
+        relations={"watches": [daily_job.id], "targets": [monthly_job.id]},
     )
 
     if not store.backfills.list(org_id, BackfillQuery(limit=None)).items:
