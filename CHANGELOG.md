@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v0.135.0 (2026-11-13)
+
+### Bug Fixes
+
+- **app**: Show a run's error above its header card
+  ([`7380b04`](https://github.com/digitl-cloud/interloper/commit/7380b042708ff2f94a4ab4a531a1904866ea9ee3))
+
+- **docs**: Bind the docs screenshot components by their current relations
+  ([`08abb9c`](https://github.com/digitl-cloud/interloper/commit/08abb9c77bfd6b48de31a79958aab05ddc25b97e))
+
+### Refactoring
+
+- **db**: Connect through psycopg 3 and name the driver in the DSN
+  ([`cad0887`](https://github.com/digitl-cloud/interloper/commit/cad08879a74a490994244b2af1dca6ed2e12ac34))
+
+
 ## v0.134.0 (2026-11-13)
 
 ### Bug Fixes
