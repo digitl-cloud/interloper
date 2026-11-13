@@ -1,10 +1,16 @@
 # Local dev/test config for the harness (make dev-up / docker compose).
 #
-# Deliberately contains ONLY the catalog. The database, launcher and runner
+# Contains only the agent and the catalog. The database, launcher and runner
 # come from the INTERLOPER_* env vars the Makefile's DEV_ENV and
 # docker-compose.yml set, which beat this file field by field anyway. The
 # harness runs the CLI from this directory so this file is the active
 # ./interloper.yaml instead of the repo-root one.
+
+# The agent is opt-in and names its model; chat needs the provider's key
+# (GEMINI_API_KEY) in the repo-root .env.
+agent:
+  enabled: true
+  model: google:gemini-2.5-flash
 
 catalog:
   include:
