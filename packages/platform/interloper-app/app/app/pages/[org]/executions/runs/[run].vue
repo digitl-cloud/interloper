@@ -278,17 +278,17 @@ onUnmounted(() => {
             <template v-else>
                 <!-- The splitter's panes pad their cards by 1px for the ring; the splitter's -mt-px keeps the page's gap. -->
                 <div class="flex min-h-0 flex-1 flex-col gap-4 sm:gap-6">
+                    <UAlert v-if="run?.error"
+                            :color="statusMeta(run.status).color"
+                            variant="subtle"
+                            :icon="statusIcon(run.status)"
+                            :title="run.status === 'canceled' ? 'Run canceled' : 'Run failed'"
+                            :description="run.error"
+                            :ui="{ description: 'whitespace-pre-wrap break-words font-mono text-xs' }" />
                     <UCard v-if="run"
                            :ui="{ body: 'flex flex-col gap-4' }">
                         <ExecutionsRunMetaStrip :run="run"
                                                 :duration="stats.duration" />
-                        <UAlert v-if="run.error"
-                                :color="statusMeta(run.status).color"
-                                variant="subtle"
-                                :icon="statusIcon(run.status)"
-                                :title="run.status === 'canceled' ? 'Run canceled' : 'Run failed'"
-                                :description="run.error"
-                                :ui="{ description: 'whitespace-pre-wrap break-words font-mono text-xs' }" />
                         <ExecutionsRunStatusBar v-model:status-filter="statusFilter"
                                                 :stats="stats" />
                     </UCard>
