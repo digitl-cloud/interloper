@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from interloper_api.login.provider import Account, LoginError, LoginProvider
+from interloper_api.auth.provider import Account, LoginError, LoginProvider
 
 if TYPE_CHECKING:
     from interloper_api.settings import ApiSettings

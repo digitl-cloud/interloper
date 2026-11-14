@@ -43,7 +43,7 @@ onMounted(async () => {
         return
     }
     try {
-        consent.value = await apiFetch<ConsentRequest>('/auth/oauth/consent', { query: { request: sealed } })
+        consent.value = await apiFetch<ConsentRequest>('/oauth/consent', { query: { request: sealed } })
     }
     catch (err) {
         fail(err)
@@ -53,7 +53,7 @@ onMounted(async () => {
 async function decide(approve: boolean) {
     deciding.value = approve ? 'approve' : 'deny'
     try {
-        const { redirect_to } = await apiFetch<{ redirect_to: string }>('/auth/oauth/consent', {
+        const { redirect_to } = await apiFetch<{ redirect_to: string }>('/oauth/consent', {
             method: 'POST',
             body: { request: sealed, approve },
         })

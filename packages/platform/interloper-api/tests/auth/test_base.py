@@ -1,4 +1,4 @@
-"""Tests for ``interloper_api.login.base``: which providers a deployment offers.
+"""Tests for ``interloper_api.auth.base``: which providers a deployment offers.
 
 The session the login installs is exercised through the routes in
 ``tests/routes/test_auth.py``.
@@ -6,7 +6,7 @@ The session the login installs is exercised through the routes in
 
 from __future__ import annotations
 
-from interloper_api.login import Login
+from interloper_api.auth import Login
 from interloper_api.settings import ApiSettings
 
 

@@ -5,7 +5,7 @@ document, sends the browser there with ``state``, a nonce and a PKCE
 challenge, and at the callback checks ``state``, exchanges the code and
 verifies the ID token's signature, issuer, audience, expiry and nonce against
 the provider's keys. What it keeps between the two legs lives in the login
-session :class:`~interloper_api.login.Login` installs.
+session :class:`~interloper_api.auth.Login` installs.
 """
 
 from __future__ import annotations

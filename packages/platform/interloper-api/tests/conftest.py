@@ -34,8 +34,8 @@ from interloper_db.settings import EncryptionSettings, PostgresSettings, QuotaSe
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 
-from interloper_api.authorization import ClientMetadataFetcher
 from interloper_api.dependencies import State
+from interloper_api.oauth import ClientMetadataFetcher
 from interloper_api.routes import admin as admin_module
 from interloper_api.routes import extensions as extensions_module
 from interloper_api.routes.admin import AdminConfigResponse

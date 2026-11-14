@@ -99,7 +99,11 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from interloper_api.settings import ApiSettings
 
-PREFIX = "/api/auth/oauth"
+PREFIX = "/api/oauth"
+
+#: Where the endpoints were before ``PREFIX``, still served for one release to
+#: clients that saved an endpoint instead of reading the metadata again.
+LEGACY_PREFIX = "/api/auth/oauth"
 
 AUTHORIZE_PATH = f"{PREFIX}/authorize"
 
@@ -113,7 +117,10 @@ METADATA_PATH = "/.well-known/oauth-authorization-server"
 
 #: The endpoints a client calls itself, cross-origin when it runs in a browser
 #: (MCP Inspector); authorization and consent run on the app's own origin.
-CROSS_ORIGIN_PATHS = frozenset({METADATA_PATH, REGISTRATION_PATH, TOKEN_PATH, REVOCATION_PATH})
+CROSS_ORIGIN_PATHS = frozenset(
+    {METADATA_PATH}
+    | {f"{prefix}/{endpoint}" for prefix in (PREFIX, LEGACY_PREFIX) for endpoint in ("register", "token", "revoke")}
+)
 
 CONSENT_REQUEST_TTL = timedelta(minutes=10)
 

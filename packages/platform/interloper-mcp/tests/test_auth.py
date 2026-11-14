@@ -15,7 +15,7 @@ import httpx2
 import interloper as il
 import pytest
 from interloper.settings import ServerSettings
-from interloper_api.authorization import AuthorizationServer
+from interloper_api.oauth import AuthorizationServer
 from interloper_api.settings import ApiSettings
 from interloper_db import engine as engine_module
 from interloper_db.crypto import hash_token

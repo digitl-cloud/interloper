@@ -13,6 +13,7 @@ from interloper_db import OrganisationQuery, Profile, Store
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
+from interloper_api.auth import Account, LoginError, LoginProvider
 from interloper_api.dependencies import (
     CurrentUserDep,
     FeaturesDep,
@@ -23,7 +24,6 @@ from interloper_api.dependencies import (
     StoreDep,
     get_org_scope,
 )
-from interloper_api.login import Account, LoginError, LoginProvider
 from interloper_api.routes.organisations import OrganisationResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])

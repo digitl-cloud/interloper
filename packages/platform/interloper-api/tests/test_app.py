@@ -79,6 +79,8 @@ def test_agent_routes_mounted_when_enabled(fake_settings: ApiSettings, oauth_sto
         ("PATCH", f"/api/organisations/{_ORG}"),
         ("GET", "/api/organisations"),
         ("GET", "/api/auth/me"),
+        ("GET", "/api/auth/tokens"),
+        ("POST", "/api/oauth/providers/amazon"),
     ],
 )
 def test_the_reorganised_routes_are_mounted(fake_settings: ApiSettings, method: str, path: str, oauth_store: Store):
@@ -89,7 +91,16 @@ def test_the_reorganised_routes_are_mounted(fake_settings: ApiSettings, method: 
 
 
 @pytest.mark.parametrize(
-    "path", ["/api/runs", "/api/components", "/api/catalog", "/api/overview", "/api/agent/conversations"]
+    "path",
+    [
+        "/api/runs",
+        "/api/components",
+        "/api/catalog",
+        "/api/overview",
+        "/api/agent/conversations",
+        "/api/tokens",
+        "/api/oauth/amazon",
+    ],
 )
 def test_organisation_routes_are_gone_from_the_top_level(fake_settings: ApiSettings, path: str, oauth_store: Store):
     app = create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings)

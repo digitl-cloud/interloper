@@ -42,7 +42,7 @@ async function submit() {
     if (!canSubmit.value) return
     submitting.value = true
     try {
-        created.value = await apiFetch<CreatedToken>('/tokens', {
+        created.value = await apiFetch<CreatedToken>('/auth/tokens', {
             method: 'POST',
             body: {
                 name: name.value.trim(),

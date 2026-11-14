@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING
 from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
 
-from interloper_api.login.google import GoogleProvider
-from interloper_api.login.provider import LoginProvider
+from interloper_api.auth.google import GoogleProvider
+from interloper_api.auth.provider import LoginProvider
 
 if TYPE_CHECKING:
     from interloper_api.settings import ApiSettings
