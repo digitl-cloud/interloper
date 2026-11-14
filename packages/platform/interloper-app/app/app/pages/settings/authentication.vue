@@ -61,7 +61,7 @@ async function loadTokens() {
     loading.value = true
     tokensError.value = null
     try {
-        tokens.value = await fetchAll<PersonalAccessToken>('/tokens')
+        tokens.value = await fetchAll<PersonalAccessToken>('/auth/tokens')
     }
     catch (err) {
         tokensError.value = err as Error
@@ -110,7 +110,7 @@ async function revokeToken(token: PersonalAccessToken) {
     if (!confirmed) return
 
     try {
-        await apiFetch(`/tokens/${token.id}`, { method: 'DELETE' })
+        await apiFetch(`/auth/tokens/${token.id}`, { method: 'DELETE' })
         toast.add({ title: `${token.name} revoked`, color: 'success' })
         await loadTokens()
     }

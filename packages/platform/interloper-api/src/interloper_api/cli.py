@@ -21,7 +21,7 @@ from interloper_db import Store
 from interloper_db.provision import bootstrap
 from interloper_db.settings import PostgresSettings
 
-from interloper_api.authorization import Client
+from interloper_api.oauth import Client
 from interloper_api.server import ApiServer
 from interloper_api.settings import ApiSettings
 

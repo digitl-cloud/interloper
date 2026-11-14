@@ -110,7 +110,7 @@ class TestCookieOnly:
         store.secrets = {"ilp_leaked": TokenKind.PERSONAL}
 
         response = self._real_client(store).post(
-            "/tokens", json={"name": "successor"}, headers={"Authorization": "Bearer ilp_leaked"}
+            "/auth/tokens", json={"name": "successor"}, headers={"Authorization": "Bearer ilp_leaked"}
         )
 
         assert response.status_code == 401
@@ -122,7 +122,7 @@ class TestCookieOnly:
         client = self._real_client(store)
         client.cookies.set("session_token", "cookie")
 
-        response = client.post("/tokens", json={"name": "laptop"})
+        response = client.post("/auth/tokens", json={"name": "laptop"})
 
         assert response.status_code == 201
         (row,) = store.rows.values()
@@ -135,8 +135,8 @@ class TestCookieOnly:
         client.cookies.set("session_token", "cookie")
 
         for response in (
-            client.get("/tokens", headers={"Authorization": "Bearer ilp_leaked"}),
-            client.delete(f"/tokens/{uuid4()}", headers={"Authorization": "Bearer ilp_leaked"}),
+            client.get("/auth/tokens", headers={"Authorization": "Bearer ilp_leaked"}),
+            client.delete(f"/auth/tokens/{uuid4()}", headers={"Authorization": "Bearer ilp_leaked"}),
         ):
             assert response.status_code == 401
 
@@ -144,7 +144,7 @@ class TestCookieOnly:
 class TestCreate:
     def test_create_returns_raw_token_once(self) -> None:
         store = FakeStore()
-        resp = _client(store).post("/tokens", json={"name": "laptop"})
+        resp = _client(store).post("/auth/tokens", json={"name": "laptop"})
 
         assert resp.status_code == 201
         body = resp.json()
@@ -155,7 +155,7 @@ class TestCreate:
     def test_create_token_needs_no_organisation(self) -> None:
         store = FakeStore()
 
-        resp = _client(store).post("/tokens", json={"name": "laptop"})
+        resp = _client(store).post("/auth/tokens", json={"name": "laptop"})
 
         assert resp.status_code == 201
         assert "organisation_id" not in resp.json()
@@ -164,7 +164,7 @@ class TestCreate:
 
     def test_create_without_expiry(self) -> None:
         store = FakeStore()
-        resp = _client(store).post("/tokens", json={"name": "forever", "expires_in_days": None})
+        resp = _client(store).post("/auth/tokens", json={"name": "forever", "expires_in_days": None})
 
         assert resp.status_code == 201
         assert resp.json()["expires_at"] is None
@@ -174,9 +174,9 @@ class TestList:
     def test_list_never_contains_secret_material(self) -> None:
         store = FakeStore()
         client = _client(store)
-        client.post("/tokens", json={"name": "laptop"})
+        client.post("/auth/tokens", json={"name": "laptop"})
 
-        resp = client.get("/tokens")
+        resp = client.get("/auth/tokens")
 
         assert resp.status_code == 200
         body = resp.json()
@@ -191,7 +191,7 @@ class TestList:
         mine, theirs = _row(name="mine"), _row(user_id=uuid4(), name="theirs")
         store.rows = {mine.id: mine, theirs.id: theirs}
 
-        resp = _client(store).get("/tokens")
+        resp = _client(store).get("/auth/tokens")
 
         ((user_id, _),) = store.listed
         assert user_id == USER_ID
@@ -200,7 +200,7 @@ class TestList:
     def test_the_page_window_is_forwarded(self) -> None:
         store = FakeStore()
 
-        resp = _client(store).get("/tokens", params={"limit": 10, "offset": 20})
+        resp = _client(store).get("/auth/tokens", params={"limit": 10, "offset": 20})
 
         assert resp.status_code == 200
         ((_, query),) = store.listed
@@ -209,7 +209,7 @@ class TestList:
     def test_a_page_larger_than_the_cap_is_refused(self) -> None:
         store = FakeStore()
 
-        resp = _client(store).get("/tokens", params={"limit": 501})
+        resp = _client(store).get("/auth/tokens", params={"limit": 501})
 
         assert resp.status_code == 422
         assert store.listed == []
@@ -221,7 +221,7 @@ class TestRevoke:
         row = _row()
         store.rows[row.id] = row
 
-        resp = _client(store).delete(f"/tokens/{row.id}")
+        resp = _client(store).delete(f"/auth/tokens/{row.id}")
 
         assert resp.status_code == 204
         assert resp.content == b""
@@ -233,8 +233,8 @@ class TestRevoke:
         row = _row()
         store.rows[row.id] = row
 
-        denied = _client(store, user_id=stranger_id).delete(f"/tokens/{row.id}")
-        missing = _client(store, user_id=stranger_id).delete(f"/tokens/{uuid4()}")
+        denied = _client(store, user_id=stranger_id).delete(f"/auth/tokens/{row.id}")
+        missing = _client(store, user_id=stranger_id).delete(f"/auth/tokens/{uuid4()}")
 
         assert denied.status_code == 404
         assert missing.status_code == 404

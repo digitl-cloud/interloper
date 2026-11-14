@@ -97,8 +97,9 @@ api:
     annotations: {}
   # IPs uvicorn trusts for X-Forwarded-* headers. The API runs behind the
   # chart's ingress/HTTPRoute (TLS terminated upstream), so it must trust the
-  # proxy to emit correct https redirects (e.g. the /api/tokens/ -> /api/tokens
-  # 307). Defaults to "*"; set to "" to disable, or a comma-separated IP list.
+  # proxy to emit correct https redirects (e.g. the /api/auth/tokens/ ->
+  # /api/auth/tokens 307). Defaults to "*"; set to "" to disable, or a
+  # comma-separated IP list.
   forwardedAllowIps: "*"
   nodeSelector: {}
   tolerations: []

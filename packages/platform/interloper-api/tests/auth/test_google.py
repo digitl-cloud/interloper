@@ -1,4 +1,4 @@
-"""Tests for ``interloper_api.login.google``: what a Google provider is built from and what it accepts.
+"""Tests for ``interloper_api.auth.google``: what a Google provider is built from and what it accepts.
 
 The login's flow against Google runs in ``tests/routes/test_auth.py``.
 """
@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from interloper_api.login import Account, GoogleProvider, LoginError
+from interloper_api.auth import Account, GoogleProvider, LoginError
 from interloper_api.settings import ApiSettings
 
 ISSUER = "https://accounts.google.com"

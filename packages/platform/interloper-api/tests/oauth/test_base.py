@@ -1,4 +1,4 @@
-"""Tests for ``interloper_api.authorization``: the server's pieces, below the routes."""
+"""Tests for ``interloper_api.oauth``: the server's pieces, below the routes."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from cryptography import fernet
 from cryptography.fernet import Fernet
 from interloper_db import Audience, Store
 
-from interloper_api.authorization import (
+from interloper_api.oauth import (
     AUTHORIZE_PATH,
     AuthorizationServer,
     Client,

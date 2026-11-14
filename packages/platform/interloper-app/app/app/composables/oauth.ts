@@ -123,7 +123,7 @@ export function useOAuthPopup() {
      * Exchange an authorization code for tokens (called from the callback page).
      */
     async function exchangeCode(provider: string, code: string): Promise<Record<string, unknown>> {
-        return await apiFetch<Record<string, unknown>>(`/oauth/${provider}`, {
+        return await apiFetch<Record<string, unknown>>(`/oauth/providers/${provider}`, {
             method: 'POST',
             body: { code },
         })

@@ -11,6 +11,7 @@ from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from interloper_db import Store
 
+from interloper_api.auth import GoogleProvider, Login
 from interloper_api.dependencies import (
     State,
     get_agent,
@@ -21,7 +22,6 @@ from interloper_api.dependencies import (
     get_settings,
     get_store,
 )
-from interloper_api.login import GoogleProvider, Login
 
 _LOGIN_SESSION: dict[str, Any] = {"encryption_key": "key", "cookie_secure": False}
 

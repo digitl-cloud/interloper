@@ -30,9 +30,9 @@ from interloper_db.store.insights import ActivityEntry
 from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, QUOTAS
 from pydantic import BaseModel, Field, RootModel, field_validator
 
-from interloper_api.authorization import CLIENT_NAME_MAX_LENGTH, Client
 from interloper_api.dependencies import SettingsDep, StateDep, StoreDep, SuperAdminDep
 from interloper_api.notifications import SuperAdminPromotionEmail
+from interloper_api.oauth import CLIENT_NAME_MAX_LENGTH, Client
 from interloper_api.routes.apps import AppResponse
 from interloper_api.routes.extensions import ExtensionResponse
 from interloper_api.routes.organisations import CreateOrganisationRequest

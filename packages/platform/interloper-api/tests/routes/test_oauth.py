@@ -1,240 +1,781 @@
-"""Tests for ``interloper_api.routes.oauth`` (connector connect flow).
+"""Tests for ``interloper_api.routes.oauth``: the OAuth 2.1 flow through the API.
 
-Providers come from the core registry (``interloper.oauth``); connector
-OAuth *app* credentials are read at the route level from provider-scoped
-environment variables (``INTERLOPER_<PROVIDER>_CLIENT_ID`` / ``_CLIENT_SECRET``, and
-``_REDIRECT_URI`` over the app's callback page).  These tests cover that resolution, the public
-``/providers`` endpoint, and the token exchange route; the per-provider
-request shapes are the providers' own behavior, tested in core.
+Every test drives the real routes over a real store (in-memory SQLite). The
+client talks plain http to an issuer configured as https, as the API does
+behind the gateway, so the request URL Authlib sees is the issuer's.
 """
 
 from __future__ import annotations
 
-import json
-from types import SimpleNamespace
-from uuid import uuid4
+from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
-import httpx2
 import pytest
+from authlib.oauth2.rfc7636 import create_s256_code_challenge
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper.oauth import PROVIDERS
-from interloper.settings import ServerSettings
+from interloper.catalog import Catalog
+from interloper_agent.settings import AgentSettings
+from interloper_db import Audience, Profile, Store
 
-from interloper_api.app import install_error_handlers
-from interloper_api.dependencies import get_caller, get_settings, get_store
-from interloper_api.routes import oauth as oauth_module
+from interloper_api.app import create_app
+from interloper_api.settings import ApiSettings
 
-_SUFFIXES = ("CLIENT_ID", "CLIENT_SECRET", "REDIRECT_URI")
-_SETTINGS = SimpleNamespace(server=ServerSettings(external_url="https://app.example.com"))
-
-
-@pytest.fixture(autouse=True)
-def _clean_oauth_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Isolate tests from ambient / .env connector OAuth variables."""
-    for key in dict(PROVIDERS.items()):
-        for suffix in _SUFFIXES:
-            monkeypatch.delenv(f"INTERLOPER_{key.upper()}_{suffix}", raising=False)
+ISSUER = "https://testserver"
+API_RESOURCE = f"{ISSUER}/api"
+MCP_RESOURCE = f"{ISSUER}/mcp"
+REDIRECT_URI = "http://127.0.0.1:8765/callback"
+VERIFIER = "a-code-verifier-long-enough-to-satisfy-rfc-7636"
+PREFIX = "/api/oauth"
+LEGACY_PREFIX = "/api/auth/oauth"
+METADATA_CLIENT_ID = "https://claude.ai/oauth/claude-code-client-metadata"
 
 
-def _configure(monkeypatch: pytest.MonkeyPatch, provider: str, **vals: str) -> None:
-    for suffix, val in vals.items():
-        monkeypatch.setenv(f"INTERLOPER_{provider.upper()}_{suffix.upper()}", val)
+@pytest.fixture
+def client(oauth_store: Store, fake_settings: ApiSettings) -> TestClient:
+    AgentSettings.get().enabled = False
+    fake_settings.server.external_url = ISSUER
+    return TestClient(create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings), follow_redirects=False)
 
 
-def _client() -> TestClient:
-    app = FastAPI()
-    install_error_handlers(app)
-    app.include_router(oauth_module.router)
-    # Stand in for an authenticated user; auth itself is covered separately.
-    app.dependency_overrides[get_caller] = lambda: SimpleNamespace(id=uuid4())
-    app.dependency_overrides[get_settings] = lambda: _SETTINGS
-    return TestClient(app)
+@pytest.fixture
+def user(oauth_store: Store, client: TestClient) -> Profile:
+    """A user logged in to the app: the client carries their session cookie.
+
+    Returns:
+        The profile.
+    """
+    profile = oauth_store.profiles.upsert(
+        issuer="https://accounts.google.com", subject="g-user", email="user@example.com", name="User"
+    )
+    client.cookies.set("session_token", oauth_store.tokens.create_session(profile.id))
+    return profile
 
 
-def test_startup_status_warns_on_a_partial_configuration(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    _configure(monkeypatch, "amazon", client_id="id", client_secret="secret")
-    _configure(monkeypatch, "criteo", client_id="id-only")
-    _configure(monkeypatch, "tiktok", redirect_uri="https://r")
+@pytest.fixture
+def documents(client: TestClient, document_host: Any) -> Any:
+    """Claude Code's client metadata document, served on a faked network the server reads it over.
 
-    with caplog.at_level("INFO", logger=oauth_module.logger.name):
-        oauth_module.log_provider_status()
-
-    warnings = [r.message for r in caplog.records if r.levelname == "WARNING"]
-    assert len(warnings) == 2
-    assert "criteo" in warnings[0] and "INTERLOPER_CRITEO_CLIENT_SECRET" in warnings[0]
-    assert "tiktok" in warnings[1] and "INTERLOPER_TIKTOK_CLIENT_ID, INTERLOPER_TIKTOK_CLIENT_SECRET" in warnings[1]
-    assert any("amazon" in r.message for r in caplog.records if r.levelname == "INFO")
-
-
-def test_list_providers_returns_configured_only_with_registry_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure(monkeypatch, "amazon", client_id="amzn-id", client_secret="amzn-secret")
-    _configure(monkeypatch, "criteo", client_id="id-only", redirect_uri="https://r")
-
-    resp = _client().get("/oauth/providers")
-
-    assert resp.status_code == 200
-    body = resp.json()
-    assert [p["key"] for p in body] == ["amazon"]
-    amazon = body[0]
-    assert amazon["client_id"] == "amzn-id"
-    assert amazon["redirect_uri"] == "https://app.example.com/auth/amazon"
-    assert amazon["auth_url"] == "https://www.amazon.com/ap/oa"
-    assert amazon["label"] == "Amazon"
-    # secrets must never be exposed by the public metadata endpoint
-    assert "client_secret" not in amazon
-
-
-def test_list_providers_derives_each_redirect_uri_unless_overridden(monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure(monkeypatch, "microsoft", client_id="id", client_secret="secret")
-    _configure(monkeypatch, "tiktok", client_id="id", client_secret="secret", redirect_uri="https://other/cb")
-
-    body = _client().get("/oauth/providers").json()
-
-    assert {p["key"]: p["redirect_uri"] for p in body} == {
-        "microsoft": "https://app.example.com/auth/microsoft",
-        "tiktok": "https://other/cb",
+    Returns:
+        The document host.
+    """
+    document_host.documents[METADATA_CLIENT_ID] = {
+        "client_id": METADATA_CLIENT_ID,
+        "client_name": "Claude Code",
+        "redirect_uris": ["http://localhost/callback", "http://127.0.0.1/callback"],
+        "grant_types": ["authorization_code", "refresh_token"],
+        "response_types": ["code"],
+        "token_endpoint_auth_method": "none",
     }
+    assert isinstance(client.app, FastAPI)
+    client.app.state.interloper.authorization_server.client_metadata = document_host.fetcher()
+    return document_host
 
 
-def test_exchange_unknown_provider_is_rejected() -> None:
-    resp = _client().post("/oauth/nope", json={"code": "x"})
-    assert resp.status_code == 400
+def _register(client: TestClient, **metadata: Any) -> dict[str, Any]:
+    body = {
+        "client_name": "Claude Code",
+        "redirect_uris": [REDIRECT_URI],
+        "token_endpoint_auth_method": "none",
+        "grant_types": ["authorization_code", "refresh_token"],
+        **metadata,
+    }
+    response = client.post(f"{PREFIX}/register", json=body)
+    assert response.status_code == 201, response.text
+    return response.json()
 
 
-def test_exchange_unconfigured_provider_is_rejected() -> None:
-    resp = _client().post("/oauth/amazon", json={"code": "x"})
-    assert resp.status_code == 400
+def _authorize_params(client_id: str, **overrides: str | None) -> dict[str, str]:
+    params: dict[str, str | None] = {
+        "response_type": "code",
+        "client_id": client_id,
+        "redirect_uri": REDIRECT_URI,
+        "state": "xyz",
+        "code_challenge": create_s256_code_challenge(VERIFIER),
+        "code_challenge_method": "S256",
+        "resource": MCP_RESOURCE,
+        **overrides,
+    }
+    return {key: value for key, value in params.items() if value is not None}
 
 
-def test_exchange_requires_authentication(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Fully configured provider, but no session: the token exchange must not
-    # be reachable anonymously (it spends the in-house OAuth credentials).
-    _configure(monkeypatch, "amazon", client_id="id", client_secret="secret")
-    app = FastAPI()
-    install_error_handlers(app)
-    app.include_router(oauth_module.router)
-    app.dependency_overrides[get_store] = lambda: SimpleNamespace()
-    resp = TestClient(app).post("/oauth/amazon", json={"code": "x"})
-    assert resp.status_code == 401
+def _query(location: str) -> dict[str, str]:
+    return {key: values[0] for key, values in parse_qs(urlsplit(location).query).items()}
 
 
-# -- Exchange route ------------------------------------------------------------
+def _sealed(client: TestClient, client_id: str, **overrides: str | None) -> str:
+    response = client.get(f"{PREFIX}/authorize", params=_authorize_params(client_id, **overrides))
+    assert response.status_code == 302, response.text
+    location = response.headers["location"]
+    assert location.startswith("/authorize?request=")
+    return _query(location)["request"]
 
 
-def _mock_async_client(monkeypatch: pytest.MonkeyPatch, handler) -> None:
-    """Route the exchange's AsyncClient through a mock transport."""
-    real = httpx2.AsyncClient
-
-    def factory(**kwargs):
-        return real(transport=httpx2.MockTransport(handler), **kwargs)
-
-    monkeypatch.setattr(httpx2, "AsyncClient", factory)
+def _decide(client: TestClient, sealed: str, *, approve: bool) -> str:
+    response = client.post(f"{PREFIX}/consent", json={"request": sealed, "approve": approve})
+    assert response.status_code == 200, response.text
+    return response.json()["redirect_to"]
 
 
-def test_exchange_spends_env_credentials_and_relays_the_raw_response(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: list[httpx2.Request] = []
+def _code(client: TestClient, client_id: str, **overrides: str | None) -> str:
+    redirect_to = _decide(client, _sealed(client, client_id, **overrides), approve=True)
+    assert redirect_to.startswith(REDIRECT_URI)
+    return _query(redirect_to)["code"]
 
-    def handler(request: httpx2.Request) -> httpx2.Response:
-        captured.append(request)
-        return httpx2.Response(200, json={"refresh_token": "rt"})
 
-    _mock_async_client(monkeypatch, handler)
-    _configure(monkeypatch, "amazon", client_id="cid", client_secret="cs")
-
-    resp = _client().post("/oauth/amazon", json={"code": "the-code"})
-
-    assert resp.status_code == 200
-    # The app secret is spent server-side, never returned: only the
-    # provider's token response reaches the browser.
-    assert resp.json() == {"refresh_token": "rt"}
-    (request,) = captured
-    assert str(request.url) == PROVIDERS["amazon"].token_url
-    assert json.loads(request.content) == {
+def _exchange(client: TestClient, client_id: str, code: str, **overrides: str) -> Any:
+    form = {
         "grant_type": "authorization_code",
-        "code": "the-code",
-        "redirect_uri": "https://app.example.com/auth/amazon",
-        "client_id": "cid",
-        "client_secret": "cs",
+        "code": code,
+        "redirect_uri": REDIRECT_URI,
+        "client_id": client_id,
+        "code_verifier": VERIFIER,
+        **overrides,
+    }
+    return client.post(f"{PREFIX}/token", data=form)
+
+
+def _refresh(client: TestClient, client_id: str, refresh_token: str, **overrides: str) -> Any:
+    form = {"grant_type": "refresh_token", "refresh_token": refresh_token, "client_id": client_id, **overrides}
+    return client.post(f"{PREFIX}/token", data=form)
+
+
+def _tokens(client: TestClient, client_id: str) -> dict[str, Any]:
+    response = _exchange(client, client_id, _code(client, client_id))
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+# -- Metadata & registration ---------------------------------------------------
+
+
+def test_metadata(client: TestClient):
+    response = client.get("/.well-known/oauth-authorization-server")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "issuer": ISSUER,
+        "authorization_endpoint": f"{ISSUER}{PREFIX}/authorize",
+        "token_endpoint": f"{ISSUER}{PREFIX}/token",
+        "registration_endpoint": f"{ISSUER}{PREFIX}/register",
+        "revocation_endpoint": f"{ISSUER}{PREFIX}/revoke",
+        "response_types_supported": ["code"],
+        "grant_types_supported": ["authorization_code", "refresh_token"],
+        "code_challenge_methods_supported": ["S256"],
+        "token_endpoint_auth_methods_supported": ["none", "client_secret_post", "client_secret_basic"],
+        "revocation_endpoint_auth_methods_supported": ["none", "client_secret_post", "client_secret_basic"],
+        "authorization_response_iss_parameter_supported": True,
+        "client_id_metadata_document_supported": True,
     }
 
 
-def test_exchange_follows_trailing_slash_redirect(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Providers such as TikTok 3xx-redirect to the trailing-slash URL; the
-    # route's client must follow it rather than surfacing the redirect page
-    # as an error.
-    def handler(request: httpx2.Request) -> httpx2.Response:
-        if not request.url.path.endswith("/token/"):
-            return httpx2.Response(307, headers={"Location": f"{request.url}/"})
-        return httpx2.Response(200, json={"refresh_token": "rt"})
+def test_register_dynamic_client(client: TestClient, oauth_store: Store):
+    registered = _register(client, client_uri="https://claude.ai")
 
-    _mock_async_client(monkeypatch, handler)
-    _configure(monkeypatch, "amazon", client_id="cid", client_secret="cs")
-
-    resp = _client().post("/oauth/amazon", json={"code": "the-code"})
-
-    assert resp.status_code == 200
-    assert resp.json() == {"refresh_token": "rt"}
+    assert "client_secret" not in registered
+    assert registered["client_name"] == "Claude Code"
+    assert registered["redirect_uris"] == [REDIRECT_URI]
+    assert registered["token_endpoint_auth_method"] == "none"
+    assert registered["grant_types"] == ["authorization_code", "refresh_token"]
+    stored = oauth_store.oauth.get_client(registered["client_id"])
+    assert stored is not None
+    assert stored.secret_hash is None
+    assert stored.registered_by == "dynamic"
 
 
-def test_exchange_relays_a_provider_rejection_as_a_500(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A 4xx from the provider becomes a 500 carrying its body, not a traceback."""
+def test_register_confidential_client_gets_a_secret(client: TestClient, oauth_store: Store):
+    registered = _register(client, token_endpoint_auth_method="client_secret_post")
 
-    def handler(request: httpx2.Request) -> httpx2.Response:
-        return httpx2.Response(400, text="invalid_grant")
-
-    _mock_async_client(monkeypatch, handler)
-    _configure(monkeypatch, "amazon", client_id="cid", client_secret="cs")
-
-    resp = _client().post("/oauth/amazon", json={"code": "stale"})
-
-    assert resp.status_code == 500
-    assert resp.json()["detail"] == "Failed to exchange auth code: invalid_grant"
+    assert registered["client_secret"].startswith("ilc_")
+    assert registered["client_secret_expires_at"] == 0
+    stored = oauth_store.oauth.get_client(registered["client_id"])
+    assert stored is not None
+    assert stored.secret_hash is not None
 
 
-def test_exchange_relays_a_transport_failure_as_a_500(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An unreachable provider is a 500, and the code never leaks into the detail."""
+@pytest.mark.parametrize(
+    "redirect_uri",
+    [
+        "javascript://x/%0Aalert(document.domain)//",
+        "JavaScript://x/%0Aalert(document.domain)//",
+        " javascript://x/%0Aalert(document.domain)//",
+        "java\tscript://x/%0Aalert(document.domain)//",
+        "data://text/html,hi",
+        "vbscript://x/msgbox",
+        "file:///etc/passwd",
+        "blob://x/y",
+        "http://evil.example/cb",
+        "http://127.0.0.1.evil.example/cb",
+        "view-source:https://testserver/",
+        "intent://scan/#Intent;scheme=zxing;end",
+        "ms-msdt:/id PCWDiagnostic",
+        "search-ms:query=x",
+        "ms-officecmd:{}",
+        "com.example.app:/oauth/callback",
+    ],
+)
+def test_register_refuses_an_unsafe_redirect_uri(client: TestClient, oauth_store: Store, redirect_uri: str):
+    response = client.post(f"{PREFIX}/register", json={"redirect_uris": [REDIRECT_URI, redirect_uri]})
 
-    def handler(request: httpx2.Request) -> httpx2.Response:
-        raise httpx2.ConnectError("no route to host")
-
-    _mock_async_client(monkeypatch, handler)
-    _configure(monkeypatch, "amazon", client_id="cid", client_secret="cs")
-
-    resp = _client().post("/oauth/amazon", json={"code": "the-code"})
-
-    assert resp.status_code == 500
-    assert "no route to host" in resp.json()["detail"]
-    assert "the-code" not in resp.json()["detail"]
-
-
-def test_exchange_relays_the_providers_parsed_response(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The route hands the body to the provider's parser: TikTok's envelope is unwrapped."""
-
-    def handler(request: httpx2.Request) -> httpx2.Response:
-        return httpx2.Response(200, json={"code": 0, "message": "OK", "data": {"access_token": "at"}})
-
-    _mock_async_client(monkeypatch, handler)
-    _configure(monkeypatch, "tiktok", client_id="cid", client_secret="cs")
-
-    resp = _client().post("/oauth/tiktok", json={"code": "the-code"})
-
-    assert resp.status_code == 200
-    assert resp.json() == {"access_token": "at"}
+    assert response.status_code == 400
+    assert response.json()["error"] in {"invalid_redirect_uri", "invalid_client_metadata"}
 
 
-def test_exchange_relays_an_in_band_provider_rejection_as_a_500(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A rejection TikTok reports inside a 200 body is a failure, not a token-less success."""
+@pytest.mark.parametrize(
+    "redirect_uri",
+    [
+        "https://claude.ai/api/mcp/auth_callback",
+        "http://127.0.0.1:8765/callback",
+        "http://localhost:3334/callback",
+        "http://[::1]:9000/callback",
+        "cursor://anysphere.cursor-retrieval/oauth/user-interloper/callback",
+        "vscode://vscode.github-authentication/did-authenticate",
+    ],
+)
+def test_register_accepts_a_safe_redirect_uri(client: TestClient, redirect_uri: str):
+    assert _register(client, redirect_uris=[redirect_uri])["redirect_uris"] == [redirect_uri]
 
-    def handler(request: httpx2.Request) -> httpx2.Response:
-        return httpx2.Response(200, json={"code": 40002, "message": "auth_code invalid", "request_id": "req"})
 
-    _mock_async_client(monkeypatch, handler)
-    _configure(monkeypatch, "tiktok", client_id="cid", client_secret="cs")
+@pytest.mark.parametrize("body", ["not json", "[1, 2]"])
+def test_register_refuses_a_body_that_is_not_a_json_object(client: TestClient, body: str):
+    response = client.post(f"{PREFIX}/register", content=body, headers={"Content-Type": "application/json"})
 
-    resp = _client().post("/oauth/tiktok", json={"code": "stale"})
+    assert response.status_code == 400
 
-    assert resp.status_code == 500
-    assert "auth_code invalid" in resp.json()["detail"]
+
+def test_register_cuts_a_long_client_name(client: TestClient, oauth_store: Store):
+    registered = _register(client, client_name="x" * 500)
+
+    assert registered["client_name"] == "x" * 100
+    stored = oauth_store.oauth.get_client(registered["client_id"])
+    assert stored is not None and stored.name == "x" * 100
+
+
+def test_an_unsafe_redirect_uri_already_stored_is_never_used(client: TestClient, oauth_store: Store):
+    unsafe = "javascript://x/%0Aalert(document.domain)//"
+    row, _ = oauth_store.oauth.register_client("Stored", [unsafe], registered_by="operator")
+
+    response = client.get(f"{PREFIX}/authorize", params=_authorize_params(row.client_id, redirect_uri=unsafe))
+
+    assert response.status_code == 400
+    assert "location" not in response.headers
+
+
+@pytest.mark.parametrize("redirect_uris", [None, []])
+def test_register_requires_redirect_uris(client: TestClient, redirect_uris: list[str] | None):
+    body: dict[str, Any] = {"client_name": "No redirect", "token_endpoint_auth_method": "none"}
+    if redirect_uris is not None:
+        body["redirect_uris"] = redirect_uris
+
+    response = client.post(f"{PREFIX}/register", json=body)
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_redirect_uri"
+
+
+def test_register_refuses_an_unsupported_grant_type(client: TestClient):
+    response = client.post(
+        f"{PREFIX}/register", json={"redirect_uris": [REDIRECT_URI], "grant_types": ["client_credentials"]}
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_client_metadata"
+
+
+# -- Authorization -------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"code_challenge": None, "code_challenge_method": None},
+        {"code_challenge_method": "plain"},
+        {"code_challenge_method": None},
+    ],
+)
+def test_authorize_without_pkce_refused(client: TestClient, overrides: dict[str, str | None]):
+    client_id = _register(client)["client_id"]
+
+    response = client.get(f"{PREFIX}/authorize", params=_authorize_params(client_id, **overrides))
+
+    assert response.status_code == 302
+    location = response.headers["location"]
+    assert location.startswith(REDIRECT_URI)
+    assert _query(location) == {
+        "error": "invalid_request",
+        "error_description": _query(location)["error_description"],
+        "state": "xyz",
+        "iss": ISSUER,
+    }
+
+
+@pytest.mark.parametrize("resource", ["https://evil.example.com/api", None])
+def test_authorize_unknown_resource_invalid_target(client: TestClient, resource: str | None):
+    client_id = _register(client)["client_id"]
+
+    response = client.get(f"{PREFIX}/authorize", params=_authorize_params(client_id, resource=resource))
+
+    assert response.status_code == 302
+    query = _query(response.headers["location"])
+    assert query["error"] == "invalid_target"
+    assert query["state"] == "xyz"
+    assert query["iss"] == ISSUER
+
+
+def test_authorize_unknown_redirect_uri_never_redirects(client: TestClient):
+    client_id = _register(client)["client_id"]
+
+    response = client.get(
+        f"{PREFIX}/authorize", params=_authorize_params(client_id, redirect_uri="https://evil.example.com/cb")
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_request"
+
+
+def test_authorize_accepts_a_loopback_redirect_uri_on_another_port(client: TestClient, user: Profile):
+    client_id = _register(client)["client_id"]
+    redirect_uri = "http://127.0.0.1:51234/callback"
+
+    redirect_to = _decide(client, _sealed(client, client_id, redirect_uri=redirect_uri), approve=True)
+
+    assert redirect_to.startswith(redirect_uri)
+    code = _query(redirect_to)["code"]
+    assert _exchange(client, client_id, code, redirect_uri=redirect_uri).status_code == 200
+
+
+def test_authorize_without_a_session_logs_in_first(client: TestClient):
+    client_id = _register(client)["client_id"]
+
+    response = client.get(f"{PREFIX}/authorize", params=_authorize_params(client_id))
+
+    assert response.status_code == 302
+    login = urlsplit(response.headers["location"])
+    assert login.path == "/login"
+    return_path = _query(response.headers["location"])["redirect"]
+    assert urlsplit(return_path).path == f"{PREFIX}/authorize"
+    assert _query(return_path) == _authorize_params(client_id)
+
+
+def test_authorize_with_a_session_goes_to_consent(client: TestClient, user: Profile):
+    client_id = _register(client)["client_id"]
+
+    assert _sealed(client, client_id)
+
+
+def test_consent_describes_the_request(client: TestClient, user: Profile):
+    client_id = _register(client)["client_id"]
+
+    response = client.get(f"{PREFIX}/consent", params={"request": _sealed(client, client_id)})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "client_name": "Claude Code",
+        "client_host": None,
+        "redirect_host": "127.0.0.1:8765",
+        "resource": "mcp",
+    }
+
+
+def test_consent_answers_the_session_cookie_only(client: TestClient, oauth_store: Store, user: Profile):
+    client_id = _register(client)["client_id"]
+    sealed = _sealed(client, client_id)
+    _, personal = oauth_store.tokens.create_personal(user.id, "laptop")
+    client.cookies.clear()
+    bearer = {"Authorization": f"Bearer {personal}"}
+
+    assert client.get(f"{PREFIX}/consent", params={"request": sealed}, headers=bearer).status_code == 401
+    posted = client.post(f"{PREFIX}/consent", json={"request": sealed, "approve": True}, headers=bearer)
+    assert posted.status_code == 401
+
+
+def test_consent_refuses_a_request_sealed_for_another_user(client: TestClient, oauth_store: Store, user: Profile):
+    client_id = _register(client)["client_id"]
+    sealed = _sealed(client, client_id)
+    other = oauth_store.profiles.upsert(
+        issuer="https://accounts.google.com", subject="g-other", email="other@example.com", name="Other"
+    )
+    client.cookies.set("session_token", oauth_store.tokens.create_session(other.id))
+
+    assert client.get(f"{PREFIX}/consent", params={"request": sealed}).status_code == 400
+    posted = client.post(f"{PREFIX}/consent", json={"request": sealed, "approve": True})
+    assert posted.status_code == 400
+    assert oauth_store.oauth.authorised_clients(other.id) == []
+
+
+def test_consent_refuses_a_tampered_request(client: TestClient, user: Profile):
+    client_id = _register(client)["client_id"]
+    sealed = _sealed(client, client_id)
+    tampered = sealed[:-4] + ("AAAA" if not sealed.endswith("AAAA") else "BBBB")
+
+    assert client.get(f"{PREFIX}/consent", params={"request": tampered}).status_code == 400
+    posted = client.post(f"{PREFIX}/consent", json={"request": tampered, "approve": True})
+    assert posted.status_code == 400
+
+
+def test_consent_refuses_a_request_whose_client_was_removed(client: TestClient, oauth_store: Store, user: Profile):
+    client_id = _register(client)["client_id"]
+    sealed = _sealed(client, client_id)
+    oauth_store.oauth.delete_client(client_id)
+
+    assert client.get(f"{PREFIX}/consent", params={"request": sealed}).status_code == 400
+    posted = client.post(f"{PREFIX}/consent", json={"request": sealed, "approve": True})
+    assert posted.status_code == 400
+    assert "location" not in posted.headers
+    assert oauth_store.oauth.authorised_clients(user.id) == []
+
+
+def test_consent_deny_returns_access_denied(client: TestClient, user: Profile):
+    client_id = _register(client)["client_id"]
+
+    redirect_to = _decide(client, _sealed(client, client_id), approve=False)
+
+    assert redirect_to.startswith(REDIRECT_URI)
+    query = _query(redirect_to)
+    assert "code" not in query
+    assert (query["error"], query["state"], query["iss"]) == ("access_denied", "xyz", ISSUER)
+
+
+# -- Token ---------------------------------------------------------------------
+
+
+def test_full_flow_issues_access_and_refresh(client: TestClient, oauth_store: Store, user: Profile):
+    client_id = _register(client)["client_id"]
+    redirect_to = _decide(client, _sealed(client, client_id), approve=True)
+    query = _query(redirect_to)
+    assert query["state"] == "xyz"
+    assert query["iss"] == ISSUER
+
+    response = _exchange(client, client_id, query["code"])
+
+    assert response.status_code == 200, response.text
+    assert response.headers["cache-control"] == "no-store"
+    token = response.json()
+    assert token["token_type"] == "Bearer"
+    assert token["expires_in"] == 3600
+    assert token["access_token"].startswith("ila_")
+    assert token["refresh_token"].startswith("ilr_")
+    resolved = oauth_store.tokens.resolve(token["access_token"], Audience.MCP)
+    assert resolved is not None
+    assert resolved[0].id == user.id
+    assert resolved[1].client_id == client_id
+    assert oauth_store.tokens.resolve(token["access_token"], Audience.API) is None
+
+
+def test_full_flow_for_the_api_resource(client: TestClient, oauth_store: Store, user: Profile):
+    client_id = _register(client)["client_id"]
+
+    response = _exchange(client, client_id, _code(client, client_id, resource=API_RESOURCE))
+
+    assert response.status_code == 200, response.text
+    access = response.json()["access_token"]
+    assert oauth_store.tokens.resolve(access, Audience.API) is not None
+    assert oauth_store.tokens.resolve(access, Audience.MCP) is None
+
+
+def test_code_bound_to_client_redirect_and_verifier(client: TestClient, oauth_store: Store, user: Profile):
+    client_id = _register(client)["client_id"]
+    other_id = _register(client, client_name="Other")["client_id"]
+
+    wrong_verifier = _exchange(client, client_id, _code(client, client_id), code_verifier="b" * 43)
+    other_client = _exchange(client, other_id, _code(client, client_id))
+    wrong_redirect = _exchange(client, client_id, _code(client, client_id), redirect_uri="http://127.0.0.1:9/cb")
+    wrong_resource = _exchange(client, client_id, _code(client, client_id), resource=API_RESOURCE)
+
+    assert wrong_verifier.json()["error"] == "invalid_grant"
+    assert other_client.json()["error"] == "invalid_grant"
+    assert wrong_redirect.json()["error"] == "invalid_grant"
+    assert wrong_resource.json()["error"] == "invalid_target"
+    assert oauth_store.oauth.authorised_clients(user.id) == []
+
+
+def test_code_single_use_revokes_what_it_issued(client: TestClient, oauth_store: Store, user: Profile):
+    client_id = _register(client)["client_id"]
+    code = _code(client, client_id)
+    token = _exchange(client, client_id, code).json()
+
+    replay = _exchange(client, client_id, code)
+
+    assert replay.status_code == 400
+    assert replay.json()["error"] == "invalid_grant"
+    assert oauth_store.tokens.resolve(token["access_token"], Audience.MCP) is None
+    assert _refresh(client, client_id, token["refresh_token"]).json()["error"] == "invalid_grant"
+
+
+def test_a_grant_revoked_while_issuing_is_refused(
+    client: TestClient, oauth_store: Store, user: Profile, monkeypatch: pytest.MonkeyPatch
+):
+    client_id = _register(client)["client_id"]
+    code = _code(client, client_id)
+    monkeypatch.setattr(oauth_store.oauth, "issue_tokens", lambda *args, **kwargs: None)
+
+    response = _exchange(client, client_id, code)
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_grant"
+
+
+def test_confidential_client_cannot_pass_as_public(client: TestClient, user: Profile):
+    registered = _register(client, token_endpoint_auth_method="client_secret_post")
+    client_id = registered["client_id"]
+    code = _code(client, client_id)
+
+    without_secret = _exchange(client, client_id, code)
+    with_secret = _exchange(client, client_id, _code(client, client_id), client_secret=registered["client_secret"])
+
+    assert without_secret.json()["error"] == "invalid_client"
+    assert with_secret.status_code == 200, with_secret.text
+
+
+def test_refresh_rotates(client: TestClient, oauth_store: Store, user: Profile):
+    client_id = _register(client)["client_id"]
+    first = _tokens(client, client_id)
+
+    response = _refresh(client, client_id, first["refresh_token"], resource=MCP_RESOURCE, scope="anything")
+
+    assert response.status_code == 200, response.text
+    second = response.json()
+    assert second["refresh_token"] != first["refresh_token"]
+    assert oauth_store.tokens.resolve(second["access_token"], Audience.MCP) is not None
+
+
+def test_refresh_bound_to_its_resource(client: TestClient, user: Profile):
+    client_id = _register(client)["client_id"]
+    first = _tokens(client, client_id)
+
+    mismatch = _refresh(client, client_id, first["refresh_token"], resource=API_RESOURCE)
+    retry = _refresh(client, client_id, first["refresh_token"])
+
+    assert mismatch.json()["error"] == "invalid_target"
+    assert retry.status_code == 200, retry.text
+
+
+def test_refresh_reuse_invalid_grant(client: TestClient, oauth_store: Store, user: Profile):
+    client_id = _register(client)["client_id"]
+    first = _tokens(client, client_id)
+    second = _refresh(client, client_id, first["refresh_token"]).json()
+
+    reuse = _refresh(client, client_id, first["refresh_token"])
+
+    assert reuse.status_code == 400
+    assert reuse.json()["error"] == "invalid_grant"
+    assert _refresh(client, client_id, second["refresh_token"]).json()["error"] == "invalid_grant"
+    assert oauth_store.tokens.resolve(second["access_token"], Audience.MCP) is None
+    assert oauth_store.oauth.authorised_clients(user.id) == []
+
+
+# -- Client metadata documents -------------------------------------------------
+
+
+def test_a_metadata_client_signs_in_without_registering(
+    client: TestClient, oauth_store: Store, user: Profile, documents: Any
+):
+    tokens = _tokens(client, METADATA_CLIENT_ID)
+
+    refreshed = _refresh(client, METADATA_CLIENT_ID, tokens["refresh_token"])
+    assert refreshed.status_code == 200, refreshed.text
+    stored = oauth_store.oauth.get_client(METADATA_CLIENT_ID)
+    assert stored is not None
+    assert stored.registered_by == "metadata"
+    assert stored.secret_hash is None
+    assert len(documents.requests) == 1
+
+
+def test_the_consent_page_names_the_domain_the_document_came_from(client: TestClient, user: Profile, documents: Any):
+    response = client.get(f"{PREFIX}/consent", params={"request": _sealed(client, METADATA_CLIENT_ID)})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "client_name": "Claude Code",
+        "client_host": "claude.ai",
+        "redirect_host": "127.0.0.1:8765",
+        "resource": "mcp",
+    }
+
+
+def test_every_authorization_reads_the_document_again(
+    client: TestClient, oauth_store: Store, user: Profile, documents: Any
+):
+    _sealed(client, METADATA_CLIENT_ID)
+    documents.documents[METADATA_CLIENT_ID]["client_name"] = "Claude"
+
+    _sealed(client, METADATA_CLIENT_ID)
+
+    stored = oauth_store.oauth.get_client(METADATA_CLIENT_ID)
+    assert stored is not None
+    assert stored.name == "Claude"
+    assert len(documents.requests) == 2
+
+
+def test_a_document_that_cannot_be_read_is_answered_here_never_at_the_client(
+    client: TestClient, oauth_store: Store, user: Profile, documents: Any
+):
+    del documents.documents[METADATA_CLIENT_ID]
+
+    response = client.get(f"{PREFIX}/authorize", params=_authorize_params(METADATA_CLIENT_ID))
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_client"
+    assert "location" not in response.headers
+    assert oauth_store.oauth.get_client(METADATA_CLIENT_ID) is None
+
+
+def test_a_redirect_uri_the_document_does_not_list_never_redirects(client: TestClient, user: Profile, documents: Any):
+    params = _authorize_params(METADATA_CLIENT_ID, redirect_uri="https://evil.example.com/callback")
+
+    response = client.get(f"{PREFIX}/authorize", params=params)
+
+    assert response.status_code == 400
+    assert "location" not in response.headers
+
+
+def test_a_metadata_client_never_authenticates_with_a_secret(client: TestClient, user: Profile, documents: Any):
+    code = _code(client, METADATA_CLIENT_ID)
+
+    response = _exchange(client, METADATA_CLIENT_ID, code, client_secret="anything")
+
+    assert response.status_code in {400, 401}
+    assert response.json()["error"] == "invalid_client"
+
+
+# -- Revocation ----------------------------------------------------------------
+
+
+def test_revoke(client: TestClient, oauth_store: Store, user: Profile):
+    client_id = _register(client)["client_id"]
+    first = _tokens(client, client_id)
+    second = _tokens(client, client_id)
+
+    revoked_access = client.post(f"{PREFIX}/revoke", data={"token": first["access_token"], "client_id": client_id})
+    revoked_refresh = client.post(
+        f"{PREFIX}/revoke",
+        data={"token": second["refresh_token"], "token_type_hint": "refresh_token", "client_id": client_id},
+    )
+    unknown = client.post(f"{PREFIX}/revoke", data={"token": "ila_no-such-token", "client_id": client_id})
+
+    assert revoked_access.status_code == 200
+    assert oauth_store.tokens.resolve(first["access_token"], Audience.MCP) is None
+    assert revoked_refresh.status_code == 200
+    assert _refresh(client, client_id, second["refresh_token"]).json()["error"] == "invalid_grant"
+    assert oauth_store.tokens.resolve(second["access_token"], Audience.MCP) is None
+    assert unknown.status_code == 200
+    assert unknown.json() == {}
+
+
+def test_revoke_leaves_personal_tokens_alone(client: TestClient, oauth_store: Store, user: Profile):
+    client_id = _register(client)["client_id"]
+    _, personal = oauth_store.tokens.create_personal(user.id, "laptop")
+
+    response = client.post(f"{PREFIX}/revoke", data={"token": personal, "client_id": client_id})
+
+    assert response.status_code == 200
+    assert oauth_store.tokens.resolve(personal, Audience.API) is not None
+
+
+def test_an_unconfigured_server_answers_503(fake_settings: ApiSettings, oauth_store: Store):
+    AgentSettings.get().enabled = False
+    fake_settings.encryption.key = ""
+    client = TestClient(create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings))
+
+    assert client.get("/.well-known/oauth-authorization-server").status_code == 503
+    assert client.post(f"{PREFIX}/token", data={"grant_type": "refresh_token"}).status_code == 503
+
+
+# -- Cross-origin access -------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", "/.well-known/oauth-authorization-server"),
+        ("POST", f"{PREFIX}/register"),
+        ("POST", f"{PREFIX}/token"),
+        ("POST", f"{PREFIX}/revoke"),
+        ("POST", f"{LEGACY_PREFIX}/register"),
+        ("POST", f"{LEGACY_PREFIX}/token"),
+        ("POST", f"{LEGACY_PREFIX}/revoke"),
+    ],
+)
+def test_a_client_facing_endpoint_answers_any_origin(client: TestClient, method: str, path: str):
+    preflight = client.options(
+        path,
+        headers={
+            "Origin": "https://inspector.example",
+            "Access-Control-Request-Method": method,
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert preflight.status_code == 200
+    assert preflight.headers["access-control-allow-origin"] == "*"
+    assert "access-control-allow-credentials" not in preflight.headers
+
+
+def test_the_metadata_carries_the_cors_header(client: TestClient):
+    response = client.get("/.well-known/oauth-authorization-server", headers={"Origin": "https://inspector.example"})
+
+    assert response.headers["access-control-allow-origin"] == "*"
+
+
+@pytest.mark.parametrize("path", [f"{PREFIX}/authorize", f"{PREFIX}/consent"])
+def test_the_browser_steps_stay_same_origin(client: TestClient, path: str):
+    response = client.options(
+        path, headers={"Origin": "https://inspector.example", "Access-Control-Request-Method": "GET"}
+    )
+
+    assert "access-control-allow-origin" not in response.headers
+
+
+def test_the_app_cors_policy_does_not_refuse_a_client_facing_endpoint(oauth_store: Store, fake_settings: ApiSettings):
+    AgentSettings.get().enabled = False
+    app = create_app(
+        store=oauth_store, catalog=Catalog(), settings=fake_settings, cors_origins=["http://localhost:3000"]
+    )
+
+    preflight = TestClient(app).options(
+        f"{PREFIX}/token", headers={"Origin": "https://inspector.example", "Access-Control-Request-Method": "POST"}
+    )
+
+    assert preflight.status_code == 200
+    assert preflight.headers["access-control-allow-origin"] == "*"
+
+
+# -- Old paths -----------------------------------------------------------------
+
+
+def test_the_old_paths_still_run_a_whole_grant(client: TestClient, oauth_store: Store, user: Profile):
+    registered = client.post(
+        f"{LEGACY_PREFIX}/register",
+        json={"client_name": "Saved", "redirect_uris": [REDIRECT_URI], "token_endpoint_auth_method": "none"},
+    )
+    assert registered.status_code == 201, registered.text
+    client_id = registered.json()["client_id"]
+    authorize = client.get(f"{LEGACY_PREFIX}/authorize", params=_authorize_params(client_id))
+    sealed = _query(authorize.headers["location"])["request"]
+    decided = client.post(f"{LEGACY_PREFIX}/consent", json={"request": sealed, "approve": True})
+    code = _query(decided.json()["redirect_to"])["code"]
+    exchange = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": REDIRECT_URI,
+        "client_id": client_id,
+        "code_verifier": VERIFIER,
+    }
+    pair = client.post(f"{LEGACY_PREFIX}/token", data=exchange).json()
+    refresh = {"grant_type": "refresh_token", "refresh_token": pair["refresh_token"], "client_id": client_id}
+    refreshed = client.post(f"{LEGACY_PREFIX}/token", data=refresh)
+    assert refreshed.status_code == 200, refreshed.text
+
+    revoked = client.post(
+        f"{LEGACY_PREFIX}/revoke", data={"token": refreshed.json()["refresh_token"], "client_id": client_id}
+    )
+
+    assert revoked.status_code == 200
+    assert oauth_store.oauth.authorised_clients(user.id) == []
+
+
+def test_the_old_paths_stay_out_of_the_schema(client: TestClient):
+    paths = client.get("/openapi.json").json()["paths"]
+
+    assert f"{PREFIX}/token" in paths
+    assert not [path for path in paths if path.startswith(LEGACY_PREFIX)]
