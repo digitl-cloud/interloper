@@ -15,8 +15,8 @@ from interloper.catalog import Catalog
 from interloper_db import Store
 from starlette.requests import HTTPConnection
 
-from interloper_api.authorization import AuthorizationServer
-from interloper_api.login import Login, LoginProvider
+from interloper_api.auth import Login, LoginProvider
+from interloper_api.oauth import AuthorizationServer
 from interloper_api.settings import ApiSettings
 
 if TYPE_CHECKING:

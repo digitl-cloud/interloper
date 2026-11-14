@@ -23,14 +23,13 @@ from interloper_db import (
 )
 from starlette.concurrency import run_in_threadpool
 
-from interloper_api.authorization import AuthorizationServer, CrossOriginMiddleware
+from interloper_api.auth import Login
 from interloper_api.dependencies import State, require_viewer
-from interloper_api.login import Login
+from interloper_api.oauth import AuthorizationServer, CrossOriginMiddleware
 from interloper_api.routes import (
     admin,
     apps,
     auth,
-    authorization,
     backfills,
     components,
     executions,
@@ -39,6 +38,7 @@ from interloper_api.routes import (
     oauth,
     organisations,
     overview,
+    providers,
     relations,
     runs,
     tokens,
@@ -54,10 +54,10 @@ logger = logging.getLogger(__name__)
 #: run's ingest, and the probes.
 _ROUTERS: tuple[APIRouter, ...] = (
     auth.router,
-    authorization.router,
+    oauth.router,
     organisations.router,
     admin.router,
-    oauth.router,
+    providers.router,
     tokens.router,
     apps.router,
     extensions.router,
@@ -229,16 +229,19 @@ def create_app(
     api = APIRouter(prefix="/api")
     for router in _ROUTERS:
         api.include_router(router)
+    # The authorization server also answers at its old /api/auth/oauth for one release,
+    # for clients that saved an endpoint instead of reading the metadata again.
+    api.include_router(oauth.router, prefix="/auth", include_in_schema=False)
     for org_router in _ORG_ROUTERS:
         api.include_router(org_router, prefix=ORG_PREFIX)
     agent_model = _mount_agent(api, settings)
     _mount_extensions(app, api)
     app.include_router(api)
-    app.include_router(authorization.well_known_router)
+    app.include_router(oauth.well_known_router)
 
     app.state.interloper = _state(store, catalog, settings, agent_model=agent_model, login=login)
 
-    oauth.log_provider_status()
+    providers.log_provider_status()
 
     return app
 

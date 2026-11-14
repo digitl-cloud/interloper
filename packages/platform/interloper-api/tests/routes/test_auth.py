@@ -24,8 +24,8 @@ from joserfc import jwt
 from joserfc.jwk import KeySet, RSAKey
 
 from interloper_api.app import install_error_handlers
+from interloper_api.auth import SESSION_COOKIE, SESSION_MAX_AGE, SESSION_PATH, GoogleProvider, Login
 from interloper_api.dependencies import State, get_caller, get_features, get_login_provider, get_settings, get_store
-from interloper_api.login import SESSION_COOKIE, SESSION_MAX_AGE, SESSION_PATH, GoogleProvider, Login
 from interloper_api.routes import auth as auth_module
 from interloper_api.settings import AuthSettings
 

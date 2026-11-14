@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from interloper_api.dependencies import SessionUserDep, StoreDep
 
-router = APIRouter(prefix="/tokens", tags=["tokens"])
+router = APIRouter(prefix="/auth/tokens", tags=["tokens"])
 
 
 # -- Response / Request models -------------------------------------------------

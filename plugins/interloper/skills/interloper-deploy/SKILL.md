@@ -113,6 +113,6 @@ and https://docs.interloper.dev/ui/running/
 - Leaving `catalog.include` empty in production: every installed source and connection is offered.
 - Confusing `runner` (how assets execute inside a process) with `launcher` (how the scheduler
   starts a run); the launcher keys are `in_process`, `docker`, `kubernetes`.
-- Registering `/api/oauth/<provider>` or `/oauth/callback` as the provider redirect URI: the
+- Registering `/api/oauth/providers/<provider>` or `/oauth/callback` as the provider redirect URI: the
   page is `/auth/<provider>`.
 - `cookie_secure: true` behind plain http: the session cookie never sticks.
