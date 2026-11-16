@@ -15,6 +15,7 @@
   "dependencies": {
     "@ai-sdk/vue": "^4.0.169",
     "@comark/vue": "^0.9.1",
+    "@iconify/vue": "^5.0.4",
     "@internationalized/date": "^3.12.4",
     "@nuxt/eslint": "^1.17.0",
     "@nuxt/ui": "~4.12.0",

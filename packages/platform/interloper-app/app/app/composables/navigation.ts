@@ -97,13 +97,14 @@ export function useComponentViews() {
  * Single source of truth for the app's main pages: the sidebar renders the
  * destinations with each hub's views as a submenu, each hub page renders those
  * views in its toolbar, and the command palette flattens both — so none of
- * them can drift apart.
+ * them can drift apart. The extensions' destinations follow the app's own.
  */
 export function useNavDestinations() {
     const { icons } = useAppConfig()
     const organisationStore = useOrganisationStore()
     const componentViews = useComponentViews()
     const executionViews = useExecutionViews()
+    const extensionDestinations = useExtensionDestinations()
 
     return computed<NavDestination[]>(() => [
         { label: 'Overview', icon: icons.overview, to: organisationStore.path('/'), exact: true, keywords: ['home', 'dashboard', 'health'] },
@@ -112,6 +113,7 @@ export function useNavDestinations() {
         { label: 'Collection', icon: icons.collection, to: organisationStore.path('/collection'), keywords: ['catalog', 'library'] },
         { label: 'Components', icon: icons.components, to: organisationStore.path(kindPath('source')), views: componentViews.value },
         { label: 'Executions', icon: icons.executions, to: organisationStore.path('/executions/runs'), views: executionViews.value },
+        ...extensionDestinations.value,
     ])
 }
 
