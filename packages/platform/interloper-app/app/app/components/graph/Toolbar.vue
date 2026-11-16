@@ -37,27 +37,26 @@ function dotOf(item: unknown): GraphNodeState | undefined {
 </script>
 
 <template>
-    <div class="flex shrink-0 flex-wrap items-center gap-3">
-        <span class="text-sm text-muted">Status</span>
-        <UTabs v-model="statusFilter"
-               :items="filterItems"
-               variant="pill"
-               size="sm"
-               :content="false">
-            <template #leading="{ item }">
-                <StatusDot v-if="dotOf(item)"
-                           :color="nodeStateColor(dotOf(item)!)"
-                           :pulse="nodeStateExecuting(dotOf(item)!)" />
-            </template>
-        </UTabs>
-        <span class="ms-4 text-sm text-muted">Group by</span>
-        <UTabs v-model="groupBy"
-               :items="groupOptions"
-               variant="pill"
-               size="sm"
-               :content="false" />
-        <div class="ms-auto flex items-center gap-2">
+    <FilterBar class="shrink-0"
+               :active="statusFilter === 'all' ? 0 : 1"
+               @reset="statusFilter = 'all'">
+        <FilterBarField label="Status">
+            <UTabs v-model="statusFilter"
+                   :items="filterItems">
+                <template #leading="{ item }">
+                    <StatusDot v-if="dotOf(item)"
+                               :color="nodeStateColor(dotOf(item)!)"
+                               :pulse="nodeStateExecuting(dotOf(item)!)" />
+                </template>
+            </UTabs>
+        </FilterBarField>
+        <FilterBarField label="Group by">
+            <UTabs v-model="groupBy"
+                   :items="groupOptions" />
+        </FilterBarField>
+        <template v-if="$slots.actions"
+                  #actions>
             <slot name="actions" />
-        </div>
-    </div>
+        </template>
+    </FilterBar>
 </template>

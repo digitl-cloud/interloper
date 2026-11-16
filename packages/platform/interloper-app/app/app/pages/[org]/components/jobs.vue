@@ -191,7 +191,8 @@ const enabled = useQueryParam<boolean | null>('enabled', null, booleanQuery)
         </template>
         <template #body>
             <DriftBanner kind="job" />
-            <DataTable :columns="columns"
+            <DataTable :active-filters="enabled === null ? 0 : 1"
+                       :columns="columns"
                        fill
                        :data="jobs"
                        :filter="row => enabled === null || jobEnabled(row) === enabled"
@@ -200,6 +201,7 @@ const enabled = useQueryParam<boolean | null>('enabled', null, booleanQuery)
                        :row-actions="rowActions"
                        :delete-impact="componentsStore.deleteImpact"
                        search-placeholder="Search jobs…"
+                       @reset-filters="enabled = null"
                        @delete="handleDelete"
                        @edit="handleEdit"
                        @retry="componentsStore.fetchAll(['job'])">

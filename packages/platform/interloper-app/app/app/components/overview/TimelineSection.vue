@@ -84,12 +84,10 @@ onUnmounted(() => timelineStore.$reset())
                 <UIcon v-if="switching"
                        :name="appConfig.ui.icons.loading"
                        class="size-4 animate-spin text-dimmed" />
-                <span class="text-sm text-muted">Window</span>
-                <UTabs v-model="activeSpan"
-                       :items="spanItems"
-                       variant="pill"
-                       size="xs"
-                       :content="false" />
+                <FilterBarField label="Window">
+                    <UTabs v-model="activeSpan"
+                           :items="spanItems" />
+                </FilterBarField>
                 <UButton label="All executions"
                          :to="organisationStore.path('/executions/runs')"
                          color="neutral"

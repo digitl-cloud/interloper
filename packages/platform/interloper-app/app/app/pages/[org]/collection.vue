@@ -21,7 +21,7 @@ const {
 
 // ── Asset panel ────────────────────────────────────────────────
 const assetPane = useSlidingPane('collection-asset-pane-size')
-const { group: splitterRef, opened: panelOpen, mounted: panelMounted, animating: panelAnimating, contentStyle: assetPaneContentStyle, onLayout: onAssetPaneLayout } = assetPane
+const { group: splitterRef, opened: panelOpen, mounted: panelMounted, animating: panelAnimating, wide, contentStyle: assetPaneContentStyle, onLayout: onAssetPaneLayout } = assetPane
 /** What USplitter exposes: its panels, the side one being the pane the sliding pane resizes. */
 type SplitterHandle = { panelsRef: NonNullable<typeof assetPane.pane.value>[] }
 // USplitter renders its panels itself, so the pane is read off the splitter rather than bound.
@@ -29,12 +29,12 @@ watchEffect(() => {
     assetPane.pane.value = (splitterRef.value as unknown as SplitterHandle | null)?.panelsRef[1] ?? null
 })
 
-const splitterItems: SplitterItem[] = [
-    { slot: 'main', defaultSize: 100, minSize: 30, class: 'flex-col min-h-0 overflow-y-auto' },
+const splitterItems = computed<SplitterItem[]>(() => [
+    { slot: 'main', defaultSize: 100, minSize: wide.value ? 30 : 0, class: 'flex-col min-h-0 overflow-y-auto' },
     { slot: 'asset', defaultSize: 0, class: 'relative overflow-hidden' },
-]
+])
 /** The handle is the page's panel gap, less the 1px the side pane pads its card with so the ring isn't clipped. */
-const handleClass = computed(() => `flex justify-center transition-all duration-200 ${panelOpen.value ? 'w-3.5 sm:w-5.5' : 'w-0'}`)
+const handleClass = computed(() => `flex justify-center transition-all duration-200 ${panelOpen.value && wide.value ? 'w-3.5 sm:w-5.5' : 'w-0'}`)
 
 const selectedAsset = ref<ComponentRecord | undefined>()
 const selectedAssetDefn = ref<AssetDefinition | undefined>()
@@ -107,7 +107,7 @@ const showEmpty = computed(() => !componentsStore.loading && !componentsStore.er
                        id="collection-asset-pane"
                        ref="splitterRef"
                        :items="splitterItems"
-                       :disabled="!panelOpen || panelAnimating"
+                       :disabled="!panelOpen || panelAnimating || !wide"
                        :ui="{ root: 'min-h-0 flex-1', handle: handleClass }"
                        @layout="onAssetPaneLayout">
                 <template #main>
@@ -140,10 +140,18 @@ const showEmpty = computed(() => !componentsStore.loading && !componentsStore.er
                 </template>
 
                 <template #asset>
+                    <!-- On a phone the pane covers the table, whose Hide button it hides: it brings its own way back. -->
                     <div v-if="panelMounted && selectedAsset && selectedSource"
-                         class="absolute inset-y-0 right-0 py-4 ps-px pe-4 sm:py-6 sm:pe-6"
+                         class="absolute inset-y-0 right-0 flex flex-col gap-3 p-4 sm:py-6 sm:ps-px sm:pe-6"
                          :style="assetPaneContentStyle">
-                        <GraphAssetPanel class="h-full"
+                        <UButton v-if="!wide"
+                                 :icon="appConfig.ui.icons.arrowLeft"
+                                 label="Back to collection"
+                                 color="neutral"
+                                 variant="ghost"
+                                 class="self-start"
+                                 @click="onPanelClose" />
+                        <GraphAssetPanel class="min-h-0 flex-1"
                                          :asset="selectedAsset"
                                          :asset-defn="selectedAssetDefn"
                                          :source="selectedSource" />

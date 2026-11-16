@@ -110,7 +110,7 @@ const showTargetHandle = computed(() => hasUpstream.value || !isRunnable.value |
 const showSourceHandle = computed(() => hasDownstream.value || isValidSource.value)
 
 const frameClass = computed(() => [
-    statusBorderClass(state.value) || 'border-(--graph-card-line)',
+    'border-(--graph-card-line)',
     props.selected && GRAPH_SELECTED_CLASS,
 ])
 

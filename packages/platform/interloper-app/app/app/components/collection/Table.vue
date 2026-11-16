@@ -222,20 +222,23 @@ function onRowClick(row: any) {
 <template>
     <UCard :ui="FILL_CARD_UI">
         <template #header>
-            <div class="flex flex-wrap items-center gap-3">
-                <UInput v-model="globalFilter"
-                        placeholder="Search collection…"
-                        :icon="appConfig.ui.icons.search"
-                        class="max-w-sm" />
-                <UButton variant="ghost"
-                         color="neutral"
-                         size="sm"
-                         :icon="allExpanded ? appConfig.icons.collapseAll : appConfig.icons.expandAll"
-                         :label="allExpanded ? 'Collapse all' : 'Expand all'"
-                         class="ml-auto"
-                         @click="toggleAllExpanded" />
-                <slot name="actions" />
-            </div>
+            <FilterBar>
+                <template #search>
+                    <UInput v-model="globalFilter"
+                            placeholder="Search collection…"
+                            :icon="appConfig.ui.icons.search"
+                            class="w-full max-w-sm sm:w-auto" />
+                </template>
+                <template #actions>
+                    <UButton variant="ghost"
+                             color="neutral"
+                             size="sm"
+                             :icon="allExpanded ? appConfig.icons.collapseAll : appConfig.icons.expandAll"
+                             :label="allExpanded ? 'Collapse all' : 'Expand all'"
+                             @click="toggleAllExpanded" />
+                    <slot name="actions" />
+                </template>
+            </FilterBar>
         </template>
 
         <UTable v-model:expanded="expanded"

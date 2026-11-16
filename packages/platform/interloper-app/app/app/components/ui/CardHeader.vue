@@ -29,7 +29,7 @@ const slots = useAppConfig().ui.card.slots
             </div>
         </div>
         <div v-if="$slots.default"
-             class="flex shrink-0 items-center gap-2">
+             class="flex min-w-0 max-w-full flex-wrap items-center gap-2">
             <slot />
         </div>
     </div>

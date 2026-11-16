@@ -86,7 +86,8 @@ const typeKey = useQueryParam('type', null)
         </template>
         <template #body>
             <DriftBanner kind="destination" />
-            <DataTable :columns="columns"
+            <DataTable :active-filters="typeKey === null ? 0 : 1"
+                       :columns="columns"
                        fill
                        :data="destinations"
                        :filter="row => typeKey === null || row.key === typeKey"
@@ -94,6 +95,7 @@ const typeKey = useQueryParam('type', null)
                        :error="componentsStore.error"
                        :delete-impact="componentsStore.deleteImpact"
                        search-placeholder="Search destinations…"
+                       @reset-filters="typeKey = null"
                        @delete="handleDelete"
                        @edit="handleEdit"
                        @retry="componentsStore.fetchAll(['destination'])">

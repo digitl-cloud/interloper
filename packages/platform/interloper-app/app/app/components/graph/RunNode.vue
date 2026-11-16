@@ -28,7 +28,7 @@ const hasUpstream = computed(() => targetConnections.value.length > 0)
 const hasDownstream = computed(() => sourceConnections.value.length > 0)
 
 const frameClass = computed(() => [
-    statusBorderClass(state.value) || 'border-(--graph-card-line)',
+    'border-(--graph-card-line)',
     props.selected && GRAPH_SELECTED_CLASS,
 ])
 </script>

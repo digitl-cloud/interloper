@@ -131,8 +131,8 @@ const frameClass = computed(() => [
     // With layers folded under it the card is no longer what the stack casts from.
     collapsed.value && props.layers === 0 && 'graph-stack-floor',
     props.nested
-        ? ['rounded-xl border bg-(--graph-nested-bg)', statusBorderClass(state.value) || 'border-(--graph-nested-line)']
-        : ['graph-card rounded-2xl border bg-(--graph-node-bg)', statusBorderClass(state.value) || 'border-(--graph-card-line)'],
+        ? 'rounded-xl border border-(--graph-nested-line) bg-(--graph-nested-bg)'
+        : 'graph-card rounded-2xl border border-(--graph-card-line) bg-(--graph-node-bg)',
 ])
 </script>
 

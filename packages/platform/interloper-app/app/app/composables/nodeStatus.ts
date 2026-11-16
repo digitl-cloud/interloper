@@ -22,20 +22,6 @@ export function nodeStateExecuting(state: GraphNodeState): boolean {
     return statusMeta(state).executing
 }
 
-/**
- * Border tint of a node: only states that demand attention or are live tint
- * it; the rest keep the card border, their dot is enough.
- */
-const STATUS_BORDER: Partial<Record<GraphNodeState, string>> = {
-    attention: 'border-warning/50',
-    running: 'border-info/50',
-    failed: 'border-error/50',
-}
-
-export function statusBorderClass(state: GraphNodeState): string {
-    return STATUS_BORDER[state] ?? ''
-}
-
 /** Rollup precedence for a container's dot: the loudest child state wins. */
 const ROLLUP: GraphNodeState[] = ['failed', 'running', 'queued', 'canceled', 'success']
 
