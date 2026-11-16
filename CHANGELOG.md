@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.137.0 (2026-11-16)
+
+### Features
+
+- **app**: Load extension UIs against the app's own modules
+  ([`6076c4b`](https://github.com/digitl-cloud/interloper/commit/6076c4bb962596b620b34029b9f5b693aaf00150))
+
+### Refactoring
+
+- **db**: Drop profiles.google_id
+  ([`2ce9fb6`](https://github.com/digitl-cloud/interloper/commit/2ce9fb69f50e1d7909e22de40c95299e3a57b75a))
+
+
 ## v0.136.0 (2026-11-16)
 
 ### Features
