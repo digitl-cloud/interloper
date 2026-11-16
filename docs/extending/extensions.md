@@ -233,6 +233,57 @@ authenticated routes. `/api` is the one prefix that reaches the API in every dep
 (the dev server's proxy, the single-process app, nginx), so the bundle is served the same way
 in each, and the package must be installed in the API's image.
 
+### What the UI runs against
+
+The app loads every extension's UI before its first navigation. An extension's code imports
+what it shares with the app by module name, and the page's import map resolves each name to
+the app's own instance, so an extension runs on the app's Vue, router, Pinia, API client,
+realtime connection, stores and theme rather than copies of its own. Leave these modules out of
+the bundle (`external` in any bundler):
+
+| Module | What it is |
+|--------|------------|
+| `vue`, `vue-router`, `pinia`, `@vueuse/core` | the packages, as the app runs them |
+| `@iconify/vue` | the icon store `UIcon` renders from: `addCollection` registers an extension's own icons |
+| `@interloper/host` | the app itself: `defineExtension`, `useExtension`, `useApi`, `useOrgApi`, `useRealtimeSubscription`, `useToast`, `useConfirm`, the organisation, user, catalog and components stores, `errorToast`, `componentIcon`, the `AppNavbar`, `CardHeader`, `DataTable`, `LoadError` and `StatusBadge` components and a set of Nuxt UI components (`UButton`, `UCard`, `UDashboardPanel`, `UTable`, `UModal`, `UForm`, ...) that render with the app's theme |
+
+The entry module's default export declares the extension. Its `setup` receives the extension's
+host, which adds its pages and its sidebar entries:
+
+```js
+// dist/index.js
+import { defineExtension } from '@interloper/host'
+
+export default defineExtension({
+    setup(host) {
+        host.addRoute({ path: '', name: 'buckets', component: () => import('./pages/buckets.js') })
+        host.addRoute({ path: 'buckets/:id', name: 'bucket', component: () => import('./pages/bucket.js') })
+        host.addNavDestination({ label: 'Buckets', icon: 'i-lucide-boxes', path: '', keywords: ['matcher'] })
+    },
+})
+```
+
+A page lives inside the organisation, under `/<organisation>/ext/<key>/`: `/acme/ext/acme` and
+`/acme/ext/acme/buckets/<id>` above, with the organisation resolved and the catalog loaded
+before it renders, like the app's own pages. It renders its own frame, a `UDashboardPanel` with
+`AppNavbar` in its header, and reaches the rest of its extension through `useExtension()`,
+without repeating its key:
+
+```js
+import { useRouter } from 'vue-router'
+import { useExtension } from '@interloper/host'
+
+const router = useRouter()
+const { apiFetch, path } = useExtension()
+const buckets = await apiFetch('/buckets')      // GET /api/organisations/<id>/ext/acme/buckets
+router.push(path(`buckets/${buckets[0].id}`))   // /<organisation>/ext/acme/buckets/<id>
+```
+
+`apiFetch` and `fetchAll` behave as `useOrgApi`'s do, below the extension's routes; `path` takes
+a page's path as `addRoute` does. A sidebar entry, its `views` a submenu, follows the app's own
+and is found by the command palette under its label and keywords. An extension that fails to
+load is reported in a toast and skipped; the app and the other extensions carry on.
+
 ## The installed packages
 
 `GET /api/extensions` lists the installed packages that ship a manifest, the platform's own

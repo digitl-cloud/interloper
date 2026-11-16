@@ -3,9 +3,11 @@
  * An organisation's pages, under its key. The route is what makes an
  * organisation the active one; before it does, the key must name one the
  * user can act in (unknown, deleted, or not theirs is a not-found, whatever
- * lies beneath it) and the catalog must be loaded.
+ * lies beneath it) and the catalog must be loaded. Named so the extensions'
+ * pages can be added beneath it (`ORGANISATION_ROUTE`).
  */
 definePageMeta({
+    name: 'organisation',
     middleware: [async (to) => {
         const organisation = await useOrganisationStore().resolve(to.params.org as string)
         if (!organisation)
