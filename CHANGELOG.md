@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v0.136.0 (2026-11-16)
+
+### Features
+
+- **api**: Serve extension UI bundles
+  ([`b92359f`](https://github.com/digitl-cloud/interloper/commit/b92359fea486bb596f0b3f4c9a28e1e9b41d4049))
+
+### Refactoring
+
+- Sign in through providers, with an identities table
+  ([`3fd2fcc`](https://github.com/digitl-cloud/interloper/commit/3fd2fcc29db71139217b48d234e64307e76e6e0b))
+
+- **api**: Group the access routes under /api/auth and /api/oauth
+  ([`74b1da2`](https://github.com/digitl-cloud/interloper/commit/74b1da2f1bbc2ba933c765d552edc78ba0f4e54f))
+
+- **db**: Keep OAuth refresh tokens in the tokens table
+  ([`58b57b6`](https://github.com/digitl-cloud/interloper/commit/58b57b66446163d4d0c7cb83a32325637e092087))
+
+
 ## v0.135.0 (2026-11-13)
 
 ### Bug Fixes
