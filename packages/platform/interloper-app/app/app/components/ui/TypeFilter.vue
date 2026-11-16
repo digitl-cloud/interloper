@@ -29,12 +29,15 @@ const items = computed(() => {
 </script>
 
 <template>
-    <USelectMenu :model-value="key ?? ALL"
-                 :items="items"
-                 value-key="value"
-                 :icon="appConfig.icons.type"
-                 :search-input="{ placeholder: 'Search types…', icon: appConfig.ui.icons.search }"
-                 :ui="{ content: 'min-w-fit' }"
-                 class="w-40"
-                 @update:model-value="key = $event === ALL ? null : $event" />
+    <FilterBarField label="Type"
+                    :inline-label="false">
+        <USelectMenu :model-value="key ?? ALL"
+                     :items="items"
+                     value-key="value"
+                     :icon="appConfig.icons.type"
+                     :search-input="{ placeholder: 'Search types…', icon: appConfig.ui.icons.search }"
+                     :ui="{ content: 'min-w-fit' }"
+                     class="w-full sm:w-40"
+                     @update:model-value="key = $event === ALL ? null : $event" />
+    </FilterBarField>
 </template>

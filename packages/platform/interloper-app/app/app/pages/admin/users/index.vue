@@ -188,7 +188,8 @@ onMounted(loadData)
             <AppNavbar title="Users" />
         </template>
         <template #body>
-            <DataTable :columns="columns"
+            <DataTable :active-filters="orgFilter === ALL_ORGS ? 0 : 1"
+                       :columns="columns"
                        fill
                        :data="filteredRows"
                        :loading="loading"
@@ -197,13 +198,17 @@ onMounted(loadData)
                        no-actions
                        no-row-click
                        search-placeholder="Search users…"
+                       @reset-filters="orgFilter = ALL_ORGS"
                        @retry="loadData">
                 <template #filters>
-                    <USelect v-model="orgFilter"
-                             :items="orgOptions"
-                             value-key="value"
-                             :icon="appConfig.icons.organisation"
-                             class="w-52" />
+                    <FilterBarField label="Organisation"
+                                    :inline-label="false">
+                        <USelect v-model="orgFilter"
+                                 :items="orgOptions"
+                                 value-key="value"
+                                 :icon="appConfig.icons.organisation"
+                                 class="w-full sm:w-52" />
+                    </FilterBarField>
                 </template>
             </DataTable>
         </template>

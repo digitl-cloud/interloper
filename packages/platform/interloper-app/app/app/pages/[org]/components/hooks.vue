@@ -109,7 +109,8 @@ function matchesFilters(hook: ComponentRecord): boolean {
         </template>
         <template #body>
             <DriftBanner kind="hook" />
-            <DataTable :columns="columns"
+            <DataTable :active-filters="Number(typeKey !== null) + Number(enabled !== null)"
+                       :columns="columns"
                        fill
                        :data="hooks"
                        :filter="matchesFilters"
@@ -117,6 +118,7 @@ function matchesFilters(hook: ComponentRecord): boolean {
                        :error="componentsStore.error"
                        :delete-impact="componentsStore.deleteImpact"
                        search-placeholder="Search hooks…"
+                       @reset-filters="typeKey = null; enabled = null"
                        @delete="handleDelete"
                        @edit="handleEdit"
                        @retry="componentsStore.fetchAll(['hook'])">

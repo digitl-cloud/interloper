@@ -68,7 +68,7 @@ const issueCount = computed(() =>
                             :layers="layers" />
             <div class="graph-card relative z-1 flex h-full w-full flex-col rounded-2xl border bg-(--graph-node-bg)"
                  :class="[
-                     statusBorderClass(state) || 'border-(--graph-card-line)',
+                     'border-(--graph-card-line)',
                      !open && 'graph-raise',
                      !open && layers === 0 && 'graph-stack-floor',
                  ]">

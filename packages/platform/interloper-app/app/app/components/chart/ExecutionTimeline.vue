@@ -359,6 +359,13 @@ const futurePercent = computed(() => {
 const scrollEl = ref<HTMLElement | null>(null)
 const plotEl = ref<HTMLElement | null>(null)
 const plotWidth = ref(0)
+const chartWidth = ref(0)
+
+/** The label column never takes more than this share of the chart, so a phone keeps a plot to read. */
+const LABEL_SHARE = 0.4
+const labelColumn = computed(() => chartWidth.value
+    ? Math.min(props.labelWidth, Math.round(chartWidth.value * LABEL_SHARE))
+    : props.labelWidth)
 const scrollTop = ref(0)
 const viewportH = ref(600)
 
@@ -547,10 +554,14 @@ let resizeObserver: ResizeObserver | null = null
 onMounted(() => {
     if (scrollEl.value) {
         viewportH.value = scrollEl.value.clientHeight
+        chartWidth.value = scrollEl.value.clientWidth
         plotWidth.value = plotEl.value?.clientWidth ?? 0
         scrollEl.value.addEventListener('wheel', onWheel, { passive: false })
         resizeObserver = new ResizeObserver(() => {
-            if (scrollEl.value) viewportH.value = scrollEl.value.clientHeight
+            if (scrollEl.value) {
+                viewportH.value = scrollEl.value.clientHeight
+                chartWidth.value = scrollEl.value.clientWidth
+            }
             plotWidth.value = plotEl.value?.clientWidth ?? 0
         })
         resizeObserver.observe(scrollEl.value)
@@ -596,9 +607,9 @@ watch(axisMax, () => {
                      @pointermove="onRulerPointerMove"
                      @pointerup="onRulerPointerUp"
                      @pointercancel="onRulerPointerUp">
-                    <div v-if="labelWidth"
+                    <div v-if="labelColumn"
                          class="flex shrink-0 items-center border-r border-default px-4"
-                         :style="{ width: labelWidth + 'px' }">
+                         :style="{ width: labelColumn + 'px' }">
                         <span class="caption truncate text-muted">{{ labelTitle }}</span>
                     </div>
                     <div ref="plotEl"
@@ -639,9 +650,9 @@ watch(axisMax, () => {
                      class="relative"
                      :style="{ height: totalHeight + 'px', minHeight: `calc(100% - ${AXIS_HEIGHT}px)` }">
                     <!-- Label gutter -->
-                    <div v-if="labelWidth"
+                    <div v-if="labelColumn"
                          class="absolute inset-y-0 left-0 z-20 border-r border-default bg-muted"
-                         :style="{ width: labelWidth + 'px' }">
+                         :style="{ width: labelColumn + 'px' }">
                         <div v-for="{ row, index } in visibleRows"
                              :key="`label-${row.id ?? row.name}`"
                              class="absolute flex w-full cursor-pointer items-center gap-2 px-4 transition-opacity"
@@ -666,7 +677,7 @@ watch(axisMax, () => {
 
                     <!-- Plot area: gridlines, bars, marker -->
                     <div class="absolute inset-y-0"
-                         :style="{ left: labelWidth + PLOT_GUTTER + 'px', right: PLOT_GUTTER + 'px' }">
+                         :style="{ left: labelColumn + PLOT_GUTTER + 'px', right: PLOT_GUTTER + 'px' }">
                         <div v-if="futurePercent !== null"
                              class="pointer-events-none absolute inset-y-0"
                              :style="{ left: `${futurePercent}%`, right: 0, backgroundImage: FUTURE_HATCH }" />
@@ -681,7 +692,7 @@ watch(axisMax, () => {
                         <template v-for="{ row, bars, index, placeholder } in visibleRows"
                                   :key="row.id ?? row.name">
                             <!-- Nothing to draw: a placeholder carrying the row's status -->
-                            <div v-if="placeholder && !labelWidth"
+                            <div v-if="placeholder && !labelColumn"
                                  class="absolute flex max-w-1/2 cursor-pointer items-center gap-1.5 overflow-hidden rounded-md border border-dashed px-2 transition-opacity"
                                  :class="placeholderClass(row.status)"
                                  :style="{
@@ -703,7 +714,7 @@ watch(axisMax, () => {
                                  :key="layout.bar.id"
                                  class="absolute flex cursor-pointer items-center gap-1.5 overflow-hidden rounded-md transition-opacity"
                                  :class="[
-                                     labelWidth ? '' : 'px-2',
+                                     labelColumn ? '' : 'px-2',
                                      layout.bar.status === 'scheduled' ? 'border border-dashed bg-default' : '',
                                  ]"
                                  :style="{
@@ -719,7 +730,7 @@ watch(axisMax, () => {
                                  @pointerenter="showTip($event, barTooltip(row, layout))"
                                  @pointerleave="hideTip"
                                  @click.stop="onBarClick(layout, row)">
-                                <template v-if="!labelWidth">
+                                <template v-if="!labelColumn">
                                     <UIcon :name="row.icon"
                                            class="size-3.5 shrink-0"
                                            :class="layout.bar.status === 'scheduled' ? 'text-dimmed' : 'text-inverted'" />

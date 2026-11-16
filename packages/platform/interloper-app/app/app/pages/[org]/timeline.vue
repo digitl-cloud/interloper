@@ -86,14 +86,13 @@ onUnmounted(() => timelineStore.$reset())
                 </UCard>
                 <UCard :ui="CANVAS_CARD_UI">
                     <template #header>
-                        <div class="flex flex-wrap items-center gap-3">
-                            <span class="text-sm text-muted">Window</span>
-                            <UTabs v-model="activeSpan"
-                                   :items="spanItems"
-                                   variant="pill"
-                                   size="xs"
-                                   :content="false" />
-                            <div class="ml-auto flex items-center gap-2">
+                        <FilterBar :active="windowSpan === DEFAULT_TIMELINE_SPAN ? 0 : 1"
+                                   @reset="windowSpan = DEFAULT_TIMELINE_SPAN">
+                            <FilterBarField label="Window">
+                                <UTabs v-model="activeSpan"
+                                       :items="spanItems" />
+                            </FilterBarField>
+                            <template #actions>
                                 <UTooltip v-if="truncated"
                                           :text="`Only the ${runCount} most recent of ${total} runs in this window are shown. Narrow the window to see them all.`">
                                     <UBadge color="warning"
@@ -108,8 +107,8 @@ onUnmounted(() => timelineStore.$reset())
                                          :loading="loading"
                                          aria-label="Refresh"
                                          @click="timelineStore.fetch()" />
-                            </div>
-                        </div>
+                            </template>
+                        </FilterBar>
                     </template>
                     <ChartExecutionTimeline v-model:selected-id="selectedId"
                                             :rows="rows"

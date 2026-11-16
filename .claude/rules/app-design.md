@@ -127,6 +127,13 @@ Buttons, badges and empty states size their own icons.
 - drawers: one width, from the theme
 - modals: Nuxt UI's widths
 
+**Phones** (below `sm`). Every page reads at 390px wide; layout comes from the shared pieces, never from page-level breakpoint hacks:
+- toolbars are `FilterBar`: one row of the search, a Filters button counting the active filters, and the actions as icon buttons (their labels stay for screen readers); the filters open in a bottom sheet with Reset;
+- sub-page tabs, and any pill control left inline, scroll sideways when too wide (the theme);
+- tables scroll inside their card;
+- a splitter's side pane (`useSlidingPane`) opens over the whole splitter as a detail view, with a visible way back; a pixel-sized rail starts folded, under its own saved layout;
+- the agent panel covers the page instead of making room.
+
 **Elevation.** Cards are flat. Overlays keep the shadows Nuxt UI ships. The graph keeps its own hover lift. Nothing else casts a shadow.
 
 ## 5. Icons
@@ -165,6 +172,8 @@ Graph node states (`idle`, `attention`, `paused`, ...) map onto the same colours
 | Page frame | `UDashboardPanel`; `#header` is `AppNavbar`: Nuxt UI's default navbar (its height and bottom border, no theme override), the same on every page (sidebar toggle, title, search, agent toggle) and never given actions. Detail pages put a `UBreadcrumb` in its `#title`. `UDashboardToolbar` holds sub-page navigation (`PageTabs`) on its left and a detail page's own actions (cancel, retry, open) on its right; the theme makes it the first row of the page's content (no rule, the content's top spacing). |
 | Where an action goes | With the card it acts on: a list's create action in `DataTable` `#actions`, a canvas's in its toolbar's `#actions` (CollectionTable, GraphToolbar), a card's in its `CardHeader`. A page with no data repeats its create action in its `UEmpty`. |
 | Section header above a card | `UPageCard variant="naked" orientation="horizontal"`: title, description, actions in its default slot |
+| Toolbar above a list or canvas | `FilterBar`: search in `#search`, filters in its default slot, the card's actions in `#actions`, and `active` / `@reset` for the filters' count and reset (`DataTable` forwards them as `active-filters` / `@reset-filters`). Every action has an icon: on a phone it is all that shows. No `ms-auto` or margin hacks between groups. |
+| Labelled filter | `FilterBarField label="Status"` around a bare `<UTabs v-model :items>`: the field sets the tabs' look, compact pills inline and a full-width list in the phone's sheet. |
 | Header inside a card | `CardHeader` in the `UCard #header` |
 | Section label | `caption text-muted` on the label; `USeparator label` and navigation `type: 'label'` items take it from the theme |
 | Container | `UCard` (the card tone) |
@@ -223,4 +232,4 @@ Graph node states (`idle`, `attention`, `paused`, ...) map onto the same colours
 - semantic colours and the status table
 - icon maps
 
-The agent panel slides in from the right below the navbar, which keeps the full width; the page's toolbar and body make room for it: the theme marks them `agent-room`, and the panel sizes `agent-room`, itself and its handle from a small stylesheet it owns. A resize then re-renders nothing and restyles only those few elements; no size that changes on every pointer move goes into a template binding, a cookie or a variable on a shared ancestor. The panel sits `--agent-inset` (the page body's own padding) from the navbar and the window's edges, so it lines up with the page's content; inside, it is padded like a card (`p-4 sm:px-6`). The graph's own colours and shadows are `--graph-*` tokens in main.css, defined from the palette, never inline. The agent's code blocks and tool payloads are the code that `font-mono` exists for.
+The agent panel slides in from the right below the navbar, which keeps the full width; the page's toolbar and body make room for it: the theme marks them `agent-room`, and the panel sizes `agent-room`, itself and its handle from a small stylesheet it owns. A resize then re-renders nothing and restyles only those few elements; no size that changes on every pointer move goes into a template binding, a cookie or a variable on a shared ancestor. The panel sits `--agent-inset` (the page body's own padding) from the navbar and the window's edges, so it lines up with the page's content; inside, it is padded like a card (`p-4 sm:px-6`). The graph's own colours and shadows are `--graph-*` tokens in main.css, defined from the palette, never inline. A graph node's border is always its card line: its state shows in its status dot, and the only coloured ring on a node is the selection's. The agent's code blocks and tool payloads are the code that `font-mono` exists for.

@@ -16,6 +16,8 @@ const props = defineProps<{
      * empty table, not the collection's onboarding.
      */
     filter?: (row: TData) => boolean
+    /** How many `#filters` controls differ from their default; on a phone, the Filters button's count. */
+    activeFilters?: number
     /** Extra context-menu / action items per row (prepended before edit & delete). */
     rowActions?: (item: TData) => DropdownMenuItem[][]
     /** When true, suppresses the built-in Edit and Delete items; the row menus carry only `rowActions`. */
@@ -48,6 +50,8 @@ const emit = defineEmits<{
     delete: [ids: string[]]
     edit: [item: TData]
     retry: []
+    /** Put every `#filters` control back to its default (the phone's filter sheet offers it). */
+    resetFilters: []
 }>()
 
 const { confirm } = useConfirm()
@@ -187,15 +191,20 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
         <UCard v-if="showTable"
                :ui="fill ? FILL_CARD_UI : undefined">
             <template #header>
-                <div class="flex flex-wrap items-center gap-3">
-                    <UInput v-model="globalFilter"
-                            :placeholder="searchPlaceholder ?? 'Search…'"
-                            :icon="appConfig.ui.icons.search"
-                            class="max-w-sm"
-                            @update:model-value="tableRef?.tableApi?.setGlobalFilter($event)" />
-                    <slot name="filters" />
-
-                    <div class="ml-auto flex items-center gap-2">
+                <FilterBar :active="activeFilters"
+                           @reset="emit('resetFilters')">
+                    <template #search>
+                        <UInput v-model="globalFilter"
+                                :placeholder="searchPlaceholder ?? 'Search…'"
+                                :icon="appConfig.ui.icons.search"
+                                class="w-full max-w-sm sm:w-auto"
+                                @update:model-value="tableRef?.tableApi?.setGlobalFilter($event)" />
+                    </template>
+                    <template v-if="$slots.filters"
+                              #default>
+                        <slot name="filters" />
+                    </template>
+                    <template #actions>
                         <UButton v-if="selectedCount > 0"
                                  color="error"
                                  variant="soft"
@@ -203,8 +212,8 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
                                  :label="`Delete (${selectedCount})`"
                                  @click="requestBulkDelete" />
                         <slot name="actions" />
-                    </div>
-                </div>
+                    </template>
+                </FilterBar>
             </template>
 
             <UTable ref="table"

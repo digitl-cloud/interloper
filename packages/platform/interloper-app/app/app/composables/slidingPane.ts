@@ -16,7 +16,9 @@ interface PaneHandle {
  * A splitter side pane that opens and closes by tweening its size, so the
  * neighbouring pane resizes in step with the slide instead of jumping. While
  * the size moves, the content keeps its open width anchored to the right
- * edge: it slides in and out rather than reflowing.
+ * edge: it slides in and out rather than reflowing. On a phone the pane opens
+ * over the whole splitter (the page lets its main pane shrink to nothing
+ * there, see `wide`): a detail view rather than a side pane.
  *
  * Bind `pane` to the side `SplitterPanel` (rendered always, default size 0),
  * `group` to the `SplitterGroup` with `@layout="onLayout"`, and `contentStyle`
@@ -33,6 +35,8 @@ export function useSlidingPane(storageKey: string) {
     const mounted = ref(false)
     const animating = ref(false)
     const openSize = useLocalStorage(storageKey, DEFAULT_SIZE)
+    const wide = useMediaQuery('(min-width: 640px)')
+    const targetSize = computed(() => (wide.value ? openSize.value : 100))
 
     let frame = 0
     function tween(from: number, to: number, done?: () => void) {
@@ -57,14 +61,14 @@ export function useSlidingPane(storageKey: string) {
         opened.value = true
         if (mounted.value && !animating.value) return
         mounted.value = true
-        nextTick(() => tween(pane.value?.getSize() ?? 0, openSize.value))
+        nextTick(() => tween(pane.value?.getSize() ?? 0, targetSize.value))
     }
 
     function hide() {
         if (!opened.value) return
         opened.value = false
         const current = pane.value?.getSize() ?? 0
-        if (!animating.value && current >= MIN_SIZE) openSize.value = current
+        if (wide.value && !animating.value && current >= MIN_SIZE) openSize.value = current
         tween(current, 0, () => { mounted.value = false })
     }
 
@@ -81,8 +85,8 @@ export function useSlidingPane(storageKey: string) {
     }
 
     const contentStyle = computed<CSSProperties>(() => (animating.value
-        ? { width: `${(groupWidth.value * openSize.value) / 100}px` }
+        ? { width: `${(groupWidth.value * targetSize.value) / 100}px` }
         : { left: '0' }))
 
-    return { pane, group, opened, mounted, animating, contentStyle, show, hide, onLayout }
+    return { pane, group, opened, mounted, animating, wide, contentStyle, show, hide, onLayout }
 }

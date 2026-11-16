@@ -16,10 +16,13 @@ const items = [
 </script>
 
 <template>
-    <USelect :model-value="enabled === null ? ALL : enabled ? 'enabled' : 'disabled'"
-             :items="items"
-             value-key="value"
-             :icon="appConfig.icons.enabled"
-             class="w-40"
-             @update:model-value="enabled = $event === ALL ? null : $event === 'enabled'" />
+    <FilterBarField label="State"
+                    :inline-label="false">
+        <USelect :model-value="enabled === null ? ALL : enabled ? 'enabled' : 'disabled'"
+                 :items="items"
+                 value-key="value"
+                 :icon="appConfig.icons.enabled"
+                 class="w-full sm:w-40"
+                 @update:model-value="enabled = $event === ALL ? null : $event === 'enabled'" />
+    </FilterBarField>
 </template>

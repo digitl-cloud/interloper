@@ -74,10 +74,11 @@ export default defineAppConfig({
       }
     },
     // A page's toolbar (its sub-page tabs, a detail page's actions) is the first row of the page's
-    // content, not a band of its own: no rule, and as far below the navbar as the content sits.
+    // content, not a band of its own: no rule, and as far below the navbar as the content sits. It
+    // keeps the theme's sideways scroll for tabs wider than a phone.
     dashboardToolbar: {
       slots: {
-        root: 'agent-room transition-[margin] min-h-0 overflow-visible border-b-0 pt-4 sm:pt-6'
+        root: 'agent-room transition-[margin] min-h-0 border-b-0 pt-4 sm:pt-6'
       }
     },
     // The navbar's search field reads as a filled control, not an outlined button.
@@ -118,12 +119,13 @@ export default defineAppConfig({
           }
         },
         // Horizontal pills (a page's sub-page tabs) are a segmented control, the same as the
-        // pill UTabs below: a card-toned track, the active view a raised chip.
+        // pill UTabs below: a card-toned track, the active view a raised chip. The ring sits
+        // inside the track so a scrolling toolbar cannot clip it.
         {
           orientation: 'horizontal',
           variant: 'pill',
           class: {
-            list: 'gap-1 rounded-lg bg-muted p-1 ring ring-default',
+            list: 'gap-1 rounded-lg bg-muted p-1 ring ring-inset ring-default',
             item: 'py-0',
             link: 'px-3 py-1',
             linkLeadingIcon: 'size-4'
@@ -234,16 +236,29 @@ export default defineAppConfig({
       }
     },
     // Segmented control: the active pill takes the panel tone on a card-toned track
-    // (theme default is a solid primary pill).
+    // (theme default is a solid primary pill). A track wider than its room scrolls sideways.
     tabs: {
       compoundVariants: [
         {
           color: 'primary',
           variant: 'pill',
           class: {
-            list: 'bg-muted ring ring-default',
+            root: 'min-w-0',
+            list: 'max-w-full overflow-x-auto bg-muted ring ring-inset ring-default',
             indicator: 'bg-default shadow-xs dark:bg-inverted',
-            trigger: 'data-[state=active]:text-highlighted dark:data-[state=active]:text-inverted'
+            trigger: 'shrink-0 data-[state=active]:text-highlighted dark:data-[state=active]:text-inverted'
+          }
+        },
+        // Vertical, the pills are a list (the phone's filter sheet): full-width rows, counts at the end.
+        {
+          color: 'primary',
+          variant: 'pill',
+          orientation: 'vertical',
+          class: {
+            root: 'w-full',
+            list: 'w-full',
+            trigger: 'justify-start',
+            trailingBadge: 'ms-auto'
           }
         }
       ]
@@ -279,6 +294,7 @@ export default defineAppConfig({
     destination: 'i-lucide-database',
     connection: 'i-lucide-key-round',
     config: 'i-lucide-sliders-horizontal',
+    filter: 'i-lucide-list-filter',
     job: 'i-lucide-calendar-clock',
     hook: 'i-lucide-zap',
     asset: 'i-lucide-box',

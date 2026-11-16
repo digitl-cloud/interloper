@@ -96,11 +96,13 @@ const markerTime = computed(() => {
 })
 const highlightedAsset = computed(() => hoveredAsset.value ?? eventInFocus.value?.component_id ?? null)
 
-// Panes clip overflow, so each keeps a 1px inset for its card's ring.
-const railItems: SplitterItem[] = [
-    { slot: 'rail', sizeUnit: 'px', defaultSize: 268, minSize: 200, maxSize: 480, collapsible: true, collapsedSize: 0, class: 'overflow-hidden p-px' },
+// Panes clip overflow, so each keeps a 1px inset for its card's ring. On a phone the rail starts folded,
+// leaving the timeline the width, and keeps its own saved layout so the desktop one is untouched.
+const wide = useMediaQuery('(min-width: 640px)')
+const railItems = computed<SplitterItem[]>(() => [
+    { slot: 'rail', sizeUnit: 'px', defaultSize: wide.value ? 268 : 0, minSize: 200, maxSize: 480, collapsible: true, collapsedSize: 0, class: 'overflow-hidden p-px' },
     { slot: 'main', class: 'min-w-0' },
-]
+])
 const panelItems: SplitterItem[] = [
     { slot: 'timeline', defaultSize: 40, minSize: 15, class: 'flex-col overflow-hidden p-px' },
     { slot: 'events', defaultSize: 60, minSize: 20, class: 'flex-col overflow-hidden p-px' },
@@ -294,8 +296,9 @@ onUnmounted(() => {
                     </UCard>
 
                     <USplitter id="run-rail"
+                               :key="wide ? 'wide' : 'phone'"
                                ref="railSplitter"
-                               auto-save-id="run-rail"
+                               :auto-save-id="wide ? 'run-rail' : 'run-rail-phone'"
                                :items="railItems"
                                :ui="{ root: 'min-h-0 flex-1 -mt-px', handle: railHandleClass }">
                         <template #rail="{ collapsed }">

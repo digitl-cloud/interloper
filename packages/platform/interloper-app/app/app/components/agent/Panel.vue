@@ -15,7 +15,8 @@ const panel = useTemplateRef<HTMLElement>('panel')
 // The panel's width and the room the page leaves for it (the `agent-room` toolbar and body, see
 // app.config) live in a small stylesheet the panel owns, as rules on just those elements. Bound in a
 // template, a resize would re-render the conversation and the layout on every pointer move; as a
-// variable on a shared ancestor, it would restyle the whole page.
+// variable on a shared ancestor, it would restyle the whole page. Below the `sm` breakpoint a phone
+// has no room to leave, so the panel spans the page's width over it and does not resize.
 const sizing = new CSSStyleSheet()
 watchEffect(() => {
     const room = open.value ? `calc(${width.value}px + var(--agent-inset))` : '0px'
@@ -23,6 +24,11 @@ watchEffect(() => {
         .agent-panel { width: ${width.value}px }
         .agent-panel-handle { right: calc(${width.value}px + var(--agent-inset) * 1.5 - 1px) }
         .agent-room { margin-inline-end: ${room}; transition-duration: ${dragging.value ? '0ms' : '300ms'} }
+        @media (width < 40rem) {
+            .agent-panel { width: auto; left: var(--agent-inset) }
+            .agent-panel-handle { display: none }
+            .agent-room { margin-inline-end: 0 }
+        }
     `)
 })
 onMounted(() => {

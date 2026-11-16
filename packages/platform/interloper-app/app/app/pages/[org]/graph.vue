@@ -53,7 +53,7 @@ function handleSaved() {
 }
 
 const assetPane = useSlidingPane('graph-asset-pane-size')
-const { group: splitterRef, opened: panelOpen, mounted: panelMounted, animating: panelAnimating, contentStyle: assetPaneContentStyle, onLayout: onAssetPaneLayout } = assetPane
+const { group: splitterRef, opened: panelOpen, mounted: panelMounted, animating: panelAnimating, wide, contentStyle: assetPaneContentStyle, onLayout: onAssetPaneLayout } = assetPane
 /** What USplitter exposes: its panels, the side one being the pane the sliding pane resizes. */
 type SplitterHandle = { panelsRef: NonNullable<typeof assetPane.pane.value>[] }
 // USplitter renders its panels itself, so the pane is read off the splitter rather than bound.
@@ -62,12 +62,12 @@ watchEffect(() => {
 })
 
 // p-px keeps the cards' outer rings inside the panes, which clip overflow.
-const splitterItems: SplitterItem[] = [
-    { slot: 'main', defaultSize: 100, minSize: 30, class: 'p-px' },
+const splitterItems = computed<SplitterItem[]>(() => [
+    { slot: 'main', defaultSize: 100, minSize: wide.value ? 30 : 0, class: 'overflow-hidden p-px' },
     { slot: 'asset', defaultSize: 0, class: 'relative overflow-hidden' },
-]
+])
 /** The handle is the page's panel gap, less the 1px each pane pads its card with so the ring isn't clipped. */
-const handleClass = computed(() => `flex justify-center transition-all duration-200 ${panelOpen.value ? 'w-3.5 sm:w-5.5' : 'w-0'}`)
+const handleClass = computed(() => `flex justify-center transition-all duration-200 ${panelOpen.value && wide.value ? 'w-3.5 sm:w-5.5' : 'w-0'}`)
 const selectedAsset = ref<ComponentRecord | undefined>()
 const selectedAssetDefn = ref<AssetDefinition | undefined>()
 const selectedSource = ref<ComponentRecord | undefined>()
@@ -172,7 +172,7 @@ async function onDeleteDependency(payload: { upstreamAssetId: string; downstream
             <USplitter id="graph-asset-pane"
                        ref="splitterRef"
                        :items="splitterItems"
-                       :disabled="!panelOpen || panelAnimating"
+                       :disabled="!panelOpen || panelAnimating || !wide"
                        :ui="{ root: 'min-h-0 flex-1', handle: handleClass }"
                        @layout="onAssetPaneLayout">
                 <template #main>
