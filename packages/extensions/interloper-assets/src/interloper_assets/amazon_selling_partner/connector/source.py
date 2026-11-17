@@ -1,11 +1,5 @@
-import asyncio
-import datetime as dt
-import gzip
-import json
-import logging
 from typing import Any
 
-import httpx2
 import interloper as il
 from interloper_pandas import DataFrameNormalizer
 
@@ -13,225 +7,35 @@ from interloper_assets.amazon_selling_partner import constants
 from interloper_assets.amazon_selling_partner.connection import AmazonSellingPartnerConnection
 from interloper_assets.amazon_selling_partner.connector import schemas
 
-logger = logging.getLogger(__name__)
-
 _Record = dict[str, Any]
-
-# Polling cadence for async reports and Data Kiosk queries (both queue server-side).
-_POLL_INTERVAL = 60.0  # seconds between status polls
-_REPORT_TIMEOUT = 7200.0  # 2h, vendor reports can queue for a long time
-_QUERY_TIMEOUT = 3600.0  # 1h for Data Kiosk queries
 
 
 # -- HELPERS: nested-dict access -----------------------------------------------
 def _nested(value: Any, *keys: str) -> Any:
-    """Walk *keys* through nested dicts, returning ``None`` on any missing hop."""
+    """Walk ``keys`` through nested dicts, for the Data Kiosk assets flattening their metric records.
+
+    Args:
+        value: The object to walk, usually a metric record.
+        *keys: The keys to follow, outermost first.
+
+    Returns:
+        The value at the end of the walk, or ``None`` on any missing hop.
+    """
     for key in keys:
         value = value.get(key) if isinstance(value, dict) else None
     return value
 
 
 def _scalars(row: dict[str, Any]) -> dict[str, Any]:
-    """Keep only scalar (str/int/float) values; blank out anything else with ``None``."""
-    return {k: (v if isinstance(v, (str, int, float)) else None) for k, v in row.items()}
+    """Keep only scalar values of a flattened Data Kiosk row, blanking anything else with ``None``.
 
+    Args:
+        row: A row the Data Kiosk assets built from a metric record.
 
-# -- HELPERS: async reports ----------------------------------------------------
-async def _request_report(
-    connection: AmazonSellingPartnerConnection,
-    report_type: str,
-    marketplace: str,
-    start_date: dt.date | None,
-    end_date: dt.date | None,
-    options: dict[str, str] | None,
-) -> str:
-    """Create an async report and return its report id."""
-    body: dict[str, Any] = {"reportType": report_type, "marketplaceIds": [marketplace]}
-    if start_date:
-        body["dataStartTime"] = start_date.strftime("%Y-%m-%dT00:00:00.000Z")
-    if end_date:
-        body["dataEndTime"] = end_date.strftime("%Y-%m-%dT23:59:59.999Z")
-    if options:
-        body["reportOptions"] = options
-
-    response = await connection.client.post(f"/reports/{constants.REPORT_API_VERSION}/reports", json=body)
-    response.raise_for_status()
-    return response.json()["reportId"]
-
-
-async def _wait_for_report(connection: AmazonSellingPartnerConnection, report_id: str) -> dict:
-    """Poll a report until it reaches a terminal state; return its final payload.
-
-    Each poll depends on the previous status, so this stays a sequential
-    fixed-interval loop bounded by ``_REPORT_TIMEOUT``. A failed report may still
-    attach a document carrying error details, so return the payload for the
-    caller to inspect rather than raising here.
-
-    Raises:
-        RuntimeError: If the report fails, or does not finish in time.
-
+    Returns:
+        The row, each str, int or float value kept and every other value ``None``.
     """
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + _REPORT_TIMEOUT
-    while True:
-        logger.info(f"Waiting for report {report_id}...")
-        try:
-            response = await connection.client.get(f"/reports/{constants.REPORT_API_VERSION}/reports/{report_id}")
-            response.raise_for_status()
-            payload = response.json()
-            status = payload["processingStatus"]
-        except httpx2.HTTPError as exc:
-            logger.debug(f"Transient error polling report {report_id}: {exc}")
-            if loop.time() >= deadline:
-                raise RuntimeError(f"Report {report_id} did not complete within {_REPORT_TIMEOUT:.0f}s") from exc
-            await asyncio.sleep(_POLL_INTERVAL)
-            continue
-
-        if status == "DONE":
-            return payload
-        if status in ("CANCELLED", "FATAL"):
-            if payload.get("reportDocumentId"):
-                return payload
-            raise RuntimeError(f"Report {report_id} failed with status {status}")
-
-        if loop.time() >= deadline:
-            raise RuntimeError(f"Report {report_id} did not complete within {_REPORT_TIMEOUT:.0f}s")
-        await asyncio.sleep(_POLL_INTERVAL)
-
-
-async def _report_document_url(connection: AmazonSellingPartnerConnection, document_id: str) -> str:
-    response = await connection.client.get(f"/reports/{constants.REPORT_API_VERSION}/documents/{document_id}")
-    response.raise_for_status()
-    return response.json()["url"]
-
-
-async def _download_gzip_json(url: str) -> dict:
-    """Download and gzip-decompress a report document from its pre-signed URL."""
-    async with httpx2.AsyncClient(timeout=None) as client:
-        response = await client.get(url)
-        response.raise_for_status()
-    return json.loads(gzip.decompress(response.content))
-
-
-async def _get_report(
-    connection: AmazonSellingPartnerConnection,
-    report_type: str,
-    marketplace: str,
-    start_date: dt.date | None = None,
-    end_date: dt.date | None = None,
-    options: dict[str, str] | None = None,
-) -> dict | None:
-    """Request, wait for, and download an async report.
-
-    Returns the parsed document, or ``None`` when the report failed only because
-    the data for the requested range is not yet available.
-
-    Raises:
-        RuntimeError: If the report fails, or does not finish in time.
-
-    """
-    report_id = await _request_report(connection, report_type, marketplace, start_date, end_date, options)
-    logger.info(f"Report id: {report_id} ({report_type})")
-
-    payload = await _wait_for_report(connection, report_id)
-    status = payload["processingStatus"]
-
-    document_id = payload.get("reportDocumentId")
-    if not document_id:
-        raise RuntimeError(f"Report {report_id} failed with status {status}")
-
-    url = await _report_document_url(connection, document_id)
-    document = await _download_gzip_json(url)
-
-    if status != "DONE":
-        details = document.get("errorDetails", "") if isinstance(document, dict) else ""
-        if "not yet available" in details:
-            logger.warning(f"Report {report_id}: {details}")
-            return None
-        raise RuntimeError(f"Report {report_id} failed: {details or status}")
-
-    return document
-
-
-# -- HELPERS: Data Kiosk -------------------------------------------------------
-async def _wait_for_query(connection: AmazonSellingPartnerConnection, query_id: str) -> dict:
-    """Poll a Data Kiosk query until it reaches a terminal state; return its payload.
-
-    Raises:
-        RuntimeError: If the query fails, or does not finish in time.
-
-    """
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + _QUERY_TIMEOUT
-    while True:
-        logger.info(f"Waiting for query {query_id}...")
-        try:
-            response = await connection.client.get(f"/dataKiosk/{constants.DATAKIOSK_API_VERSION}/queries/{query_id}")
-            response.raise_for_status()
-            payload = response.json()
-            status = payload["processingStatus"]
-        except httpx2.HTTPError as exc:
-            logger.debug(f"Transient error polling query {query_id}: {exc}")
-            if loop.time() >= deadline:
-                raise RuntimeError(f"Query {query_id} did not complete within {_QUERY_TIMEOUT:.0f}s") from exc
-            await asyncio.sleep(_POLL_INTERVAL)
-            continue
-
-        if status == "DONE":
-            return payload
-        if status in ("CANCELLED", "FATAL"):
-            raise RuntimeError(f"Query {query_id} failed with status {status}")
-
-        if loop.time() >= deadline:
-            raise RuntimeError(f"Query {query_id} did not complete within {_QUERY_TIMEOUT:.0f}s")
-        await asyncio.sleep(_POLL_INTERVAL)
-
-
-async def _download_json(url: str) -> Any:
-    """Download a Data Kiosk document (plain JSON) from its pre-signed URL."""
-    async with httpx2.AsyncClient(timeout=None) as client:
-        response = await client.get(url)
-        response.raise_for_status()
-    return response.json()
-
-
-def _extract_metrics(document: Any) -> list[dict]:
-    """Pull the ``metrics`` record list out of a Data Kiosk result document.
-
-    The list may sit at the top level or nested under the queried view object,
-    so fall back to a shallow search of nested dicts.
-    """
-    if not isinstance(document, dict):
-        return []
-    if isinstance(document.get("metrics"), list):
-        return document["metrics"]
-    for value in document.values():
-        if isinstance(value, dict):
-            found = _extract_metrics(value)
-            if found:
-                return found
-    return []
-
-
-async def _run_query(connection: AmazonSellingPartnerConnection, query: str) -> list[dict]:
-    """Create, wait for, and download a Data Kiosk query; return its metric records."""
-    response = await connection.client.post(
-        f"/dataKiosk/{constants.DATAKIOSK_API_VERSION}/queries", json={"query": query}
-    )
-    response.raise_for_status()
-    query_id = response.json()["queryId"]
-    logger.info(f"Query id: {query_id}")
-
-    payload = await _wait_for_query(connection, query_id)
-    document_id = payload.get("dataDocumentId")
-    if not document_id:
-        # DONE with no document => the query produced no rows.
-        return []
-
-    response = await connection.client.get(f"/dataKiosk/{constants.DATAKIOSK_API_VERSION}/documents/{document_id}")
-    response.raise_for_status()
-    document = await _download_json(response.json()["documentUrl"])
-    return _extract_metrics(document)
+    return {key: (value if isinstance(value, (str, int, float)) else None) for key, value in row.items()}
 
 
 # -- SOURCE --------------------------------------------------------------------
@@ -269,15 +73,14 @@ class AmazonSellingPartner(il.Source):
     )
     async def vendor_traffic_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Glance views per ASIN per day."""
-        document = await _get_report(
-            self.connection,
-            report_type="GET_VENDOR_TRAFFIC_REPORT",
-            marketplace=self.marketplace,
+        return await self.connection.api.report(
+            key="trafficByAsin",
             start_date=context.partition_date,
             end_date=context.partition_date,
-            options={"reportPeriod": "DAY"},
+            reportType="GET_VENDOR_TRAFFIC_REPORT",
+            marketplaceIds=[self.marketplace],
+            reportOptions={"reportPeriod": "DAY"},
         )
-        return document.get("trafficByAsin", []) if document else []
 
     @il.asset(
         schema=schemas.VendorSalesRetailManufacturingStats,
@@ -286,15 +89,14 @@ class AmazonSellingPartner(il.Source):
     )
     async def vendor_sales_retail_manufacturing_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Retail sales per ASIN per day, manufacturing (distributor) view."""
-        document = await _get_report(
-            self.connection,
-            report_type="GET_VENDOR_SALES_REPORT",
-            marketplace=self.marketplace,
+        return await self.connection.api.report(
+            key="salesByAsin",
             start_date=context.partition_date,
             end_date=context.partition_date,
-            options={"reportPeriod": "DAY", "sellingProgram": "RETAIL", "distributorView": "MANUFACTURING"},
+            reportType="GET_VENDOR_SALES_REPORT",
+            marketplaceIds=[self.marketplace],
+            reportOptions={"reportPeriod": "DAY", "sellingProgram": "RETAIL", "distributorView": "MANUFACTURING"},
         )
-        return document.get("salesByAsin", []) if document else []
 
     @il.asset(
         schema=schemas.VendorSalesRetailSourcingStats,
@@ -303,15 +105,14 @@ class AmazonSellingPartner(il.Source):
     )
     async def vendor_sales_retail_sourcing_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Retail sales per ASIN per day, sourcing (distributor) view."""
-        document = await _get_report(
-            self.connection,
-            report_type="GET_VENDOR_SALES_REPORT",
-            marketplace=self.marketplace,
+        return await self.connection.api.report(
+            key="salesByAsin",
             start_date=context.partition_date,
             end_date=context.partition_date,
-            options={"reportPeriod": "DAY", "sellingProgram": "RETAIL", "distributorView": "SOURCING"},
+            reportType="GET_VENDOR_SALES_REPORT",
+            marketplaceIds=[self.marketplace],
+            reportOptions={"reportPeriod": "DAY", "sellingProgram": "RETAIL", "distributorView": "SOURCING"},
         )
-        return document.get("salesByAsin", []) if document else []
 
     @il.asset(
         schema=schemas.VendorSalesBusinessManufacturingStats,
@@ -320,15 +121,14 @@ class AmazonSellingPartner(il.Source):
     )
     async def vendor_sales_business_manufacturing_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Business (B2B) sales per ASIN per day, manufacturing (distributor) view."""
-        document = await _get_report(
-            self.connection,
-            report_type="GET_VENDOR_SALES_REPORT",
-            marketplace=self.marketplace,
+        return await self.connection.api.report(
+            key="salesByAsin",
             start_date=context.partition_date,
             end_date=context.partition_date,
-            options={"reportPeriod": "DAY", "sellingProgram": "BUSINESS", "distributorView": "MANUFACTURING"},
+            reportType="GET_VENDOR_SALES_REPORT",
+            marketplaceIds=[self.marketplace],
+            reportOptions={"reportPeriod": "DAY", "sellingProgram": "BUSINESS", "distributorView": "MANUFACTURING"},
         )
-        return document.get("salesByAsin", []) if document else []
 
     @il.asset(
         schema=schemas.VendorSalesBusinessSourcingStats,
@@ -337,15 +137,14 @@ class AmazonSellingPartner(il.Source):
     )
     async def vendor_sales_business_sourcing_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Business (B2B) sales per ASIN per day, sourcing (distributor) view."""
-        document = await _get_report(
-            self.connection,
-            report_type="GET_VENDOR_SALES_REPORT",
-            marketplace=self.marketplace,
+        return await self.connection.api.report(
+            key="salesByAsin",
             start_date=context.partition_date,
             end_date=context.partition_date,
-            options={"reportPeriod": "DAY", "sellingProgram": "BUSINESS", "distributorView": "SOURCING"},
+            reportType="GET_VENDOR_SALES_REPORT",
+            marketplaceIds=[self.marketplace],
+            reportOptions={"reportPeriod": "DAY", "sellingProgram": "BUSINESS", "distributorView": "SOURCING"},
         )
-        return document.get("salesByAsin", []) if document else []
 
     @il.asset(
         schema=schemas.VendorInventoryRetailManufacturingStats,
@@ -354,15 +153,14 @@ class AmazonSellingPartner(il.Source):
     )
     async def vendor_inventory_retail_manufacturing_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Retail inventory health per ASIN per day, manufacturing (distributor) view."""
-        document = await _get_report(
-            self.connection,
-            report_type="GET_VENDOR_INVENTORY_REPORT",
-            marketplace=self.marketplace,
+        return await self.connection.api.report(
+            key="inventoryByAsin",
             start_date=context.partition_date,
             end_date=context.partition_date,
-            options={"reportPeriod": "DAY", "sellingProgram": "RETAIL", "distributorView": "MANUFACTURING"},
+            reportType="GET_VENDOR_INVENTORY_REPORT",
+            marketplaceIds=[self.marketplace],
+            reportOptions={"reportPeriod": "DAY", "sellingProgram": "RETAIL", "distributorView": "MANUFACTURING"},
         )
-        return document.get("inventoryByAsin", []) if document else []
 
     @il.asset(
         schema=schemas.VendorInventoryRetailSourcingStats,
@@ -371,15 +169,14 @@ class AmazonSellingPartner(il.Source):
     )
     async def vendor_inventory_retail_sourcing_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Retail inventory health per ASIN per day, sourcing (distributor) view."""
-        document = await _get_report(
-            self.connection,
-            report_type="GET_VENDOR_INVENTORY_REPORT",
-            marketplace=self.marketplace,
+        return await self.connection.api.report(
+            key="inventoryByAsin",
             start_date=context.partition_date,
             end_date=context.partition_date,
-            options={"reportPeriod": "DAY", "sellingProgram": "RETAIL", "distributorView": "SOURCING"},
+            reportType="GET_VENDOR_INVENTORY_REPORT",
+            marketplaceIds=[self.marketplace],
+            reportOptions={"reportPeriod": "DAY", "sellingProgram": "RETAIL", "distributorView": "SOURCING"},
         )
-        return document.get("inventoryByAsin", []) if document else []
 
     @il.asset(
         schema=schemas.VendorNetPureProductMarginStats,
@@ -388,15 +185,14 @@ class AmazonSellingPartner(il.Source):
     )
     async def vendor_net_pure_product_margin_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Net pure product margin per ASIN per day."""
-        document = await _get_report(
-            self.connection,
-            report_type="GET_VENDOR_NET_PURE_PRODUCT_MARGIN_REPORT",
-            marketplace=self.marketplace,
+        return await self.connection.api.report(
+            key="netPureProductMarginByAsin",
             start_date=context.partition_date,
             end_date=context.partition_date,
-            options={"reportPeriod": "DAY"},
+            reportType="GET_VENDOR_NET_PURE_PRODUCT_MARGIN_REPORT",
+            marketplaceIds=[self.marketplace],
+            reportOptions={"reportPeriod": "DAY"},
         )
-        return document.get("netPureProductMarginByAsin", []) if document else []
 
     @il.asset(
         schema=schemas.VendorForecastingRetailStats,
@@ -411,18 +207,14 @@ class AmazonSellingPartner(il.Source):
         ``forecastGenerationDate`` and every other run writes nothing. Past
         generations cannot be backfilled from the API.
         """
-        document = await _get_report(
-            self.connection,
-            report_type="GET_VENDOR_FORECASTING_REPORT",
-            marketplace=self.marketplace,
-            options={"sellingProgram": "RETAIL"},
+        records = await self.connection.api.report(
+            key="forecastByAsin",
+            reportType="GET_VENDOR_FORECASTING_REPORT",
+            marketplaceIds=[self.marketplace],
+            reportOptions={"sellingProgram": "RETAIL"},
         )
         generated_on = context.partition_date.isoformat()
-        return [
-            record
-            for record in (document.get("forecastByAsin", []) if document else [])
-            if record.get("forecastGenerationDate") == generated_on
-        ]
+        return [record for record in records if record.get("forecastGenerationDate") == generated_on]
 
     # --- Vendor Analytics: Data Kiosk (GraphQL) -------------------------------
 
@@ -443,7 +235,7 @@ class AmazonSellingPartner(il.Source):
             }}
           }}
         }}"""
-        metrics = await _run_query(self.connection, query)
+        metrics = await self.connection.api.query(key="metrics", query=query)
         return [
             {
                 **_scalars(
@@ -490,7 +282,7 @@ class AmazonSellingPartner(il.Source):
             }}
           }}
         }}"""
-        metrics = await _run_query(self.connection, query)
+        metrics = await self.connection.api.query(key="metrics", query=query)
         rows: list[_Record] = []
         for m in metrics:
             metric = _nested(m, "metrics")
@@ -542,7 +334,7 @@ class AmazonSellingPartner(il.Source):
             }}
           }}
         }}"""
-        metrics = await _run_query(self.connection, query)
+        metrics = await self.connection.api.query(key="metrics", query=query)
         rows: list[_Record] = []
         for m in metrics:
             metric = _nested(m, "metrics")
