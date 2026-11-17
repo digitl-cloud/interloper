@@ -16,6 +16,7 @@ from typing import Any, ClassVar
 
 import httpx2
 import interloper as il
+import pytest
 from interloper.asset.context import ExecutionContext
 from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
@@ -322,6 +323,29 @@ class TestMediaStats:
         }  # m3 is an AD, which has no metric set
         assert all("impressions" not in requested for requested in metrics.values())
 
+    async def test_sends_exactly_these_requests(self):
+        requests: list[httpx2.Request] = []
+        media_handler = self._handler([])
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            return media_handler(request)
+
+        await _run(_faked_source(handler), "media_stats")
+
+        assert {request.method for request in requests} == {"GET"}
+        media, stories, *insights = requests
+        fields = ",".join(constants.MEDIA_STATS_FIELDS)
+        assert media.url.path == "/v26.0/1784/media"
+        assert media.url.params.multi_items() == [("fields", fields), ("since", "1773878400"), ("until", "1789516800")]
+        assert stories.url.path == "/v26.0/1784/stories"
+        assert stories.url.params.multi_items() == [("fields", fields)]
+        assert {(request.url.path, *request.url.params.multi_items()) for request in insights} == {
+            ("/v26.0/m1/insights", ("metric", ",".join(constants.FEED_METRICS))),
+            ("/v26.0/m2/insights", ("metric", ",".join(constants.REELS_METRICS))),
+            ("/v26.0/s1/insights", ("metric", ",".join(constants.STORY_METRICS))),
+        }
+
     def test_schema_is_the_union_of_the_metric_sets(self):
         union = {*constants.FEED_METRICS, *constants.REELS_METRICS, *constants.STORY_METRICS}
         fields = set(schemas.MediaStats.model_fields)
@@ -344,3 +368,139 @@ class TestMediaStats:
         assert out["boost_eligibility_info"] == '{"eligible_to_boost": true}'
         assert out["timestamp"].isoformat().startswith("2026-09-10T10:00:00")
         assert str(out["date"])[:10] == "2026-09-15"
+
+
+async def _requests(key: str, day: dt.date = DAY) -> list[httpx2.Request]:
+    requests: list[httpx2.Request] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        return httpx2.Response(200, json={"data": []})
+
+    await _run(_faked_source(handler), key, day)
+    return requests
+
+
+def _day_window(day: dt.date) -> list[tuple[str, str]]:
+    return [("since", day.isoformat()), ("until", (day + dt.timedelta(days=1)).isoformat())]
+
+
+class TestRequests:
+    """Every request an asset sends: method, path and query, in order. Graph takes no scope header."""
+
+    async def test_account_stats(self):
+        day = dt.date.today() - dt.timedelta(days=1)
+        (request,) = await _requests("account_stats", day)
+        assert (request.method, request.url.path) == ("GET", "/v26.0/1784/insights")
+        assert request.url.params.multi_items() == [
+            ("metric", "follower_count,reach"),
+            ("period", "day"),
+            *_day_window(day),
+        ]
+
+    async def test_engagement_stats(self):
+        (request,) = await _requests("engagement_stats")
+        assert (request.method, request.url.path) == ("GET", "/v26.0/1784/insights")
+        assert request.url.params.multi_items() == [
+            ("metric", ",".join(constants.ENGAGEMENT_METRICS)),
+            ("period", "day"),
+            ("metric_type", "total_value"),
+            *_day_window(DAY),
+        ]
+
+    @pytest.mark.parametrize(
+        ("key", "breakdown"),
+        [
+            ("followers_stats_by_country", "country"),
+            ("followers_stats_by_city", "city"),
+            ("followers_stats_by_age_gender", "gender,age"),
+        ],
+    )
+    async def test_followers_stats(self, key: str, breakdown: str):
+        (request,) = await _requests(key)
+        assert (request.method, request.url.path) == ("GET", "/v26.0/1784/insights")
+        assert request.url.params.multi_items() == [
+            ("metric", "follower_demographics"),
+            ("period", "lifetime"),
+            ("metric_type", "total_value"),
+            ("breakdown", breakdown),
+            *_day_window(DAY),
+        ]
+
+    async def test_profiles(self):
+        (request,) = await _requests("profiles")
+        assert (request.method, request.url.path) == ("GET", "/v26.0/1784")
+        assert request.url.params.multi_items() == [("fields", "followers_count,follows_count,media_count")]
+
+    async def test_media(self):
+        (request,) = await _requests("media")
+        assert (request.method, request.url.path) == ("GET", "/v26.0/1784/media")
+        assert request.url.params.multi_items() == [("fields", ",".join(constants.MEDIA_FIELDS))]
+
+
+class TestPaging:
+    """Every edge follows its absolute ``paging.next`` link, which carries the cursor and the query."""
+
+    async def test_account_insights_follow_every_page(self):
+        next_link = f"{GRAPH}/1784/insights?metric=likes&after=p2"
+        pages = {
+            None: {
+                "data": [{"name": "likes", "total_value": {"value": 25}}],
+                "paging": {"next": next_link},
+            },
+            "p2": {"data": [{"name": "accounts_engaged", "total_value": {"value": 9}}]},
+        }
+        urls: list[httpx2.URL] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            urls.append(request.url)
+            return httpx2.Response(200, json=pages[request.url.params.get("after")])
+
+        rows = await _run(_faked_source(handler), "engagement_stats")
+        assert rows == [{"likes": 25, "accounts_engaged": 9, "date": DAY}]
+        assert urls[0].params.multi_items()[0] == ("metric", ",".join(constants.ENGAGEMENT_METRICS))
+        assert str(urls[1]) == next_link
+
+    async def test_media_stats_follows_every_page_of_every_edge(self):
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            path, after = request.url.path, request.url.params.get("after")
+            if path.endswith("/media") and after is None:
+                body = {
+                    "data": [{"id": "m1", "media_product_type": "FEED"}],
+                    "paging": {"next": f"{GRAPH}{path}?after=p2"},
+                }
+            elif path.endswith("/media"):
+                body = {"data": [{"id": "m2", "media_product_type": "FEED"}]}
+            elif path.endswith("/stories"):
+                body = {"data": []}
+            elif after is None:
+                body = {
+                    "data": [{"name": "likes", "values": [{"value": 1}]}],
+                    "paging": {"next": f"{GRAPH}{path}?after=p2"},
+                }
+            else:
+                body = {"data": [{"name": "reach", "values": [{"value": 2}]}]}
+            return httpx2.Response(200, json=body)
+
+        rows = await _run(_faked_source(handler), "media_stats")
+        assert [(row["id"], row["likes"], row["reach"]) for row in rows] == [("m1", 1, 2), ("m2", 1, 2)]
+
+
+class TestRefusals:
+    """Graph refuses with an HTTP error status, which fails the asset."""
+
+    async def test_a_refused_node_read_fails_the_asset(self):
+        source = _faked_source(lambda request: httpx2.Response(400, json={"error": {"code": 100}}))
+        with pytest.raises(httpx2.HTTPStatusError):
+            await _run(source, "profiles")
+
+    async def test_a_refusal_on_a_later_page_fails_the_asset(self):
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            if request.url.params.get("after") == "p2":
+                return httpx2.Response(400, json={"error": {"code": 100}})
+            return httpx2.Response(
+                200, json={"data": [{"id": "1"}], "paging": {"next": f"{GRAPH}/1784/media?after=p2"}}
+            )
+
+        with pytest.raises(httpx2.HTTPStatusError):
+            await _run(_faked_source(handler), "media")

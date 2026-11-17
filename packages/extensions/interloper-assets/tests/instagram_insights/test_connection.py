@@ -36,6 +36,13 @@ class TestClient:
         assert request.headers["Authorization"] == "Bearer token"
 
 
+class TestApi:
+    def test_the_api_is_built_on_the_client(self):
+        connection = _connection(lambda request: httpx2.Response(200, json={"data": []}))
+
+        assert connection.api.client is connection.client
+
+
 class TestAccounts:
     NEXT_LINK = f"{GRAPH}/me/accounts?limit=100&after=cursor-1"
 
@@ -64,12 +71,24 @@ class TestAccounts:
             {"id": "13", "name": "Bare Page"},
         ]
         assert seen[0].path == "/v26.0/me/accounts"
-        assert dict(seen[0].params) == {
-            "fields": "instagram_business_account{id,username,name},name",
-            "access_token": "token",
-            "limit": "100",
-        }
+        assert seen[0].params.multi_items() == [
+            ("fields", "instagram_business_account{id,username,name},name"),
+            ("limit", "100"),
+        ]
         assert len(seen) == 2
+
+    async def test_the_token_travels_as_the_bearer_never_in_the_url(self):
+        requests: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            return httpx2.Response(200, json={"data": []})
+
+        await _connection(handler).accounts()
+
+        (request,) = requests
+        assert "access_token" not in request.url.params
+        assert request.headers["Authorization"] == "Bearer token"
 
     async def test_follows_the_next_link_with_its_cursor(self):
         seen: list[httpx2.URL] = []
