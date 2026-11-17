@@ -13,10 +13,11 @@ so the seeded shape stays in sync with production code paths. Safe to re-run:
 every step is guarded so repeated invocations neither error nor duplicate.
 
 ``INTERLOPER_DEV_USER_EMAIL`` (default ``admin@dev.local``) names the dev user.
-The seed promotes the profile holding that address, or creates a placeholder
-holding it. A first login joins the profile holding its address, so your first
-real login with that address, through any provider, lands on the seeded profile:
-super-admin in the seed org, no duplicate.
+The seed promotes the profile holding that address, or provisions one holding
+it that nothing signs in to yet. The first login whose address such a profile
+holds claims it, so your first login with that address, through any provider,
+lands on the seeded profile: super-admin in the seed org, no duplicate, and no
+mail server needed.
 
 Run directly against a reachable Postgres (host path or inside the compose
 ``seed`` service)::
@@ -44,10 +45,6 @@ from sqlmodel import Session, select
 
 DEV_USER_EMAIL = os.environ.get("INTERLOPER_DEV_USER_EMAIL", "admin@dev.local")
 
-# The identity a placeholder profile is created with. No provider issues it, so
-# it never signs in; a real login joins the placeholder by its address instead.
-PLACEHOLDER_ISSUER = "urn:interloper:dev-seed"
-
 ORG_NAME = "Dev Org"
 
 DEMO_SOURCE_KEY = "demo_source"  # catalog key of interloper_assets.demo.basic.source.DemoSource
@@ -58,21 +55,14 @@ DEMO_JOB_CRON = "0 6 * * *"  # every day at 06:00
 
 
 def _ensure_super_admin(store: Store) -> tuple[Profile, bool]:
-    """Promote the oldest profile holding the dev user's address, creating a placeholder when none does.
+    """Promote the oldest profile holding the dev user's address, provisioning one when none does.
 
     Returns ``(profile, created)``.
     """
     holders = store.profiles.list(ProfileQuery(email=DEV_USER_EMAIL, limit=None)).items
     created = not holders
     profile = (
-        store.profiles.upsert(
-            issuer=PLACEHOLDER_ISSUER,
-            subject=DEV_USER_EMAIL,
-            email=DEV_USER_EMAIL,
-            name=DEV_USER_EMAIL.split("@", 1)[0],
-        )
-        if created
-        else holders[0]
+        store.profiles.provision(email=DEV_USER_EMAIL, name=DEV_USER_EMAIL.split("@", 1)[0]) if created else holders[0]
     )
     assert profile.id is not None
     return store.profiles.set_super_admin(profile.id, value=True), created
@@ -150,7 +140,7 @@ def main() -> None:
     asset_count = len(source.children)
     job_created = _ensure_demo_job(store, org.id, source.id)
 
-    how = "created a placeholder your first login joins" if created else "matched the profile holding the address"
+    how = "provisioned, your first login claims it" if created else "matched the profile holding the address"
     print("Seed complete:")
     print(f"  org    : {org.name} ({org.id})")
     print(f"  admin  : {DEV_USER_EMAIL} ({admin.id}) [super_admin] ({how})")

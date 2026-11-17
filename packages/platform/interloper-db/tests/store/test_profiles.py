@@ -10,7 +10,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import Engine, inspect, text
 
-from interloper_db import Audience, NotFoundError
+from interloper_db import Audience, ConflictError, NotFoundError
 from interloper_db.store import ProfileQuery, Store
 
 GOOGLE = "https://accounts.google.com"
@@ -139,13 +139,22 @@ class TestUpsertIdentity:
         assert found is not None
         assert found.id == profile.id
 
-    def test_a_known_identity_updates_its_profile(self, store: Store):
-        first = store.profiles.upsert(issuer=GOOGLE, subject="g-1", email="old@example.com")
+    def test_a_known_identity_signs_in_to_its_profile(self, store: Store):
+        first = store.profiles.upsert(issuer=GOOGLE, subject="g-1", email="ada@example.com")
 
-        again = store.profiles.upsert(issuer=GOOGLE, subject="g-1", email="new@example.com")
+        again = store.profiles.upsert(issuer=GOOGLE, subject="g-1", email="ada@example.com")
 
         assert again.id == first.id
         assert store.profiles.list(ProfileQuery(limit=None)).total == 1
+
+    def test_a_later_login_keeps_the_profiles_address(self, store: Store):
+        profile = store.profiles.upsert(issuer=GOOGLE, subject="g-1", email="ada@example.com")
+        store.profiles.link(profile.id, issuer=MICROSOFT, subject="oid-1")
+
+        again = store.profiles.upsert(issuer=MICROSOFT, subject="oid-1", email="ada.lovelace@example.com")
+
+        assert again.id == profile.id
+        assert again.email == "ada@example.com"
 
     def test_each_issuer_signs_in_its_own_profile(self, store: Store):
         google = store.profiles.upsert(issuer=GOOGLE, subject="s-1", email="user@example.com")
@@ -173,6 +182,71 @@ class TestLink:
             store.profiles.link(uuid4(), issuer=MICROSOFT, subject="oid-1")
 
         assert store.profiles.get_by_identity(MICROSOFT, "oid-1") is None
+
+
+class TestProvision:
+    def test_creates_a_profile_no_identity_signs_in_to(self, store: Store):
+        profile = store.profiles.provision(email="ada@example.com", name="Ada")
+
+        assert store.profiles.issuers(profile.id) == []
+        assert [found.id for found in store.profiles.list(ProfileQuery(email="ada@example.com")).items] == [profile.id]
+
+
+class TestIdentities:
+    """The ways a profile signs in, each addressable by a reference derived from it."""
+
+    def test_lists_them_oldest_first(self, store: Store):
+        profile = store.profiles.upsert(issuer=GOOGLE, subject="g-1", email="ada@example.com")
+        store.profiles.link(profile.id, issuer=MICROSOFT, subject="oid-1")
+
+        identities = store.profiles.identities(profile.id)
+
+        assert [(identity.issuer, identity.subject) for identity in identities] == [
+            (GOOGLE, "g-1"),
+            (MICROSOFT, "oid-1"),
+        ]
+
+    def test_each_reference_is_stable_and_its_own(self, store: Store):
+        profile = store.profiles.upsert(issuer=GOOGLE, subject="g-1", email="ada@example.com")
+        store.profiles.link(profile.id, issuer=MICROSOFT, subject="oid-1")
+
+        first = [identity.reference for identity in store.profiles.identities(profile.id)]
+        again = [identity.reference for identity in store.profiles.identities(profile.id)]
+
+        assert first == again
+        assert len(set(first)) == 2
+
+
+class TestUnlink:
+    def test_the_identity_no_longer_signs_in(self, store: Store):
+        profile = store.profiles.upsert(issuer=GOOGLE, subject="g-1", email="ada@example.com")
+        store.profiles.link(profile.id, issuer=MICROSOFT, subject="oid-1")
+        microsoft = next(identity for identity in store.profiles.identities(profile.id) if identity.issuer == MICROSOFT)
+
+        store.profiles.unlink(profile.id, microsoft.reference)
+
+        assert store.profiles.get_by_identity(MICROSOFT, "oid-1") is None
+        assert store.profiles.issuers(profile.id) == [GOOGLE]
+
+    def test_the_last_identity_stays(self, store: Store):
+        profile = store.profiles.upsert(issuer=GOOGLE, subject="g-1", email="ada@example.com")
+        (google,) = store.profiles.identities(profile.id)
+
+        with pytest.raises(ConflictError):
+            store.profiles.unlink(profile.id, google.reference)
+
+        assert store.profiles.get_by_identity(GOOGLE, "g-1") is not None
+
+    def test_another_profiles_identity_is_not_found(self, store: Store):
+        ada = store.profiles.upsert(issuer=GOOGLE, subject="g-1", email="ada@example.com")
+        store.profiles.link(ada.id, issuer=MICROSOFT, subject="oid-1")
+        bob = store.profiles.upsert(issuer=GOOGLE, subject="g-2", email="bob@example.com")
+        microsoft = next(identity for identity in store.profiles.identities(ada.id) if identity.issuer == MICROSOFT)
+
+        with pytest.raises(NotFoundError):
+            store.profiles.unlink(bob.id, microsoft.reference)
+
+        assert store.profiles.get_by_identity(MICROSOFT, "oid-1") is not None
 
 
 class TestIssuers:
@@ -315,14 +389,6 @@ class TestUpsertAvatar:
         store.profiles.upsert(issuer=GOOGLE, subject="g1", email="ada@x")
 
         assert store.profiles.get(profile.id).avatar_url == "https://a/1.png"
-
-    def test_the_email_is_refreshed_on_every_login(self, store: Store):
-        # The identity provider owns the address; a change there must land.
-        profile = store.profiles.upsert(issuer=GOOGLE, subject="g1", email="old@x")
-
-        store.profiles.upsert(issuer=GOOGLE, subject="g1", email="new@x")
-
-        assert store.profiles.get(profile.id).email == "new@x"
 
 
 class TestMigration024:

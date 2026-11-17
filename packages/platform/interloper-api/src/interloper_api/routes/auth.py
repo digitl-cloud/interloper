@@ -3,34 +3,41 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from collections.abc import MutableMapping
+from datetime import datetime
+from typing import Annotated, Any
 from urllib.parse import urlsplit
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
-from interloper_db import OrganisationQuery, Profile, ProfileQuery, Store
+from interloper_db import NotFoundError, OrganisationQuery, Profile, ProfileQuery, Store
+from interloper_db.models import Identity
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from interloper_api.auth import Account, Login, LoginError, LoginProvider
+from interloper_api.auth import Account, LinkProposal, Login, LoginError, LoginProvider
 from interloper_api.dependencies import (
     CurrentUserDep,
     FeaturesDep,
     LoginDep,
     LoginProviderDep,
+    OfferedLoginDep,
     SessionUserDep,
     SettingsDep,
     StateDep,
     StoreDep,
     get_org_scope,
 )
+from interloper_api.notifications import LinkConfirmationEmail
 from interloper_api.routes.organisations import OrganisationResponse
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+_INVALID_LINK = "This link is invalid or has expired"
 
 
 # -- Helpers -------------------------------------------------------------------
@@ -225,46 +232,70 @@ async def login_callback(
         provider: The provider the path names.
         store: The database store.
         settings: The settings, whose ``auth`` holds the signup and session
-            policy.
+            policy, ``smtp`` the mail server and ``server`` the public URL.
 
     Returns:
-        A redirect to the login's destination carrying the session cookie, or
-        to the login page when the login did not complete, several profiles
-        hold its address, or signup is not allowed.
+        A redirect to the login's destination carrying the session cookie, to
+        the link page when its address belongs to a profile that already
+        signs in, or to the login page when the login did not complete or is
+        refused.
     """
     try:
         account, destination = await provider.complete(request)
     except LoginError as error:
         return RedirectResponse(url=f"/login?error={error.reason}", status_code=302)
-    return await run_in_threadpool(_sign_in, account, destination, store, settings.auth)
+    return await run_in_threadpool(_sign_in, request.session, account, provider, destination, store, settings)
 
 
-def _sign_in(account: Account, destination: str, store: Store, auth_config: Any) -> RedirectResponse:
+def _sign_in(
+    login_session: MutableMapping[str, Any],
+    account: Account,
+    provider: LoginProvider,
+    destination: str,
+    store: Store,
+    settings: Any,
+) -> RedirectResponse:
     """Open a login session for the account the provider proved.
 
     The address is the trust anchor, as it already is for signup,
-    invitations and super-admin promotion: every provider vouches for the
-    addresses it hands over, so a first login whose address a profile holds
-    joins that profile as another way to sign in to it.
+    invitations and super-admin promotion. A first login whose address a
+    profile holds joins that profile: at once when nothing signs in to it yet;
+    otherwise it is proposed as a link, since a provider's word about an
+    address can be stale, and joins once the person proves the profile is
+    theirs, by signing in the way it does or by the link emailed to it.
 
     Args:
+        login_session: The login's session, where a proposed link waits.
         account: The verified account.
+        provider: The provider that proved it.
         destination: The destination the login asked for; honoured only when
             it is app-relative, otherwise the app root is used.
         store: The database store.
-        auth_config: The resolved auth configuration.
+        settings: The settings, whose ``auth`` holds the signup and session
+            policy.
 
     Returns:
-        A redirect to the destination carrying the session cookie, or to the
-        login page when several profiles hold the address or signup is not
-        allowed.
+        A redirect to the destination carrying the session cookie, to the link
+        page when the account is proposed as a link, or to the login page when
+        several profiles hold the address or signup is not allowed.
     """
+    auth_config = settings.auth
     if not store.profiles.get_by_identity(account.issuer, account.subject):
         holders = store.profiles.list(ProfileQuery(email=account.email, limit=None)).items
         if len(holders) > 1:
             profile_ids = ", ".join(str(holder.id) for holder in holders)
             logger.warning("Login refused: profiles %s all hold its address", profile_ids)
             return RedirectResponse(url="/login?error=address_shared", status_code=302)
+        if holders and store.profiles.issuers(holders[0].id):
+            LinkProposal(
+                issuer=account.issuer,
+                subject=account.subject,
+                provider=provider.name,
+                profile_id=holders[0].id,
+                email=holders[0].email,
+                destination=_app_relative(destination),
+            ).save(login_session)
+            return RedirectResponse(url="/auth/link", status_code=302)
         if holders:
             store.profiles.link(holders[0].id, issuer=account.issuer, subject=account.subject)
         elif not _signup_allowed(account.email, auth_config, store):
@@ -278,9 +309,19 @@ def _sign_in(account: Account, destination: str, store: Store, auth_config: Any)
         avatar_url=account.avatar_url,
     )
 
+    # Signing in the way the profile does proves it is the person's: the link
+    # their earlier login proposed joins it.
+    proposal = LinkProposal.take(login_session)
+    if (
+        proposal is not None
+        and proposal.profile_id == profile.id
+        and store.profiles.get_by_identity(proposal.issuer, proposal.subject) is None
+    ):
+        store.profiles.link(profile.id, issuer=proposal.issuer, subject=proposal.subject)
+
     # Bootstrap super-admins from settings. Promote-only: removing an email from
     # the list never demotes an existing super-admin.
-    if not profile.is_super_admin and account.email.lower() in auth_config.super_admin_emails:
+    if not profile.is_super_admin and profile.email.lower() in auth_config.super_admin_emails:
         profile = store.profiles.set_super_admin(profile.id, value=True)
 
     response = RedirectResponse(url=_app_relative(destination), status_code=302)
@@ -294,6 +335,151 @@ def _sign_in(account: Account, destination: str, store: Store, auth_config: Any)
         path="/",
     )
     return response
+
+
+# -- Link proposal -------------------------------------------------------------
+
+
+class LinkProposalResponse(BaseModel):
+    """The link a login proposed, and the ways the person can prove the profile is theirs.
+
+    Attributes:
+        email: The address of the profile the new account would join.
+        provider: The provider of the new account; ``None`` when the
+            deployment no longer offers it.
+        methods: The offered providers the profile signs in through; signing
+            in through one links the new account.
+        email_available: Whether the link can be emailed to the address
+            instead, which needs a mail server.
+        destination: Where the login that proposed it asked to land.
+    """
+
+    email: str
+    provider: LoginProviderResponse | None
+    methods: list[LoginProviderResponse]
+    email_available: bool
+    destination: str
+
+    @classmethod
+    def from_proposal(cls, proposal: LinkProposal, store: Store, login: Login, settings: Any) -> LinkProposalResponse:
+        """Describe a proposal with the ways it can be proved.
+
+        Args:
+            proposal: The proposal.
+            store: The database store, read for the profile's ways to sign in.
+            login: The sign-in providers the deployment offers.
+            settings: The settings, whose ``smtp`` is the mail server.
+
+        Returns:
+            The response model.
+        """
+        provider = login.providers.get(proposal.provider)
+        methods = login.providers_of(store.profiles.issuers(proposal.profile_id))
+        return cls(
+            email=proposal.email,
+            provider=LoginProviderResponse.from_provider(provider) if provider is not None else None,
+            methods=[LoginProviderResponse.from_provider(method) for method in methods],
+            email_available=settings.smtp.enabled,
+            destination=proposal.destination,
+        )
+
+
+def get_link_proposal(request: Request, login: OfferedLoginDep) -> LinkProposal:
+    """The link the caller's login proposed, from its login session.
+
+    Args:
+        request: The request, whose login session holds the proposal.
+        login: The sign-in providers the deployment offers, whose middleware
+            keeps the login session.
+
+    Returns:
+        The proposal.
+
+    Raises:
+        HTTPException: 404 when no proposal waits, or it expired with the
+            login session.
+    """
+    proposal = LinkProposal.from_session(request.session)
+    if proposal is None:
+        raise HTTPException(status_code=404, detail="No link is waiting; sign in again")
+    return proposal
+
+
+LinkProposalDep = Annotated[LinkProposal, Depends(get_link_proposal)]
+
+
+@router.get("/link")
+def read_link_proposal(
+    proposal: LinkProposalDep, store: StoreDep, login: OfferedLoginDep, settings: SettingsDep
+) -> LinkProposalResponse:
+    """Describe the link the caller's login proposed, for the page that asks them to prove it.
+
+    Answers without a session: the login session is the credential, and it
+    already proves the new account.
+
+    Args:
+        proposal: The proposal.
+        store: The database store.
+        login: The sign-in providers the deployment offers.
+        settings: The settings, whose ``smtp`` is the mail server.
+
+    Returns:
+        The proposal and the ways to prove it.
+    """
+    return LinkProposalResponse.from_proposal(proposal, store, login, settings)
+
+
+@router.post("/link/email", status_code=204)
+def email_link_proposal(
+    request: Request, proposal: LinkProposalDep, login: OfferedLoginDep, settings: SettingsDep
+) -> Response:
+    """Email the address a link that confirms the proposed account, for someone who cannot sign in the old way.
+
+    The link carries the proposal, encrypted, so nothing is stored; the proposal
+    leaves the login session.
+
+    Args:
+        request: The request, whose login session holds the proposal.
+        proposal: The proposal.
+        login: The sign-in providers the deployment offers, which sign the
+            link and name the provider in the email.
+        settings: The settings, whose ``smtp`` is the mail server and
+            ``server`` the public URL the link points at.
+
+    Returns:
+        An empty 204 response.
+
+    Raises:
+        HTTPException: 409 when the deployment sends no email.
+    """
+    if not settings.smtp.enabled:
+        raise HTTPException(status_code=409, detail="This deployment sends no email")
+    provider = login.providers.get(proposal.provider)
+    email = LinkConfirmationEmail.from_link(
+        login.seal_link(proposal),
+        provider_label=provider.label if provider is not None else proposal.provider,
+        address=proposal.email,
+        base_url=settings.server.public_url,
+    )
+    email.deliver(settings.smtp, proposal.email)
+    LinkProposal.discard(request.session)
+    return Response(status_code=204)
+
+
+@router.delete("/link", status_code=204)
+def cancel_link_proposal(request: Request, login: OfferedLoginDep) -> Response:
+    """Drop the link the caller's login proposed, if any.
+
+    Args:
+        request: The request, whose login session may hold a proposal.
+        login: The sign-in providers the deployment offers, whose middleware
+            keeps the login session.
+
+    Returns:
+        An empty 204 response.
+    """
+    LinkProposal.discard(request.session)
+    return Response(status_code=204)
 
 
 @router.post("/logout", status_code=204)
@@ -340,8 +526,9 @@ def get_me(user: CurrentUserDep, store: StoreDep, login: LoginDep, features: Fea
 class UpdateMeRequest(BaseModel):
     """User-editable profile fields; omitted fields stay untouched.
 
-    Email is absent by design: the identity provider manages it and every
-    login refreshes it, so an edit here would be silently reverted.
+    Email is absent by design: linking, signup and super-admin rights trust
+    the profile's address, so it is the one the profile was created with,
+    and changing it would need proof of the new one.
     """
 
     name: str | None = Field(default=None, min_length=1, max_length=200)
@@ -429,3 +616,129 @@ def accept_invite(body: AcceptInviteRequest, user: SessionUserDep, store: StoreD
     if not organisation:
         raise HTTPException(status_code=400, detail="Invalid or expired invitation")
     return OrganisationResponse.from_organisation(organisation)
+
+
+# -- Sign-in methods -----------------------------------------------------------
+
+
+class IdentityResponse(BaseModel):
+    """A way the caller signs in.
+
+    Attributes:
+        id: The identity's reference, derived from it, which names it to the
+            other routes without exposing the provider's subject.
+        provider: The provider the deployment offers for it; ``None`` when the
+            deployment no longer offers one.
+        created_at: When it was added.
+    """
+
+    id: UUID
+    provider: LoginProviderResponse | None
+    created_at: datetime | None
+
+    @classmethod
+    def from_identity(cls, identity: Identity, login: Login | None) -> IdentityResponse:
+        """Describe an identity, naming its provider among those offered.
+
+        Args:
+            identity: The identity.
+            login: The sign-in providers the deployment offers.
+
+        Returns:
+            The response model.
+        """
+        providers = login.providers_of([identity.issuer]) if login is not None else []
+        return cls(
+            id=identity.reference,
+            provider=LoginProviderResponse.from_provider(providers[0]) if providers else None,
+            created_at=identity.created_at,
+        )
+
+
+class ConfirmLinkRequest(BaseModel):
+    """Request body confirming an emailed link."""
+
+    token: str
+
+
+@router.post("/link/confirm")
+def confirm_link(body: ConfirmLinkRequest, store: StoreDep, login: OfferedLoginDep) -> IdentityResponse:
+    """Let the account an emailed link proposes sign in to the profile holding the address.
+
+    Answers without a credential: following the link from the address's
+    inbox is the proof. The app's page posts it on a click, never on load, so
+    a mail scanner opening the link confirms nothing. Following it again
+    changes nothing.
+
+    Args:
+        body: The link's token.
+        store: The database store.
+        login: The sign-in providers the deployment offers, which sealed the
+            link.
+
+    Returns:
+        The way to sign in the link added.
+
+    Raises:
+        HTTPException: 400 when the link was altered or expired, or its profile
+            is gone or no longer holds the address it was emailed to; 409 when
+            the account signs in to another profile since.
+    """
+    proposal = login.open_link(body.token)
+    if proposal is None:
+        raise HTTPException(status_code=400, detail=_INVALID_LINK)
+    try:
+        profile = store.profiles.get(proposal.profile_id)
+    except NotFoundError as error:
+        raise HTTPException(status_code=400, detail=_INVALID_LINK) from error
+    if profile.email.lower() != proposal.email.lower():
+        raise HTTPException(status_code=400, detail=_INVALID_LINK)
+    holder = store.profiles.get_by_identity(proposal.issuer, proposal.subject)
+    if holder is None:
+        store.profiles.link(profile.id, issuer=proposal.issuer, subject=proposal.subject)
+    elif holder.id != profile.id:
+        raise HTTPException(status_code=409, detail="This account already signs in to another profile")
+    added = next(
+        identity
+        for identity in store.profiles.identities(profile.id)
+        if (identity.issuer, identity.subject) == (proposal.issuer, proposal.subject)
+    )
+    return IdentityResponse.from_identity(added, login)
+
+
+@router.get("/identities")
+def list_identities(user: SessionUserDep, store: StoreDep, login: LoginDep) -> list[IdentityResponse]:
+    """List the ways the caller signs in, oldest first.
+
+    Args:
+        user: The caller, authenticated by the session cookie alone.
+        store: The database store.
+        login: The sign-in providers the deployment offers.
+
+    Returns:
+        The caller's identities.
+    """
+    return [IdentityResponse.from_identity(identity, login) for identity in store.profiles.identities(user.id)]
+
+
+@router.delete("/identities/{identity_id}", status_code=204)
+def remove_identity(
+    identity_id: UUID, user: SessionUserDep, store: StoreDep, session_token: Annotated[str | None, Cookie()] = None
+) -> Response:
+    """Remove a way the caller signs in, and end the caller's other sessions.
+
+    Whoever signed in through the account removed keeps no session; the
+    caller keeps theirs.
+
+    Args:
+        identity_id: The identity's reference.
+        user: The caller, authenticated by the session cookie alone.
+        store: The database store.
+        session_token: The caller's own session, which stays live.
+
+    Returns:
+        An empty 204 response.
+    """
+    store.profiles.unlink(user.id, identity_id)
+    store.tokens.revoke_sessions(user.id, keep=session_token)
+    return Response(status_code=204)

@@ -160,6 +160,24 @@ def get_login(state: StateDep) -> Login | None:
     return state.login
 
 
+def get_offered_login(login: Annotated[Login | None, Depends(get_login)]) -> Login:
+    """The sign-in providers the deployment offers, for routes that need a login session.
+
+    Args:
+        login: The sign-in providers, or ``None`` on a deployment that offers
+            none.
+
+    Returns:
+        The login.
+
+    Raises:
+        HTTPException: 404 when the deployment offers no sign-in.
+    """
+    if login is None:
+        raise HTTPException(status_code=404, detail="This deployment offers no sign-in")
+    return login
+
+
 def get_login_provider(provider: str, state: StateDep) -> LoginProvider:
     """The sign-in provider the path names.
 
@@ -186,4 +204,5 @@ FeaturesDep = Annotated[dict[str, bool], Depends(get_features)]
 AgentDep = Annotated[Any, Depends(get_agent)]
 AuthorizationServerDep = Annotated[AuthorizationServer, Depends(get_authorization_server)]
 LoginDep = Annotated[Login | None, Depends(get_login)]
+OfferedLoginDep = Annotated[Login, Depends(get_offered_login)]
 LoginProviderDep = Annotated[LoginProvider, Depends(get_login_provider)]

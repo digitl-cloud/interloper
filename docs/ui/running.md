@@ -131,7 +131,11 @@ Google account or a Microsoft work or school account, whichever providers have a
 The Microsoft app registration is multi-tenant and emits the optional ID token claims `email` and
 `xms_edov`: a login whose address does not belong to a verified domain is refused. The address is
 what a profile is trusted by: a first login, through either provider, whose address a profile already
-holds joins that profile as another way to sign in to it.
+holds is offered to link to it. The person proves the profile is theirs by signing in the way it
+already does, which links the new account at once, or, with SMTP configured, by following a link
+emailed to its address within the hour; nothing is stored until one of them happens. People see and
+remove their ways to sign in under Settings, Authentication, Sign in; removing one signs out their
+other sessions, and the last one stays.
 `allowed_domains` restricts who may sign up; `super_admin_emails`
 bootstraps platform administrators, promoted when the API starts and at login (promote-only). Once
 one exists, super-admins grant and revoke the access from the admin portal's Users page, and

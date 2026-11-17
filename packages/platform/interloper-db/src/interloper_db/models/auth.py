@@ -3,13 +3,15 @@
 from datetime import datetime
 from enum import StrEnum
 from typing import ClassVar, Optional
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from interloper.errors import ConfigError
 from sqlmodel import Column, Relationship, SQLModel, text
 from sqlmodel import Field as SQLField
 
 from interloper_db.models.columns import TZDateTime, timestamp_column
+
+_IDENTITY_NAMESPACE = UUID("3f6c2a8e-91d4-4b7a-a5e2-0c8d7b1f4e69")
 
 
 class Role(StrEnum):
@@ -113,8 +115,7 @@ class Identity(SQLModel, table=True):
 
     An OpenID Connect provider names a person by its issuer and a subject that
     is unique within it, so the pair identifies the person whatever their
-    address becomes; a profile has one identity per provider it signs in
-    through.
+    address becomes; a profile signs in through one or more identities.
     """
 
     __tablename__: ClassVar[str] = "identities"
@@ -123,6 +124,15 @@ class Identity(SQLModel, table=True):
     subject: str = SQLField(primary_key=True)
     profile_id: UUID = SQLField(foreign_key="profiles.id", index=True)
     created_at: datetime | None = timestamp_column()
+
+    @property
+    def reference(self) -> UUID:
+        """Name the identity outside the database, without its subject.
+
+        Returns:
+            A UUID derived from the issuer and subject, the same on every read.
+        """
+        return uuid5(_IDENTITY_NAMESPACE, f"{self.issuer}\n{self.subject}")
 
 
 class Organisation(SQLModel, table=True):

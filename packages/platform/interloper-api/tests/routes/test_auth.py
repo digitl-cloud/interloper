@@ -19,7 +19,8 @@ import httpx2
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper_db import NotFoundError, Page, ProfileQuery
+from interloper_db import ConflictError, NotFoundError, Page, ProfileQuery
+from interloper_db.models import Identity
 from joserfc import jwt
 from joserfc.jwk import KeySet, RSAKey
 
@@ -42,8 +43,11 @@ from interloper_api.dependencies import (
     get_settings,
     get_store,
 )
+from interloper_api.notifications import LinkConfirmationEmail
 from interloper_api.routes import auth as auth_module
-from interloper_api.settings import AuthSettings
+from interloper_api.settings import AuthSettings, SmtpSettings
+
+MAIL = SmtpSettings(host="smtp.example.com", user="mailer", password="placeholder")
 
 ISSUER = "https://accounts.google.com"
 AUTHORIZATION_ENDPOINT = f"{ISSUER}/o/oauth2/v2/auth"
@@ -219,23 +223,32 @@ class FakeStore:
 
     Attributes:
         holders: The profiles holding the address signing in.
+        holder_issuers: The issuers the holder already signs in through.
         queried: The addresses the callback looked profiles up by.
-        linked: The identities linked, as ``(profile id, issuer, subject)``.
+        linked: The identities linked, as ``(profile id, issuer, subject)``;
+            each then signs in to its profile.
     """
 
-    def __init__(self, *, is_super_admin: bool = False, exists: bool = False, invited: bool = False) -> None:
-        self.profile = SimpleNamespace(id=uuid4(), is_super_admin=is_super_admin)
+    def __init__(
+        self, *, is_super_admin: bool = False, exists: bool = False, invited: bool = False, email: str | None = None
+    ) -> None:
+        self.profile = SimpleNamespace(id=uuid4(), is_super_admin=is_super_admin, email=email)
         self.exists = exists
+        self.known_issuers: set[str] = set()
         self.invited = invited
         self.holders: list[SimpleNamespace] = []
+        self.holder_issuers: list[str] = []
         self.queried: list[str | None] = []
         self.linked: list[tuple[UUID, str, str]] = []
         self.promoted: list[UUID] = []
         self.upserted: dict[str, Any] | None = None
         self.sessions_created: list[UUID] = []
         self.profiles = SimpleNamespace(
+            get=self._get_profile,
             get_by_identity=self._get_profile_by_identity,
             list=self._list_profiles,
+            issuers=lambda profile_id: self.holder_issuers,
+            identities=self._identities,
             link=self._link,
             upsert=self._upsert_profile,
             set_super_admin=self._set_super_admin,
@@ -243,8 +256,24 @@ class FakeStore:
         self.tokens = SimpleNamespace(create_session=self._create_session)
         self.invitations = SimpleNamespace(has_pending=self._has_pending_invitation)
 
+    def _get_profile(self, profile_id: UUID) -> SimpleNamespace:
+        holder = next((holder for holder in self.holders if holder.id == profile_id), None)
+        if holder is None:
+            raise NotFoundError(f"Profile {profile_id} not found")
+        return holder
+
     def _get_profile_by_identity(self, issuer: str, subject: str) -> SimpleNamespace | None:
-        return self.profile if self.exists else None
+        for linked_profile, linked_issuer, linked_subject in self.linked:
+            if (linked_issuer, linked_subject) == (issuer, subject):
+                return SimpleNamespace(id=linked_profile)
+        return self.profile if self.exists or issuer in self.known_issuers else None
+
+    def _identities(self, profile_id: UUID) -> list[Identity]:
+        return [
+            Identity(issuer=linked_issuer, subject=linked_subject, profile_id=linked_profile)
+            for linked_profile, linked_issuer, linked_subject in self.linked
+            if linked_profile == profile_id
+        ]
 
     def _list_profiles(self, query: ProfileQuery) -> Page:
         self.queried.append(query.email)
@@ -258,6 +287,8 @@ class FakeStore:
 
     def _upsert_profile(self, **kwargs) -> SimpleNamespace:
         self.upserted = kwargs
+        if getattr(self.profile, "email", None) is None:
+            self.profile.email = kwargs["email"]
         return self.profile
 
     def _set_super_admin(self, user_id: UUID, *, value: bool) -> SimpleNamespace:
@@ -285,34 +316,45 @@ def _client(
     super_admin_emails: list[str] | None = None,
     allowed_domains: list[str] | None = None,
     *,
+    also_offered: tuple[FakeIdentityProvider, ...] = (),
+    smtp: SmtpSettings | None = None,
     encryption_key: str = ENCRYPTION_KEY,
 ) -> TestClient:
-    """Serve the auth routes at their real path, with the fake's provider talking to it.
+    """Serve the auth routes at their real path, offering a provider talking to each fake.
 
     Args:
         store: The fake store.
         fake: The fake provider the login runs against.
         super_admin_emails: The addresses promoted on login.
         allowed_domains: The domains signup is open to; empty for everyone.
+        also_offered: Fakes of the other providers the deployment offers.
+        smtp: The mail server; ``None`` for a deployment sending none.
         encryption_key: The secret the login's session cookie is signed from.
 
     Returns:
         A client that does not follow redirects.
     """
-    provider = fake.provider_type(
-        client_id=CLIENT_ID,
-        client_secret="client-secret",
-        public_url=PUBLIC_URL,
-        transport=httpx2.MockTransport(fake.handle),
-    )
+    providers = [
+        offered.provider_type(
+            client_id=CLIENT_ID,
+            client_secret="client-secret",
+            public_url=PUBLIC_URL,
+            transport=httpx2.MockTransport(offered.handle),
+        )
+        for offered in (fake, *also_offered)
+    ]
+    login = Login(providers, encryption_key=encryption_key, cookie_secure=False)
     app = FastAPI()
     install_error_handlers(app)
-    Login([provider], encryption_key=encryption_key, cookie_secure=False).install(app)
+    login.install(app)
     app.include_router(auth_module.router, prefix="/api")
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_login_provider] = lambda: provider
+    app.dependency_overrides[get_login] = lambda: login
+    app.dependency_overrides[get_login_provider] = lambda provider: login.providers[provider]
     app.dependency_overrides[get_settings] = lambda: SimpleNamespace(
-        auth=_auth_config(super_admin_emails or [], allowed_domains or [])
+        auth=_auth_config(super_admin_emails or [], allowed_domains or []),
+        smtp=smtp or SmtpSettings(),
+        server=SimpleNamespace(public_url=PUBLIC_URL),
     )
     return TestClient(app, follow_redirects=False)
 
@@ -395,6 +437,13 @@ def test_listed_email_is_promoted_case_insensitively(google: FakeGoogle) -> None
 def test_unlisted_email_is_not_promoted(google: FakeGoogle) -> None:
     store = FakeStore()
     response = _sign_in(_client(store, google, ["someone-else@example.com"]), google)
+    assert response.status_code == 302
+    assert store.promoted == []
+
+
+def test_promotion_reads_the_profiles_address_not_the_logins(google: FakeGoogle) -> None:
+    store = FakeStore(exists=True, email="ada@example.com")
+    response = _sign_in(_client(store, google, ["boss@example.com"]), google)
     assert response.status_code == 302
     assert store.promoted == []
 
@@ -835,12 +884,29 @@ class TestMicrosoftLogin:
         assert store.sessions_created == []
 
 
+@pytest.fixture
+def delivered(monkeypatch: pytest.MonkeyPatch) -> list[tuple[LinkConfirmationEmail, str]]:
+    """Record the link confirmation emails delivered, instead of sending them.
+
+    Args:
+        monkeypatch: Pytest's patcher.
+
+    Returns:
+        The emails delivered, each with its recipient.
+    """
+    sent: list[tuple[LinkConfirmationEmail, str]] = []
+    monkeypatch.setattr(LinkConfirmationEmail, "deliver", lambda email, smtp, to: sent.append((email, to)))
+    return sent
+
+
 class TestCallbackLinking:
     """The address is the trust anchor: a first login joins the profile holding its address."""
 
-    def test_a_microsoft_login_joins_the_profile_holding_its_address(self, microsoft: FakeMicrosoft) -> None:
+    def test_a_login_claims_the_profile_holding_its_address_that_nothing_signs_in_to(
+        self, microsoft: FakeMicrosoft, delivered: list
+    ) -> None:
         store = FakeStore()
-        holder = SimpleNamespace(id=uuid4())
+        holder = SimpleNamespace(id=uuid4(), email="ada@contoso.com")
         store.holders = [holder]
 
         response = _sign_in(_client(store, microsoft), microsoft)
@@ -850,19 +916,11 @@ class TestCallbackLinking:
         assert store.linked == [(holder.id, MICROSOFT_ISSUER, "oid-1")]
         assert store.upserted is not None
         assert store.sessions_created == [store.profile.id]
-
-    def test_another_google_account_joins_the_profile_holding_its_address(self, google: FakeGoogle) -> None:
-        store = FakeStore()
-        holder = SimpleNamespace(id=uuid4())
-        store.holders = [holder]
-
-        _sign_in(_client(store, google), google)
-
-        assert store.linked == [(holder.id, ISSUER, "google-1")]
+        assert delivered == []
 
     def test_joining_a_profile_skips_the_signup_allowlist(self, microsoft: FakeMicrosoft) -> None:
         store = FakeStore()
-        store.holders = [SimpleNamespace(id=uuid4())]
+        store.holders = [SimpleNamespace(id=uuid4(), email="ada@contoso.com")]
 
         response = _sign_in(_client(store, microsoft, allowed_domains=["digitlcloud.com"]), microsoft)
 
@@ -902,6 +960,198 @@ class TestCallbackLinking:
         assert store.sessions_created == [store.profile.id]
 
 
+class TestLinkProposal:
+    """A login whose address a profile that signs in holds proposes a link, which the person proves.
+
+    The proposal waits in the login session; signing in through one of the
+    profile's own ways links it, or the link emailed to the address does.
+    """
+
+    @staticmethod
+    def _propose(
+        microsoft: FakeMicrosoft, google: FakeGoogle, *, smtp: SmtpSettings | None = None
+    ) -> tuple[FakeStore, TestClient, httpx2.Response]:
+        """Run a Microsoft login whose address a profile signing in with Google holds.
+
+        Args:
+            microsoft: The fake Microsoft the login runs against.
+            google: The fake Google the profile signs in with.
+            smtp: The mail server; ``None`` for a deployment sending none.
+
+        Returns:
+            The store, the browser, and the callback's response.
+        """
+        store = FakeStore()
+        store.holders = [SimpleNamespace(id=store.profile.id, email="Ada@Contoso.com")]
+        store.holder_issuers = [ISSUER]
+        client = _client(store, microsoft, also_offered=(google,), smtp=smtp)
+        return store, client, _sign_in(client, microsoft, "/jobs")
+
+    @staticmethod
+    def _emailed_token(client: TestClient, delivered: list) -> str:
+        """Email the proposed link and read its token back from the email.
+
+        Args:
+            client: The browser holding the proposal.
+            delivered: The emails delivered.
+
+        Returns:
+            The token the emailed link carries.
+        """
+        client.post("/api/auth/link/email")
+        ((email, _),) = delivered
+        return email.confirm_url.rsplit("/", 1)[1]
+
+    def test_the_login_proposes_a_link_and_signs_nobody_in(
+        self, microsoft: FakeMicrosoft, google: FakeGoogle, delivered: list
+    ) -> None:
+        store, client, response = self._propose(microsoft, google)
+
+        assert response.headers["location"] == "/auth/link"
+        assert "session_token" not in response.cookies
+        assert store.sessions_created == []
+        assert store.linked == []
+        assert delivered == []
+        proposal = client.get("/api/auth/link")
+        assert proposal.status_code == 200
+        assert proposal.json() == {
+            "email": "Ada@Contoso.com",
+            "provider": {"name": "microsoft", "label": "Microsoft"},
+            "methods": [{"name": "google", "label": "Google"}],
+            "email_available": False,
+            "destination": "/jobs",
+        }
+
+    def test_signing_in_the_way_the_profile_does_links_the_account(
+        self, microsoft: FakeMicrosoft, google: FakeGoogle
+    ) -> None:
+        store, client, _ = self._propose(microsoft, google)
+        store.known_issuers = {ISSUER}
+
+        response = _sign_in(client, google, "/jobs")
+
+        assert response.headers["location"] == "/jobs"
+        assert store.linked == [(store.profile.id, MICROSOFT_ISSUER, "oid-1")]
+        assert store.sessions_created == [store.profile.id]
+        assert client.get("/api/auth/link").status_code == 404
+
+    def test_signing_in_to_another_profile_links_nothing(self, microsoft: FakeMicrosoft, google: FakeGoogle) -> None:
+        store, client, _ = self._propose(microsoft, google)
+        store.profile = SimpleNamespace(id=uuid4(), is_super_admin=False)
+        store.known_issuers = {ISSUER}
+
+        _sign_in(client, google)
+
+        assert store.linked == []
+        assert store.sessions_created == [store.profile.id]
+        assert client.get("/api/auth/link").status_code == 404
+
+    def test_the_link_can_be_emailed_instead(
+        self, microsoft: FakeMicrosoft, google: FakeGoogle, delivered: list
+    ) -> None:
+        store, client, _ = self._propose(microsoft, google, smtp=MAIL)
+        assert client.get("/api/auth/link").json()["email_available"] is True
+
+        response = client.post("/api/auth/link/email")
+
+        assert response.status_code == 204
+        ((email, recipient),) = delivered
+        assert recipient == "Ada@Contoso.com"
+        assert email.provider_label == "Microsoft"
+        assert email.confirm_url.startswith(f"{PUBLIC_URL}/auth/link/")
+        assert store.linked == []
+        assert client.get("/api/auth/link").status_code == 404
+
+    def test_following_the_emailed_link_links_the_account_from_any_browser(
+        self, microsoft: FakeMicrosoft, google: FakeGoogle, delivered: list
+    ) -> None:
+        store, client, _ = self._propose(microsoft, google, smtp=MAIL)
+        token = self._emailed_token(client, delivered)
+
+        response = _client(store, microsoft, also_offered=(google,)).post(
+            "/api/auth/link/confirm", json={"token": token}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["provider"] == {"name": "microsoft", "label": "Microsoft"}
+        assert store.linked == [(store.profile.id, MICROSOFT_ISSUER, "oid-1")]
+
+    def test_following_it_again_changes_nothing(
+        self, microsoft: FakeMicrosoft, google: FakeGoogle, delivered: list
+    ) -> None:
+        store, client, _ = self._propose(microsoft, google, smtp=MAIL)
+        token = self._emailed_token(client, delivered)
+
+        first = client.post("/api/auth/link/confirm", json={"token": token})
+        again = client.post("/api/auth/link/confirm", json={"token": token})
+
+        assert first.status_code == again.status_code == 200
+        assert first.json() == again.json()
+        assert store.linked == [(store.profile.id, MICROSOFT_ISSUER, "oid-1")]
+
+    @pytest.mark.parametrize("change", ["altered", "address changed", "profile gone"])
+    def test_a_link_that_no_longer_holds_links_nothing(
+        self, microsoft: FakeMicrosoft, google: FakeGoogle, delivered: list, change: str
+    ) -> None:
+        store, client, _ = self._propose(microsoft, google, smtp=MAIL)
+        token = self._emailed_token(client, delivered)
+        if change == "altered":
+            token = token[:-2] + ("aa" if not token.endswith("aa") else "bb")
+        elif change == "address changed":
+            store.holders[0].email = "ada.new@contoso.com"
+        else:
+            store.holders = []
+
+        response = client.post("/api/auth/link/confirm", json={"token": token})
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "This link is invalid or has expired"
+        assert store.linked == []
+
+    def test_an_account_signing_in_elsewhere_since_is_refused(
+        self, microsoft: FakeMicrosoft, google: FakeGoogle, delivered: list
+    ) -> None:
+        store, client, _ = self._propose(microsoft, google, smtp=MAIL)
+        token = self._emailed_token(client, delivered)
+        elsewhere = (uuid4(), MICROSOFT_ISSUER, "oid-1")
+        store.linked.append(elsewhere)
+
+        response = client.post("/api/auth/link/confirm", json={"token": token})
+
+        assert response.status_code == 409
+        assert store.linked == [elsewhere]
+
+    def test_without_mail_the_link_cannot_be_emailed(
+        self, microsoft: FakeMicrosoft, google: FakeGoogle, delivered: list
+    ) -> None:
+        _, client, _ = self._propose(microsoft, google)
+
+        response = client.post("/api/auth/link/email")
+
+        assert response.status_code == 409
+        assert delivered == []
+        assert client.get("/api/auth/link").status_code == 200
+
+    def test_cancelling_drops_the_proposal(self, microsoft: FakeMicrosoft, google: FakeGoogle) -> None:
+        store, client, _ = self._propose(microsoft, google)
+
+        response = client.delete("/api/auth/link")
+
+        assert response.status_code == 204
+        assert client.get("/api/auth/link").status_code == 404
+        store.known_issuers = {ISSUER}
+        _sign_in(client, google)
+        assert store.linked == []
+
+    @pytest.mark.parametrize(("method", "path"), [("GET", "/api/auth/link"), ("POST", "/api/auth/link/email")])
+    def test_without_a_proposal_there_is_nothing_to_act_on(
+        self, microsoft: FakeMicrosoft, method: str, path: str
+    ) -> None:
+        response = _client(FakeStore(), microsoft).request(method, path)
+
+        assert response.status_code == 404
+
+
 # -- Endpoints about the caller ------------------------------------------------
 
 
@@ -927,17 +1177,24 @@ class CallerStore:
         """
         self.profile = _me_profile()
         self.issuers: list[str] = []
+        self.identities: list[SimpleNamespace] = []
+        self.unlink_error: Exception | None = None
+        self.unlinked: list[tuple[UUID, UUID]] = []
         self.revoked_sessions: list[UUID] = []
+        self.kept_sessions: list[str | None] = []
         self.last_organisations: list[tuple[UUID, UUID | None]] = []
         self.accept_calls: list[tuple[str, UUID]] = []
         self._accepted = accepted
         self._organisations = organisations or []
         self._roles = roles or {}
         resolved = (self.profile, SimpleNamespace(kind="session")) if authenticated else None
-        self.tokens = SimpleNamespace(
-            resolve=lambda raw, audience: resolved, revoke_sessions=self.revoked_sessions.append
+        self.tokens = SimpleNamespace(resolve=lambda raw, audience: resolved, revoke_sessions=self._revoke_sessions)
+        self.profiles = SimpleNamespace(
+            update=self._update_profile,
+            issuers=lambda profile_id: self.issuers,
+            identities=lambda profile_id: self.identities,
+            unlink=self._unlink,
         )
-        self.profiles = SimpleNamespace(update=self._update_profile, issuers=lambda profile_id: self.issuers)
         self.organisations = SimpleNamespace(
             list=lambda query: Page(items=self._organisations, total=len(self._organisations)),
             get=self._get_organisation,
@@ -960,6 +1217,27 @@ class CallerStore:
     def _accept(self, token: str, user_id: UUID) -> Any:
         self.accept_calls.append((token, user_id))
         return self._accepted
+
+    def _revoke_sessions(self, user_id: UUID, *, keep: str | None = None) -> None:
+        self.revoked_sessions.append(user_id)
+        self.kept_sessions.append(keep)
+
+    def _unlink(self, profile_id: UUID, reference: UUID) -> None:
+        if self.unlink_error is not None:
+            raise self.unlink_error
+        self.unlinked.append((profile_id, reference))
+
+
+def _identity(issuer: str) -> SimpleNamespace:
+    return SimpleNamespace(reference=uuid4(), issuer=issuer, created_at=dt.datetime(2026, 11, 17, 9, 30, tzinfo=dt.UTC))
+
+
+def _both_providers() -> Login:
+    providers = [
+        GoogleProvider(client_id=CLIENT_ID, client_secret="client-secret", public_url=PUBLIC_URL),
+        MicrosoftProvider(client_id=CLIENT_ID, client_secret="client-secret", public_url=PUBLIC_URL),
+    ]
+    return Login(providers, encryption_key=ENCRYPTION_KEY, cookie_secure=False)
 
 
 def _session_client(store: CallerStore, login: Login | None = None) -> TestClient:
@@ -1092,9 +1370,11 @@ class TestCookieOnlyRoutes:
         [
             ("PUT", "/auth/me/last-organisation", {"org_id": "00000000-0000-0000-0000-000000000000"}),
             ("POST", "/auth/accept-invite", {"token": "invite-token"}),
+            ("GET", "/auth/identities", None),
+            ("DELETE", "/auth/identities/00000000-0000-0000-0000-000000000000", None),
         ],
     )
-    def test_a_bearer_is_refused(self, method: str, path: str, body: dict[str, str]) -> None:
+    def test_a_bearer_is_refused(self, method: str, path: str, body: dict[str, str] | None) -> None:
         store = CallerStore()
 
         response = _session_client(store).request(
@@ -1104,6 +1384,7 @@ class TestCookieOnlyRoutes:
         assert response.status_code == 401
         assert store.last_organisations == []
         assert store.accept_calls == []
+        assert store.unlinked == []
 
     def test_get_me_accepts_a_bearer(self) -> None:
         client = _session_client(CallerStore())
@@ -1176,3 +1457,63 @@ class TestAcceptInvite:
 
         assert response.status_code == 400
         assert response.json()["detail"] == "Invalid or expired invitation"
+
+
+# -- Sign-in methods -----------------------------------------------------------
+
+
+class TestListIdentities:
+    """``GET /auth/identities``: the ways the caller signs in."""
+
+    def test_names_the_provider_of_each(self) -> None:
+        store = CallerStore()
+        google, microsoft = _identity(ISSUER), _identity(MICROSOFT_ISSUER)
+        store.identities = [google, microsoft]
+
+        response = _session_client(store, _both_providers()).get("/auth/identities")
+
+        assert response.status_code == 200
+        assert [(item["id"], item["provider"]["name"]) for item in response.json()] == [
+            (str(google.reference), "google"),
+            (str(microsoft.reference), "microsoft"),
+        ]
+
+    def test_a_provider_the_deployment_no_longer_offers_is_named_by_none(self) -> None:
+        store = CallerStore()
+        store.identities = [_identity("https://idp.example.com")]
+
+        response = _session_client(store, _both_providers()).get("/auth/identities")
+
+        assert response.json()[0]["provider"] is None
+
+
+class TestRemoveIdentity:
+    """``DELETE /auth/identities/{id}``: a way to sign in goes, and so do the caller's other sessions."""
+
+    def test_removes_it_and_ends_every_other_session(self) -> None:
+        store = CallerStore()
+        microsoft = _identity(MICROSOFT_ISSUER)
+        store.identities = [_identity(ISSUER), microsoft]
+
+        response = _session_client(store).delete(f"/auth/identities/{microsoft.reference}")
+
+        assert response.status_code == 204
+        assert store.unlinked == [(store.profile.id, microsoft.reference)]
+        assert store.revoked_sessions == [store.profile.id]
+        assert store.kept_sessions == ["tok"]
+
+    @pytest.mark.parametrize(
+        ("error", "status"),
+        [
+            pytest.param(NotFoundError("Identity not found"), 404, id="not the caller's"),
+            pytest.param(ConflictError("A profile keeps at least one way to sign in"), 409, id="the last one"),
+        ],
+    )
+    def test_a_refused_removal_ends_no_session(self, error: Exception, status: int) -> None:
+        store = CallerStore()
+        store.unlink_error = error
+
+        response = _session_client(store).delete(f"/auth/identities/{uuid4()}")
+
+        assert response.status_code == status
+        assert store.revoked_sessions == []

@@ -20,6 +20,7 @@ from interloper_api.dependencies import (
     get_features,
     get_login,
     get_login_provider,
+    get_offered_login,
     get_settings,
     get_store,
 )
@@ -70,6 +71,10 @@ def _client(state: State) -> TestClient:
     def login(login: Annotated[Any, Depends(get_login)]) -> dict[str, Any]:
         return {"same": login is state.login}
 
+    @app.get("/offered-login")
+    def offered_login(login: Annotated[Any, Depends(get_offered_login)]) -> dict[str, Any]:
+        return {"same": login is state.login}
+
     @app.get("/login/{provider}")
     def login_provider(provider: Annotated[Any, Depends(get_login_provider)]) -> dict[str, Any]:
         return {"same": state.login is not None and provider is state.login.providers.get("google")}
@@ -92,6 +97,11 @@ class TestInstalledSlots:
         state = dataclasses.replace(app_state, **{slot: object()})
 
         assert _client(state).get(path).json() == {"same": True}
+
+    def test_the_offered_login_reads_back(self, app_state: State) -> None:
+        login = Login([GoogleProvider(client_id="cid", client_secret="s", public_url="https://app")], **_LOGIN_SESSION)
+
+        assert _client(dataclasses.replace(app_state, login=login)).get("/offered-login").json() == {"same": True}
 
     def test_the_login_provider_the_path_names_reads_back(self, app_state: State) -> None:
         login = Login([GoogleProvider(client_id="cid", client_secret="s", public_url="https://app")], **_LOGIN_SESSION)
@@ -130,6 +140,12 @@ class TestMissingSlots:
 
         assert response.status_code == 404
         assert response.json()["detail"] == "Unknown sign-in provider 'google'"
+
+    def test_a_missing_login_offers_nothing_to_routes_that_need_one(self, app_state: State) -> None:
+        response = _client(app_state).get("/offered-login")
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "This deployment offers no sign-in"
 
     def test_a_provider_the_login_does_not_offer_is_a_404(self, app_state: State) -> None:
         login = Login([GoogleProvider(client_id="cid", client_secret="s", public_url="https://app")], **_LOGIN_SESSION)

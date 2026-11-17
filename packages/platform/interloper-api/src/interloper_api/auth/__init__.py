@@ -7,16 +7,19 @@ a deployment offers and installs the session their logins keep.
 
 from interloper_api.auth.base import PROVIDERS, SESSION_COOKIE, SESSION_MAX_AGE, SESSION_PATH, Login
 from interloper_api.auth.google import GoogleProvider
+from interloper_api.auth.link import LINK_EXPIRY, LinkProposal
 from interloper_api.auth.microsoft import MicrosoftProvider
 from interloper_api.auth.provider import Account, LoginError, LoginProvider
 
 __all__ = [
+    "LINK_EXPIRY",
     "PROVIDERS",
     "SESSION_COOKIE",
     "SESSION_MAX_AGE",
     "SESSION_PATH",
     "Account",
     "GoogleProvider",
+    "LinkProposal",
     "Login",
     "LoginError",
     "LoginProvider",

@@ -18,3 +18,10 @@ export interface LoginProvider {
     name: string
     label: string
 }
+
+/** A way the caller signs in; `provider` is null when the deployment no longer offers it. */
+export interface Identity {
+    id: string
+    provider: LoginProvider | null
+    created_at: string | null
+}

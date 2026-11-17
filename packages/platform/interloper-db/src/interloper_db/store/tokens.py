@@ -77,22 +77,23 @@ class TokenStore:
             )
         return raw
 
-    def revoke_sessions(self, user_id: UUID) -> None:
+    def revoke_sessions(self, user_id: UUID, *, keep: str | None = None) -> None:
         """Revoke every live login session of a user (logout everywhere).
 
         Args:
             user_id: Profile UUID.
+            keep: The raw secret of one session to leave live, the caller's
+                own; ``None`` revokes them all.
         """
+        statement = update(Token).where(
+            col(Token.user_id) == user_id,
+            col(Token.kind) == TokenKind.SESSION,
+            col(Token.revoked_at).is_(None),
+        )
+        if keep is not None:
+            statement = statement.where(col(Token.token_hash) != hash_token(keep))
         with session_scope(self._engine) as session:
-            session.connection().execute(
-                update(Token)
-                .where(
-                    col(Token.user_id) == user_id,
-                    col(Token.kind) == TokenKind.SESSION,
-                    col(Token.revoked_at).is_(None),
-                )
-                .values(revoked_at=datetime.now(UTC))
-            )
+            session.connection().execute(statement.values(revoked_at=datetime.now(UTC)))
             commit(session)
 
     def create_access(self, user_id: UUID, client_id: str, resource: Audience) -> str:

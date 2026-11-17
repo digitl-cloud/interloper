@@ -275,6 +275,15 @@ class TestSessions:
         assert store.tokens.resolve(theirs, Audience.APP) is not None
         assert store.tokens.resolve(personal, Audience.API) is not None
 
+    def test_revoke_sessions_can_keep_the_callers_own(self, store: Store, profile: Profile):
+        mine = store.tokens.create_session(profile.id)
+        elsewhere = store.tokens.create_session(profile.id)
+
+        store.tokens.revoke_sessions(profile.id, keep=mine)
+
+        assert store.tokens.resolve(mine, Audience.APP) is not None
+        assert store.tokens.resolve(elsewhere, Audience.APP) is None
+
     def test_migration_017_keeps_logins(self, store: Store, profile: Profile, token_db: Engine):
         # A login made before migration 017 lives in ``sessions``; the upgrade
         # moves it into ``tokens`` with its hash, so the cookie keeps working.
