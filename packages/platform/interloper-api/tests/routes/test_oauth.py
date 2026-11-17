@@ -27,7 +27,7 @@ MCP_RESOURCE = f"{ISSUER}/mcp"
 REDIRECT_URI = "http://127.0.0.1:8765/callback"
 VERIFIER = "a-code-verifier-long-enough-to-satisfy-rfc-7636"
 PREFIX = "/api/oauth"
-LEGACY_PREFIX = "/api/auth/oauth"
+OLD_PREFIX = "/api/auth/oauth"
 METADATA_CLIENT_ID = "https://claude.ai/oauth/claude-code-client-metadata"
 
 
@@ -691,9 +691,6 @@ def test_an_unconfigured_server_answers_503(fake_settings: ApiSettings, oauth_st
         ("POST", f"{PREFIX}/register"),
         ("POST", f"{PREFIX}/token"),
         ("POST", f"{PREFIX}/revoke"),
-        ("POST", f"{LEGACY_PREFIX}/register"),
-        ("POST", f"{LEGACY_PREFIX}/token"),
-        ("POST", f"{LEGACY_PREFIX}/revoke"),
     ],
 )
 def test_a_client_facing_endpoint_answers_any_origin(client: TestClient, method: str, path: str):
@@ -743,39 +740,10 @@ def test_the_app_cors_policy_does_not_refuse_a_client_facing_endpoint(oauth_stor
 # -- Old paths -----------------------------------------------------------------
 
 
-def test_the_old_paths_still_run_a_whole_grant(client: TestClient, oauth_store: Store, user: Profile):
-    registered = client.post(
-        f"{LEGACY_PREFIX}/register",
-        json={"client_name": "Saved", "redirect_uris": [REDIRECT_URI], "token_endpoint_auth_method": "none"},
-    )
-    assert registered.status_code == 201, registered.text
-    client_id = registered.json()["client_id"]
-    authorize = client.get(f"{LEGACY_PREFIX}/authorize", params=_authorize_params(client_id))
-    sealed = _query(authorize.headers["location"])["request"]
-    decided = client.post(f"{LEGACY_PREFIX}/consent", json={"request": sealed, "approve": True})
-    code = _query(decided.json()["redirect_to"])["code"]
-    exchange = {
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": REDIRECT_URI,
-        "client_id": client_id,
-        "code_verifier": VERIFIER,
-    }
-    pair = client.post(f"{LEGACY_PREFIX}/token", data=exchange).json()
-    refresh = {"grant_type": "refresh_token", "refresh_token": pair["refresh_token"], "client_id": client_id}
-    refreshed = client.post(f"{LEGACY_PREFIX}/token", data=refresh)
-    assert refreshed.status_code == 200, refreshed.text
-
-    revoked = client.post(
-        f"{LEGACY_PREFIX}/revoke", data={"token": refreshed.json()["refresh_token"], "client_id": client_id}
-    )
-
-    assert revoked.status_code == 200
-    assert oauth_store.oauth.authorised_clients(user.id) == []
-
-
-def test_the_old_paths_stay_out_of_the_schema(client: TestClient):
-    paths = client.get("/openapi.json").json()["paths"]
-
-    assert f"{PREFIX}/token" in paths
-    assert not [path for path in paths if path.startswith(LEGACY_PREFIX)]
+@pytest.mark.parametrize(
+    ("method", "endpoint"),
+    [("POST", "register"), ("GET", "authorize"), ("POST", "consent"), ("POST", "token"), ("POST", "revoke")],
+)
+def test_the_authorization_server_answers_only_under_its_prefix(client: TestClient, method: str, endpoint: str):
+    assert client.request(method, f"{PREFIX}/{endpoint}").status_code != 404
+    assert client.request(method, f"{OLD_PREFIX}/{endpoint}").status_code == 404
