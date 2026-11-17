@@ -13,7 +13,9 @@
  *
  * Reads the app's `.nuxt/`, so the app is prepared first (`nuxt prepare`, which `pnpm install` runs).
  * A declaration error in a file `@interloper/host` reaches fails the build; the rest of
- * the app is not part of the contract and may use names a declaration cannot carry.
+ * the app is not part of the contract and may use names a declaration cannot carry. A
+ * package the declarations import and `@interloper/ui` does not depend on is named in a
+ * warning: an extension's install lacks it, so what it types is `any` there.
  */
 import { execFileSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
@@ -24,6 +26,7 @@ import { SHARED_MODULES } from '../../app/app/extensions/shared/modules.ts'
 const APP = resolve(import.meta.dirname, '../../app')
 const NUXT = join(APP, '.nuxt')
 const HOST = join(APP, 'app/extensions/shared/host.ts')
+const PACKAGE = resolve(import.meta.dirname, '../package.json')
 const DIST = resolve(import.meta.dirname, '../dist')
 const WORK = join(DIST, '.emit')
 const OUT = join(WORK, 'out')
@@ -137,6 +140,7 @@ function declarations(): void {
 
     const target = (file: string) => join(DIST, 'host', relative(OUT, file))
     const inHost = (file: string, path: string) => relativeSpecifier(target(file), join(DIST, 'host', relative(APP, path)))
+    const packages = new Set<string>()
     for (const file of reached) {
         const text = readFileSync(file, 'utf8')
             .replace(SPECIFIER, (whole, lead: string, quote: string, specifier: string) => {
@@ -148,9 +152,29 @@ function declarations(): void {
                 if (!source) return whole
                 return `import('${isAbsolute(source) ? inHost(file, source) : source}').${name}`
             })
+        for (const [, , , specifier] of text.matchAll(SPECIFIER)) {
+            if (!/^[./#]/.test(specifier!)) packages.add(packageOf(specifier!))
+        }
         mkdirSync(dirname(target(file)), { recursive: true })
         writeFileSync(target(file), text)
     }
+
+    const declared = dependencies()
+    const undeclared = [...packages].filter(name => !declared.has(name))
+    if (undeclared.length)
+        console.warn(`@interloper/host's declarations import packages @interloper/ui does not depend on, typed as any for extensions: ${undeclared.join(', ')}`)
+}
+
+/** The package a bare specifier names: `@nuxt/ui` for `@nuxt/ui/runtime/types`, `vue` for `vue`. */
+function packageOf(specifier: string): string {
+    const segments = specifier.split('/')
+    return segments.slice(0, specifier.startsWith('@') ? 2 : 1).join('/')
+}
+
+/** The packages `@interloper/ui` depends on, its peers included: what an extension's install brings. */
+function dependencies(): Set<string> {
+    const { dependencies = {}, peerDependencies = {} } = JSON.parse(readFileSync(PACKAGE, 'utf8'))
+    return new Set([...Object.keys(dependencies), ...Object.keys(peerDependencies)])
 }
 
 /**

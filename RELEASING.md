@@ -4,21 +4,27 @@ Releases are automated by the **Release** workflow
 ([`.github/workflows/release.yaml`](.github/workflows/release.yaml)), triggered
 manually (`workflow_dispatch`, `stable` or `release-candidate`). The `release`
 job runs `python-semantic-release` to bump the shared version, tag, and create
-the GitHub release. When a release is cut, three sets of artifacts are then
-published in parallel:
+the GitHub release. When a release is cut, four sets of artifacts are then
+published:
 
 1. **PyPI** — `uv build --all-packages` + `uv publish --trusted-publishing always`
    publishes every workspace package (in the `release` job).
-2. **Docker images → GHCR** — the `docker` job builds each component image and
+2. **npm**: the `release` job packs `@interloper/ui`, the SDK extension UIs
+   build with, before the PyPI publish, so a pack failure stops both publishes,
+   and publishes it after, with npm trusted publishing and provenance (see
+   below). The tag, the GitHub release and the images it triggers are out by
+   then either way.
+3. **Docker images → GHCR** — the `docker` job builds each component image and
    pushes it to `ghcr.io/<owner>/interloper-<role>` (see below).
-3. **Helm chart → GHCR** — the `helm` job packages `chart/interloper` and
+4. **Helm chart → GHCR** — the `helm` job packages `chart/interloper` and
    pushes it as an OCI artifact beside the images (stable releases only; see
    below).
 
 `semantic-release` bumps the chart's `version` and `appVersion` in
-[`chart/interloper/Chart.yaml`](chart/interloper/Chart.yaml) alongside the
-Python version, so the published chart and the image tag it deploys always
-match the release.
+[`chart/interloper/Chart.yaml`](chart/interloper/Chart.yaml) and the `version`
+of [`packages/platform/interloper-app/sdk/package.json`](packages/platform/interloper-app/sdk/package.json)
+alongside the Python version, so the published chart, the image tag it deploys
+and the SDK always match the release.
 
 Things to configure on the repo before the first release:
 
@@ -27,6 +33,7 @@ Things to configure on the repo before the first release:
   the release commit and tag. These may be set at the repo or org level; if set
   on the org, make sure the `interloper` repository is granted access.
 - **PyPI trusted publishing** for each published package — see below.
+- **npm trusted publishing** for `@interloper/ui`: see below.
 - **Package visibility** — the first chart push creates the `charts/interloper`
   package as private. Make it public (repo → *Packages* → the package →
   *Package settings*) so unauthenticated clients can pull it.
@@ -94,6 +101,49 @@ All workspace packages are published:
 `interloper-core`, `interloper-assets`, `interloper-pandas`, `interloper-db`,
 `interloper-google-cloud`, `interloper-docker`, `interloper-k8s`,
 `interloper-scheduler`, `interloper-api`, `interloper-agent`, `interloper-app`.
+
+## npm trusted publishing (one-time bootstrap)
+
+The release publishes `@interloper/ui` with
+[npm trusted publishing](https://docs.npmjs.com/trusted-publishers) (OIDC) and
+provenance, so no npm token lives in CI. The package belongs to the npm
+organisation `interloper`. npm adds a trusted publisher on the package's own
+settings page, so the package must exist first. The first version is published
+by hand, from a release tag:
+
+1. Run the first release that carries the npm step. Its PyPI publish goes
+   through and its npm step fails: the package does not exist yet.
+
+2. From a checkout of that release's tag, build and pack the SDK and publish the
+   tarball, signed in to npm with an account that can publish to the
+   `interloper` organisation:
+
+   ```bash
+   git checkout v<version>
+   pnpm install
+   pnpm --filter @interloper/ui build
+   PACK=$(mktemp -d)
+   (cd packages/platform/interloper-app/sdk && pnpm pack --pack-destination "$PACK")
+   npm publish "$PACK"/interloper-ui-*.tgz --access public
+   ```
+
+   Only a tag carries a `package.json` whose version matches its content: on
+   `main`, the version is the last release's and the content is newer, and npm
+   never lets a version be published twice. Publish what `pnpm pack` writes,
+   never the directory itself: the packed `package.json` takes its `exports`
+   from `publishConfig`, which points at the compiled preset in `dist/`.
+
+3. In the package's settings on npmjs.com, add a trusted publisher for GitHub
+   Actions: repository `digitl-cloud/interloper`, workflow `release.yaml`, no
+   environment (the workflow uses none).
+
+The same by-hand publish, from the release's tag, recovers any release whose npm
+step failed after PyPI published. A release candidate's version is a
+prerelease, which npm publishes only with `--tag rc`, so it never becomes
+`latest`; the release passes that tag itself.
+
+`make check-sdk-package` checks the package as npm installs it, from a project
+outside the workspace; CI runs the same check.
 
 ## Docker images (GitHub Container Registry)
 
