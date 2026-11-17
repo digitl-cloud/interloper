@@ -3,6 +3,7 @@ from functools import cached_property
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
+from interloper_assets.awin.api import AwinApi
 from interloper_assets.awin.constants import BASE_URL
 
 
@@ -28,21 +29,28 @@ class AwinConnection(il.Connection):
         """
         return il.AsyncRESTClient(BASE_URL, auth=il.HTTPBearerAuth(self.access_token))
 
+    @cached_property
+    def api(self) -> AwinApi:
+        """The Awin API engine every caller shares, built on ``client``.
+
+        Returns:
+            The engine, cached per connection instance.
+        """
+        return AwinApi(self.client)
+
     @il.fetch_field_provider
     async def advertisers(self) -> list[dict[str, str]]:
         """List the advertiser accounts this token can access, sorted by name.
 
-        Backs the source's ``advertiser_id`` ``FetchField``. Reuses ``self.client``
-        (bearer auth is all Awin's ``/accounts`` endpoint needs) so it runs in the
-        API process over the lightweight ``AsyncRESTClient``.
+        Backs the source's ``advertiser_id`` ``FetchField``. Goes through ``self.api``,
+        over the lightweight ``AsyncRESTClient``, so it runs in the API process.
 
         Returns:
             The options for the field's dropdown.
 
         """
-        response = await self.client.get("/accounts", params={"type": "advertiser"})
-        response.raise_for_status()
-        accounts = response.json().get("accounts", [])
+        data = await self.api.get("/accounts", type="advertiser")
+        accounts = data.get("accounts", [])
         results = [
             {"advertiser_id": str(a["accountId"]), "name": a.get("accountName") or str(a["accountId"])}
             for a in accounts
