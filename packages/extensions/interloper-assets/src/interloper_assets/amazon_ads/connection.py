@@ -1,9 +1,10 @@
 from enum import Enum
 from functools import cached_property
 
-import httpx2
 import interloper as il
 from pydantic_settings import SettingsConfigDict
+
+from interloper_assets.amazon_ads.api import AmazonAdsApi
 
 
 class AmazonAdsAPILocation(Enum):
@@ -92,40 +93,27 @@ class AmazonAdsConnection(il.RefreshTokenOAuthConnection):
         client.headers.update({"Amazon-Advertising-API-ClientId": self.client_id})
         return client
 
+    @cached_property
+    def api(self) -> AmazonAdsApi:
+        """The Amazon Ads API engine every caller shares, built on ``client``.
+
+        Returns:
+            The engine, cached per connection instance.
+        """
+        return AmazonAdsApi(self.client)
+
     @il.fetch_field_provider
-    async def profiles(self) -> list[dict[str, str]]:
+    def profiles(self) -> list[dict[str, str]]:
         """Fetch Amazon Ads advertising profiles for this connection.
+
+        It reads through ``api`` like the assets, and so synchronously, as
+        ``client`` is.
 
         Returns:
             The options for the field's dropdown.
 
         """
-        location = self.api_location
-
-        async with httpx2.AsyncClient(timeout=30) as client:
-            token_resp = await client.post(
-                f"{location.auth_url}/auth/o2/token",
-                data={
-                    "grant_type": "refresh_token",
-                    "refresh_token": self.refresh_token,
-                    "client_id": self.client_id,
-                    "client_secret": self.client_secret,
-                },
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-            )
-            token_resp.raise_for_status()
-            access_token = token_resp.json()["access_token"]
-
-            profiles_resp = await client.get(
-                f"{location.api_url}/v2/profiles",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Amazon-Advertising-API-ClientId": self.client_id,
-                },
-            )
-            profiles_resp.raise_for_status()
-            profiles = profiles_resp.json()
-
+        profiles = self.api.get("/v2/profiles")
         return [
             {
                 "profile_id": str(p["profileId"]),
@@ -136,11 +124,11 @@ class AmazonAdsConnection(il.RefreshTokenOAuthConnection):
             for p in profiles
         ]
 
-    async def check(self) -> bool:
+    def check(self) -> bool:
         """Prove the credentials work by running the ``profiles`` lookup.
 
         Returns:
             True — any credential failure raises out of the lookup.
         """
-        await self.profiles()
+        self.profiles()
         return True

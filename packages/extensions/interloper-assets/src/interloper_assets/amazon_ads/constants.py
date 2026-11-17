@@ -1,3 +1,14 @@
+import datetime as dt
+
+# -- API -----------------------------------------------------------------------
+
+PAGE_SIZE = 100
+
+# how long a report job may take to be accepted, to complete and to download before its asset fails
+REPORT_CREATE_DEADLINE = dt.timedelta(hours=1)
+REPORT_WAIT_DEADLINE = dt.timedelta(hours=2)
+REPORT_DOWNLOAD_DEADLINE = dt.timedelta(minutes=10)
+
 # -- PRODUCTS ------------------------------------------------------------------
 
 PRODUCTS_CAMPAIGN_METRICS = [
