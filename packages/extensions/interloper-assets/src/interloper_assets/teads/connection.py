@@ -4,6 +4,7 @@ import interloper as il
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.teads import constants
+from interloper_assets.teads.api import TeadsApi
 
 
 @il.connection(
@@ -35,3 +36,12 @@ class TeadsConnection(il.Connection):
             }
         )
         return client
+
+    @cached_property
+    def api(self) -> TeadsApi:
+        """The Teads API engine every caller shares, built on ``client``.
+
+        Returns:
+            The engine, cached per connection instance.
+        """
+        return TeadsApi(self.client)
