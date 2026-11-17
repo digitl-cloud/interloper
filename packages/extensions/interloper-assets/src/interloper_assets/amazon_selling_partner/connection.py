@@ -6,6 +6,8 @@ import httpx2
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
+from interloper_assets.amazon_selling_partner.api import AmazonSellingPartnerApi
+
 
 class AmazonSellingPartnerLocation(Enum):
     """Selling Partner API region, which selects both endpoints."""
@@ -156,7 +158,11 @@ class AmazonSellingPartnerConnection(il.Connection):
 
     @cached_property
     def client(self) -> il.AsyncRESTClient:
-        """Async REST client for the Amazon Selling Partner API."""
+        """The Selling Partner API client every caller shares.
+
+        Returns:
+            The authenticated client for the region, cached per connection instance.
+        """
         location = self.api_location
         return il.AsyncRESTClient(
             location.api_url,
@@ -171,8 +177,21 @@ class AmazonSellingPartnerConnection(il.Connection):
             timeout=60,
         )
 
+    @cached_property
+    def api(self) -> AmazonSellingPartnerApi:
+        """The Selling Partner API engine every caller shares, built on ``client``.
+
+        Returns:
+            The engine, cached per connection instance.
+        """
+        return AmazonSellingPartnerApi(self.client)
+
     async def check(self) -> bool:
         """Prove the credentials work by exchanging the LWA refresh token.
+
+        It goes to the region's token host rather than through ``api``: no
+        Selling Partner call is open to every vendor and seller account, so the
+        token exchange is the one proof every account can give.
 
         Returns:
             True — an invalid client id/secret or refresh token raises out of the
