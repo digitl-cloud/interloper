@@ -5,6 +5,7 @@ import interloper as il
 from interloper.errors import ConnectionCheckError
 from pydantic_settings import SettingsConfigDict
 
+from interloper_assets.tiktok_ads.api import TiktokAdsApi, TiktokAdsApiError
 from interloper_assets.tiktok_ads.constants import BASE_URL
 
 
@@ -38,6 +39,15 @@ class TiktokAdsConnection(il.OAuthConnection):
         # Static-header auth drops straight into the async client.
         return il.AsyncRESTClient(BASE_URL, headers={"Access-Token": self.access_token})
 
+    @cached_property
+    def api(self) -> TiktokAdsApi:
+        """The TikTok Business API engine every caller shares, built on ``client``.
+
+        Returns:
+            The engine, cached per connection instance.
+        """
+        return TiktokAdsApi(self.client)
+
     @il.fetch_field_provider
     async def advertisers(self) -> list[dict[str, str]]:
         """List the advertisers this connection's access token can access, sorted by name.
@@ -48,29 +58,27 @@ class TiktokAdsConnection(il.OAuthConnection):
         — alongside the connection's access token. Talks to the v1.3 API over the
         lightweight ``AsyncRESTClient`` (not the SDK) so it runs in the API process.
 
-        TikTok rejects a request with HTTP 200 and a non-zero ``code``, so the
-        status alone proves nothing. Its ``message`` names the cause (a token
-        issued to another app, a revoked token) and carries neither the secret
-        nor the token, so the connection check reports it as is.
+        TikTok's refusal names the cause (a token issued to another app, a
+        revoked token) and carries neither the secret nor the token, so the
+        connection check reports it as is.
 
         Returns:
             The options for the field's dropdown.
 
         Raises:
-            ConnectionCheckError: If TikTok answers with a non-zero API code,
-                carrying that code and TikTok's message.
+            ConnectionCheckError: If TikTok refuses the lookup, carrying its
+                code and message.
 
         """
         app_id = os.environ.get("INTERLOPER_TIKTOK_CLIENT_ID", "")
         secret = os.environ.get("INTERLOPER_TIKTOK_CLIENT_SECRET", "")
 
-        response = await self.client.get("/oauth2/advertiser/get/", params={"app_id": app_id, "secret": secret})
-        response.raise_for_status()
-        body = response.json()
-        if body.get("code") != 0:
-            raise ConnectionCheckError(f"TikTok API error {body.get('code')}: {body.get('message')}")
+        try:
+            data = await self.api.get("/oauth2/advertiser/get/", app_id=app_id, secret=secret)
+        except TiktokAdsApiError as error:
+            raise ConnectionCheckError(str(error)) from error
 
-        advertisers = body.get("data", {}).get("list", [])
+        advertisers = data.get("list", [])
         results = [
             {"advertiser_id": a["advertiser_id"], "name": a.get("advertiser_name") or a["advertiser_id"]}
             for a in advertisers

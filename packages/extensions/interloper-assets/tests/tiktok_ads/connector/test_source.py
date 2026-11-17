@@ -220,6 +220,66 @@ class TestAdgroups:
         assert json.loads(requests[0].url.params["filtering"]) == {"primary_status": "STATUS_ALL"}
 
 
+class TestRequests:
+    def _run(self, key: str, response: dict[str, Any]) -> tuple[list[dict[str, Any]], list[httpx2.Request]]:
+        requests: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            return httpx2.Response(200, json=response)
+
+        connection = TiktokAdsConnection(id="tt", access_token="x")
+        connection.__dict__["client"] = il.AsyncRESTClient(constants.BASE_URL, transport=httpx2.MockTransport(handler))
+        source = TiktokAds(id="src-1", advertiser_id="123", connection=connection)
+        asset = next(a for a in source.assets if type(a).key == key)
+        context = il.ExecutionContext(asset, il.TimePartition(value=dt.date(2026, 10, 1)).window)
+        return asyncio.run(asset.data(context=context)), requests
+
+    @pytest.mark.parametrize(
+        ("key", "report_type", "dimensions", "metrics"),
+        [
+            ("ads_stats", "BASIC", ["ad_id", "stat_time_day"], constants.BASIC_METRICS),
+            (
+                "ads_stats_by_country",
+                "AUDIENCE",
+                ["ad_id", "country_code", "stat_time_day"],
+                constants.AUDIENCE_METRICS,
+            ),
+            (
+                "ads_stats_by_age_gender",
+                "AUDIENCE",
+                ["ad_id", "age", "gender", "stat_time_day"],
+                constants.AUDIENCE_METRICS,
+            ),
+            ("ads_stats_by_platform", "AUDIENCE", ["ad_id", "platform", "stat_time_day"], constants.AUDIENCE_METRICS),
+            ("videos_stats_by_platform", "AUDIENCE", ["ad_id", "platform", "stat_time_day"], constants.VIDEO_METRICS),
+        ],
+    )
+    def test_a_report_asks_the_integrated_report_for_its_day(
+        self, key: str, report_type: str, dimensions: list[str], metrics: list[str]
+    ):
+        _, requests = self._run(key, {"code": 0, "data": {"list": [], "page_info": {"total_page": 1}}})
+
+        params = requests[0].url.params
+        assert requests[0].url.path.endswith("/report/integrated/get/")
+        assert params["report_type"] == report_type
+        assert params["advertiser_id"] == "123"
+        assert (params["service_type"], params["data_level"]) == ("AUCTION", "AUCTION_AD")
+        assert json.loads(params["dimensions"]) == dimensions
+        assert json.loads(params["metrics"]) == metrics
+        assert params["start_date"] == params["end_date"] == "2026-10-01"
+
+    def test_the_advertiser_is_read_in_one_request(self):
+        rows, requests = self._run("advertisers", {"code": 0, "data": {"list": [{"advertiser_id": "123"}]}})
+
+        assert rows == [{"advertiser_id": "123", "date": dt.date(2026, 10, 1)}]
+        (request,) = requests
+        assert request.url.path.endswith("/advertiser/info/")
+        assert json.loads(request.url.params["advertiser_ids"]) == ["123"]
+        assert json.loads(request.url.params["fields"]) == constants.ADVERTISER_FIELDS
+        assert "page" not in request.url.params
+
+
 REPORT_ASSETS = (
     "ads_stats",
     "ads_stats_by_country",

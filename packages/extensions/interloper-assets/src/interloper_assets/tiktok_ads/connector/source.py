@@ -1,6 +1,3 @@
-import datetime as dt
-import json
-import logging
 from typing import Any
 
 import interloper as il
@@ -21,7 +18,11 @@ from interloper_assets.tiktok_ads.connector.schemas import (
     VideosStatsByPlatform,
 )
 
-logger = logging.getLogger(__name__)
+# the reports read auction ads; reservation ads and coarser levels are other reports
+_AUCTION_ADS = {"service_type": "AUCTION", "data_level": "AUCTION_AD"}
+# the campaign, ad group and ad lists leave deleted objects out unless asked for every status, and a
+# deleted object still carries spend in the reports
+_EVERY_STATUS = {"filtering": {"primary_status": "STATUS_ALL"}}
 
 
 # -- NORMALIZERS ---------------------------------------------------------------
@@ -68,71 +69,6 @@ class TiktokStatsNormalizer(DataFrameNormalizer):
 _ENTITY_NORMALIZER = DataFrameNormalizer(drop_na_columns=True)
 # the advertiser endpoint, unlike the campaign and ad ones, sends its creation time as seconds since the epoch
 _ADVERTISER_NORMALIZER = DataFrameNormalizer(drop_na_columns=True, epoch_columns=["create_time"], epoch_unit="s")
-# the campaign, ad group and ad lists leave deleted objects out unless asked for every status, and a
-# deleted object still carries spend in the reports
-_EVERY_STATUS = {"filtering": json.dumps({"primary_status": "STATUS_ALL"})}
-
-
-# -- HELPERS: HTTP / pagination ------------------------------------------------
-def _select_list(response: Any) -> list[dict[str, Any]]:
-    """Pull ``data.list`` out of a TikTok response, raising on a non-zero API code.
-
-    Raises:
-        RuntimeError: If TikTok answers with a non-zero API code.
-
-    """
-    body = response.json()
-    if body.get("code") != 0:
-        raise RuntimeError(f"TikTok API error {body.get('code')}: {body.get('message')}")
-    return body["data"]["list"]
-
-
-async def _paginate(connection: TiktokAdsConnection, path: str, params: dict[str, Any]) -> list[dict[str, Any]]:
-    """GET a paginated TikTok endpoint, following ``data.page_info.total_page``.
-
-    The first page reports ``total_page``, so the remaining pages are fetched
-    concurrently (bounded by ``PAGE_CONCURRENCY``) by the paginating client.
-    """
-    paginator = il.PageNumberPaginator(total_path="data.page_info.total_page")
-    pages = connection.client.paginate(
-        path,
-        paginator,
-        params={**params, "page_size": constants.PAGE_SIZE},
-        data_selector=_select_list,
-        concurrency=constants.PAGE_CONCURRENCY,
-    )
-    return [row async for page in pages for row in page]
-
-
-async def _request_report(
-    connection: TiktokAdsConnection,
-    advertiser_id: str,
-    date: dt.date,
-    *,
-    report_type: str,
-    dimensions: list[str],
-    metrics: list[str],
-) -> list[dict[str, Any]]:
-    """Request an AUCTION_AD integrated report for *date* and return its rows."""
-    return await _paginate(
-        connection,
-        "/report/integrated/get/",
-        {
-            "advertiser_id": advertiser_id,
-            "service_type": "AUCTION",
-            "report_type": report_type,
-            "data_level": "AUCTION_AD",
-            "dimensions": json.dumps(dimensions),
-            "metrics": json.dumps(metrics),
-            "start_date": date.isoformat(),
-            "end_date": date.isoformat(),
-        },
-    )
-
-
-def _with_date(rows: list[dict[str, Any]], date: dt.date) -> list[dict[str, Any]]:
-    """Stamp the partition date onto each entity row, which TikTok returns without a date."""
-    return [{**row, "date": date} for row in rows]
 
 
 # -- SOURCE --------------------------------------------------------------------
@@ -159,54 +95,50 @@ class TiktokAds(il.Source):
     @il.asset(schema=AdsStats, partitioning=il.TimePartitionConfig(column="stat_time_day"), tags=["Report"])
     async def ads_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad-level performance with basic metrics including spend, clicks, and conversions."""
-        rows = await _request_report(
-            self.connection,
-            self.advertiser_id,
+        return await self.connection.api.report(
             context.partition_date,
+            advertiser_id=self.advertiser_id,
             report_type="BASIC",
             dimensions=["ad_id", "stat_time_day"],
             metrics=constants.BASIC_METRICS,
+            **_AUCTION_ADS,
         )
-        return rows
 
     @il.asset(schema=AdsStatsByCountry, partitioning=il.TimePartitionConfig(column="stat_time_day"), tags=["Report"])
     async def ads_stats_by_country(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad performance segmented by country."""
-        rows = await _request_report(
-            self.connection,
-            self.advertiser_id,
+        return await self.connection.api.report(
             context.partition_date,
+            advertiser_id=self.advertiser_id,
             report_type="AUDIENCE",
             dimensions=["ad_id", "country_code", "stat_time_day"],
             metrics=constants.AUDIENCE_METRICS,
+            **_AUCTION_ADS,
         )
-        return rows
 
     @il.asset(schema=AdsStatsByAgeGender, partitioning=il.TimePartitionConfig(column="stat_time_day"), tags=["Report"])
     async def ads_stats_by_age_gender(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad performance segmented by age and gender demographics."""
-        rows = await _request_report(
-            self.connection,
-            self.advertiser_id,
+        return await self.connection.api.report(
             context.partition_date,
+            advertiser_id=self.advertiser_id,
             report_type="AUDIENCE",
             dimensions=["ad_id", "age", "gender", "stat_time_day"],
             metrics=constants.AUDIENCE_METRICS,
+            **_AUCTION_ADS,
         )
-        return rows
 
     @il.asset(schema=AdsStatsByPlatform, partitioning=il.TimePartitionConfig(column="stat_time_day"), tags=["Report"])
     async def ads_stats_by_platform(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad performance segmented by platform."""
-        rows = await _request_report(
-            self.connection,
-            self.advertiser_id,
+        return await self.connection.api.report(
             context.partition_date,
+            advertiser_id=self.advertiser_id,
             report_type="AUDIENCE",
             dimensions=["ad_id", "platform", "stat_time_day"],
             metrics=constants.AUDIENCE_METRICS,
+            **_AUCTION_ADS,
         )
-        return rows
 
     @il.asset(
         schema=VideosStatsByPlatform,
@@ -215,15 +147,14 @@ class TiktokAds(il.Source):
     )
     async def videos_stats_by_platform(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Video ad performance segmented by platform."""
-        rows = await _request_report(
-            self.connection,
-            self.advertiser_id,
+        return await self.connection.api.report(
             context.partition_date,
+            advertiser_id=self.advertiser_id,
             report_type="AUDIENCE",
             dimensions=["ad_id", "platform", "stat_time_day"],
             metrics=constants.VIDEO_METRICS,
+            **_AUCTION_ADS,
         )
-        return rows
 
     # --- Entity assets (_ENTITY_NORMALIZER) ---
 
@@ -235,9 +166,8 @@ class TiktokAds(il.Source):
     )
     async def ads(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """All ads in the advertiser account with their attributes."""
-        params = {"advertiser_id": self.advertiser_id, **_EVERY_STATUS}
-        rows = await _paginate(self.connection, "/ad/get/", params)
-        return _with_date(rows, context.partition_date)
+        rows = await self.connection.api.rows("/ad/get/", advertiser_id=self.advertiser_id, **_EVERY_STATUS)
+        return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
         schema=Campaigns,
@@ -247,9 +177,8 @@ class TiktokAds(il.Source):
     )
     async def campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """All campaigns in the advertiser account with their attributes."""
-        params = {"advertiser_id": self.advertiser_id, **_EVERY_STATUS}
-        rows = await _paginate(self.connection, "/campaign/get/", params)
-        return _with_date(rows, context.partition_date)
+        rows = await self.connection.api.rows("/campaign/get/", advertiser_id=self.advertiser_id, **_EVERY_STATUS)
+        return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
         schema=Adgroups,
@@ -259,9 +188,8 @@ class TiktokAds(il.Source):
     )
     async def adgroups(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """All ad groups in the advertiser account with their schedule, budget, targeting and status."""
-        params = {"advertiser_id": self.advertiser_id, **_EVERY_STATUS}
-        rows = await _paginate(self.connection, "/adgroup/get/", params)
-        return _with_date(rows, context.partition_date)
+        rows = await self.connection.api.rows("/adgroup/get/", advertiser_id=self.advertiser_id, **_EVERY_STATUS)
+        return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
         schema=Advertisers,
@@ -271,15 +199,9 @@ class TiktokAds(il.Source):
     )
     async def advertisers(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """The advertiser account with its attributes."""
-        response = await self.connection.client.get(
+        data = await self.connection.api.get(
             "/advertiser/info/",
-            params={
-                "advertiser_ids": json.dumps([self.advertiser_id]),
-                "fields": json.dumps(constants.ADVERTISER_FIELDS),
-            },
+            advertiser_ids=[self.advertiser_id],
+            fields=constants.ADVERTISER_FIELDS,
         )
-        response.raise_for_status()
-        body = response.json()
-        if body.get("code") != 0:
-            raise RuntimeError(f"TikTok API error {body.get('code')}: {body.get('message')}")
-        return _with_date(body["data"]["list"], context.partition_date)
+        return [{**row, "date": context.partition_date} for row in data["list"]]
