@@ -32,6 +32,8 @@
 **/.nuxt
 **/.output
 **/.cache
+# Extension UI bundles: the api image builds its own
+packages/extensions/*/src/*/static
 
 # Docs and unrelated top-level files
 README.md

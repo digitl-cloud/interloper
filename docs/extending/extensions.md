@@ -335,6 +335,12 @@ contract: one it does not export cannot be used, since a copy bundled with the e
 miss the app's theme. Exporting every Nuxt UI component would add about 450 KB, gzipped, to
 every page that shows an extension, so each is added to `host.ts` when an extension needs it.
 
+`make build-extensions` runs all of it for every UI in the workspace, and
+`make check-typescript` builds the SDK and type-checks it and every UI, as CI does. A package's
+wheel carries whatever its `static/` holds, so the release runs `make build-extensions` before
+it builds the wheels, and the loaded api image builds the `packages/extensions` UIs into the
+packages it installs.
+
 To work on a UI with hot reload, run its dev server beside the app's and name it in
 `INTERLOPER_UI_DEV` (`<key>=<entry URL>`, several separated by commas):
 

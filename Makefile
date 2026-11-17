@@ -21,8 +21,13 @@ check-python:
 	uv run ty check
 	PYTHONDONTWRITEBYTECODE= uv run pytest -n auto --maxprocesses 4
 
+# Every extension UI in the pnpm workspace: the extensions' own and the examples'.
+EXTENSION_UIS := --filter './packages/extensions/*/ui' --filter './examples/*/ui'
+
 check-typescript:
 	cd packages/platform/interloper-app/app && pnpm run lint && pnpm exec nuxt typecheck
+	pnpm --filter @interloper/ui build
+	pnpm --filter @interloper/ui $(EXTENSION_UIS) typecheck
 
 check:
 	make check-python
@@ -38,6 +43,12 @@ build-app:
 	rm -rf packages/platform/interloper-app/src/interloper_app/static/*
 	cp -r packages/platform/interloper-app/app/.output/public/* packages/platform/interloper-app/src/interloper_app/static/
 	touch packages/platform/interloper-app/src/interloper_app/static/.gitkeep
+
+# Each UI builds into its Python package's static/, which the package's wheel carries.
+build-extensions:
+	pnpm install
+	pnpm --filter @interloper/ui build
+	pnpm $(EXTENSION_UIS) build
 
 
 # ###############

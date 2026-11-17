@@ -14,7 +14,8 @@
 #   core-slim       the framework and nothing else
 #   scheduler       core + db + scheduler + assets (cron + queue worker + reaper)
 #   scheduler-slim  core + db + scheduler (in-process launcher only)
-#   api             core + db + api + agent (assets installed; SDK extras skipped)
+#   api             core + db + api + agent (assets installed; SDK extras skipped),
+#                   with the extensions' UIs built into their packages
 #   api-slim        core + db + api
 #   mcp             core + db + toolkit + mcp (read-only MCP server, PAT auth)
 #   mcp-slim        core + db + toolkit + mcp, no assets
@@ -132,6 +133,54 @@ RUN apt-get update \
 # BUILD STAGES
 # ================================================================
 
+# ── node workspace (the app, the SDK, the extensions' UIs) ───
+# Pin the node stages to the *build* platform (the runner's native arch)
+# rather than the target. What they build is static, architecture-independent
+# assets, so there is no reason to run the heavy Vite/Rollup/Tailwind build
+# under QEMU for the linux/arm64 target: emulating that bundler is what made
+# the multi-arch frontend build hang. Only the nginx runtime stage is built
+# per-target-arch (a trivial COPY), and the api's Python build copies the
+# extension UIs' output in.
+FROM --platform=$BUILDPLATFORM node:26-alpine AS node-workspace
+
+WORKDIR /repo
+# Node ships without corepack since v25; it installs the pnpm `packageManager` pins.
+RUN npm install --global corepack && corepack enable
+# The pnpm workspace is the repository's; the examples are not in the context.
+COPY --parents package.json pnpm-workspace.yaml pnpm-lock.yaml \
+    packages/platform/interloper-app/app/package.json packages/platform/interloper-app/app/patches \
+    packages/platform/interloper-app/sdk/package.json packages/extensions/*/ui/package.json ./
+RUN pnpm install --frozen-lockfile --ignore-scripts \
+    --filter @interloper/app --filter @interloper/ui --filter './packages/extensions/*/ui'
+COPY packages/platform/interloper-app/app/ packages/platform/interloper-app/app/
+# nuxt.config reads the workspace version from the Python package beside the app.
+COPY packages/platform/interloper-app/pyproject.toml packages/platform/interloper-app/
+RUN cd packages/platform/interloper-app/app && pnpm exec nuxt prepare
+
+
+# ── frontend (Nuxt SPA, built static) ────────────────────────
+FROM node-workspace AS build-spa
+
+WORKDIR /repo/packages/platform/interloper-app/app
+RUN NUXT_PRESET=static pnpm build
+
+
+# ── extension UIs (built static, into their packages) ────────
+# Each UI builds into its Python package's static/ directory; /out gathers
+# those directories alone, for the api build to lay over the source.
+FROM node-workspace AS build-extension-uis
+
+COPY packages/platform/interloper-app/sdk/ packages/platform/interloper-app/sdk/
+RUN pnpm --filter @interloper/ui build
+# package.json keeps the COPY valid while no extension has a UI.
+COPY --parents package.json packages/extensions/*/ui ./
+RUN mkdir /out \
+    && pnpm --filter './packages/extensions/*/ui' build \
+    && for static in packages/extensions/*/src/*/static; do \
+        if [ -d "$static" ]; then mkdir -p "/out/$static" && cp -R "$static/." "/out/$static/"; fi; \
+    done
+
+
 # ── scheduler ─────────────────────────────────────────────────
 # One image runs cron + queue worker + reaper in the same process. It carries
 # both launchers; launcher.type picks between them at runtime.
@@ -203,6 +252,8 @@ ENV ASSETS_EXTRAS=""
 RUN --mount=type=cache,target=/root/.cache/uv \
     docker/uv-sync.sh --frozen interloper-core interloper-assets interloper-db interloper-api
 COPY . .
+# The extensions' UI bundles, installed inside their packages like any other file.
+COPY --from=build-extension-uis /out/ ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     docker/uv-sync.sh interloper-core interloper-assets interloper-db interloper-api
 
@@ -241,30 +292,6 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/uv \
     docker/uv-sync.sh interloper-core interloper-db interloper-toolkit interloper-mcp
-
-
-# ── frontend (Nuxt SPA, built static) ────────────────────────
-# Pin this stage to the *build* platform (the runner's native arch) rather
-# than the target. The SPA output is static, architecture-independent assets,
-# so there is no reason to run the heavy Vite/Rollup/Tailwind build under
-# QEMU for the linux/arm64 target — emulating that bundler is what made the
-# multi-arch frontend build hang. Only the final nginx runtime stage below
-# is built per-target-arch (a trivial COPY).
-FROM --platform=$BUILDPLATFORM node:26-alpine AS build-spa
-
-WORKDIR /repo
-# Node ships without corepack since v25; it installs the pnpm `packageManager` pins.
-RUN npm install --global corepack && corepack enable
-# The pnpm workspace is the repository's; the app is the one project installed here.
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY packages/platform/interloper-app/app/package.json packages/platform/interloper-app/app/
-COPY packages/platform/interloper-app/app/patches/ packages/platform/interloper-app/app/patches/
-RUN pnpm install --frozen-lockfile --ignore-scripts --filter @interloper/app
-COPY packages/platform/interloper-app/app/ packages/platform/interloper-app/app/
-# nuxt.config reads the workspace version from the Python package beside the app.
-COPY packages/platform/interloper-app/pyproject.toml packages/platform/interloper-app/
-WORKDIR /repo/packages/platform/interloper-app/app
-RUN pnpm exec nuxt prepare && NUXT_PRESET=static pnpm build
 
 
 # ================================================================

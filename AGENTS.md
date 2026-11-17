@@ -59,6 +59,7 @@ Combined (from repo root):
 - `make check` — both Python and frontend checks
 - `make check-python` / `make check-typescript` — individual halves
 - `make build-app` — build the SPA and stage it inside the Python package
+- `make build-extensions`: build the SDK and every extension UI into its Python package's `static/`
 - `make setup` — `pre-commit install` + `uv sync --all-packages --all-extras`
 
 ## Local dev instance

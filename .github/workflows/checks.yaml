@@ -64,9 +64,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    defaults:
-      run:
-        working-directory: packages/platform/interloper-app/app
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -85,10 +82,19 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Lint
-        run: pnpm run lint
+        run: pnpm --filter @interloper/app lint
 
       - name: Typecheck
-        run: pnpm exec nuxt typecheck
+        run: pnpm --filter @interloper/app exec nuxt typecheck
+
+      - name: Build the SDK
+        run: pnpm --filter @interloper/ui build
+
+      - name: Typecheck the SDK and extension UIs
+        run: pnpm --filter @interloper/ui --filter './packages/extensions/*/ui' --filter './examples/*/ui' typecheck
+
+      - name: Build extension UIs
+        run: pnpm --filter './packages/extensions/*/ui' --filter './examples/*/ui' build
 
   docker:
     name: Docker smoke (${{ matrix.target }})

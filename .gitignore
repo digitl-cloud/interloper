@@ -7,6 +7,9 @@ wheels/
 .pytest_cache
 .venv
 node_modules/
+# Extension UI bundles, built by `make build-extensions`
+packages/extensions/*/src/*/static/
+examples/*/src/*/static/
 .DS_Store
 .env
 data/
