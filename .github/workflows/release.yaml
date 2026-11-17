@@ -115,10 +115,11 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
-      # Each extension's wheel carries its UI bundle, so the UIs build first.
-      - name: Build extension UIs
+      # interloper-app's wheel carries the SPA and each extension's wheel its UI
+      # bundle, so they build first.
+      - name: Build the app and extension UIs
         if: steps.release.outputs.released == 'true'
-        run: make build-extensions
+        run: make build-app build-extensions
 
       - name: Build & Publish
         if: steps.release.outputs.released == 'true'
