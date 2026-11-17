@@ -1,0 +1,166 @@
+"""The Impact Advertiser API engine every Impact request goes through."""
+
+from __future__ import annotations
+
+import datetime as dt
+import logging
+from asyncio import get_running_loop, sleep
+from typing import Any
+
+import httpx2
+import interloper as il
+
+from interloper_assets.impact import constants
+
+logger = logging.getLogger(__name__)
+
+
+class ImpactApi:
+    """The Impact Advertiser API: its paged lists and its export jobs.
+
+    A list answers ``@numpages`` on every page and holds the page's records
+    under the resource's own name (``Actions``, ``Campaigns``), so the other
+    pages are fetched concurrently, at most ``PAGE_CONCURRENCY`` at once.
+    Impact refuses a request with an HTTP error status, raised as it comes.
+
+    An export runs as a job: the export endpoint answers the job's
+    ``QueuedUri``, the job is polled until it completes, and its results are
+    downloaded as JSON, paged like a list.
+
+    ``rows`` and ``report`` take a day and send it as Impact's ``StartDate``
+    and ``EndDate`` window over it, in UTC; an endpoint that names its day
+    otherwise gets it from the caller with its other parameters.
+    """
+
+    def __init__(self, client: il.AsyncRESTClient) -> None:
+        """Build the engine on an authenticated client.
+
+        Args:
+            client: The client every request goes through, authenticated as the account and
+                rooted at its ``/Advertisers/{AccountSID}`` URL.
+        """
+        self.client = client
+
+    async def rows(self, path: str, key: str, day: dt.date | None = None, **params: Any) -> list[dict[str, Any]]:
+        """Read every record of a paged list.
+
+        Args:
+            path: The endpoint, relative to the account's URL, such as ``/Actions``.
+            key: The key a page holds its records under, such as ``Actions``.
+            day: The day the list covers, sent as Impact's window over it; ``None`` sends no window.
+            **params: The query parameters.
+
+        Returns:
+            The records of every page, in page order.
+        """
+        window = self._window(day) if day is not None else {}
+        return await self._records(path, key, {**params, **window})
+
+    async def export(self, path: str, key: str, **params: Any) -> list[dict[str, Any]]:
+        """Export records as a job: queue it, wait for it, then download every page of its results.
+
+        Args:
+            path: The export endpoint, relative to the account's URL, such as
+                ``/Programs/{id}/ClickExport``.
+            key: The key a page of the download holds its records under, such as ``Clicks``.
+            **params: The export's query parameters; the results are always asked for as JSON.
+
+        Returns:
+            The records of every page of the job's download, in page order.
+        """
+        response = await self.client.get(path, params={**params, "ResultFormat": "JSON"})
+        response.raise_for_status()
+        job_id = response.json()["QueuedUri"].split("/")[-1]
+        await self._wait(job_id)
+        return await self._records(
+            f"/Jobs/{job_id}/Download",
+            key,
+            {"Mode": "stream"},
+            headers={"Accept": "application/octet-stream"},
+        )
+
+    async def report(self, report_id: str, day: dt.date, **params: Any) -> list[dict[str, Any]]:
+        """Export one day of a report.
+
+        Args:
+            report_id: The report, such as ``att_adv_performance_by_day_pm_only``.
+            day: The report's only day.
+            **params: The report's other parameters, such as its ``SUBAID``.
+
+        Returns:
+            The report's records.
+        """
+        return await self.export(f"/ReportExport/{report_id}", "Records", **params, **self._window(day))
+
+    async def _records(
+        self, path: str, key: str, params: dict[str, Any], headers: dict[str, str] | None = None
+    ) -> list[dict[str, Any]]:
+        """Read every page of a paged response and collect its records.
+
+        A response without ``@numpages`` is read as the only page: an endpoint
+        that does not page ignores ``Page`` and would answer the same records
+        forever.
+
+        Args:
+            path: The endpoint, relative to the account's URL.
+            key: The key a page holds its records under; a page without it, or with it null, holds none.
+            params: The query parameters of every page.
+            headers: Headers of every page, beside the client's; ``None`` adds none.
+
+        Returns:
+            The records of every page, in page order.
+        """
+        pages = self.client.paginate(
+            path,
+            il.PageNumberPaginator(page_param="Page", total_path="@numpages", maximum_page=1),
+            params=params,
+            headers=headers,
+            concurrency=constants.PAGE_CONCURRENCY,
+        )
+        return [row async for page in pages for row in page.get(key) or []]
+
+    async def _wait(self, job_id: str) -> None:
+        """Poll a queued job until it completes.
+
+        Each poll depends on the previous one's status, so the polls run one
+        after another, ``JOB_POLL_INTERVAL`` apart, until ``JOB_POLL_TIMEOUT``.
+        A poll that fails is read as no status yet and polled again.
+
+        Args:
+            job_id: The job, as its ``QueuedUri`` names it.
+
+        Raises:
+            RuntimeError: If the job is cancelled or fails, or does not complete in time.
+        """
+        loop = get_running_loop()
+        deadline = loop.time() + constants.JOB_POLL_TIMEOUT
+        while True:
+            logger.info(f"Waiting for Impact job {job_id}...")
+            try:
+                response = await self.client.get(f"/Jobs/{job_id}")
+                response.raise_for_status()
+                status = response.json()["Status"]
+            except httpx2.HTTPError as error:
+                logger.debug(f"Transient error polling Impact job {job_id}: {error}")
+                status = None
+
+            if status == "COMPLETED":
+                return
+            if status in ("CANCELLED", "ERROR", "FAILED"):
+                raise RuntimeError(f"Impact job {job_id} failed with status {status}")
+
+            if loop.time() >= deadline:
+                raise RuntimeError(f"Impact job {job_id} did not complete within {constants.JOB_POLL_TIMEOUT:.0f}s")
+            await sleep(constants.JOB_POLL_INTERVAL)
+
+    @staticmethod
+    def _window(day: dt.date) -> dict[str, str]:
+        """Encode a day as Impact's ``StartDate`` and ``EndDate`` window over it.
+
+        Args:
+            day: The day to cover.
+
+        Returns:
+            The window's first and last second of the day, in UTC.
+        """
+        return {"StartDate": day.strftime("%Y-%m-%dT00:00:00Z"), "EndDate": day.strftime("%Y-%m-%dT23:59:59Z")}

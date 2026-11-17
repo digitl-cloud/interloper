@@ -4,6 +4,7 @@ import httpx2
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
+from interloper_assets.impact.api import ImpactApi
 from interloper_assets.impact.constants import BASE_URL
 
 
@@ -33,6 +34,15 @@ class ImpactConnection(il.Connection):
             headers={"Accept": "application/json"},
         )
 
+    @cached_property
+    def api(self) -> ImpactApi:
+        """The Impact Advertiser API engine every caller shares, built on ``client``.
+
+        Returns:
+            The engine, cached per connection instance.
+        """
+        return ImpactApi(self.client)
+
     @il.fetch_field_provider
     async def programs(self) -> list[dict[str, str]]:
         """Fetch Impact programs (campaigns) accessible by the connection.
@@ -41,9 +51,8 @@ class ImpactConnection(il.Connection):
             The options for the field's dropdown.
 
         """
-        paginator = il.PageNumberPaginator(page_param="Page", total_path="@numpages")
-        pages = self.client.paginate("/Campaigns", paginator, data_selector=lambda r: r.json().get("Campaigns") or [])
-        return [{"Id": c["Id"], "Name": c.get("Name", c["Id"])} async for page in pages for c in page]
+        programs = await self.api.rows("/Campaigns", "Campaigns")
+        return [{"Id": program["Id"], "Name": program.get("Name", program["Id"])} for program in programs]
 
     async def check(self) -> bool:
         """Prove the credentials work by running the ``programs`` lookup.
