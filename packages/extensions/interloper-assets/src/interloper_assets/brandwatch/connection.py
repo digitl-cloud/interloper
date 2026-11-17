@@ -4,6 +4,7 @@ import interloper as il
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.brandwatch import constants
+from interloper_assets.brandwatch.api import BrandwatchApi
 
 
 @il.connection(
@@ -31,3 +32,12 @@ class BrandwatchConnection(il.Connection):
         # (`param_key`) is carried over unverified from the reference connector
         # and may need to be `apikey` — confirm against a live key.
         return il.AsyncRESTClient(constants.BASE_URL, params={"param_key": self.api_key}, timeout=60)
+
+    @cached_property
+    def api(self) -> BrandwatchApi:
+        """The Brandwatch Measure API engine every caller shares, built on ``client``.
+
+        Returns:
+            The engine, cached per connection instance.
+        """
+        return BrandwatchApi(self.client)
