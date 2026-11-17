@@ -5,6 +5,7 @@ import interloper as il
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.pinterest_ads import constants
+from interloper_assets.pinterest_ads.api import PinterestAdsApi
 
 
 class PinterestRefreshTokenAuth(il.OAuth2RefreshTokenAuth):
@@ -57,6 +58,15 @@ class PinterestAdsConnection(il.RefreshTokenOAuthConnection):
             ),
         )
 
+    @cached_property
+    def api(self) -> PinterestAdsApi:
+        """The Pinterest v5 API engine every caller shares, built on ``client``.
+
+        Returns:
+            The engine, cached per connection instance.
+        """
+        return PinterestAdsApi(self.client)
+
     @il.fetch_field_provider
     async def accounts(self) -> list[dict[str, str]]:
         """List the ad accounts reachable by this connection.
@@ -66,18 +76,8 @@ class PinterestAdsConnection(il.RefreshTokenOAuthConnection):
         Returns:
             The options for the field's dropdown.
         """
-        paginator = il.JSONCursorPaginator(cursor_path="bookmark", cursor_param="bookmark")
-        pages = self.client.paginate(
-            "/ad_accounts",
-            paginator,
-            params={"page_size": constants.PAGE_SIZE},
-            data_selector="items",
-        )
-        return [
-            {"id": account["id"], "name": account.get("name") or account["id"]}
-            async for page in pages
-            for account in page
-        ]
+        accounts = await self.api.rows("/ad_accounts")
+        return [{"id": account["id"], "name": account.get("name") or account["id"]} for account in accounts]
 
     async def check(self) -> bool:
         """Prove the credentials work by running the ``accounts`` lookup.
