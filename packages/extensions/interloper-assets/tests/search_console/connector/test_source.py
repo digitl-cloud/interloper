@@ -1,12 +1,11 @@
 """Regression tests for the SearchConsole source.
 
-Search Analytics rows carry their dimension values as a positional ``keys``
-list aligned to the requested dimensions, plus ``clicks``, ``impressions``,
-``ctr`` and ``position``. The source's shared query method lays each key onto a column
-named after its dimension, stamps the request-only ``search_type``, and pages
-with ``startRow`` past the 25,000-row response cap. Every report grouped by
-``DATE`` partitions on it; ``search_appearance_stats`` is not, so it stamps
-``date``.
+Every asset is one Search Analytics report through the connection's engine,
+which lays each row's positional ``keys`` onto columns named after the
+requested dimensions, stamps the request-only ``search_type`` and pages with
+``startRow`` (pinned in ``test_api.py``). These tests pin what each asset sends
+and returns. Every report grouped by ``DATE`` partitions on it;
+``search_appearance_stats`` is not, so it stamps ``date``.
 """
 
 from __future__ import annotations
@@ -15,7 +14,10 @@ import datetime as dt
 from types import SimpleNamespace
 from typing import Any
 
+import httplib2
 import interloper as il
+import pytest
+from googleapiclient.errors import HttpError
 from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
@@ -39,9 +41,10 @@ REPORT_ASSETS = {
 class FakeSearchAnalytics:
     """Serve canned Search Analytics pages and record every request body."""
 
-    def __init__(self, pages: dict[str, list[list[dict[str, Any]]]]):
-        """Hold the pages to serve, keyed by search type, in startRow order."""
+    def __init__(self, pages: dict[str, list[list[dict[str, Any]]]], refusal: HttpError | None = None):
+        """Hold the pages to serve, keyed by search type, in startRow order, or the refusal to raise."""
         self.pages = pages
+        self.refusal = refusal
         self.requests: list[dict[str, Any]] = []
 
     def searchanalytics(self) -> FakeSearchAnalytics:
@@ -49,6 +52,8 @@ class FakeSearchAnalytics:
 
     def query(self, siteUrl: str, body: dict[str, Any]) -> SimpleNamespace:
         self.requests.append({"siteUrl": siteUrl, **body})
+        if self.refusal is not None:
+            raise self.refusal
         pages = self.pages.get(body["type"], [])
         index = body["startRow"] // constants.ROW_LIMIT
         rows = pages[index] if index < len(pages) else []
@@ -75,6 +80,11 @@ def _asset(key: str, source: Any = None) -> Any:
     return next(a for a in (source or _source()).assets if type(a).key == key)
 
 
+def _data(key: str, client: Any) -> list[dict[str, Any]]:
+    asset = _asset(key, _source(client))
+    return asset.data(context=il.ExecutionContext(asset, il.TimePartition(value=_DAY).window))
+
+
 class TestSourceAssets:
     def test_asset_keys(self):
         assert {type(a).key for a in _source().assets} == set(REPORT_ASSETS)
@@ -88,120 +98,107 @@ class TestSourceAssets:
             assert asset.tags == ["Report"], type(asset).key
 
 
-class TestSearchAnalyticsQuery:
-    """Keys land on dimension-named columns, search types iterate, pages follow startRow."""
+class TestAssetQueries:
+    """Each asset sends exactly its old queries and returns exactly its old rows."""
 
-    def test_keys_map_onto_dimension_columns(self):
-        client = FakeSearchAnalytics({"WEB": [[_row("2026-09-28", "deu", "MOBILE")]]})
-        records = _source(client, site_url="sc-domain:example.com")._search_analytics(
-            _DAY,
-            dimensions=constants.SITE_BY_COUNTRY_DEVICE_DIMENSIONS,
-            search_types=["WEB"],
-        )
-        assert records == [
+    @pytest.mark.parametrize(
+        ("key", "dimensions", "search_types", "aggregation_type", "stamped"),
+        [
+            ("page_stats", constants.PAGE_DIMENSIONS, constants.SEARCH_TYPES, "BY_PAGE", {}),
+            ("site_stats", constants.SITE_DIMENSIONS, constants.SEARCH_TYPES, "BY_PROPERTY", {}),
+            (
+                "site_stats_by_country_device",
+                constants.SITE_BY_COUNTRY_DEVICE_DIMENSIONS,
+                constants.SEARCH_TYPES,
+                "AUTO",
+                {},
+            ),
+            (
+                "site_stats_by_country_page",
+                constants.SITE_BY_COUNTRY_PAGE_DIMENSIONS,
+                constants.ALL_SEARCH_TYPES,
+                "AUTO",
+                {},
+            ),
+            (
+                "search_appearance_stats",
+                constants.SEARCH_APPEARANCE_DIMENSIONS,
+                constants.ALL_SEARCH_TYPES,
+                "AUTO",
+                {"date": _DAY},
+            ),
+        ],
+    )
+    def test_an_asset_queries_its_day_once_per_search_type(
+        self,
+        key: str,
+        dimensions: list[str],
+        search_types: list[str],
+        aggregation_type: str,
+        stamped: dict[str, Any],
+    ):
+        pages = {search_type: [[_row(*(f"{search_type}-{d}" for d in dimensions))]] for search_type in search_types}
+        client = FakeSearchAnalytics(pages)
+
+        rows = _data(key, client)
+
+        assert client.requests == [
             {
-                "date": "2026-09-28",
-                "country": "deu",
-                "device": "MOBILE",
+                "siteUrl": "sc-domain:example.com",
+                "startDate": "2026-09-28",
+                "endDate": "2026-09-28",
+                "dimensions": dimensions,
+                "type": search_type,
+                "aggregationType": aggregation_type,
+                "dataState": "final",
+                "rowLimit": 25_000,
+                "startRow": 0,
+            }
+            for search_type in search_types
+        ]
+        assert rows == [
+            {
+                **{dimension.lower(): f"{search_type}-{dimension}" for dimension in dimensions},
                 "clicks": 3.0,
                 "impressions": 40.0,
                 "ctr": 0.075,
                 "position": 4.25,
-                "search_type": "web",
+                "search_type": search_type.lower(),
+                **stamped,
             }
+            for search_type in search_types
         ]
 
-    def test_search_appearance_dimension_column(self):
-        client = FakeSearchAnalytics({"DISCOVER": [[_row("RICHCARD")]]})
-        records = _source(client, site_url="sc-domain:example.com")._search_analytics(
-            _DAY,
-            dimensions=constants.SEARCH_APPEARANCE_DIMENSIONS,
-            search_types=["DISCOVER"],
-        )
-        assert records[0]["search_appearance"] == "RICHCARD"
-        assert records[0]["search_type"] == "discover"
-        assert "keys" not in records[0]
+    def test_an_asset_pages_past_the_row_limit(self):
+        full_page = [_row("2026-09-28", "deu", f"device-{i}") for i in range(constants.ROW_LIMIT)]
+        client = FakeSearchAnalytics({"WEB": [full_page, [_row("2026-09-28", "fra", "MOBILE")]]})
 
-    def test_one_request_series_per_search_type(self):
-        client = FakeSearchAnalytics({"WEB": [[_row("a")]], "IMAGE": [[_row("b")]]})
-        records = _source(client, site_url="https://example.com/")._search_analytics(
-            _DAY,
-            dimensions=["QUERY"],
-            search_types=constants.SEARCH_TYPES,
-            aggregation_type="BY_PROPERTY",
-        )
-        assert [r["search_type"] for r in records] == ["web", "image"]
-        assert [r["type"] for r in client.requests] == constants.SEARCH_TYPES
-        request = client.requests[0]
-        assert request["siteUrl"] == "https://example.com/"
-        assert request["startDate"] == request["endDate"] == "2026-09-28"
-        assert request["aggregationType"] == "BY_PROPERTY"
-        assert request["dataState"] == "final"
-        assert request["rowLimit"] == constants.ROW_LIMIT
+        rows = _data("site_stats_by_country_device", client)
 
-    def test_pages_past_the_row_limit(self):
-        full_page = [_row(f"q{i}") for i in range(constants.ROW_LIMIT)]
-        client = FakeSearchAnalytics({"WEB": [full_page, [_row("last")]]})
-        records = _source(client, site_url="sc-domain:example.com")._search_analytics(
-            _DAY,
-            dimensions=["QUERY"],
-            search_types=["WEB"],
-        )
-        assert len(records) == constants.ROW_LIMIT + 1
-        assert records[-1]["query"] == "last"
-        assert [r["startRow"] for r in client.requests] == [0, constants.ROW_LIMIT]
+        assert len(rows) == constants.ROW_LIMIT + 1
+        assert rows[-1]["country"] == "fra"
+        assert [(r["type"], r["startRow"]) for r in client.requests] == [
+            ("WEB", 0),
+            ("WEB", 25_000),
+            ("IMAGE", 0),
+            ("VIDEO", 0),
+            ("NEWS", 0),
+        ]
 
-    def test_empty_response_yields_no_rows(self):
+    def test_an_asset_with_nothing_to_report_returns_no_rows(self):
         client = FakeSearchAnalytics({})
-        records = _source(client, site_url="sc-domain:example.com")._search_analytics(
-            _DAY,
-            dimensions=["QUERY"],
-            search_types=["WEB"],
-        )
-        assert records == []
-        assert len(client.requests) == 1
 
+        assert _data("search_appearance_stats", client) == []
+        assert len(client.requests) == len(constants.ALL_SEARCH_TYPES)
 
-class TestAssetRequests:
-    """Each asset sends the dimensions, search types and aggregation of its old report."""
+    def test_a_refusal_raises_out_of_the_asset_as_google_sent_it(self):
+        refusal = HttpError(httplib2.Response({"status": 403}), b'{"error": {"message": "No access to the site"}}')
+        client = FakeSearchAnalytics({}, refusal=refusal)
 
-    def _requests(self, key: str) -> list[dict[str, Any]]:
-        client = FakeSearchAnalytics({})
-        source = _source(client)
-        _asset(key, source).run(il.TimePartition(_DAY))
-        return client.requests
+        with pytest.raises(HttpError) as raised:
+            _data("page_stats", client)
 
-    def test_page_stats(self):
-        requests = self._requests("page_stats")
-        assert [r["type"] for r in requests] == constants.SEARCH_TYPES
-        assert requests[0]["dimensions"] == constants.PAGE_DIMENSIONS
-        assert requests[0]["aggregationType"] == "BY_PAGE"
-
-    def test_site_stats(self):
-        requests = self._requests("site_stats")
-        assert [r["type"] for r in requests] == constants.SEARCH_TYPES
-        assert requests[0]["dimensions"] == constants.SITE_DIMENSIONS
-        assert requests[0]["aggregationType"] == "BY_PROPERTY"
-
-    def test_site_stats_by_country_device(self):
-        requests = self._requests("site_stats_by_country_device")
-        assert [r["type"] for r in requests] == constants.SEARCH_TYPES
-        assert requests[0]["dimensions"] == constants.SITE_BY_COUNTRY_DEVICE_DIMENSIONS
-        assert requests[0]["aggregationType"] == "AUTO"
-
-    def test_site_stats_by_country_page(self):
-        requests = self._requests("site_stats_by_country_page")
-        assert [r["type"] for r in requests] == constants.ALL_SEARCH_TYPES
-        assert requests[0]["dimensions"] == constants.SITE_BY_COUNTRY_PAGE_DIMENSIONS
-
-    def test_search_appearance_stats_stamps_the_partition_day(self):
-        client = FakeSearchAnalytics({"WEB": [[_row("VIDEO")]]})
-        source = _source(client)
-        rows = _asset("search_appearance_stats", source).run(il.TimePartition(_DAY)).to_dict("records")
-        assert [r["type"] for r in client.requests] == constants.ALL_SEARCH_TYPES
-        assert client.requests[0]["dimensions"] == constants.SEARCH_APPEARANCE_DIMENSIONS
-        assert rows[0]["date"] == _DAY
-        assert rows[0]["search_appearance"] == "VIDEO"
+        assert raised.value is refusal
 
 
 class TestSpecRoundtripAndReconcile:
@@ -220,11 +217,7 @@ class TestSpecRoundtripAndReconcile:
 
     def test_dated_report_row_reconciles(self):
         client = FakeSearchAnalytics({"WEB": [[_row("2026-09-28", "https://example.com/a", "shoes", "deu", "MOBILE")]]})
-        records = _source(client, site_url="sc-domain:example.com")._search_analytics(
-            _DAY,
-            dimensions=constants.PAGE_DIMENSIONS,
-            search_types=["WEB"],
-        )
+        records = _data("page_stats", client)
         normalized = self._child("page_stats").normalizer.normalize(records)
         reconciled = TableData.from_data(normalized).reconcile(schemas.PageStats)
         TableData.from_data(reconciled).reconcile(schemas.PageStats, strict=True)

@@ -7,6 +7,7 @@ import interloper as il
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.search_console import constants
+from interloper_assets.search_console.api import SearchConsoleApi
 
 
 @il.connection(
@@ -49,6 +50,18 @@ class SearchConsoleConnection(il.Connection):
 
         return build(constants.API_SERVICE, constants.API_VERSION, credentials=self.credentials)
 
+    @property
+    def api(self) -> SearchConsoleApi:
+        """Build a Search Console API engine on a fresh ``client``.
+
+        Not cached, for the reason ``client`` is not: every caller gets a
+        transport of its own.
+
+        Returns:
+            The engine, on a client of its own.
+        """
+        return SearchConsoleApi(self.client())
+
     @il.fetch_field_provider
     async def sites(self) -> list[dict[str, str]]:
         """Fetch the Search Console properties the service account has been added to.
@@ -57,7 +70,7 @@ class SearchConsoleConnection(il.Connection):
             One option per property: its ``site_url`` and a ``name`` label carrying
             the service account's permission level on it.
         """
-        response = await asyncio.to_thread(lambda: self.client().sites().list().execute())
+        response = await asyncio.to_thread(lambda: self.api.get("sites.list"))
         return [
             {"site_url": site["siteUrl"], "name": f"{site['siteUrl']} ({site.get('permissionLevel', 'UNKNOWN')})"}
             for site in response.get("siteEntry", [])
