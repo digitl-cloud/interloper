@@ -1,5 +1,5 @@
 from functools import cached_property
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx2
 import interloper as il
@@ -7,6 +7,9 @@ from pydantic import model_validator
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.facebook_ads import constants
+
+if TYPE_CHECKING:
+    from interloper_assets.facebook_ads.api import FacebookGraphApi, FacebookMarketingApi
 
 _GRAPH_URL = f"https://graph.facebook.com/v{constants.API_VERSION}"
 
@@ -55,8 +58,14 @@ class FacebookAdsConnection(il.OAuthConnection):
         return data
 
     @cached_property
-    def api(self) -> Any:
-        """Initialise and return the Facebook Ads SDK API client every request goes through."""
+    def client(self) -> "FacebookGraphApi":
+        """The Graph API client every asset request goes through, on the Facebook SDK.
+
+        The SDK is imported on first use, since the API process does not carry it.
+
+        Returns:
+            The client, cached per connection instance.
+        """
         from interloper_assets.facebook_ads.api import FacebookGraphApi
 
         return FacebookGraphApi.init(
@@ -68,13 +77,25 @@ class FacebookAdsConnection(il.OAuthConnection):
             crash_log=False,
         )
 
+    @cached_property
+    def api(self) -> "FacebookMarketingApi":
+        """The Marketing API engine every asset reads through, built on ``client``.
+
+        Returns:
+            The engine, cached per connection instance.
+        """
+        from interloper_assets.facebook_ads.api import FacebookMarketingApi
+
+        return FacebookMarketingApi(self.client)
+
     @il.fetch_field_provider
     async def accounts(self) -> list[dict[str, str]]:
         """List the active ad accounts reachable by this connection.
 
-        Backs the source's ``account_id`` ``FetchField``. Uses the Graph API
-        over httpx2 (not the SDK) so it runs in the API process, which omits
-        the heavy SDK extras.
+        Backs the source's ``account_id`` ``FetchField``. It reads the Graph
+        API over httpx2 rather than through ``api``, whose client is the
+        Facebook SDK, so that it runs in the API process, which omits the
+        heavy SDK extras.
 
         Returns:
             The options for the field's dropdown.

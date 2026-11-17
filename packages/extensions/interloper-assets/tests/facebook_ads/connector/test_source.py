@@ -21,12 +21,12 @@ import pytest
 from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
+from requests.structures import CaseInsensitiveDict
 
 from interloper_assets.facebook_ads import constants
 from interloper_assets.facebook_ads.api import FacebookGraphApi
 from interloper_assets.facebook_ads.connection import FacebookAdsConnection
 from interloper_assets.facebook_ads.connector import schemas
-from interloper_assets.facebook_ads.connector import source as connector
 from interloper_assets.facebook_ads.connector.source import PIVOT_COLUMNS, FacebookActionsNormalizer, FacebookAds
 
 
@@ -275,95 +275,149 @@ class TestNewEntities:
         assert json.loads(out.loc[0, "targeting"]) == {"geo_locations": {"countries": ["DE"]}}
 
 
-class _FakeObject:
-    def __init__(self, data: dict) -> None:
-        self.data = data
+class _Reply:
+    def __init__(self, status: int, body: dict) -> None:
+        self.status_code = status
+        self.text = json.dumps(body)
+        self.headers = CaseInsensitiveDict()
 
-    def export_all_data(self) -> dict:
-        return self.data
+
+class _Requests:
+    def __init__(self, bodies: list[dict | _Reply]) -> None:
+        self.replies = [body if isinstance(body, _Reply) else _Reply(200, body) for body in bodies]
+        self.sent: list[tuple[str, str, dict[str, Any]]] = []
+
+    def request(self, method: str, url: str, **kwargs: Any) -> _Reply:
+        self.sent.append((method, url.removeprefix(_GRAPH), dict(kwargs.get("params") or kwargs.get("data") or {})))
+        return self.replies.pop(0)
 
 
-class TestEntityReads:
-    def test_every_request_goes_through_the_graph_engine(self):
-        connection = FacebookAdsConnection(id="fb", access_token="x", app_id="1", app_secret="x")
-        assert isinstance(connection.api, FacebookGraphApi)
+class _Session:
+    GRAPH = constants.BASE_URL
+    timeout = None
+
+    def __init__(self, bodies: list[dict | _Reply]) -> None:
+        self.requests = _Requests(bodies)
+
+
+_GRAPH = f"{constants.BASE_URL}/v{constants.API_VERSION}/"
+_DAY = dt.date(2026, 10, 1)
+_PLATFORM = ["publisher_platform", "platform_position", "impression_device"]
+_JOB = [{"report_run_id": "777"}, {"id": "777", "async_status": "Job Completed", "async_percent_completion": 100}]
+_TOO_HEAVY = _Reply(500, {"error": {"code": 1, "message": "Please reduce the amount of data you're asking for"}})
+
+
+def _page(rows: list[dict], after: str | None = None) -> dict[str, Any]:
+    paging = {"paging": {"cursors": {"after": after}, "next": f"{_GRAPH}next"}} if after else {}
+    return {"data": rows, **paging}
+
+
+def _encoded(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _run(source: Any, key: str) -> list[dict]:
+    asset = next(asset for asset in source.assets if type(asset).key == key)
+    return asset.data(context=il.ExecutionContext(asset, il.TimePartition(value=_DAY).window))
+
+
+def _source_on(*bodies: dict | _Reply) -> tuple[Any, list[tuple[str, str, dict[str, Any]]]]:
+    source = _source()
+    client = FacebookGraphApi(_Session(list(bodies)), api_version=f"v{constants.API_VERSION}")
+    source.connection.__dict__["client"] = client
+    return source, client._session.requests.sent
+
+
+class TestRequests:
+    """What each asset sends to the Graph API and returns, pinned at the HTTP session under the SDK."""
+
+    @pytest.mark.parametrize(
+        ("key", "fields", "level", "breakdowns"),
+        [
+            ("campaigns_stats", constants.CAMPAIGNS_FIELDS, "campaign", _PLATFORM),
+            ("ads_stats", constants.ADS_INSIGHT_FIELDS, "ad", _PLATFORM),
+            ("ads_stats_by_age_gender", constants.GENDER_AGE_FIELDS, "ad", ["gender", "age"]),
+            ("ads_stats_by_country", constants.GEO_FIELDS, "ad", ["country", "region"]),
+            ("videos_stats", constants.VIDEOS_FIELDS, "ad", _PLATFORM),
+        ],
+    )
+    def test_a_report_runs_one_day_as_a_job_and_reads_every_page_of_its_result(
+        self, key: str, fields: list[str], level: str, breakdowns: list[str]
+    ):
+        rows = [{"ad_id": "1", "date_start": "2026-10-01"}, {"ad_id": "2", "date_start": "2026-10-01"}]
+        source, sent = _source_on(*_JOB, _page(rows[:1], after="A"), _page(rows[1:]))
+
+        assert _run(source, key) == rows
+        assert sent == [
+            (
+                "POST",
+                "act_123/insights",
+                {
+                    "level": level,
+                    "time_range": _encoded({"since": "2026-10-01", "until": "2026-10-01"}),
+                    "breakdowns": _encoded(breakdowns),
+                    "action_breakdown": _encoded(["action_device", "action_type"]),
+                    "fields": _encoded(fields),
+                },
+            ),
+            ("GET", "777/", {}),
+            ("GET", "777/insights", {}),
+            ("GET", "777/insights", {"after": "A"}),
+        ]
+
+    @pytest.mark.parametrize(
+        ("key", "edge", "fields"),
+        [
+            ("campaigns", "campaigns", constants.CAMPAIGN_ENTITY_FIELDS),
+            ("adsets", "adsets", constants.ADSET_ENTITY_FIELDS),
+            ("ads", "ads", constants.AD_ENTITY_FIELDS),
+        ],
+    )
+    def test_an_entity_reads_every_page_of_live_objects_and_stamps_the_day(
+        self, key: str, edge: str, fields: list[str]
+    ):
+        first = {"id": "1", "bid_amount": None, "targeting": {"age_min": 18, "age_max": None}}
+        source, sent = _source_on(_page([first], after="A"), _page([{"id": "2"}]))
+
+        assert _run(source, key) == [
+            {**first, "date": _DAY},
+            {"id": "2", "date": _DAY},
+        ]
+        query = {"limit": 100, "fields": ",".join(fields)}
+        assert sent == [("GET", f"act_123/{edge}", query), ("GET", f"act_123/{edge}", {**query, "after": "A"})]
+
+    def test_custom_audiences_read_every_page_and_stamp_the_day(self):
+        source, sent = _source_on(_page([{"id": "1"}], after="A"), _page([{"id": "2"}]))
+
+        assert _run(source, "custom_audiences") == [{"id": "1", "date": _DAY}, {"id": "2", "date": _DAY}]
+        query = {"fields": ",".join(constants.CUSTOM_AUDIENCES_FIELDS)}
+        assert sent == [
+            ("GET", "act_123/customaudiences", query),
+            ("GET", "act_123/customaudiences", {**query, "after": "A"}),
+        ]
+
+    def test_the_ad_account_is_read_in_one_request_and_stamped(self):
+        source, sent = _source_on({"id": "act_123", "account_id": "123", "currency": "EUR"})
+
+        assert _run(source, "ad_accounts") == [{"id": "act_123", "account_id": "123", "currency": "EUR", "date": _DAY}]
+        assert sent == [("GET", "act_123/", {"fields": ",".join(constants.AD_ACCOUNT_ENTITY_FIELDS)})]
+
+    def test_a_page_halved_for_size_stays_halved_for_that_read_only(self):
+        source, sent = _source_on(_TOO_HEAVY, _page([{"id": "1"}], after="A"), _page([]), _page([{"id": "2"}]))
+
+        assert _run(source, "campaigns") == [{"id": "1", "date": _DAY}]
+        assert _run(source, "ads") == [{"id": "2", "date": _DAY}]
+        assert [(path, query["limit"]) for _, path, query in sent] == [
+            ("act_123/campaigns", 100),
+            ("act_123/campaigns", 50),
+            ("act_123/campaigns", 50),
+            ("act_123/ads", 100),
+        ]
 
     def test_the_account_requests_no_field_that_needs_a_page(self):
         # Facebook answers 400 for the whole account when one of these comes without a page_id
         for name in ("show_checkout_experience", "has_page_authorized_adaccount"):
             assert name not in constants.AD_ACCOUNT_ENTITY_FIELDS
-
-    def test_an_insights_report_runs_as_an_async_job_and_returns_its_rows(self, monkeypatch):
-        class FakeRow:
-            def __init__(self, data: dict) -> None:
-                self._json = data
-
-        class FakeJob:
-            def api_get(self) -> FakeRow:
-                return FakeRow({"async_status": "Job Completed", "async_percent_completion": 100})
-
-            def get_result(self) -> list[FakeRow]:
-                return [FakeRow({"campaign_id": "c1", "spend": "1.5"})]
-
-        class FakeAccount:
-            def get_insights(self, **kwargs: Any) -> FakeJob:
-                assert (kwargs["fields"], kwargs["params"], kwargs["is_async"]) == (["spend"], {"level": "ad"}, True)
-                return FakeJob()
-
-        monkeypatch.setattr(connector, "_account", lambda connection, account_id: FakeAccount())
-        rows = connector._get_ads_insights(_source().connection, "123", fields=["spend"], params={"level": "ad"})
-        assert rows == [{"campaign_id": "c1", "spend": "1.5"}]
-
-    def test_entity_assets_read_their_edges_and_stamp_the_day(self, monkeypatch):
-        class FakeAccount:
-            def get_ads(self, **kwargs: Any) -> list[_FakeObject]:
-                assert kwargs["fields"] == constants.AD_ENTITY_FIELDS
-                return [_FakeObject({"id": "a1"}), _FakeObject({"id": "a2"})]
-
-            def get_ad_sets(self, **kwargs: Any) -> list[_FakeObject]:
-                assert kwargs["fields"] == constants.ADSET_ENTITY_FIELDS
-                return [_FakeObject({"id": "s1"})]
-
-            def api_get(self, **kwargs: Any) -> _FakeObject:
-                assert kwargs["fields"] == constants.AD_ACCOUNT_ENTITY_FIELDS
-                return _FakeObject({"id": "act_123", "account_id": "123"})
-
-        monkeypatch.setattr(connector, "_account", lambda connection, account_id: FakeAccount())
-        source = _source()
-        day = dt.date(2026, 10, 1)
-
-        def run(key: str) -> list[dict]:
-            asset = next(a for a in source.assets if type(a).key == key)
-            return asset.data(context=il.ExecutionContext(asset, il.TimePartition(value=day).window))
-
-        assert run("ads") == [{"id": "a1", "date": day}, {"id": "a2", "date": day}]
-        assert run("adsets") == [{"id": "s1", "date": day}]
-        assert run("ad_accounts") == [{"id": "act_123", "account_id": "123", "date": day}]
-
-    def test_entity_edges_read_live_objects_in_pages_of_100(self, monkeypatch):
-        requested: dict[str, dict[str, Any]] = {}
-
-        class FakeAccount:
-            def get_campaigns(self, **kwargs: Any) -> list[_FakeObject]:
-                requested["campaigns"] = kwargs["params"]
-                return []
-
-            def get_ad_sets(self, **kwargs: Any) -> list[_FakeObject]:
-                requested["adsets"] = kwargs["params"]
-                return []
-
-            def get_ads(self, **kwargs: Any) -> list[_FakeObject]:
-                requested["ads"] = kwargs["params"]
-                return []
-
-        monkeypatch.setattr(connector, "_account", lambda connection, account_id: FakeAccount())
-        connection = FacebookAdsConnection(id="fb", access_token="x", app_id="1", app_secret="x")
-        for read in (connector._get_campaigns, connector._get_adsets, connector._get_ads):
-            read(connection, "123")
-
-        assert list(requested.values()) == [{"limit": 100}] * 3
-        # the request engine halves a page's limit in place, so no two reads may share one mapping
-        assert len({id(params) for params in requested.values()}) == 3
 
 
 def test_isinstance_of_dataframe_normalizer():

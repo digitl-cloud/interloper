@@ -1,17 +1,17 @@
-"""The Graph API client every Facebook Ads request goes through."""
+"""The Graph API client and the Marketing API engine every Facebook Ads asset reads through."""
 
 from __future__ import annotations
 
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import timedelta
-from time import sleep
+from datetime import date, timedelta
+from time import monotonic, sleep
 from typing import Any, ClassVar
 
 import requests
 from facebook_business.api import FacebookAdsApi, FacebookResponse
-from facebook_business.exceptions import FacebookRequestError
+from facebook_business.exceptions import FacebookError, FacebookRequestError
 
 logger = logging.getLogger(__name__)
 
@@ -289,3 +289,137 @@ class FacebookGraphApi(FacebookAdsApi):
         """
         tokens = path.split("?")[0].split("/")[4:] if isinstance(path, str) else [str(token) for token in path]
         return len([token for token in tokens if token]) > 1
+
+
+class FacebookMarketingApi:
+    """The Marketing API over the Graph client: its nodes, its paged edges and its insights jobs.
+
+    Every request goes through the client's ``call``, which waits out
+    throttling, repeats transient failures and asks for less when Facebook
+    refuses a request for its size; any refusal it does not absorb is raised
+    as the SDK's ``FacebookRequestError``. A path names a node and, below it,
+    an edge: ``act_1`` is an ad account, ``act_1/ads`` its ads.
+    """
+
+    REPORT_TIMEOUT: ClassVar[timedelta] = timedelta(hours=1)
+    REPORT_POLL: ClassVar[timedelta] = timedelta(seconds=10)
+
+    def __init__(self, client: FacebookGraphApi) -> None:
+        """Build the engine on the Graph client.
+
+        Args:
+            client: The client every request goes through, carrying the connection's credentials.
+        """
+        self.client = client
+
+    def get(self, path: str, **params: Any) -> dict[str, Any]:
+        """Read one node.
+
+        Args:
+            path: The node, such as ``act_1``.
+            **params: The query parameters; ``fields`` is a list.
+
+        Returns:
+            The node as Graph sends it.
+        """
+        return self.client.call("GET", self._path(path), self._query(params)).json()
+
+    def rows(self, path: str, **params: Any) -> list[dict[str, Any]]:
+        """Read every row of an edge, page after page.
+
+        Pages follow the ``after`` cursor while Graph announces a next page
+        and the last one held rows. Every page is asked for with the same
+        mapping, in which the client halves ``limit`` when a page is refused
+        for size, so the pages after it keep the size that fits.
+
+        Args:
+            path: The edge, such as ``act_1/ads``.
+            **params: The query parameters; ``fields`` is a list.
+
+        Returns:
+            The rows of every page, in page order, as Graph sends them.
+        """
+        query = self._query(params)
+        rows: list[dict[str, Any]] = []
+        while True:
+            body = self.client.call("GET", self._path(path), query).json()
+            rows.extend(body["data"])
+            paging = body.get("paging", {})
+            after = paging.get("cursors", {}).get("after")
+            if not body["data"] or "next" not in paging or after is None:
+                return rows
+            query["after"] = after
+
+    def report(self, path: str, day: date, **params: Any) -> list[dict[str, Any]]:
+        """Run one day of an insights report as a job, wait for it and read its rows.
+
+        Args:
+            path: The insights edge of the node the report covers, such as ``act_1/insights``.
+            day: The report's only day.
+            **params: What the report is: its ``fields``, ``level``, ``breakdowns``
+                and the like; a list or dict value is sent as JSON.
+
+        Returns:
+            The report's rows, as Graph sends them.
+        """
+        window = {"time_range": {"since": day.isoformat(), "until": day.isoformat()}}
+        job = self.client.call("POST", self._path(path), {**params, **window}).json()
+        self._poll(job["report_run_id"])
+        return self.rows(f"{job['report_run_id']}/insights")
+
+    def _poll(self, job_id: str) -> None:
+        """Wait for a report job to complete.
+
+        A job often sits at "Job Running 99%" for minutes before completing,
+        so it is polled for up to ``REPORT_TIMEOUT``.
+
+        Args:
+            job_id: The job's ``report_run_id``.
+
+        Raises:
+            FacebookError: If the job failed.
+            TimeoutError: If the job has not completed within ``REPORT_TIMEOUT``.
+        """
+        deadline = monotonic() + self.REPORT_TIMEOUT.total_seconds()
+        while True:
+            job = self.get(job_id)
+            status, completion = job["async_status"], job["async_percent_completion"]
+            logger.info(f"Waiting for report... ({status} {completion}%)")
+            if status == "Job Failed":
+                raise FacebookError("Facebook insights report failed")
+            if status == "Job Completed":
+                return
+            if monotonic() >= deadline:
+                raise TimeoutError(
+                    f"Facebook insights report did not complete within {self.REPORT_TIMEOUT} "
+                    f"(last status: {status} {completion}%)"
+                )
+            sleep(self.REPORT_POLL.total_seconds())
+
+    @staticmethod
+    def _path(path: str) -> tuple[str, str]:
+        """Split a Graph path into the node and the edge the client addresses.
+
+        Args:
+            path: A node (``act_1``) or an edge below one (``act_1/ads``).
+
+        Returns:
+            The node and the edge, the edge empty when the path is the node itself.
+        """
+        node, _, edge = path.partition("/")
+        return node, edge
+
+    @staticmethod
+    def _query(params: dict[str, Any]) -> dict[str, Any]:
+        """Join a ``fields`` list with commas, the form the client splits to read an object in halves.
+
+        Args:
+            params: The query parameters as the caller passed them.
+
+        Returns:
+            A new mapping of the parameters, a ``fields`` list comma-separated and every other value unchanged.
+        """
+        return {
+            key: ",".join(value) if key == "fields" and isinstance(value, list) else value
+            for key, value in params.items()
+        }
