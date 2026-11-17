@@ -8,12 +8,15 @@ caches only the credentials and builds a fresh service on every ``client()``.
 from __future__ import annotations
 
 import asyncio
+import json
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from google.oauth2 import service_account
 from googleapiclient import discovery
+from googleapiclient.errors import HttpError
+from googleapiclient.http import HttpMockSequence
 
 from interloper_assets.campaign_manager_360 import constants
 from interloper_assets.campaign_manager_360.connection import CampaignManager360Connection
@@ -107,3 +110,26 @@ class TestProfiles:
 
     def test_check_runs_the_lookup(self):
         assert asyncio.run(_connection({}).check()) is True
+
+    def test_reads_every_profile_in_one_request(self):
+        http = HttpMockSequence(
+            [({"status": "200"}, json.dumps({"items": [{"profileId": "111", "accountId": "222"}]}))]
+        )
+        connection = _connection()
+        connection.__dict__["client"] = lambda: discovery.build(constants.API_SERVICE, constants.API_VERSION, http=http)
+
+        assert asyncio.run(connection.profiles()) == [
+            {"profile_id": "111", "account_id": "222", "name": "111 (222)", "account_name": "222"}
+        ]
+        assert [(method, uri, body) for uri, method, body, _ in http.request_sequence] == [
+            ("GET", "https://dfareporting.googleapis.com/dfareporting/v5/userprofiles?alt=json", None)
+        ]
+
+    def test_a_refused_lookup_fails_the_check_with_the_vendors_error(self):
+        refusal = json.dumps({"error": {"code": 403, "message": "The service account has no profile"}})
+        http = HttpMockSequence([({"status": "403"}, refusal)])
+        connection = _connection()
+        connection.__dict__["client"] = lambda: discovery.build(constants.API_SERVICE, constants.API_VERSION, http=http)
+
+        with pytest.raises(HttpError, match="The service account has no profile"):
+            asyncio.run(connection.check())
