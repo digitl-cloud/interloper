@@ -1,5 +1,4 @@
-BASE_URL = "https://adsapi.snapchat.com"
-API_VERSION = "v1"
+BASE_URL = "https://adsapi.snapchat.com/v1"
 
 CORE_METRICS = [
     "impressions",

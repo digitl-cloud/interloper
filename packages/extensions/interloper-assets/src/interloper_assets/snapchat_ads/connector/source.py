@@ -1,5 +1,3 @@
-import datetime as dt
-import logging
 from typing import Any
 
 import interloper as il
@@ -18,10 +16,6 @@ from interloper_assets.snapchat_ads.connector.schemas import (
     CampaignsStats,
     VideosStatsByOs,
 )
-
-logger = logging.getLogger(__name__)
-
-_RECORD = dict[str, Any]
 
 # Stats fields requested for the ad/campaign performance reports.
 _REPORT_METRICS = constants.CONVERSION_METRICS + constants.CORE_METRICS + constants.ADDITIONAL_METRICS
@@ -66,57 +60,6 @@ class SnapchatStatsNormalizer(DataFrameNormalizer):
 _ENTITY_NORMALIZER = DataFrameNormalizer(flatten_max_level=3, drop_na_columns=True)
 
 
-# -- HELPERS: HTTP / pagination ------------------------------------------------
-async def _get_pages(connection: SnapchatAdsConnection, path: str, params: dict | None = None) -> list[_RECORD]:
-    """GET a Snapchat endpoint and follow ``paging.next_link``, returning each page's JSON.
-
-    Pagination is cursor-based (each page links to the next), so the paginating
-    client walks it sequentially; the total page count isn't known up front.
-    """
-    client = connection.client
-    paginator = il.JSONLinkPaginator(next_url_path="paging.next_link")
-    return [page async for page in client.paginate(path, paginator, params=params)]
-
-
-async def _request_report(
-    connection: SnapchatAdsConnection,
-    account_id: str,
-    date: dt.date,
-    metrics: list[str],
-    breakdown: str = "ad",
-    report_dimension: list[str] | None = None,
-) -> list[_RECORD]:
-    """Request a TOTAL-granularity stats report for *date* and return its breakdown rows."""
-    params: dict[str, Any] = {
-        "granularity": "TOTAL",
-        "start_time": date.isoformat(),
-        "end_time": (date + dt.timedelta(days=1)).isoformat(),
-        "breakdown": breakdown,
-        "fields": ",".join(metrics),
-    }
-    if report_dimension is not None:
-        params["report_dimension"] = ",".join(report_dimension)
-
-    rows: list[_RECORD] = []
-    for page in await _get_pages(connection, f"/{constants.API_VERSION}/adaccounts/{account_id}/stats", params):
-        for total in page.get("total_stats", []):
-            rows.extend(total["total_stat"]["breakdown_stats"][breakdown])
-    return rows
-
-
-async def _entity_records(connection: SnapchatAdsConnection, path: str, list_key: str, item_key: str) -> list[_RECORD]:
-    """Page an entity endpoint and unwrap ``page[list_key][i][item_key]`` records."""
-    records: list[_RECORD] = []
-    for page in await _get_pages(connection, path):
-        records.extend(item[item_key] for item in page.get(list_key, []))
-    return records
-
-
-def _with_date(rows: list[_RECORD], date: dt.date) -> list[_RECORD]:
-    """Stamp the partition date onto each stats row (the normalizer reshapes the rest)."""
-    return [{**row, "date": date} for row in rows]
-
-
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
     tags=["Advertising"],
@@ -139,44 +82,44 @@ class SnapchatAds(il.Source):
     # --- Time-series reports (SnapchatStatsNormalizer from the source) ---
 
     @il.asset(schema=AdsStats, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    async def ads_stats(self, context: il.ExecutionContext) -> list[_RECORD]:
+    async def ads_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad-level performance with core, additional, and conversion metrics."""
-        rows = await _request_report(
-            self.connection, self.account_id, context.partition_date, _REPORT_METRICS, breakdown="ad"
+        rows = await self.connection.api.report(
+            f"/adaccounts/{self.account_id}/stats", context.partition_date, breakdown="ad", fields=_REPORT_METRICS
         )
-        return _with_date(rows, context.partition_date)
+        return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(schema=CampaignsStats, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    async def campaigns_stats(self, context: il.ExecutionContext) -> list[_RECORD]:
+    async def campaigns_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Campaign-level performance with core, additional, and conversion metrics."""
-        rows = await _request_report(
-            self.connection, self.account_id, context.partition_date, _REPORT_METRICS, breakdown="campaign"
+        rows = await self.connection.api.report(
+            f"/adaccounts/{self.account_id}/stats", context.partition_date, breakdown="campaign", fields=_REPORT_METRICS
         )
-        return _with_date(rows, context.partition_date)
+        return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(schema=AdsStatsByCountry, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    async def ads_stats_by_country(self, context: il.ExecutionContext) -> list[_RECORD]:
+    async def ads_stats_by_country(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad performance segmented by country with delivery and conversion metrics."""
-        rows = await _request_report(
-            self.connection,
-            self.account_id,
+        rows = await self.connection.api.report(
+            f"/adaccounts/{self.account_id}/stats",
             context.partition_date,
-            constants.CONVERSION_METRICS + constants.DELIVERY_METRICS,
+            breakdown="ad",
+            fields=constants.CONVERSION_METRICS + constants.DELIVERY_METRICS,
             report_dimension=["country"],
         )
-        return _with_date(rows, context.partition_date)
+        return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(schema=VideosStatsByOs, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
-    async def videos_stats_by_os(self, context: il.ExecutionContext) -> list[_RECORD]:
+    async def videos_stats_by_os(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Video ad performance segmented by operating system."""
-        rows = await _request_report(
-            self.connection,
-            self.account_id,
+        rows = await self.connection.api.report(
+            f"/adaccounts/{self.account_id}/stats",
             context.partition_date,
-            constants.VIDEOS_METRICS,
+            breakdown="ad",
+            fields=constants.VIDEOS_METRICS,
             report_dimension=["os"],
         )
-        return _with_date(rows, context.partition_date)
+        return [{**row, "date": context.partition_date} for row in rows]
 
     # --- Entity assets (flattening normalizer) ---
 
@@ -186,11 +129,10 @@ class SnapchatAds(il.Source):
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
-    async def ad_accounts(self, context: il.ExecutionContext) -> list[_RECORD]:
+    async def ad_accounts(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """The source's ad account with its attributes."""
-        path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}"
-        rows = await _entity_records(self.connection, path, "adaccounts", "adaccount")
-        return _with_date(rows, context.partition_date)
+        rows = await self.connection.api.rows(f"/adaccounts/{self.account_id}", "adaccounts", "adaccount")
+        return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
         schema=Ads,
@@ -198,11 +140,10 @@ class SnapchatAds(il.Source):
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
-    async def ads(self, context: il.ExecutionContext) -> list[_RECORD]:
+    async def ads(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """All ads in the ad account with their attributes."""
-        path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}/ads"
-        rows = await _entity_records(self.connection, path, "ads", "ad")
-        return _with_date(rows, context.partition_date)
+        rows = await self.connection.api.rows(f"/adaccounts/{self.account_id}/ads", "ads", "ad")
+        return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
         schema=AdSquads,
@@ -210,11 +151,10 @@ class SnapchatAds(il.Source):
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
-    async def ad_squads(self, context: il.ExecutionContext) -> list[_RECORD]:
+    async def ad_squads(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """All ad squads in the ad account with their attributes."""
-        path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}/adsquads"
-        rows = await _entity_records(self.connection, path, "adsquads", "adsquad")
-        return _with_date(rows, context.partition_date)
+        rows = await self.connection.api.rows(f"/adaccounts/{self.account_id}/adsquads", "adsquads", "adsquad")
+        return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
         schema=Campaigns,
@@ -222,8 +162,7 @@ class SnapchatAds(il.Source):
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
-    async def campaigns(self, context: il.ExecutionContext) -> list[_RECORD]:
+    async def campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """All campaigns in the ad account with their attributes."""
-        path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}/campaigns"
-        rows = await _entity_records(self.connection, path, "campaigns", "campaign")
-        return _with_date(rows, context.partition_date)
+        rows = await self.connection.api.rows(f"/adaccounts/{self.account_id}/campaigns", "campaigns", "campaign")
+        return [{**row, "date": context.partition_date} for row in rows]
