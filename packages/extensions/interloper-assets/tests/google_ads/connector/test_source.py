@@ -1,6 +1,6 @@
 """Regression tests for the Google Ads source.
 
-The SDK streams proto-plus ``GoogleAdsRow`` messages; the source converts each
+The SDK streams proto-plus ``GoogleAdsRow`` messages; the engine converts each
 through ``MessageToDict`` into the REST JSON shape (camelCase keys nested per
 resource, int64 values as strings, ``type`` rather than proto-plus's ``type_``)
 and the source normalizer flattens that into full GAQL resource paths
@@ -80,22 +80,29 @@ def _ad_row() -> Any:
     return row
 
 
-class _FakeService:
+class _FakeClient:
+    """The SDK client and its ``GoogleAdsService``, streaming ``rows`` in two batches."""
+
     def __init__(self, rows: list[Any]):
         self.rows = rows
+        self.service_names: list[str] = []
         self.calls: list[dict[str, Any]] = []
+
+    def get_service(self, name: str) -> _FakeClient:
+        self.service_names.append(name)
+        return self
 
     def search_stream(self, **kwargs: Any) -> list[Any]:
         self.calls.append(kwargs)
         return [SimpleNamespace(results=self.rows[:1]), SimpleNamespace(results=self.rows[1:])]
 
 
-def _source(monkeypatch: Any | None = None, service: _FakeService | None = None, **fields: Any) -> Any:
+def _source(monkeypatch: Any | None = None, client: _FakeClient | None = None, **fields: Any) -> Any:
     connection = GoogleAdsConnection(
         client_id="cid", client_secret="secret", refresh_token="token", developer_token="dev"
     )
-    if monkeypatch is not None and service is not None:
-        monkeypatch.setitem(connection.__dict__, "client", SimpleNamespace(get_service=lambda name: service))
+    if monkeypatch is not None and client is not None:
+        monkeypatch.setitem(connection.__dict__, "client", client)
     return GoogleAds(id="src-1", connection=connection, customer_id="123", **fields)
 
 
@@ -131,26 +138,35 @@ class TestAssets:
 class TestSearchStream:
     """Each asset asks the stream for its one-day GAQL query, through the manager when set."""
 
-    def test_campaigns_query_and_login_customer(self, monkeypatch: Any):
-        service = _FakeService([_campaign_row(), _campaign_row()])
-        asset = _asset("campaigns_stats", _source(monkeypatch, service, login_customer_id="999"))
-        rows = _run(asset)
-        assert len(rows) == 2
-        (call,) = service.calls
-        assert call["customer_id"] == "123"
-        assert call["metadata"] == [("login-customer-id", "999")]
-        assert call["query"].startswith(f"SELECT {', '.join(constants.CAMPAIGN_FIELDS)} FROM campaign ")
-        assert call["query"].endswith("WHERE segments.date BETWEEN '2026-06-14' AND '2026-06-14'")
+    def test_campaigns_stats_sends_its_one_day_query(self, monkeypatch: Any):
+        client = _FakeClient([_campaign_row()])
+        _run(_asset("campaigns_stats", _source(monkeypatch, client)))
+        assert client.service_names == ["GoogleAdsService"]
+        assert client.calls == [
+            {
+                "customer_id": "123",
+                "query": f"SELECT {', '.join(constants.CAMPAIGN_FIELDS)} FROM campaign "
+                "WHERE segments.date BETWEEN '2026-06-14' AND '2026-06-14'",
+                "metadata": [],
+            }
+        ]
 
-    def test_no_login_customer_sends_no_metadata(self, monkeypatch: Any):
-        service = _FakeService([_ad_row()])
-        _run(_asset("ads_stats", _source(monkeypatch, service)))
-        assert service.calls[0]["metadata"] == []
-        assert " FROM ad_group_ad " in service.calls[0]["query"]
+    def test_ads_stats_sends_its_one_day_query_through_the_manager(self, monkeypatch: Any):
+        client = _FakeClient([_ad_row()])
+        _run(_asset("ads_stats", _source(monkeypatch, client, login_customer_id="999")))
+        assert client.service_names == ["GoogleAdsService"]
+        assert client.calls == [
+            {
+                "customer_id": "123",
+                "query": f"SELECT {', '.join(constants.AD_FIELDS)} FROM ad_group_ad "
+                "WHERE segments.date BETWEEN '2026-06-14' AND '2026-06-14'",
+                "metadata": [("login-customer-id", "999")],
+            }
+        ]
 
     def test_rows_take_the_rest_json_shape(self, monkeypatch: Any):
-        service = _FakeService([_ad_row()])
-        (row,) = _run(_asset("ads_stats", _source(monkeypatch, service)))
+        client = _FakeClient([_ad_row()])
+        (row,) = _run(_asset("ads_stats", _source(monkeypatch, client)))
         assert row["adGroupAd"]["ad"]["type"] == "RESPONSIVE_SEARCH_AD"
         assert row["adGroupAd"]["ad"]["id"] == "111"
         assert row["segments"]["keyword"]["info"]["text"] == "running shoes"
@@ -160,7 +176,7 @@ class TestReconcile:
     """SDK-built rows normalize onto the full resource paths with the declared types."""
 
     def _reconcile(self, monkeypatch: Any, key: str, row: Any, schema: Any) -> Any:
-        asset = _asset(key, _source(monkeypatch, _FakeService([row])))
+        asset = _asset(key, _source(monkeypatch, _FakeClient([row])))
         normalized = asset.normalizer.normalize(_run(asset))
         return TableData.from_data(normalized).reconcile(schema)
 

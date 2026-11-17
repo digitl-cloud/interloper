@@ -1,15 +1,18 @@
 """Regression tests for the Google Ads connection.
 
 The SDK client is built from the connection's OAuth trio plus its developer
-token. The ``customers`` lookup runs over plain REST instead: it trades the
-refresh token for an access token, lists the accessible customers and names
-each one with a one-row GAQL search, falling back to the bare id for a customer
-that refuses the query. These tests drive both against fakes.
+token. The ``customers`` lookup runs over plain REST instead, since the API
+process that runs it carries no SDK: it trades the refresh token for an access
+token, lists the accessible customers and names each one with a one-row GAQL
+search, falling back to the bare id for a customer that refuses the query.
+These tests drive both against fakes.
 """
 
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from collections.abc import Callable
 from typing import Any
 from urllib.parse import parse_qs
@@ -58,6 +61,27 @@ class TestClient:
                 "api_version": API_VERSION,
             }
         ]
+
+    def test_the_api_is_built_on_the_client(self, monkeypatch: Any):
+        monkeypatch.setattr(GoogleAdsClient, "load_from_dict", lambda config: object())
+        connection = _connection()
+
+        assert connection.api.client is connection.client
+        assert connection.api is connection.api
+
+
+class TestImport:
+    def test_the_connection_loads_without_the_sdk(self):
+        script = (
+            "import sys\n"
+            "sys.modules['google.ads'] = None\n"
+            "sys.modules['google.protobuf'] = None\n"
+            "import interloper_assets.google_ads.connection\n"
+        )
+
+        result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=False)
+
+        assert result.returncode == 0, result.stderr
 
 
 class TestCustomers:
@@ -117,6 +141,15 @@ class TestCustomers:
 
     async def test_check_runs_the_lookup(self, monkeypatch: Any):
         _serve(monkeypatch, self._handler([]))
+        assert await _connection().check() is True
+
+    async def test_the_lookup_and_the_check_never_load_the_sdk(self, monkeypatch: Any):
+        for name in [name for name in sys.modules if name == "google.ads" or name.startswith("google.ads.")]:
+            monkeypatch.delitem(sys.modules, name)
+        monkeypatch.setitem(sys.modules, "google.ads", None)
+        _serve(monkeypatch, self._handler([]))
+
+        assert len(await _connection().customers()) == 3
         assert await _connection().check() is True
 
     async def test_check_raises_on_a_rejected_refresh_token(self, monkeypatch: Any):
