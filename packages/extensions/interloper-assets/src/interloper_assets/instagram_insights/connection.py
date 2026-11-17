@@ -4,6 +4,7 @@ import interloper as il
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.instagram_insights import constants
+from interloper_assets.instagram_insights.api import InstagramInsightsApi
 
 
 @il.connection(
@@ -41,6 +42,15 @@ class InstagramInsightsConnection(il.RefreshTokenOAuthConnection):
             auth=il.HTTPBearerAuth(self.refresh_token),
         )
 
+    @cached_property
+    def api(self) -> InstagramInsightsApi:
+        """The Instagram Graph API engine every caller shares, built on ``client``.
+
+        Returns:
+            The engine, cached per connection instance.
+        """
+        return InstagramInsightsApi(self.client)
+
     @il.fetch_field_provider
     async def accounts(self) -> list[dict[str, str]]:
         """List the Instagram Business/Creator accounts reachable by this connection.
@@ -55,36 +65,19 @@ class InstagramInsightsConnection(il.RefreshTokenOAuthConnection):
             The options for the field's dropdown.
 
         """
-        params: dict[str, str] | None = {
-            "fields": "instagram_business_account{id,username,name},name",
-            "access_token": self.refresh_token,
-            "limit": "100",
-        }
+        pages = await self.api.rows(
+            "/me/accounts",
+            fields="instagram_business_account{id,username,name},name",
+            limit=100,
+        )
 
         accounts: list[dict[str, str]] = []
-        path: str | None = "/me/accounts"
-
-        while path:
-            response = await self.client.get(path, params=params)
-            response.raise_for_status()
-            data = response.json()
-
-            for page in data.get("data", []):
-                ig_account = page.get("instagram_business_account")
-                if not ig_account:
-                    continue
-                name = ig_account.get("username") or ig_account.get("name") or page.get("name", ig_account["id"])
-                accounts.append(
-                    {
-                        "id": str(ig_account["id"]),
-                        "name": name,
-                    }
-                )
-
-            # The "next" link already carries the cursor, fields and token.
-            path = data.get("paging", {}).get("next")
-            params = None
-
+        for page in pages:
+            account = page.get("instagram_business_account")
+            if not account:
+                continue
+            name = account.get("username") or account.get("name") or page.get("name", account["id"])
+            accounts.append({"id": str(account["id"]), "name": name})
         return accounts
 
     async def check(self) -> bool:
