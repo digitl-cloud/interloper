@@ -4,8 +4,9 @@ Ad analytics rows carry their day as a nested ``dateRange`` of ``{year, month,
 day}`` objects; ``LinkedinAdsStatsNormalizer`` turns both bounds into dates so
 the report partitions on the vendor's own ``date_range_start``. Entities come
 back undated and carry epoch-millisecond ``runSchedule`` instants, which the
-source normalizer's epoch option converts to UTC datetimes. Requests are
-written as raw Rest.li 2.0 query strings, pinned here against a mock transport.
+source normalizer's epoch option converts to UTC datetimes. What each asset
+sends through the connection's API engine is pinned here against a mock
+transport.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from typing import Any
 
 import httpx2
 import interloper as il
+import pytest
 from interloper.asset.context import ExecutionContext
 from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
@@ -50,6 +52,13 @@ def _faked_source(handler: Any) -> Any:
         "https://api.linkedin.com/rest", transport=httpx2.MockTransport(handler)
     )
     return _source(connection)
+
+
+def _params(request: httpx2.Request) -> dict[str, str]:
+    pairs = [part.split("=", 1) for part in request.url.query.decode().split("&") if part]
+    params = dict(pairs)
+    assert len(params) == len(pairs), f"a parameter is sent twice: {pairs}"
+    return params
 
 
 async def _run(source: Any, key: str) -> list[dict[str, Any]]:
@@ -159,60 +168,94 @@ class TestPartitionColumns:
 
 
 class TestRequests:
-    async def test_ads_stats_sends_a_raw_restli_query(self):
-        seen: list[httpx2.Request] = []
+    async def test_ads_stats_asks_ad_analytics_for_its_day(self):
+        requests: list[httpx2.Request] = []
 
         def handler(request: httpx2.Request) -> httpx2.Response:
-            seen.append(request)
-            return httpx2.Response(200, json={"elements": [ANALYTICS_ROW]})
+            requests.append(request)
+            return httpx2.Response(200, json={"paging": {"start": 0, "count": 10}, "elements": [ANALYTICS_ROW]})
 
         rows = await _run(_faked_source(handler), "ads_stats")
-        assert rows == [ANALYTICS_ROW]
-        query = seen[0].url.query.decode()
-        assert "pivots=List(SHARE,CAMPAIGN)" in query
-        assert "dateRange=(start:(year:2026,month:9,day:15),end:(year:2026,month:9,day:15))" in query
-        assert "accounts=List(urn%3Ali%3AsponsoredAccount%3A123)" in query
-        assert "fields=pivotValues,dateRange,costInLocalCurrency," in query
 
-    async def test_ad_accounts_fetches_the_sources_account(self):
-        seen: list[httpx2.Request] = []
+        assert rows == [ANALYTICS_ROW]
+        (request,) = requests
+        assert request.method == "GET"
+        assert request.url.path == "/rest/adAnalytics"
+        assert _params(request) == {
+            "q": "statistics",
+            "pivots": "List(SHARE,CAMPAIGN)",
+            "timeGranularity": "(value:DAILY)",
+            "dateRange": "(start:(year:2026,month:9,day:15),end:(year:2026,month:9,day:15))",
+            "accounts": "List(urn%3Ali%3AsponsoredAccount%3A123)",
+            "fields": f"pivotValues,dateRange,{','.join(constants.ANALYTICS_FIELDS)}",
+        }
+
+    @pytest.mark.parametrize("body", [{"paging": {"start": 0, "count": 10}, "elements": []}, {}])
+    async def test_a_day_without_analytics_has_no_rows(self, body: dict[str, Any]):
+        rows = await _run(_faked_source(lambda _: httpx2.Response(200, json=body)), "ads_stats")
+
+        assert rows == []
+
+    async def test_ad_accounts_read_the_sources_account_in_one_request(self):
+        requests: list[httpx2.Request] = []
 
         def handler(request: httpx2.Request) -> httpx2.Response:
-            seen.append(request)
+            requests.append(request)
             return httpx2.Response(200, json={"id": 123, "name": "Acme", "currency": "EUR", "status": "ACTIVE"})
 
         rows = await _run(_faked_source(handler), "ad_accounts")
-        assert seen[0].url.path == "/rest/adAccounts/123"
-        assert rows == [{"id": 123, "name": "Acme", "currency": "EUR", "status": "ACTIVE", "date": DAY}]
 
-    async def test_search_follows_the_page_token(self):
-        seen: list[str] = []
+        assert rows == [{"id": 123, "name": "Acme", "currency": "EUR", "status": "ACTIVE", "date": DAY}]
+        (request,) = requests
+        assert request.method == "GET"
+        assert request.url.path == "/rest/adAccounts/123"
+        assert _params(request) == {"fields": "id,name,currency,status"}
+
+    @pytest.mark.parametrize(
+        ("key", "resource", "fields"),
+        [
+            (
+                "campaigns",
+                "adCampaigns",
+                "id,name,type,status,objectiveType,dailyBudget,runSchedule,costType,campaignGroup",
+            ),
+            ("campaign_groups", "adCampaignGroups", "id,name,status,runSchedule"),
+        ],
+    )
+    async def test_an_entity_search_follows_the_page_token(self, key: str, resource: str, fields: str):
+        requests: list[httpx2.Request] = []
         pages = {
             None: {"elements": [{"id": 1}], "metadata": {"nextPageToken": "tok/1"}},
             "tok%2F1": {"elements": [{"id": 2}], "metadata": {}},
         }
 
         def handler(request: httpx2.Request) -> httpx2.Response:
-            query = request.url.query.decode()
-            seen.append(query)
-            token = query.split("pageToken=")[1] if "pageToken=" in query else None
-            return httpx2.Response(200, json=pages[token])
+            requests.append(request)
+            return httpx2.Response(200, json=pages[_params(request).get("pageToken")])
 
-        rows = await _run(_faked_source(handler), "campaigns")
-        assert [row["id"] for row in rows] == [1, 2]
-        assert all(row["date"] == DAY for row in rows)
-        assert len(seen) == 2
-        assert seen[0].startswith("q=search&pageSize=1000&fields=id,name,type,status,")
-        assert seen[1].endswith("&pageToken=tok%2F1")
+        rows = await _run(_faked_source(handler), key)
 
-    async def test_campaign_groups_search_their_own_resource(self):
-        seen: list[httpx2.URL] = []
+        assert rows == [{"id": 1, "date": DAY}, {"id": 2, "date": DAY}]
+        assert [request.method for request in requests] == ["GET", "GET"]
+        assert [request.url.path for request in requests] == [f"/rest/adAccounts/123/{resource}"] * 2
+        assert _params(requests[0]) == {"q": "search", "pageSize": "1000", "fields": fields}
+        assert _params(requests[1]) == {"q": "search", "pageSize": "1000", "fields": fields, "pageToken": "tok%2F1"}
+
+    async def test_an_entity_search_without_page_token_reads_one_page(self):
+        requests: list[httpx2.Request] = []
 
         def handler(request: httpx2.Request) -> httpx2.Response:
-            seen.append(request.url)
-            return httpx2.Response(200, json={"elements": [{"id": 7}], "metadata": {}})
+            requests.append(request)
+            return httpx2.Response(200, json={"elements": [{"id": 7}]})
 
         rows = await _run(_faked_source(handler), "campaign_groups")
+
         assert rows == [{"id": 7, "date": DAY}]
-        assert [url.path for url in seen] == ["/rest/adAccounts/123/adCampaignGroups"]
-        assert seen[0].query.decode() == f"q=search&pageSize=1000&fields={','.join(constants.CAMPAIGN_GROUP_FIELDS)}"
+        assert len(requests) == 1
+
+    @pytest.mark.parametrize("key", REPORT_ASSETS + ENTITY_ASSETS)
+    async def test_a_refused_request_fails_the_asset(self, key: str):
+        source = _faked_source(lambda _: httpx2.Response(401, json={"status": 401, "code": "REVOKED_ACCESS_TOKEN"}))
+
+        with pytest.raises(httpx2.HTTPStatusError, match="401 Unauthorized"):
+            await _run(source, key)

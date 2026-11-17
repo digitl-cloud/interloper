@@ -4,6 +4,7 @@ import interloper as il
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.linkedin_ads import constants
+from interloper_assets.linkedin_ads.api import LinkedinAdsApi
 
 
 @il.connection(
@@ -44,35 +45,27 @@ class LinkedinAdsConnection(il.RefreshTokenOAuthConnection):
         )
         return client
 
+    @cached_property
+    def api(self) -> LinkedinAdsApi:
+        """The LinkedIn Marketing API engine every caller shares, built on ``client``.
+
+        Returns:
+            The engine, cached per connection instance.
+        """
+        return LinkedinAdsApi(self.client)
+
     @il.fetch_field_provider
     async def accounts(self) -> list[dict[str, str]]:
         """List the ad accounts reachable by this connection.
 
-        Backs the source's ``account_id`` ``FetchField``. Reuses ``self.client``
-        (same base URL, version and Rest.li headers as the assets) and paginates
-        the Marketing API over offset/count.
+        Backs the source's ``account_id`` ``FetchField``, through the same
+        engine as the assets.
 
         Returns:
             The options for the field's dropdown.
-
         """
-        paginator = il.OffsetPaginator(
-            limit=100,
-            offset_param="start",
-            limit_param="count",
-            data_selector="elements",
-        )
-        pages = self.client.paginate(
-            "/adAccounts",
-            paginator,
-            params={"q": "search"},
-            data_selector="elements",
-        )
-        return [
-            {"id": str(account["id"]), "name": account.get("name", str(account["id"]))}
-            async for page in pages
-            for account in page
-        ]
+        accounts = await self.api.offset_rows("/adAccounts", q="search")
+        return [{"id": str(account["id"]), "name": account.get("name", str(account["id"]))} for account in accounts]
 
     async def check(self) -> bool:
         """Prove the credentials work by running the ``accounts`` lookup.

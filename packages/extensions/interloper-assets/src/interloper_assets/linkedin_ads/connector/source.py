@@ -1,6 +1,5 @@
 import datetime as dt
 from typing import Any
-from urllib.parse import quote
 
 import interloper as il
 import pandas as pd
@@ -38,22 +37,6 @@ class LinkedinAdsStatsNormalizer(DataFrameNormalizer):
         return super().normalize(rows)
 
 
-# -- HELPERS -------------------------------------------------------------------
-def _with_date(rows: list[dict[str, Any]], date: dt.date) -> list[dict[str, Any]]:
-    """Stamp the partition date onto entity rows, which LinkedIn returns undated.
-
-    Used by ``ad_accounts``, ``campaign_groups`` and ``campaigns``.
-
-    Args:
-        rows: The entity rows as the API returned them.
-        date: The partition day to stamp.
-
-    Returns:
-        The rows, each with a ``date`` key.
-    """
-    return [{**row, "date": date} for row in rows]
-
-
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
     tags=["Advertising"],
@@ -79,34 +62,6 @@ class LinkedinAds(il.Source):
         discriminator=True,
     )
 
-    async def _search(self, resource: str, fields: list[str]) -> list[dict[str, Any]]:
-        """Walk the account's cursor-paginated ``q=search`` finder for *resource*.
-
-        The query string is written out raw because Rest.li 2.0 rejects
-        percent-encoded projection commas, which rules out ``client.paginate``
-        (its paginators re-encode the whole query).
-
-        Args:
-            resource: The account sub-resource to search, e.g. ``adCampaigns``.
-            fields: The element fields to project.
-
-        Returns:
-            The elements of every page, in page order.
-        """
-        path = f"/adAccounts/{self.account_id}/{resource}"
-        query = f"q=search&pageSize={constants.SEARCH_PAGE_SIZE}&fields={','.join(fields)}"
-        elements: list[dict[str, Any]] = []
-        page_token = None
-        while True:
-            url = f"{path}?{query}" if page_token is None else f"{path}?{query}&pageToken={quote(page_token, safe='')}"
-            response = await self.connection.client.get(url)
-            response.raise_for_status()
-            body = response.json()
-            elements.extend(body.get("elements", []))
-            page_token = (body.get("metadata") or {}).get("nextPageToken")
-            if not page_token:
-                return elements
-
     @il.asset(
         schema=AdsStats,
         partitioning=il.TimePartitionConfig(column="date_range_start"),
@@ -115,39 +70,33 @@ class LinkedinAds(il.Source):
     )
     async def ads_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Daily cost, delivery, engagement and conversions of each sponsored share per campaign."""
-        date = context.partition_date
-        day = f"(year:{date.year},month:{date.month},day:{date.day})"
-        query = "&".join(
-            [
-                "q=statistics",
-                f"pivots={constants.ANALYTICS_PIVOTS}",
-                "timeGranularity=(value:DAILY)",
-                f"dateRange=(start:{day},end:{day})",
-                f"accounts=List(urn%3Ali%3AsponsoredAccount%3A{self.account_id})",
-                f"fields=pivotValues,dateRange,{','.join(constants.ANALYTICS_FIELDS)}",
-            ]
+        return await self.connection.api.report(
+            context.partition_date,
+            q="statistics",
+            pivots=constants.ANALYTICS_PIVOTS,
+            timeGranularity={"value": "DAILY"},
+            accounts=[f"urn:li:sponsoredAccount:{self.account_id}"],
+            fields=["pivotValues", "dateRange", *constants.ANALYTICS_FIELDS],
         )
-        response = await self.connection.client.get(f"/adAnalytics?{query}")
-        response.raise_for_status()
-        return response.json().get("elements", [])
 
     @il.asset(schema=AdAccounts, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
     async def ad_accounts(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """The ad account with its name, currency and status."""
-        response = await self.connection.client.get(
-            f"/adAccounts/{self.account_id}?fields={','.join(constants.ACCOUNT_FIELDS)}"
-        )
-        response.raise_for_status()
-        return _with_date([response.json()], context.partition_date)
+        account = await self.connection.api.get(f"/adAccounts/{self.account_id}", fields=constants.ACCOUNT_FIELDS)
+        return [{**account, "date": context.partition_date}]
 
     @il.asset(schema=CampaignGroups, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
     async def campaign_groups(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """All campaign groups of the ad account with their status and run schedule."""
-        rows = await self._search("adCampaignGroups", constants.CAMPAIGN_GROUP_FIELDS)
-        return _with_date(rows, context.partition_date)
+        rows = await self.connection.api.rows(
+            f"/adAccounts/{self.account_id}/adCampaignGroups", q="search", fields=constants.CAMPAIGN_GROUP_FIELDS
+        )
+        return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(schema=Campaigns, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
     async def campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """All campaigns of the ad account with their type, objective, budget and run schedule."""
-        rows = await self._search("adCampaigns", constants.CAMPAIGN_FIELDS)
-        return _with_date(rows, context.partition_date)
+        rows = await self.connection.api.rows(
+            f"/adAccounts/{self.account_id}/adCampaigns", q="search", fields=constants.CAMPAIGN_FIELDS
+        )
+        return [{**row, "date": context.partition_date} for row in rows]
