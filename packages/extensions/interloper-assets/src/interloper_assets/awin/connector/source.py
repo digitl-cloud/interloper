@@ -1,4 +1,3 @@
-import datetime as dt
 import json
 from typing import Any
 
@@ -60,48 +59,6 @@ class AwinTransactionsNormalizer(DataFrameNormalizer):
         return super().normalize(data)
 
 
-# -- HELPERS -------------------------------------------------------------------
-
-
-async def get_advertiser_transactions(
-    client: il.AsyncRESTClient,
-    advertiser_id: str,
-    start_date: dt.date,
-    end_date: dt.date,
-) -> list[dict]:
-    """Fetch advertiser transactions from the Awin API."""
-    response = await client.get(
-        f"/advertisers/{advertiser_id}/transactions/",
-        params={
-            "startDate": start_date.isoformat() + "T00:00:00",
-            "endDate": end_date.isoformat() + "T23:59:59",
-            "timezone": "UTC",
-            "showBasketProducts": True,
-        },
-    )
-    response.raise_for_status()
-    return response.json()
-
-
-async def get_advertiser_reports_by_publisher(
-    client: il.AsyncRESTClient,
-    advertiser_id: str,
-    start_date: dt.date,
-    end_date: dt.date,
-) -> list[dict]:
-    """Fetch advertiser reports aggregated by publisher from the Awin API."""
-    response = await client.get(
-        f"/advertisers/{advertiser_id}/reports/publisher",
-        params={
-            "startDate": start_date.isoformat(),
-            "endDate": end_date.isoformat(),
-            "timezone": "UTC",
-        },
-    )
-    response.raise_for_status()
-    return response.json()
-
-
 # -- SOURCE --------------------------------------------------------------------
 
 
@@ -132,13 +89,13 @@ class Awin(il.Source):
     )
     async def transactions(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Advertiser transactions including commissions, sales amounts, and click attribution."""
-        data = await get_advertiser_transactions(
-            client=self.connection.client,
-            advertiser_id=self.advertiser_id,
-            start_date=context.partition_date,
-            end_date=context.partition_date,
+        rows = await self.connection.api.rows(
+            f"/advertisers/{self.advertiser_id}/transactions/",
+            context.partition_date,
+            timezone="UTC",
+            showBasketProducts=True,
         )
-        return [{**row, "date": context.partition_date} for row in data]
+        return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
         schema=PublishersStats,
@@ -147,10 +104,9 @@ class Awin(il.Source):
     )
     async def publishers_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Advertiser performance reports aggregated by publisher."""
-        data = await get_advertiser_reports_by_publisher(
-            client=self.connection.client,
-            advertiser_id=self.advertiser_id,
-            start_date=context.partition_date,
-            end_date=context.partition_date,
+        rows = await self.connection.api.report(
+            f"/advertisers/{self.advertiser_id}/reports/publisher",
+            context.partition_date,
+            timezone="UTC",
         )
-        return [{**row, "date": context.partition_date} for row in data]
+        return [{**row, "date": context.partition_date} for row in rows]
