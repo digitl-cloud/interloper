@@ -8,29 +8,18 @@ caches only the credentials and builds a fresh service on every client call.
 from __future__ import annotations
 
 import asyncio
+import subprocess
+import sys
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from google.oauth2 import service_account
 from googleapiclient import discovery
+from googleapiclient.errors import HttpError
 
 from interloper_assets.display_video_360 import constants
 from interloper_assets.display_video_360.connection import DisplayVideo360Connection
-
-
-class FakePartners:
-    """Serve canned ``partners.list`` pages, keyed by page token."""
-
-    def __init__(self, pages: dict[str | None, dict[str, Any]]):
-        """Hold the pages to serve."""
-        self.pages = pages
-
-    def partners(self) -> FakePartners:
-        return self
-
-    def list(self, pageToken: str | None) -> SimpleNamespace:
-        return SimpleNamespace(execute=lambda: self.pages[pageToken])
 
 
 @pytest.fixture
@@ -58,11 +47,8 @@ def builds(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
     return recorded
 
 
-def _connection(pages: dict[str | None, dict[str, Any]] | None = None) -> DisplayVideo360Connection:
-    connection = DisplayVideo360Connection(service_account_key='{"type": "service_account"}')
-    if pages is not None:
-        connection.__dict__["dv_client"] = lambda: FakePartners(pages)
-    return connection
+def _connection() -> DisplayVideo360Connection:
+    return DisplayVideo360Connection(service_account_key='{"type": "service_account"}')
 
 
 class TestClients:
@@ -85,34 +71,66 @@ class TestClients:
         ]
         assert all(build["credentials"] is connection.credentials for build in builds)
 
+    def test_the_api_is_cached_and_built_on_both_builders(self):
+        connection = _connection()
+        assert connection.api is connection.api
+        assert connection.api.dv_client == connection.dv_client
+        assert connection.api.dbm_client == connection.dbm_client
+
+
+_WITHOUT_GOOGLE_SDKS = """
+import sys
+
+
+class BlockGoogleSdks:
+    def find_spec(self, name, path=None, target=None):
+        if name.split(".")[0] == "googleapiclient" or name == "google.oauth2" or name.startswith("google.oauth2."):
+            raise ModuleNotFoundError(f"No module named {name!r}")
+
+
+sys.meta_path.insert(0, BlockGoogleSdks())
+from interloper_assets.display_video_360.connection import DisplayVideo360Connection
+from interloper_assets.display_video_360.connector.source import DisplayVideo360
+
+DisplayVideo360Connection(service_account_key="{}").api
+"""
+
+
+class TestImports:
+    def test_the_connection_its_api_and_the_source_import_without_the_google_sdks(self):
+        """The API process installs no vendor SDK, and imports every connection and source."""
+        subprocess.run([sys.executable, "-c", _WITHOUT_GOOGLE_SDKS], check=True)
+
+
+_PARTNERS = "https://displayvideo.googleapis.com/v4/partners"
+
 
 class TestPartners:
-    def test_pages_through_every_partner(self):
-        connection = _connection(
-            {
-                None: {"partners": [{"partnerId": "1", "displayName": "Digitl"}], "nextPageToken": "next"},
-                "next": {"partners": [{"partnerId": "2"}]},
-            }
+    def test_pages_through_every_partner_on_one_service(self, google, connection):
+        google.serve(
+            {"partners": [{"partnerId": "1", "displayName": "Digitl"}], "nextPageToken": "next"},
+            {"partners": [{"partnerId": "2"}]},
         )
+
         assert asyncio.run(connection.partners()) == [
             {"partner_id": "1", "name": "Digitl"},
             {"partner_id": "2", "name": "2"},
         ]
+        assert google.requests == [
+            ("GET", f"{_PARTNERS}?alt=json", None),
+            ("GET", f"{_PARTNERS}?pageToken=next&alt=json", None),
+        ]
+        assert google.builds == [constants.DV_API_SERVICE]
 
-    def test_pagination_reuses_one_service(self):
-        services: list[FakePartners] = []
-        connection = _connection()
+    def test_no_partners(self, connection):
+        assert asyncio.run(connection.partners()) == []
 
-        def dv_client() -> FakePartners:
-            services.append(FakePartners({None: {"nextPageToken": "next"}, "next": {}}))
-            return services[-1]
+    def test_check_runs_the_lookup(self, google, connection):
+        assert asyncio.run(connection.check()) is True
+        assert google.requests == [("GET", f"{_PARTNERS}?alt=json", None)]
 
-        connection.__dict__["dv_client"] = dv_client
-        assert connection._list_partners() == []
-        assert len(services) == 1
+    def test_a_refused_check_raises_the_vendors_error(self, google, connection):
+        google.serve((403, {"error": {"code": 403, "message": "The caller does not have permission"}}))
 
-    def test_no_partners(self):
-        assert asyncio.run(_connection({None: {}}).partners()) == []
-
-    def test_check_runs_the_lookup(self):
-        assert asyncio.run(_connection({None: {}}).check()) is True
+        with pytest.raises(HttpError, match="The caller does not have permission"):
+            asyncio.run(connection.check())

@@ -7,6 +7,7 @@ import interloper as il
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.display_video_360 import constants
+from interloper_assets.display_video_360.api import DisplayVideo360Api
 
 
 @il.connection(
@@ -63,23 +64,14 @@ class DisplayVideo360Connection(il.Connection):
 
         return build(constants.DBM_API_SERVICE, constants.DBM_API_VERSION, credentials=self.credentials)
 
-    def _list_partners(self) -> list[dict[str, Any]]:
-        """Page through the partners accessible to the service account.
+    @cached_property
+    def api(self) -> DisplayVideo360Api:
+        """The Display & Video 360 API engine every caller shares, built on ``dv_client`` and ``dbm_client``.
 
         Returns:
-            Every partner, across all pages.
-
+            The engine, cached per connection instance; each call to it builds a service of its own.
         """
-        service = self.dv_client()
-        partners: list[dict[str, Any]] = []
-        page_token: str | None = None
-        while True:
-            response = service.partners().list(pageToken=page_token).execute()
-            partners.extend(response.get("partners") or [])
-            page_token = response.get("nextPageToken")
-            if not page_token:
-                break
-        return partners
+        return DisplayVideo360Api(self.dv_client, self.dbm_client)
 
     @il.fetch_field_provider
     async def partners(self) -> list[dict[str, str]]:
@@ -89,7 +81,7 @@ class DisplayVideo360Connection(il.Connection):
             The options for the field's dropdown.
 
         """
-        partners = await asyncio.to_thread(self._list_partners)
+        partners = await asyncio.to_thread(self.api.rows, "partners")
         return [
             {
                 "partner_id": str(p["partnerId"]),
