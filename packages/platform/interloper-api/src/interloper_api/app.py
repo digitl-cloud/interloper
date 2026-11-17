@@ -229,9 +229,6 @@ def create_app(
     api = APIRouter(prefix="/api")
     for router in _ROUTERS:
         api.include_router(router)
-    # The authorization server also answers at its old /api/auth/oauth for one release,
-    # for clients that saved an endpoint instead of reading the metadata again.
-    api.include_router(oauth.router, prefix="/auth", include_in_schema=False)
     for org_router in _ORG_ROUTERS:
         api.include_router(org_router, prefix=ORG_PREFIX)
     agent_model = _mount_agent(api, settings)
