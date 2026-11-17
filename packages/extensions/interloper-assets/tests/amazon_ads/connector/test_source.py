@@ -18,6 +18,7 @@ child asset → normalize+validate a camelCase report row.
 from __future__ import annotations
 
 import datetime as dt
+import gzip
 import json
 from typing import Any
 
@@ -208,6 +209,124 @@ class TestCountMetricTypes:
 
 DAY = dt.date(2026, 10, 1)
 API_URL = "https://advertising-api-eu.amazon.com"
+REPORT_URL = "https://offline-report-storage.example/report.json.gz?signature=s"
+REPORT_ROWS = [{"date": "2026-10-01", "campaignId": 1, "impressions": 3, "cost": 1.5}]
+EVERY_STATE = {"stateFilter": {"include": ["ENABLED", "PAUSED", "ARCHIVED"]}}
+
+# the token-paged list calls: path, vendor media type, the response key holding a page, extended data asked for
+TOKEN_LISTS = {
+    "products_campaigns": ("/sp/campaigns/list", "application/vnd.spCampaign.v3+json", "campaigns", True),
+    "products_ad_groups": ("/sp/adGroups/list", "application/vnd.spAdGroup.v3+json", "adGroups", True),
+    "products_ads": ("/sp/productAds/list", "application/vnd.spProductAd.v3+json", "productAds", True),
+    "brands_campaigns": ("/sb/v4/campaigns/list", "application/vnd.sbcampaignresource.v4+json", "campaigns", True),
+    "brands_ad_groups": ("/sb/v4/adGroups/list", "application/vnd.sbadgroupresource.v4+json", "adGroups", True),
+    "brands_ads": ("/sb/v4/ads/list", "application/vnd.sbadresource.v4+json", "ads", False),
+}
+OFFSET_LISTS = {
+    "display_campaigns": "/sd/campaigns/extended",
+    "display_ad_groups": "/sd/adGroups/extended",
+    "display_ads": "/sd/productAds/extended",
+}
+# every report: ad product, report type, grouping, columns
+REPORTS = {
+    "products_advertised_products_stats": (
+        "SPONSORED_PRODUCTS",
+        "spAdvertisedProduct",
+        ["advertiser"],
+        constants.PRODUCTS_ADVERTISED_PRODUCT_METRICS,
+    ),
+    "products_campaigns_stats": (
+        "SPONSORED_PRODUCTS",
+        "spCampaigns",
+        ["campaign", "adGroup"],
+        constants.PRODUCTS_CAMPAIGN_METRICS,
+    ),
+    "products_search_terms_stats": (
+        "SPONSORED_PRODUCTS",
+        "spSearchTerm",
+        ["searchTerm"],
+        constants.PRODUCTS_SEARCH_TERM_METRICS,
+    ),
+    "products_targeting_stats": (
+        "SPONSORED_PRODUCTS",
+        "spTargeting",
+        ["targeting"],
+        constants.PRODUCTS_TARGETING_METRICS,
+    ),
+    "products_purchased_products_stats": (
+        "SPONSORED_PRODUCTS",
+        "spPurchasedProduct",
+        ["asin"],
+        constants.PRODUCTS_PURCHASED_PRODUCT_METRICS,
+    ),
+    "products_gross_and_invalid_traffic_stats": (
+        "SPONSORED_PRODUCTS",
+        "spGrossAndInvalids",
+        ["campaign"],
+        constants.PRODUCTS_GROSS_AND_INVALID_TRAFFIC_METRICS,
+    ),
+    "display_campaigns_stats": ("SPONSORED_DISPLAY", "sdCampaigns", ["campaign"], constants.DISPLAY_CAMPAIGN_METRICS),
+    "display_advertised_products_stats": (
+        "SPONSORED_DISPLAY",
+        "sdAdvertisedProduct",
+        ["advertiser"],
+        constants.DISPLAY_ADVERTISED_PRODUCT_METRICS,
+    ),
+    "display_purchased_products_stats": (
+        "SPONSORED_DISPLAY",
+        "sdPurchasedProduct",
+        ["asin"],
+        constants.DISPLAY_PURCHASED_PRODUCT_METRICS,
+    ),
+    "display_targeting_stats": ("SPONSORED_DISPLAY", "sdTargeting", ["targeting"], constants.DISPLAY_TARGETING_METRICS),
+    "display_gross_and_invalid_traffic_stats": (
+        "SPONSORED_DISPLAY",
+        "sdGrossAndInvalids",
+        ["campaign"],
+        constants.DISPLAY_GROSS_AND_INVALID_TRAFFIC_METRICS,
+    ),
+    "display_ad_groups_stats": ("SPONSORED_DISPLAY", "sdAdGroup", ["adGroup"], constants.DISPLAY_AD_GROUP_METRICS),
+    "brands_campaigns_stats": ("SPONSORED_BRANDS", "sbCampaigns", ["campaign"], constants.BRANDS_CAMPAIGN_METRICS),
+    "brands_ads_stats": ("SPONSORED_BRANDS", "sbAds", ["ads"], constants.BRANDS_AD_METRICS),
+    "brands_search_terms_stats": (
+        "SPONSORED_BRANDS",
+        "sbSearchTerm",
+        ["searchTerm"],
+        constants.BRANDS_SEARCH_TERM_METRICS,
+    ),
+    "brands_targeting_stats": ("SPONSORED_BRANDS", "sbTargeting", ["targeting"], constants.BRANDS_TARGETING_METRICS),
+    "brands_purchased_products_stats": (
+        "SPONSORED_BRANDS",
+        "sbPurchasedProduct",
+        ["purchasedAsin"],
+        constants.BRANDS_PURCHASED_PRODUCT_METRICS,
+    ),
+    "brands_gross_and_invalid_traffic_stats": (
+        "SPONSORED_BRANDS",
+        "sbGrossAndInvalids",
+        ["campaign"],
+        constants.BRANDS_GROSS_AND_INVALID_TRAFFIC_METRICS,
+    ),
+    "brands_placements_stats": (
+        "SPONSORED_BRANDS",
+        "sbCampaignPlacement",
+        ["campaignPlacement"],
+        constants.BRANDS_PLACEMENT_METRICS,
+    ),
+    "brands_ad_groups_stats": ("SPONSORED_BRANDS", "sbAdGroup", ["adGroup"], constants.BRANDS_AD_GROUP_METRICS),
+    "television_campaigns_stats": (
+        "SPONSORED_TELEVISION",
+        "stCampaigns",
+        ["campaign"],
+        constants.TELEVISION_CAMPAIGN_METRICS,
+    ),
+    "television_targeting_stats": (
+        "SPONSORED_TELEVISION",
+        "stTargeting",
+        ["targeting"],
+        constants.TELEVISION_TARGETING_METRICS,
+    ),
+}
 
 
 def _source_with_api(handler: Any) -> Any:
@@ -227,122 +346,107 @@ def _conform(key: str, rows: list[dict[str, Any]], schema: type[Schema], *, stri
     return TableData.from_data(normalized).reconcile(schema, strict=strict)
 
 
+def _headers(request: httpx2.Request) -> dict[str, str | None]:
+    names = ("amazon-advertising-api-scope", "content-type", "accept")
+    return {name: request.headers.get(name) for name in names}
+
+
+def _ordered(content: bytes) -> str:
+    # re-encoded with its keys in the order sent, so a comparison pins the order too
+    return json.dumps(json.loads(content))
+
+
+@pytest.fixture
+def downloads(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict[str, Any]]]:
+    """Serve every report download as the gzipped JSON of ``REPORT_ROWS``, recording each call.
+
+    Args:
+        monkeypatch: Replaces ``httpx2.get`` for the test only.
+
+    Returns:
+        The URL and keyword arguments of each download, in order.
+    """
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    def get(url: str, **kwargs: Any) -> httpx2.Response:
+        calls.append((url, kwargs))
+        content = gzip.compress(json.dumps(REPORT_ROWS).encode())
+        return httpx2.Response(200, content=content, request=httpx2.Request("GET", url))
+
+    monkeypatch.setattr(httpx2, "get", get)
+    return calls
+
+
 class TestEntities:
     """Campaigns and ad groups per ad product, mirroring each product's list call."""
 
-    def test_products_campaigns_page_through_the_next_token(self):
+    def test_every_entity_asset_is_pinned(self):
+        entities = {type(a).key for a in _source().assets if "Entity" in a.tags}
+        assert entities == {*TOKEN_LISTS, *OFFSET_LISTS, "profiles"}
+
+    @pytest.mark.parametrize("key", sorted(TOKEN_LISTS))
+    def test_a_token_list_sends_its_call_page_by_page(self, key: str):
+        path, media_type, page_key, extended = TOKEN_LISTS[key]
         requests: list[httpx2.Request] = []
 
         def handler(request: httpx2.Request) -> httpx2.Response:
             requests.append(request)
-            body = json.loads(request.content)
-            if body.get("nextToken") is None:
-                page = {"campaigns": [{"campaignId": "1", "tags": {"team": "a"}}], "nextToken": "t1"}
-            else:
-                page = {"campaigns": [{"campaignId": "2"}]}
-            return httpx2.Response(200, json=page)
+            if "nextToken" not in json.loads(request.content):
+                return httpx2.Response(200, json={page_key: [{"id": "1"}], "nextToken": "t1"})
+            return httpx2.Response(200, json={page_key: [{"id": "2"}]})
 
-        rows = _run(_source_with_api(handler), "products_campaigns")
-        assert [row["campaignId"] for row in rows] == ["1", "2"]
-        assert all(row["date"] == DAY for row in rows)
-        assert json.loads(rows[0]["tags"]) == {"team": "a"}
+        rows = _run(_source_with_api(handler), key)
+
+        assert rows == [{"id": "1", "date": DAY}, {"id": "2", "date": DAY}]
+        body = {**EVERY_STATE, **({"includeExtendedDataFields": True} if extended else {}), "maxResults": 100}
         first, second = requests
-        assert (first.method, first.url.path) == ("POST", "/sp/campaigns/list")
-        assert first.headers["Amazon-Advertising-API-Scope"] == "123"
-        assert first.headers["Content-Type"] == "application/vnd.spCampaign.v3+json"
-        assert first.headers["Accept"] == "application/vnd.spCampaign.v3+json"
-        assert json.loads(first.content) == {
-            "stateFilter": {"include": ["ENABLED", "PAUSED", "ARCHIVED"]},
-            "includeExtendedDataFields": True,
-            "maxResults": 100,
-        }
-        assert json.loads(second.content)["nextToken"] == "t1"
+        for request in requests:
+            assert (request.method, request.url.path, request.url.query) == ("POST", path, b"")
+            assert _headers(request) == {
+                "amazon-advertising-api-scope": "123",
+                "content-type": media_type,
+                "accept": media_type,
+            }
+        assert _ordered(first.content) == json.dumps(body)
+        assert _ordered(second.content) == json.dumps({**body, "nextToken": "t1"})
 
-    def test_brands_ad_groups_use_the_v4_resource(self):
-        requests: list[httpx2.Request] = []
-
-        def handler(request: httpx2.Request) -> httpx2.Response:
-            requests.append(request)
-            return httpx2.Response(200, json={"adGroups": [{"adGroupId": "7", "campaignId": "1"}]})
-
-        rows = _run(_source_with_api(handler), "brands_ad_groups")
-        assert [row["adGroupId"] for row in rows] == ["7"]
-        [request] = requests
-        assert request.url.path == "/sb/v4/adGroups/list"
-        assert request.headers["Content-Type"] == "application/vnd.sbadgroupresource.v4+json"
-
-    def test_display_campaigns_page_by_offset_until_empty(self):
-        calls: list[tuple[str, str, dict[str, str]]] = []
+    @pytest.mark.parametrize("key", sorted(OFFSET_LISTS))
+    def test_an_offset_list_sends_its_call_until_an_empty_page(self, key: str):
+        # the paginator advances one request in place, so each is recorded as it is sent
+        calls: list[tuple[str, str, bytes, dict[str, str | None]]] = []
 
         def handler(request: httpx2.Request) -> httpx2.Response:
-            params = dict(request.url.params)
-            calls.append((request.url.path, request.headers["Amazon-Advertising-API-Scope"], params))
-            return httpx2.Response(200, json=[{"campaignId": 5, "name": "SD"}] if params["startIndex"] == "0" else [])
+            calls.append((request.method, request.url.path, request.url.query, _headers(request)))
+            return httpx2.Response(200, json=[{"id": 1}] if request.url.params["startIndex"] == "0" else [])
 
-        rows = _run(_source_with_api(handler), "display_campaigns")
-        assert [row["campaignId"] for row in rows] == [5]
+        rows = _run(_source_with_api(handler), key)
+
+        assert rows == [{"id": 1, "date": DAY}]
+        headers = {"amazon-advertising-api-scope": "123", "content-type": None, "accept": "*/*"}
         assert calls == [
-            (
-                "/sd/campaigns/extended",
-                "123",
-                {"startIndex": "0", "count": "100", "stateFilter": "enabled,paused,archived"},
-            ),
-            (
-                "/sd/campaigns/extended",
-                "123",
-                {"startIndex": "100", "count": "100", "stateFilter": "enabled,paused,archived"},
-            ),
+            ("GET", OFFSET_LISTS[key], b"stateFilter=enabled%2Cpaused%2Carchived&count=100&startIndex=0", headers),
+            ("GET", OFFSET_LISTS[key], b"stateFilter=enabled%2Cpaused%2Carchived&count=100&startIndex=100", headers),
         ]
 
-    def test_every_entity_asset_calls_its_own_list(self):
-        calls = {
-            "products_campaigns": ("POST", "/sp/campaigns/list", "application/vnd.spCampaign.v3+json", "campaigns"),
-            "products_ad_groups": ("POST", "/sp/adGroups/list", "application/vnd.spAdGroup.v3+json", "adGroups"),
-            "brands_campaigns": (
-                "POST",
-                "/sb/v4/campaigns/list",
-                "application/vnd.sbcampaignresource.v4+json",
-                "campaigns",
-            ),
-            "brands_ad_groups": (
-                "POST",
-                "/sb/v4/adGroups/list",
-                "application/vnd.sbadgroupresource.v4+json",
-                "adGroups",
-            ),
-            "display_campaigns": ("GET", "/sd/campaigns/extended", None, None),
-            "display_ad_groups": ("GET", "/sd/adGroups/extended", None, None),
-            "products_ads": ("POST", "/sp/productAds/list", "application/vnd.spProductAd.v3+json", "productAds"),
-            "brands_ads": ("POST", "/sb/v4/ads/list", "application/vnd.sbadresource.v4+json", "ads"),
-            "display_ads": ("GET", "/sd/productAds/extended", None, None),
-        }
-        for key, (method, path, media_type, page_key) in calls.items():
-            seen: list[httpx2.Request] = []
+    @pytest.mark.parametrize(
+        ("key", "schema"),
+        [("products_campaigns", schemas.ProductsCampaigns), ("brands_campaigns", schemas.BrandsCampaigns)],
+    )
+    def test_free_form_tags_land_whole_as_json(self, key: str, schema: type[Schema]):
+        page_key = TOKEN_LISTS[key][2]
+        campaigns = [
+            {"campaignId": "1", "tags": {"team": "a", "budget owner": "b"}},
+            {"campaignId": "2", "tags": {}},
+            {"campaignId": "3"},
+        ]
+        rows = _run(_source_with_api(lambda _: httpx2.Response(200, json={page_key: campaigns})), key)
 
-            def handler(request: httpx2.Request, seen=seen, page_key=page_key) -> httpx2.Response:
-                seen.append(request)
-                if page_key is None:
-                    return httpx2.Response(200, json=[{"id": 1}] if request.url.params["startIndex"] == "0" else [])
-                return httpx2.Response(200, json={page_key: [{"id": "1"}]})
+        out = _conform(key, rows, schema)
 
-            rows = _run(_source_with_api(handler), key)
-            assert rows == [{"id": rows[0]["id"], "date": DAY}], key
-            assert (seen[0].method, seen[0].url.path) == (method, path), key
-            if media_type is not None:
-                assert seen[0].headers["Content-Type"] == media_type, key
-
-    def test_brands_ads_ask_for_no_extended_data_their_list_does_not_take(self):
-        requests: list[httpx2.Request] = []
-
-        def handler(request: httpx2.Request) -> httpx2.Response:
-            requests.append(request)
-            return httpx2.Response(200, json={"ads": [{"adId": "9"}]})
-
-        _run(_source_with_api(handler), "brands_ads")
-        assert json.loads(requests[0].content) == {
-            "stateFilter": {"include": ["ENABLED", "PAUSED", "ARCHIVED"]},
-            "maxResults": 100,
-        }
+        assert json.loads(out.loc[0, "tags"]) == {"team": "a", "budget owner": "b"}
+        assert out.loc[1, "tags"] == "{}"
+        assert pd.isna(out.loc[2, "tags"])
+        assert not [column for column in out.columns if column.startswith("tags_")]
 
     def test_a_products_ad_conforms_with_its_extended_data(self):
         row = {
@@ -421,6 +525,15 @@ class TestEntities:
             spec_json = DAG(src).mini_dag(asset.id).to_spec().model_dump(mode="json")
             child: Any = next(a for a in DAGSpec(**spec_json).reconstruct().operations if type(a).key == key)
             assert type(child.normalizer).__name__ == "SponsoredDisplayEntityNormalizer", key
+
+    def test_campaigns_keep_their_tags_whole_through_the_roundtrip(self):
+        for key in ("products_campaigns", "brands_campaigns"):
+            src = _source()
+            asset = next(a for a in src.assets if type(a).key == key)
+            spec_json = DAG(src).mini_dag(asset.id).to_spec().model_dump(mode="json")
+            child: Any = next(a for a in DAGSpec(**spec_json).reconstruct().operations if type(a).key == key)
+            out = child.normalizer.normalize([{"campaignId": "1", "tags": {"team": "a"}, "date": DAY}])
+            assert json.loads(out.loc[0, "tags"]) == {"team": "a"}, key
 
     def test_products_lifecycle_times_conform_whatever_their_precision(self):
         # Sponsored Products sends milliseconds only when they are not zero
@@ -524,8 +637,10 @@ class TestEntities:
 
 class TestProfiles:
     def test_profiles_keep_only_the_sources_own_profile(self):
+        requests: list[httpx2.Request] = []
+
         def handler(request: httpx2.Request) -> httpx2.Response:
-            assert request.url.path == "/v2/profiles"
+            requests.append(request)
             return httpx2.Response(
                 200,
                 json=[
@@ -535,7 +650,19 @@ class TestProfiles:
             )
 
         rows = _run(_source_with_api(handler), "profiles")
-        assert [row["profileId"] for row in rows] == [123]
+        assert rows == [
+            {
+                "profileId": 123,
+                "countryCode": "DE",
+                "dailyBudget": 10.0,
+                "accountInfo": {"subType": "KDP"},
+                "date": DAY,
+            }
+        ]
+        # the profile listing is the one call Amazon does not scope to a profile
+        [request] = requests
+        assert (request.method, request.url.path, request.url.query) == ("GET", "/v2/profiles", b"")
+        assert _headers(request) == {"amazon-advertising-api-scope": None, "content-type": None, "accept": "*/*"}
         # /v2/profiles sends profileId as a number, which the default RECONCILE cast turns into the text id
         out = _conform("profiles", rows, schemas.Profiles, strict=False)
         assert out.loc[0, "profile_id"] == "123"
@@ -548,6 +675,55 @@ class TestProfiles:
 
         with pytest.raises(RuntimeError, match="does not list profile 123"):
             _run(_source_with_api(handler), "profiles")
+
+
+class TestReports:
+    def test_every_report_asset_is_pinned(self):
+        reports = {type(a).key for a in _source().assets if "Report" in a.tags}
+        assert reports == set(REPORTS)
+
+    @pytest.mark.parametrize("key", sorted(REPORTS))
+    def test_runs_one_report_job_for_the_day_and_returns_its_rows_untouched(
+        self, key: str, downloads: list[tuple[str, dict[str, Any]]]
+    ):
+        ad_product, report_type_id, group_by, columns = REPORTS[key]
+        requests: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            if request.method == "POST":
+                return httpx2.Response(200, json={"reportId": "r-1", "status": "PENDING"})
+            return httpx2.Response(200, json={"reportId": "r-1", "status": "COMPLETED", "url": REPORT_URL})
+
+        rows = _run(_source_with_api(handler), key)
+
+        assert rows == REPORT_ROWS
+        report_headers = {
+            "amazon-advertising-api-scope": "123",
+            "content-type": "application/vnd.createasyncreportrequest.v3+json",
+            "accept": "*/*",
+        }
+        create, status = requests
+        assert (create.method, create.url.path, create.url.query) == ("POST", "/reporting/reports", b"")
+        assert _headers(create) == report_headers
+        assert _ordered(create.content) == json.dumps(
+            {
+                "name": f"{report_type_id} | 2026-10-01 - 2026-10-01",
+                "startDate": "2026-10-01",
+                "endDate": "2026-10-01",
+                "configuration": {
+                    "reportTypeId": report_type_id,
+                    "adProduct": ad_product,
+                    "groupBy": group_by,
+                    "columns": columns,
+                    "timeUnit": "DAILY",
+                    "format": "GZIP_JSON",
+                },
+            }
+        )
+        assert (status.method, status.url.path, status.url.query) == ("GET", "/reporting/reports/r-1", b"")
+        assert _headers(status) == report_headers
+        assert downloads == [(REPORT_URL, {"timeout": None})]
 
 
 class TestTelevisionReports:
