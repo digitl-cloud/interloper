@@ -158,3 +158,6 @@ MIN_RETRY_INTERVAL = 60
 
 # Maximum amount of time between polling requests (seconds).
 MAX_RETRY_INTERVAL = 20 * 60
+
+# Longest a report file may take to become available (seconds).
+REPORT_TIMEOUT = 3 * 60 * 60

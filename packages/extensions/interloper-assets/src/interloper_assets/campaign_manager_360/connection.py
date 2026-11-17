@@ -7,6 +7,7 @@ import interloper as il
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.campaign_manager_360 import constants
+from interloper_assets.campaign_manager_360.api import CampaignManager360Api
 
 
 @il.connection(
@@ -50,6 +51,15 @@ class CampaignManager360Connection(il.Connection):
 
         return build(constants.API_SERVICE, constants.API_VERSION, credentials=self.credentials)
 
+    @cached_property
+    def api(self) -> CampaignManager360Api:
+        """The Campaign Manager 360 API engine every caller shares, built on ``client``.
+
+        Returns:
+            The engine, cached per connection instance; it builds a client per call.
+        """
+        return CampaignManager360Api(self.client)
+
     @il.fetch_field_provider
     async def profiles(self) -> list[dict[str, str]]:
         """Fetch the CM360 user profiles the service account has access to.
@@ -61,7 +71,7 @@ class CampaignManager360Connection(il.Connection):
             The options for the field's dropdown.
 
         """
-        response = await asyncio.to_thread(lambda: self.client().userProfiles().list().execute())
+        response = await asyncio.to_thread(self.api.get, "userProfiles.list")
         return [
             {
                 "profile_id": str(p["profileId"]),
