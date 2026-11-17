@@ -6,6 +6,7 @@ from typing import Any
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
+from interloper_assets.search_ads_360.api import SearchAds360Api
 from interloper_assets.search_ads_360.constants import BASE_URL, SCOPES
 
 _TOKEN_BASE_URL = "https://oauth2.googleapis.com"
@@ -97,3 +98,12 @@ class SearchAds360Connection(il.Connection):
         """
         auth = _ServiceAccountAuth(json.loads(self.service_account_key), SCOPES)
         return il.AsyncRESTClient(BASE_URL, auth=auth, timeout=60)
+
+    @cached_property
+    def api(self) -> SearchAds360Api:
+        """The Search Ads 360 Reporting API engine every caller shares, built on ``client``.
+
+        Returns:
+            The engine, cached per connection instance.
+        """
+        return SearchAds360Api(self.client)
