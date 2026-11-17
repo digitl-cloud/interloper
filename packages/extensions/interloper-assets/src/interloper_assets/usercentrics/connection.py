@@ -4,6 +4,7 @@ import interloper as il
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.usercentrics import constants
+from interloper_assets.usercentrics.api import UsercentricsApi
 
 
 @il.connection(
@@ -28,3 +29,12 @@ class UsercentricsConnection(il.Connection):
         """
         # Static API-key header (no token refresh) drops straight into the async client.
         return il.AsyncRESTClient(constants.BASE_URL, headers={"X-API-Key": self.api_key})
+
+    @cached_property
+    def api(self) -> UsercentricsApi:
+        """The Usercentrics data-export API engine every caller shares, built on ``client``.
+
+        Returns:
+            The engine, cached per connection instance.
+        """
+        return UsercentricsApi(self.client)
