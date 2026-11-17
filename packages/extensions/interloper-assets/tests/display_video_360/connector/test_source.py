@@ -19,24 +19,12 @@ from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
+from interloper_assets.display_video_360 import constants
 from interloper_assets.display_video_360.connection import DisplayVideo360Connection
-from interloper_assets.display_video_360.connector import schemas, source
-from interloper_assets.display_video_360.connector.source import (
-    DisplayVideo360,
-    DisplayVideo360Normalizer,
-    _parse_report_csv,
-)
+from interloper_assets.display_video_360.connector import schemas
+from interloper_assets.display_video_360.connector.source import DisplayVideo360, DisplayVideo360Normalizer
 
 _ASSET_KEY = "partners"
-
-_REPORT_CSV = (
-    "Date,Advertiser ID,Active View: Viewable Impressions,Active View: % Viewable Impressions,Impressions\n"
-    "2026/07/10,9,90,85.5,100\n"
-    "2026/07/10,9,180,72.1,200\n"
-    ",,270,,300\n"
-    "\n"
-    "Report Time:,2026/07/11\n"
-)
 
 _PARTNER = {
     "name": "partners/123",
@@ -49,7 +37,9 @@ _PARTNER = {
         "measurementConfig": {"dv360ToCmCostReportingEnabled": True, "dv360ToCmDataSharingEnabled": False}
     },
     "dataAccessConfig": {"sdfConfig": {"version": "SDF_VERSION_8", "adminEmail": "admin@digitl.com"}},
-    "exchangeConfig": {"enabledExchanges": json.dumps([{"exchange": "EXCHANGE_GOOGLE_AD_MANAGER"}])},
+    "exchangeConfig": {
+        "enabledExchanges": [{"exchange": "EXCHANGE_GOOGLE_AD_MANAGER", "googleAdManagerAgencyId": "1"}]
+    },
     "billingConfig": {"billingProfileId": "77"},
 }
 
@@ -76,7 +66,7 @@ class TestAudienceScope:
 
 
 class TestReports:
-    """Bid Manager report filters, CSV parsing, and header normalization."""
+    """Bid Manager report filters and header normalization."""
 
     def test_filters_partner_only(self):
         assert _source()._report_filters == [{"type": "FILTER_PARTNER", "value": "123"}]
@@ -87,15 +77,6 @@ class TestReports:
             {"type": "FILTER_ADVERTISER", "value": "9"},
         ]
 
-    def test_parse_report_csv_drops_footer(self):
-        rows = _parse_report_csv(_REPORT_CSV)
-        assert len(rows) == 2
-        assert rows[0]["Impressions"] == 100
-        assert rows[1]["Impressions"] == 200
-
-    def test_parse_report_csv_no_data_marker(self):
-        assert _parse_report_csv("Date,Impressions\nNo data returned by the reporting service.,\n") == []
-
     def test_percent_headers_do_not_collide(self):
         normalizer = DisplayVideo360Normalizer(snake_case_digits=True, flatten_max_level=2)
         assert normalizer.column_name("Active View: % Viewable Impressions") == ("active_view_pct_viewable_impressions")
@@ -105,8 +86,9 @@ class TestReports:
             "you_tube_revenue_e_cpv_adv_currency"
         )
 
-    def test_parsed_report_conforms_to_schema(self):
-        rows = _parse_report_csv(_REPORT_CSV)
+    def test_report_rows_conform_to_schema(self, google, connection, download):
+        google.serve({"queryId": "q"}, {"key": {"reportId": "r"}}, _DONE_REPORT)
+        rows = _run(connection, "line_items_stats")
         normalized = _source().normalizer.normalize(rows)
         table = TableData.from_data(normalized)
         df = table.reconcile(schemas.LineItemsStats)
@@ -143,111 +125,136 @@ class TestNormalizerMapping:
             assert isinstance(asset.normalizer, DisplayVideo360Normalizer), type(asset).key
 
 
-class FakeAudiences:
-    """Serve canned ``firstPartyAndPartnerAudiences.list`` pages, keyed by page token."""
-
-    def __init__(self, pages: dict[str | None, dict[str, Any]]):
-        """Hold the pages to serve."""
-        self.pages = pages
-
-    def firstPartyAndPartnerAudiences(self) -> FakeAudiences:
-        return self
-
-    def list(self, partnerId: str, pageToken: str | None) -> SimpleNamespace:
-        return SimpleNamespace(execute=lambda: self.pages[pageToken])
+_DAY = dt.date(2026, 7, 10)
+_DISPLAY_VIDEO = "https://displayvideo.googleapis.com/v4"
+_BID_MANAGER = "https://doubleclickbidmanager.googleapis.com/v2"
+_DONE_REPORT = {"metadata": {"status": {"state": "DONE"}, "googleCloudStoragePath": "https://storage/report.csv"}}
 
 
-class FakeService:
-    """Record a discovery call chain and answer ``execute()`` by the chain's last method."""
-
-    def __init__(self, responses: dict[str, Any]):
-        """Hold the responses to serve, keyed by method name."""
-        self.responses = responses
-        self.calls: list[str] = []
-
-    def __getattr__(self, name: str) -> Any:
-        """Answer any discovery method with a call that records its name and chains on.
-
-        Args:
-            name: The discovery method being looked up.
-
-        Returns:
-            A callable accepting any arguments, which records ``name`` and returns this fake.
-        """
-
-        def call(*args: Any, **kwargs: Any) -> FakeService:
-            self.calls.append(name)
-            return self
-
-        return call
-
-    def execute(self) -> Any:
-        return self.responses.get(self.calls[-1], {})
+def _run(connection: DisplayVideo360Connection, key: str, **fields: str) -> list[dict[str, Any]]:
+    settings: dict[str, Any] = {"partner_id": "123", **fields}
+    source = DisplayVideo360(id="src-1", connection=connection, **settings)
+    asset = next(a for a in source.assets if type(a).key == key)
+    return asset.data(context=SimpleNamespace(partition_date=_DAY))
 
 
-class TestServicePerAsset:
-    """Each asset builds its own service once per run, since the transport is not thread-safe."""
+def _report_requests(title: str, dimensions: list[str], metrics: list[str], filters: list[dict]) -> list[tuple]:
+    day = {"year": 2026, "month": 7, "day": 10}
+    query = {
+        "metadata": {
+            "title": title,
+            "dataRange": {"range": "CUSTOM_DATES", "customStartDate": day, "customEndDate": day},
+            "format": "CSV",
+        },
+        "params": {"type": "STANDARD", "groupBys": dimensions, "filters": filters, "metrics": metrics, "options": {}},
+        "schedule": {"frequency": "ONE_TIME"},
+    }
+    return [
+        ("POST", f"{_BID_MANAGER}/queries?alt=json", query),
+        ("POST", f"{_BID_MANAGER}/queries/q:run?synchronous=false&alt=json", None),
+        ("GET", f"{_BID_MANAGER}/queries/q/reports/r?alt=json", None),
+        ("DELETE", f"{_BID_MANAGER}/queries/q?", None),
+    ]
 
-    def test_audiences_pages_through_one_service(self):
-        services: list[FakeAudiences] = []
 
-        def dv_client() -> FakeAudiences:
-            services.append(
-                FakeAudiences(
-                    {
-                        None: {"firstPartyAndPartnerAudiences": [{"name": "a"}], "nextPageToken": "next"},
-                        "next": {"firstPartyAndPartnerAudiences": [{"name": "b"}]},
-                    }
-                )
-            )
-            return services[-1]
+class TestRequests:
+    """What each asset sends, on one service of its own since the transport is not thread-safe, and returns."""
 
-        connection = DisplayVideo360Connection(service_account_key="{}")
-        connection.__dict__["dv_client"] = dv_client
-        src = DisplayVideo360(id="src-1", partner_id="123", connection=connection)
-        asset = next(a for a in src.assets if type(a).key == "audiences")
-        rows = asset.data(context=SimpleNamespace(partition_date=dt.date(2026, 7, 10)))
-        assert [row["name"] for row in rows] == ["a", "b"]
-        assert len(services) == 1
+    def test_line_items_stats_runs_one_query_for_its_day(self, google, connection, download):
+        google.serve({"queryId": "q"}, {"key": {"reportId": "r"}}, _DONE_REPORT)
 
-    def test_custom_audiences_fetches_on_one_service(self):
-        services: list[FakeService] = []
+        rows = _run(connection, "line_items_stats")
 
-        def dv_client() -> FakeService:
-            services.append(FakeService({"get": {"name": "audience"}}))
-            return services[-1]
-
-        connection = DisplayVideo360Connection(service_account_key="{}")
-        connection.__dict__["dv_client"] = dv_client
-        src = DisplayVideo360(id="src-1", partner_id="123", audience_id="7", connection=connection)
-        asset = next(a for a in src.assets if type(a).key == "custom_audiences")
-        rows = asset.data(context=SimpleNamespace(partition_date=dt.date(2026, 7, 10)))
-        assert rows == [{"name": "audience", "date": dt.date(2026, 7, 10)}]
-        assert len(services) == 1
-
-    def test_report_runs_on_one_service(self, monkeypatch: pytest.MonkeyPatch):
-        services: list[FakeService] = []
-
-        def dbm_client() -> FakeService:
-            services.append(FakeService({"create": {"queryId": "q"}, "run": {"key": {"reportId": "r"}}}))
-            return services[-1]
-
-        monkeypatch.setattr(
-            source, "_wait_for_report", lambda *args: {"metadata": {"googleCloudStoragePath": "https://report"}}
+        assert google.requests == _report_requests(
+            "line_items_stats_2026-07-10",
+            constants.LINE_ITEM_DIMENSIONS,
+            constants.LINE_ITEM_METRICS,
+            [{"type": "FILTER_PARTNER", "value": "123"}],
         )
-        monkeypatch.setattr(
-            source.httpx2,
-            "get",
-            lambda url, timeout: SimpleNamespace(content=_REPORT_CSV.encode(), raise_for_status=lambda: None),
+        assert google.builds == [constants.DBM_API_SERVICE]
+        assert download.downloads == [{"url": "https://storage/report.csv", "timeout": None}]
+        assert rows == [
+            {
+                "Date": "2026/07/10",
+                "Advertiser ID": 9,
+                "Active View: Viewable Impressions": 90,
+                "Active View: % Viewable Impressions": 85.5,
+                "Impressions": 100,
+            },
+            {
+                "Date": "2026/07/10",
+                "Advertiser ID": 9,
+                "Active View: Viewable Impressions": 180,
+                "Active View: % Viewable Impressions": 72.1,
+                "Impressions": 200,
+            },
+        ]
+
+    def test_line_items_stats_by_country_narrows_to_the_advertiser(self, google, connection, download):
+        google.serve({"queryId": "q"}, {"key": {"reportId": "r"}}, _DONE_REPORT)
+
+        rows = _run(connection, "line_items_stats_by_country", advertiser_id="9")
+
+        assert google.requests == _report_requests(
+            "line_items_stats_by_country_2026-07-10",
+            constants.LINE_ITEM_COUNTRY_DIMENSIONS,
+            constants.LINE_ITEM_COUNTRY_METRICS,
+            [{"type": "FILTER_PARTNER", "value": "123"}, {"type": "FILTER_ADVERTISER", "value": "9"}],
         )
-        connection = DisplayVideo360Connection(service_account_key="{}")
-        connection.__dict__["dbm_client"] = dbm_client
-        src = DisplayVideo360(id="src-1", partner_id="123", connection=connection)
-        asset = next(a for a in src.assets if type(a).key == "line_items_stats")
-        rows = asset.data(context=SimpleNamespace(partition_date=dt.date(2026, 7, 10)))
+        assert google.builds == [constants.DBM_API_SERVICE]
         assert len(rows) == 2
-        assert len(services) == 1
-        assert services[0].calls == ["queries", "create", "queries", "run", "queries", "delete"]
+
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_partners_lists_every_partner_and_stamps_the_day(self, google, connection, strict: bool):
+        other = {**_PARTNER, "partnerId": "456", "exchangeConfig": {"enabledExchanges": []}}
+        google.serve({"partners": [_PARTNER], "nextPageToken": "next"}, {"partners": [other]})
+
+        rows = _run(connection, "partners")
+
+        assert google.requests == [
+            ("GET", f"{_DISPLAY_VIDEO}/partners?alt=json", None),
+            ("GET", f"{_DISPLAY_VIDEO}/partners?pageToken=next&alt=json", None),
+        ]
+        assert google.builds == [constants.DV_API_SERVICE]
+        source = _source()
+        table = TableData.from_data(source.normalizer.normalize(rows)).reconcile(schemas.Partners, strict=strict)
+        first, second = table.to_dict("records")
+        assert first["date"] == second["date"] == _DAY
+        assert first["partner_id"] == "123"
+        assert first["exchange_config_enabled_exchanges"] == json.dumps(
+            [{"exchange": "EXCHANGE_GOOGLE_AD_MANAGER", "googleAdManagerAgencyId": "1"}]
+        )
+        assert second["exchange_config_enabled_exchanges"] == "[]"
+
+    def test_audiences_list_the_partners_audiences(self, google, connection):
+        google.serve({"firstPartyAndPartnerAudiences": [{"name": "a"}]})
+
+        rows = _run(connection, "audiences")
+
+        assert google.requests == [
+            ("GET", f"{_DISPLAY_VIDEO}/firstPartyAndPartnerAudiences?partnerId=123&alt=json", None)
+        ]
+        assert google.builds == [constants.DV_API_SERVICE]
+        assert rows == [{"name": "a", "date": _DAY}]
+
+    def test_audiences_list_the_advertisers_audiences_when_set(self, google, connection):
+        rows = _run(connection, "audiences", advertiser_id="9")
+
+        assert google.requests == [
+            ("GET", f"{_DISPLAY_VIDEO}/firstPartyAndPartnerAudiences?advertiserId=9&alt=json", None)
+        ]
+        assert rows == []
+
+    def test_custom_audiences_read_the_configured_audience(self, google, connection):
+        google.serve({"name": "audience", "audienceSize": "10"})
+
+        rows = _run(connection, "custom_audiences", audience_id="7")
+
+        assert google.requests == [
+            ("GET", f"{_DISPLAY_VIDEO}/firstPartyAndPartnerAudiences/7?partnerId=123&alt=json", None)
+        ]
+        assert google.builds == [constants.DV_API_SERVICE]
+        assert rows == [{"name": "audience", "audienceSize": "10", "date": _DAY}]
 
 
 class TestSpecRoundtrip:

@@ -11,6 +11,7 @@ DBM_SCOPES = ["https://www.googleapis.com/auth/doubleclickbidmanager"]
 # Report polling bounds (seconds).
 MIN_RETRY_INTERVAL = 60
 MAX_RETRY_INTERVAL = 20 * 60
+REPORT_TIMEOUT = 3 * 60 * 60
 
 LINE_ITEM_DIMENSIONS = [
     "FILTER_ADVERTISER_CURRENCY",
