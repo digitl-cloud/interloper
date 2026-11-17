@@ -14,6 +14,7 @@ from interloper_db import Audience, NotFoundError
 from interloper_db.store import ProfileQuery, Store
 
 GOOGLE = "https://accounts.google.com"
+MICROSOFT = "https://login.microsoftonline.com/0c1ea3a1-36e3-4a64-8a3a-2b3e8b0e2a51/v2.0"
 
 
 class TestList:
@@ -51,6 +52,19 @@ class TestList:
 
         assert [profile.id for profile in super_admins.items] == [admin.id]
         assert [profile.id for profile in others.items] == [member.id]
+
+    def test_filters_on_the_address_whatever_its_case(self, store: Store):
+        ada = store.profiles.upsert(issuer=GOOGLE, subject="g-ada", email="Ada@Example.com")
+        store.profiles.upsert(issuer=GOOGLE, subject="g-bob", email="bob@example.com")
+
+        page = store.profiles.list(ProfileQuery(email="ada@EXAMPLE.com", limit=None))
+
+        assert [profile.id for profile in page.items] == [ada.id]
+
+    def test_an_address_no_profile_holds_lists_none(self, store: Store):
+        store.profiles.upsert(issuer=GOOGLE, subject="g-ada", email="ada@example.com")
+
+        assert store.profiles.list(ProfileQuery(email="bob@example.com", limit=None)).items == []
 
 
 class TestDelete:
@@ -139,6 +153,45 @@ class TestUpsertIdentity:
         other = store.profiles.upsert(issuer="https://login.example.com", subject="s-1", email="user@example.com")
 
         assert other.id != google.id
+
+
+class TestLink:
+    """Another identity joins a profile, which it then signs in to."""
+
+    def test_the_identity_signs_in_to_the_profile(self, store: Store):
+        profile = store.profiles.upsert(issuer=GOOGLE, subject="g-1", email="ada@example.com")
+
+        store.profiles.link(profile.id, issuer=MICROSOFT, subject="oid-1")
+
+        linked = store.profiles.get_by_identity(MICROSOFT, "oid-1")
+        first = store.profiles.get_by_identity(GOOGLE, "g-1")
+        assert linked is not None and first is not None
+        assert linked.id == first.id == profile.id
+
+    def test_a_missing_profile_raises(self, store: Store):
+        with pytest.raises(NotFoundError):
+            store.profiles.link(uuid4(), issuer=MICROSOFT, subject="oid-1")
+
+        assert store.profiles.get_by_identity(MICROSOFT, "oid-1") is None
+
+
+class TestIssuers:
+    """Which identity providers a profile signs in through."""
+
+    def test_reads_the_issuers_a_profile_signs_in_through(self, store: Store):
+        profile = store.profiles.upsert(issuer=GOOGLE, subject="g-1", email="user@example.com")
+        store.profiles.upsert(issuer=MICROSOFT, subject="oid-1", email="other@example.com")
+
+        assert store.profiles.issuers(profile.id) == [GOOGLE]
+
+    def test_lists_each_linked_issuer(self, store: Store):
+        profile = store.profiles.upsert(issuer=GOOGLE, subject="g-1", email="user@example.com")
+        store.profiles.link(profile.id, issuer=MICROSOFT, subject="oid-1")
+
+        assert sorted(store.profiles.issuers(profile.id)) == [GOOGLE, MICROSOFT]
+
+    def test_a_profile_without_identities_has_no_issuers(self, store: Store):
+        assert store.profiles.issuers(uuid4()) == []
 
 
 class TestUpdate:

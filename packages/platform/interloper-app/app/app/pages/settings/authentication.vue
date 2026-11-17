@@ -11,6 +11,7 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const appConfig = useAppConfig()
+const providerIcon = useLoginProviderIcon()
 const toast = useToast()
 const { confirm } = useConfirm()
 const { apiFetch, fetchAll } = useApi()
@@ -266,19 +267,28 @@ const columns: TableColumn<PersonalAccessToken>[] = [
                            title="Sign in"
                            description="The accounts you sign in to Interloper with." />
                 <UCard>
-                    <UFormField label="Google"
-                                :description="userStore.user?.email"
-                                orientation="horizontal">
-                        <template #label>
-                            <span class="flex items-center gap-2">
-                                <UIcon :name="appConfig.icons.google"
-                                       class="size-4" />
-                                Google
-                            </span>
-                        </template>
-                        <UBadge label="Connected"
-                                color="success" />
-                    </UFormField>
+                    <template v-for="(provider, index) in userStore.user?.login_providers ?? []"
+                              :key="provider.name">
+                        <USeparator v-if="index > 0" />
+                        <UFormField :label="provider.label"
+                                    :description="userStore.user?.email"
+                                    orientation="horizontal">
+                            <template #label>
+                                <span class="flex items-center gap-2">
+                                    <UIcon :name="providerIcon(provider.name)"
+                                           class="size-4" />
+                                    {{ provider.label }}
+                                </span>
+                            </template>
+                            <UBadge label="Connected"
+                                    color="success" />
+                        </UFormField>
+                    </template>
+                    <UEmpty v-if="!userStore.user?.login_providers.length"
+                            variant="naked"
+                            size="sm"
+                            title="No sign-in provider"
+                            description="None of the providers this deployment offers is linked to your account." />
                 </UCard>
             </div>
 

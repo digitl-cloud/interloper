@@ -147,14 +147,11 @@ docker-build-push:
 # encryption key is a throwaway dev secret — never use it outside local dev.
 DEV_DIR := dev
 
-# Dev super-admin identity. INTERLOPER_DEV_USER_GOOGLE_ID (your Google subject
-# id) makes the seed write the exact profile your login resolves to — so you're
-# super-admin out of the box with no duplicate. Without it the seed falls back
-# to matching/creating by email. Resolved highest-first from: the make command
-# line, a repo-root .env (gitignored), the shell env, else the defaults below.
-# Set them once in .env, e.g.:
+# Dev super-admin: the seed promotes the profile holding this address, and your
+# first login with it joins that profile. Resolved highest-first from: the make
+# command line, a repo-root .env (gitignored), the shell env, else the default
+# below. Set it once in .env, e.g.:
 #   INTERLOPER_DEV_USER_EMAIL=you@example.com
-#   INTERLOPER_DEV_USER_GOOGLE_ID=1234567890
 -include .env
 # Export every .env-loaded var to recipe environments, so the app subprocess
 # also sees vars the harness doesn't forward explicitly — connector OAuth creds
@@ -163,17 +160,19 @@ DEV_DIR := dev
 # set inline on each recipe, which wins over the exported value).
 export
 INTERLOPER_DEV_USER_EMAIL ?= admin@dev.local
-INTERLOPER_DEV_USER_GOOGLE_ID ?=
 
-# Google OAuth for the app login (the /auth flow). Put your client id + secret
-# in .env (they're secrets). The OAuth client in Google Cloud must list
-# <INTERLOPER_SERVER_EXTERNAL_URL>/api/auth/google/callback, so
-# http://localhost:3000/api/auth/google/callback here, as an authorised redirect
-# URI; cookie_secure=false lets the session cookie stick over local http. e.g. in .env:
+# The app login's providers (the /auth flow), Google and Microsoft. Put each
+# client id + secret in .env (they're secrets). A provider's client must list
+# <INTERLOPER_SERVER_EXTERNAL_URL>/api/auth/<provider>/callback, so
+# http://localhost:3000/api/auth/google/callback (or .../microsoft/callback)
+# here, as a redirect URI; cookie_secure=false lets the session cookie stick
+# over local http. e.g. in .env:
 #   INTERLOPER_AUTH_GOOGLE_CLIENT_ID=...apps.googleusercontent.com
 #   INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET=...
 INTERLOPER_AUTH_GOOGLE_CLIENT_ID ?=
 INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET ?=
+INTERLOPER_AUTH_MICROSOFT_CLIENT_ID ?=
+INTERLOPER_AUTH_MICROSOFT_CLIENT_SECRET ?=
 INTERLOPER_AUTH_COOKIE_SECURE ?= false
 
 DEV_ENV := INTERLOPER_POSTGRES_HOST=localhost \
@@ -186,9 +185,10 @@ DEV_ENV := INTERLOPER_POSTGRES_HOST=localhost \
            INTERLOPER_ENCRYPTION_KEY=dev-encryption-key-not-for-production \
            INTERLOPER_SERVER_EXTERNAL_URL=http://localhost:$(or $(INTERLOPER_SERVER_PORT),3000) \
            INTERLOPER_DEV_USER_EMAIL=$(INTERLOPER_DEV_USER_EMAIL) \
-           INTERLOPER_DEV_USER_GOOGLE_ID=$(INTERLOPER_DEV_USER_GOOGLE_ID) \
            INTERLOPER_AUTH_GOOGLE_CLIENT_ID=$(INTERLOPER_AUTH_GOOGLE_CLIENT_ID) \
            INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET=$(INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET) \
+           INTERLOPER_AUTH_MICROSOFT_CLIENT_ID=$(INTERLOPER_AUTH_MICROSOFT_CLIENT_ID) \
+           INTERLOPER_AUTH_MICROSOFT_CLIENT_SECRET=$(INTERLOPER_AUTH_MICROSOFT_CLIENT_SECRET) \
            INTERLOPER_AUTH_COOKIE_SECURE=$(INTERLOPER_AUTH_COOKIE_SECURE)
 
 dev-db:
@@ -218,9 +218,10 @@ dev: dev-reset dev-up
 # Compose stack lives in dev/. Run from there and forward the dev-user identity
 # (resolved from .env / shell env above) into compose's env interpolation.
 COMPOSE_ENV := INTERLOPER_DEV_USER_EMAIL=$(INTERLOPER_DEV_USER_EMAIL) \
-               INTERLOPER_DEV_USER_GOOGLE_ID=$(INTERLOPER_DEV_USER_GOOGLE_ID) \
                INTERLOPER_AUTH_GOOGLE_CLIENT_ID=$(INTERLOPER_AUTH_GOOGLE_CLIENT_ID) \
                INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET=$(INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET) \
+               INTERLOPER_AUTH_MICROSOFT_CLIENT_ID=$(INTERLOPER_AUTH_MICROSOFT_CLIENT_ID) \
+               INTERLOPER_AUTH_MICROSOFT_CLIENT_SECRET=$(INTERLOPER_AUTH_MICROSOFT_CLIENT_SECRET) \
                INTERLOPER_AUTH_COOKIE_SECURE=$(INTERLOPER_AUTH_COOKIE_SECURE)
 
 compose-up:

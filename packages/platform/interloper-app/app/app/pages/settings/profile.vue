@@ -24,6 +24,11 @@ const dirty = computed(() => {
     return state.name.trim() !== baseName || state.timezone !== baseTimezone
 })
 const valid = computed(() => state.name.trim().length > 0)
+const emailDescription = computed(() => {
+    const labels = userStore.user?.login_providers.map(provider => provider.label) ?? []
+    const managedBy = labels.length ? ` Managed by your ${labels.join(' and ')} account.` : ''
+    return `Used for sign-in and notifications.${managedBy}`
+})
 const canSave = computed(() => dirty.value && valid.value && !saving.value)
 
 async function save() {
@@ -79,7 +84,7 @@ async function save() {
                     <USeparator />
 
                     <UFormField label="Email"
-                                description="Used for sign-in and notifications. Managed by your Google account."
+                                :description="emailDescription"
                                 orientation="horizontal">
                         <span class="text-muted">{{ userStore.user?.email }}</span>
                     </UFormField>

@@ -18,6 +18,7 @@ from interloper_api.dependencies import (
     get_authorization_server,
     get_catalog,
     get_features,
+    get_login,
     get_login_provider,
     get_settings,
     get_store,
@@ -65,6 +66,10 @@ def _client(state: State) -> TestClient:
     def authorization_server(server: Annotated[Any, Depends(get_authorization_server)]) -> dict[str, Any]:
         return {"same": server is state.authorization_server}
 
+    @app.get("/login")
+    def login(login: Annotated[Any, Depends(get_login)]) -> dict[str, Any]:
+        return {"same": login is state.login}
+
     @app.get("/login/{provider}")
     def login_provider(provider: Annotated[Any, Depends(get_login_provider)]) -> dict[str, Any]:
         return {"same": state.login is not None and provider is state.login.providers.get("google")}
@@ -81,7 +86,7 @@ class TestInstalledSlots:
 
     @pytest.mark.parametrize(
         ("slot", "path"),
-        [("agent", "/agent"), ("authorization_server", "/authorization-server")],
+        [("agent", "/agent"), ("authorization_server", "/authorization-server"), ("login", "/login")],
     )
     def test_an_optional_slot_reads_back(self, app_state: State, slot: str, path: str) -> None:
         state = dataclasses.replace(app_state, **{slot: object()})

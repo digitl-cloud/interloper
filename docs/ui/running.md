@@ -113,6 +113,8 @@ postgres:
 auth:
   google_client_id: ...
   google_client_secret: ...
+  microsoft_client_id: ...
+  microsoft_client_secret: ...
   allowed_domains: [example.com]
 
 catalog:
@@ -123,8 +125,14 @@ catalog:
 
 The file is not interpolated: a field left out of a block is read from its `INTERLOPER_<SECTION>_<FIELD>`
 variable, which is where secrets go. `INTERLOPER_ENCRYPTION_KEY` is required: resource configs are
-encrypted at rest, and the Google login signs the cookie it keeps between Google's two legs with a key
-derived from it, so every replica can finish a login another one started. Login is Google OAuth. `allowed_domains` restricts who may sign up; `super_admin_emails`
+encrypted at rest, and a login signs the cookie it keeps between the provider's two legs with a key
+derived from it, so every replica can finish a login another one started. People sign in with a
+Google account or a Microsoft work or school account, whichever providers have a client configured.
+The Microsoft app registration is multi-tenant and emits the optional ID token claims `email` and
+`xms_edov`: a login whose address does not belong to a verified domain is refused. The address is
+what a profile is trusted by: a first login, through either provider, whose address a profile already
+holds joins that profile as another way to sign in to it.
+`allowed_domains` restricts who may sign up; `super_admin_emails`
 bootstraps platform administrators, promoted when the API starts and at login (promote-only). Once
 one exists, super-admins grant and revoke the access from the admin portal's Users page, and
 register the OAuth clients of apps that cannot register themselves on its OAuth clients page (see

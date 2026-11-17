@@ -131,6 +131,26 @@ class LoginProvider(ABC):
         """
 
     @abstractmethod
+    def issues(self, issuer: str) -> bool:
+        """Tell whether an identity's issuer is this provider.
+
+        Args:
+            issuer: The issuer an identity was recorded under.
+
+        Returns:
+            Whether the provider issues identities under it.
+        """
+
+    def claims_options(self) -> dict[str, Any] | None:
+        """Name the checks the ID token's claims pass, in Authlib's ``claims_options`` form.
+
+        Returns:
+            The checks, or ``None`` to keep Authlib's: the ``iss`` claim
+            equals the discovery document's issuer.
+        """
+        return None
+
+    @abstractmethod
     def account(self, claims: dict[str, Any]) -> Account:
         """Read the account a verified ID token proves.
 
@@ -184,7 +204,7 @@ class LoginProvider(ABC):
         """
         destination = request.session.pop(self._destination_key, "/")
         try:
-            token = await self._client.authorize_access_token(request)
+            token = await self._client.authorize_access_token(request, claims_options=self.claims_options())
         except MismatchingStateError as error:
             raise LoginError("login_expired") from error
         except (OAuthError, JoseError, httpx2.HTTPError) as error:

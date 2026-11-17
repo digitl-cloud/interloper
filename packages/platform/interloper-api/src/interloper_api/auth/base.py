@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
 
 from interloper_api.auth.google import GoogleProvider
+from interloper_api.auth.microsoft import MicrosoftProvider
 from interloper_api.auth.provider import LoginProvider
 
 if TYPE_CHECKING:
@@ -21,7 +22,7 @@ SESSION_PATH = "/api/auth"
 SESSION_MAX_AGE = 600
 _SESSION_KEY_LABEL = b"interloper login state"
 
-PROVIDERS: tuple[type[LoginProvider], ...] = (GoogleProvider,)
+PROVIDERS: tuple[type[LoginProvider], ...] = (GoogleProvider, MicrosoftProvider)
 
 
 class Login:
@@ -66,6 +67,19 @@ class Login:
         if not configured or not settings.encryption.key:
             return None
         return cls(configured, encryption_key=settings.encryption.key, cookie_secure=settings.auth.cookie_secure)
+
+    def providers_of(self, issuers: Iterable[str]) -> list[LoginProvider]:
+        """Name the offered providers that issue any of a person's identities.
+
+        Args:
+            issuers: The issuers of the identities.
+
+        Returns:
+            The providers, in the order offered; an issuer no offered
+            provider issues names none.
+        """
+        issuers = set(issuers)
+        return [provider for provider in self.providers.values() if any(provider.issues(issuer) for issuer in issuers)]
 
     def install(self, app: FastAPI) -> None:
         """Add the session a login keeps between its two routes.

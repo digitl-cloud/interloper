@@ -44,15 +44,15 @@ x-interloper-env: &interloper-env
   # The app as the browser reaches it, through the frontend's nginx: the OAuth
   # issuer, whatever port the api container listens on.
   INTERLOPER_SERVER_EXTERNAL_URL: http://localhost:3000
-  # Dev super-admin identity. Set INTERLOPER_DEV_USER_GOOGLE_ID (your Google
-  # subject id) so the seeded profile is the one your login resolves to.
-  # `make compose-*` forwards these from the repo-root .env / shell env.
+  # Dev super-admin: your first login with this address joins the seeded
+  # profile. `make compose-*` forwards it from the repo-root .env / shell env.
   INTERLOPER_DEV_USER_EMAIL: ${INTERLOPER_DEV_USER_EMAIL:-admin@dev.local}
-  INTERLOPER_DEV_USER_GOOGLE_ID: ${INTERLOPER_DEV_USER_GOOGLE_ID:-}
-  # Google OAuth for the app login. client id/secret come from .env / shell env
+  # The app login's providers. client ids/secrets come from .env / shell env
   # (`make compose-*` forwards them); the rest default for local http.
   INTERLOPER_AUTH_GOOGLE_CLIENT_ID: ${INTERLOPER_AUTH_GOOGLE_CLIENT_ID:-}
   INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET: ${INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET:-}
+  INTERLOPER_AUTH_MICROSOFT_CLIENT_ID: ${INTERLOPER_AUTH_MICROSOFT_CLIENT_ID:-}
+  INTERLOPER_AUTH_MICROSOFT_CLIENT_SECRET: ${INTERLOPER_AUTH_MICROSOFT_CLIENT_SECRET:-}
   INTERLOPER_AUTH_COOKIE_SECURE: ${INTERLOPER_AUTH_COOKIE_SECURE:-false}
 
 # The api image (core + db + assets + api) is enough to run both the API and the

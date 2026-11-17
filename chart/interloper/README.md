@@ -116,6 +116,7 @@ release context, so you rarely need to set them manually.
 Secret-bearing fields never go through the ConfigMap — they are injected
 as env vars from the chart's Secret (`secrets.*`), pairing with their
 feature block: `auth.google_client_id` + `secrets.googleClientSecret`,
+`auth.microsoft_client_id` + `secrets.env.INTERLOPER_AUTH_MICROSOFT_CLIENT_SECRET`,
 `smtp.user` + `secrets.smtpPassword`, `externalPostgres` +
 `secrets.postgresPassword`.
 
@@ -134,7 +135,8 @@ api, scheduler, mcp and db-init pods as the env var of the same name, so a
 credential is added by adding a key, whichever component reads it. That
 covers the platform's own (`INTERLOPER_ENCRYPTION_KEY`,
 `INTERLOPER_POSTGRES_PASSWORD`, `INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET`,
-`INTERLOPER_SMTP_PASSWORD`, `INTERLOPER_OTEL_HEADERS`) and the connector
+`INTERLOPER_AUTH_MICROSOFT_CLIENT_SECRET`, `INTERLOPER_SMTP_PASSWORD`,
+`INTERLOPER_OTEL_HEADERS`) and the connector
 credentials (`INTERLOPER_<PROVIDER>_CLIENT_ID`, `_CLIENT_SECRET`, the
 Google Ads and Bing Ads developer tokens), which the
 api, the scheduler and the MCP server all resolve connections with.

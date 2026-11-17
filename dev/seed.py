@@ -12,19 +12,16 @@ It reuses the same Store/CLI APIs the app uses — no hand-rolled row inserts �
 so the seeded shape stays in sync with production code paths. Safe to re-run:
 every step is guarded so repeated invocations neither error nor duplicate.
 
-``INTERLOPER_DEV_USER_EMAIL`` (default ``admin@dev.local``) and
-``INTERLOPER_DEV_USER_GOOGLE_ID`` (optional) name the dev user. Login resolves a
-profile by its identity (for Google, the account's subject id), not email, so
-setting the google id makes the seed write the **exact** profile your login lands
-on: super-admin out of the box, no duplicate. Without the id, the seed matches an
-existing profile by email (e.g. one created by a prior login, whose google id it
-prints so you can set it) or creates a synthetic placeholder.
+``INTERLOPER_DEV_USER_EMAIL`` (default ``admin@dev.local``) names the dev user.
+The seed promotes the profile holding that address, or creates a placeholder
+holding it. A first login joins the profile holding its address, so your first
+real login with that address, through any provider, lands on the seeded profile:
+super-admin in the seed org, no duplicate.
 
 Run directly against a reachable Postgres (host path or inside the compose
 ``seed`` service)::
 
-    INTERLOPER_DEV_USER_EMAIL=you@example.com \
-    INTERLOPER_DEV_USER_GOOGLE_ID=1234567890 uv run python dev/seed.py
+    INTERLOPER_DEV_USER_EMAIL=you@example.com uv run python dev/seed.py
 
 Connection and catalog come from settings (``interloper.yaml`` + ``INTERLOPER_*``
 env), so point those at the target database before running.
@@ -38,26 +35,18 @@ from uuid import UUID
 import interloper as il
 from interloper_db import create_all, ensure_database, init_engine
 from interloper_db.engine import get_engine
-from interloper_db.models import Component, Identity, Organisation, Profile, UserOrganisation
+from interloper_db.models import Component, Organisation, Profile, UserOrganisation
 from interloper_db.settings import PostgresSettings
-from interloper_db.store import ComponentQuery, Store
-from sqlmodel import Session, col, select
+from interloper_db.store import ComponentQuery, ProfileQuery, Store
+from sqlmodel import Session, select
 
 # -- Seed identity (stable so re-runs are idempotent) -------------------------
 
-# The dev user to make super-admin. Set INTERLOPER_DEV_USER_GOOGLE_ID to your
-# Google subject id so the profile the seed creates is the exact one your login
-# resolves to (login matches on the identity, not email): super-admin out of the
-# box, no duplicate profile. Without it the seed matches/creates by email only.
 DEV_USER_EMAIL = os.environ.get("INTERLOPER_DEV_USER_EMAIL", "admin@dev.local")
-DEV_USER_GOOGLE_ID = (os.environ.get("INTERLOPER_DEV_USER_GOOGLE_ID") or "").strip() or None
 
-# The issuer a Google login's identity carries.
-GOOGLE_ISSUER = "https://accounts.google.com"
-
-# Google subject prefix for the placeholder profiles this script creates when no
-# real google id is configured (vs. ids from an actual Google login).
-SYNTHETIC_GOOGLE_ID_PREFIX = "dev:"
+# The identity a placeholder profile is created with. No provider issues it, so
+# it never signs in; a real login joins the placeholder by its address instead.
+PLACEHOLDER_ISSUER = "urn:interloper:dev-seed"
 
 ORG_NAME = "Dev Org"
 
@@ -68,93 +57,25 @@ DEMO_JOB_NAME = "Demo Daily"
 DEMO_JOB_CRON = "0 6 * * *"  # every day at 06:00
 
 
-def _google_id(profile_id: UUID) -> str | None:
-    """The Google subject id a profile signs in with, if it signs in with Google."""
-    with Session(get_engine()) as session:
-        return session.exec(
-            select(Identity.subject).where(Identity.profile_id == profile_id, Identity.issuer == GOOGLE_ISSUER)
-        ).first()
+def _ensure_super_admin(store: Store) -> tuple[Profile, bool]:
+    """Promote the oldest profile holding the dev user's address, creating a placeholder when none does.
 
-
-def _is_synthetic(profile: Profile) -> bool:
-    """True for profiles this seed created, vs. ones from a real Google login."""
-    assert profile.id is not None
-    return (_google_id(profile.id) or "").startswith(SYNTHETIC_GOOGLE_ID_PREFIX)
-
-
-def _upsert_by_google_id(store: Store, google_id: str, email: str) -> Profile:
-    """Create or promote the profile a Google login with ``google_id`` signs in to.
-
-    This is the identity a Google login resolves on (``_sign_in`` in the auth
-    route), so seeding it means the login lands on this exact row — no second
-    profile. An existing profile keeps its name/email; only super-admin is set.
+    Returns ``(profile, created)``.
     """
-    profile = store.profiles.get_by_identity(GOOGLE_ISSUER, google_id) or store.profiles.upsert(
-        issuer=GOOGLE_ISSUER, subject=google_id, email=email, name=email.split("@", 1)[0]
+    holders = store.profiles.list(ProfileQuery(email=DEV_USER_EMAIL, limit=None)).items
+    created = not holders
+    profile = (
+        store.profiles.upsert(
+            issuer=PLACEHOLDER_ISSUER,
+            subject=DEV_USER_EMAIL,
+            email=DEV_USER_EMAIL,
+            name=DEV_USER_EMAIL.split("@", 1)[0],
+        )
+        if created
+        else holders[0]
     )
     assert profile.id is not None
-    return store.profiles.set_super_admin(profile.id, value=True)
-
-
-def _remove_synthetic_duplicates(store: Store, email: str, keep_id: UUID) -> int:
-    """Delete leftover synthetic (``dev:``) profiles for ``email``, with everything anchored to them."""
-    with Session(get_engine()) as session:
-        dupes = session.exec(
-            select(Profile.id)
-            .join(Identity, col(Identity.profile_id) == col(Profile.id))
-            .where(
-                Profile.email == email,
-                Identity.issuer == GOOGLE_ISSUER,
-                col(Identity.subject).like(f"{SYNTHETIC_GOOGLE_ID_PREFIX}%"),
-                Profile.id != keep_id,
-            )
-        ).all()
-    for profile_id in dupes:
-        store.profiles.delete(profile_id)
-    return len(dupes)
-
-
-def _ensure_super_admin(store: Store) -> tuple[Profile, str]:
-    """Ensure the dev super-admin profile. Returns ``(profile, mode)``.
-
-    ``mode`` is ``"google_id"`` (keyed by the configured real id — login matches
-    out of the box), ``"matched"`` (promoted an existing profile found by email),
-    or ``"synthetic"`` (created a placeholder).
-    """
-    if DEV_USER_GOOGLE_ID is not None:
-        profile = _upsert_by_google_id(store, DEV_USER_GOOGLE_ID, DEV_USER_EMAIL)
-        assert profile.id is not None
-        _remove_synthetic_duplicates(store, DEV_USER_EMAIL, keep_id=profile.id)
-        return profile, "google_id"
-
-    with Session(get_engine()) as session:
-        rows = session.exec(
-            select(Profile).where(Profile.email == DEV_USER_EMAIL).order_by(col(Profile.created_at))
-        ).all()
-        # Prefer a real (Google-authenticated) profile over a synthetic dev one.
-        real = [p for p in rows if not _is_synthetic(p)]
-        chosen = real[0] if real else (rows[0] if rows else None)
-        if chosen is not None:
-            session.expunge(chosen)
-
-    if chosen is not None:
-        assert chosen.id is not None
-        store.profiles.set_super_admin(chosen.id, value=True)
-        return chosen, "matched"
-
-    # No profile with this email yet — create a synthetic placeholder. A real
-    # Google login (matched on its identity) would otherwise create its own row;
-    # re-run with INTERLOPER_DEV_USER_GOOGLE_ID, or log in then re-run.
-    name = DEV_USER_EMAIL.split("@", 1)[0]
-    profile = store.profiles.upsert(
-        issuer=GOOGLE_ISSUER,
-        subject=f"{SYNTHETIC_GOOGLE_ID_PREFIX}{DEV_USER_EMAIL}",
-        email=DEV_USER_EMAIL,
-        name=name,
-    )
-    assert profile.id is not None
-    store.profiles.set_super_admin(profile.id, value=True)
-    return profile, "synthetic"
+    return store.profiles.set_super_admin(profile.id, value=True), created
 
 
 def _ensure_org(store: Store, admin_id: UUID) -> Organisation:
@@ -220,7 +141,7 @@ def main() -> None:
 
     store = Store.from_settings(catalog)
 
-    admin, mode = _ensure_super_admin(store)
+    admin, created = _ensure_super_admin(store)
     assert admin.id is not None  # populated on insert; narrows Optional PK for type-checkers
     org = _ensure_org(store, admin.id)
     assert org.id is not None
@@ -229,26 +150,12 @@ def main() -> None:
     asset_count = len(source.children)
     job_created = _ensure_demo_job(store, org.id, source.id)
 
-    how = {
-        "google_id": "keyed by your Google identity, your login will match",
-        "matched": "matched existing profile by email",
-        "synthetic": "created synthetic placeholder",
-    }[mode]
+    how = "created a placeholder your first login joins" if created else "matched the profile holding the address"
     print("Seed complete:")
     print(f"  org    : {org.name} ({org.id})")
     print(f"  admin  : {DEV_USER_EMAIL} ({admin.id}) [super_admin] ({how})")
     print(f"  source : {DEMO_SOURCE_KEY} -> {DEMO_SOURCE_NAME} ({asset_count} assets)")
     print(f"  job    : {DEMO_JOB_NAME} (cron {DEMO_JOB_CRON}, {'created' if job_created else 'exists'})")
-    if mode == "matched":
-        print(
-            f"  hint   : set INTERLOPER_DEV_USER_GOOGLE_ID={_google_id(admin.id)} (e.g. in .env) so a\n"
-            f"           fresh seed matches your login without creating a second profile."
-        )
-    elif mode == "synthetic":
-        print(
-            f"  note   : no profile for {DEV_USER_EMAIL} yet. Log in via Google as that user,\n"
-            f"           then re-run the seed (it prints your google_id to set in .env)."
-        )
 
 
 if __name__ == "__main__":

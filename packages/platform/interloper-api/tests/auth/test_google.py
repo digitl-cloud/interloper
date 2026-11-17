@@ -77,3 +77,15 @@ class TestAccount:
             _provider().account(claims)
 
         assert raised.value.reason == "login_failed"
+
+
+class TestIssuer:
+    def test_keeps_authlibs_check_of_the_discovery_documents_issuer(self) -> None:
+        assert _provider().claims_options() is None
+
+    def test_issues_googles_issuer(self) -> None:
+        assert _provider().issues(ISSUER) is True
+
+    @pytest.mark.parametrize("issuer", ["https://login.microsoftonline.com/t/v2.0", "https://accounts.google.com/x"])
+    def test_issues_no_other_issuer(self, issuer: str) -> None:
+        assert _provider().issues(issuer) is False
