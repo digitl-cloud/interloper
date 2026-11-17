@@ -50,3 +50,13 @@ Vendors serialize loosely: counts as floats, numbers as strings, dates as string
 ## 4. One source, one shape
 
 Assets of a source share the source's normalizer and its discriminator. Keep per-asset special cases out of the source: if one report needs a different reshape, give that asset its own normalizer rather than branching inside a shared one. A helper used by a single asset belongs in its body; a helper used by several is a module-level function with a docstring saying which ones and why.
+
+## 5. A vendor's API has one engine
+
+Every request a source sends goes through its container's `api.py`: one class, `<Vendor>Api`, holding how the vendor's API works, so no asset or connection repeats it.
+
+- **Its methods are the vendor's mechanisms, never its resources.** One response, a paged list, a report over a window of days, a report job: TikTok's are `get`, `rows` and `report`. A request's parameters are written in the asset that sends it, and so is its path unless the mechanism lives on a single endpoint (TikTok's integrated report), so a new asset never changes the engine; only a new mechanism does.
+- **It owns the transport, the normalizer owns the row.** The engine sends, pages, unwraps the vendor's envelope, encodes parameters the way the vendor wants them, runs and polls report jobs, decompresses, throttles and raises the vendor's refusals. It returns records as the vendor sends them; reshaping a record (nested metrics, pivots, casing) stays with the normalizer (rule 4).
+- **It holds no account.** Where a request names the account is part of each endpoint (TikTok's `advertiser_id` on `/campaign/get/` but `advertiser_ids` on `/advertiser/info/`, Snapchat's path, Criteo's filters), so the asset passes it with the endpoint's other parameters. Where the vendor scopes every call the same way (Amazon's scope header), each method takes it as its first argument.
+- **It never sees the execution context.** An asset passes the day it asks for and stamps its own `date` (rule 2); the engine logs through its module's logger.
+- **The connection builds it.** A connection exposes its authenticated transport as `client`, when it has one, and the engine as `api`, built on it. Its fetch-field providers and `check()` go through `api` as the assets do, so a refusal is handled in one place.

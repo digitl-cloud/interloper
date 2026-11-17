@@ -49,6 +49,13 @@ def _advertisers(_: httpx2.Request) -> httpx2.Response:
     return httpx2.Response(200, json={"code": 0, "message": "OK", "data": {"list": advertisers}})
 
 
+class TestApi:
+    def test_the_api_is_built_on_the_client(self):
+        connection = _connection(_advertisers)
+
+        assert connection.api.client is connection.client
+
+
 class TestAdvertisers:
     async def test_lists_the_advertisers_by_name_as_the_connector_app(self):
         requests: list[httpx2.Request] = []
