@@ -335,6 +335,7 @@ export default defineAppConfig({
     authentication: 'i-lucide-shield-check',
     conversation: 'i-lucide-message-square',
     activity: 'i-lucide-scroll-text',
-    google: 'i-devicon-google'
+    google: 'i-devicon-google',
+    microsoft: 'icon:microsoft'
   }
 })

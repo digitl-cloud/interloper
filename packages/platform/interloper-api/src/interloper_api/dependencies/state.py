@@ -148,6 +148,18 @@ def get_authorization_server(state: StateDep) -> AuthorizationServer:
     return state.authorization_server
 
 
+def get_login(state: StateDep) -> Login | None:
+    """The sign-in providers the deployment offers.
+
+    Args:
+        state: The application's state.
+
+    Returns:
+        The login, or ``None`` on a deployment that offers none.
+    """
+    return state.login
+
+
 def get_login_provider(provider: str, state: StateDep) -> LoginProvider:
     """The sign-in provider the path names.
 
@@ -173,4 +185,5 @@ SettingsDep = Annotated[ApiSettings, Depends(get_settings)]
 FeaturesDep = Annotated[dict[str, bool], Depends(get_features)]
 AgentDep = Annotated[Any, Depends(get_agent)]
 AuthorizationServerDep = Annotated[AuthorizationServer, Depends(get_authorization_server)]
+LoginDep = Annotated[Login | None, Depends(get_login)]
 LoginProviderDep = Annotated[LoginProvider, Depends(get_login_provider)]

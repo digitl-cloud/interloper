@@ -1,7 +1,7 @@
 """Tests for ``interloper_api.routes.auth``: signing in, the login session, and the caller's own profile.
 
-Logins run against Google, faked at the HTTP transport (its discovery document, its keys and a
-token endpoint that signs real ID tokens), so the login runs Authlib's own
+Logins run against Google and Microsoft, faked at the HTTP transport (their discovery documents,
+their keys and token endpoints that sign real ID tokens), so the login runs Authlib's own
 checks end to end; a lightweight fake store records what the callback does.
 """
 
@@ -11,7 +11,7 @@ import dataclasses
 import datetime as dt
 import time
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, ClassVar
 from urllib.parse import parse_qs, urlsplit
 from uuid import UUID, uuid4
 
@@ -19,32 +19,55 @@ import httpx2
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper_db import NotFoundError, Page
+from interloper_db import NotFoundError, Page, ProfileQuery
 from joserfc import jwt
 from joserfc.jwk import KeySet, RSAKey
 
 from interloper_api.app import install_error_handlers
-from interloper_api.auth import SESSION_COOKIE, SESSION_MAX_AGE, SESSION_PATH, GoogleProvider, Login
-from interloper_api.dependencies import State, get_caller, get_features, get_login_provider, get_settings, get_store
+from interloper_api.auth import (
+    SESSION_COOKIE,
+    SESSION_MAX_AGE,
+    SESSION_PATH,
+    GoogleProvider,
+    Login,
+    LoginProvider,
+    MicrosoftProvider,
+)
+from interloper_api.dependencies import (
+    State,
+    get_caller,
+    get_features,
+    get_login,
+    get_login_provider,
+    get_settings,
+    get_store,
+)
 from interloper_api.routes import auth as auth_module
 from interloper_api.settings import AuthSettings
 
 ISSUER = "https://accounts.google.com"
 AUTHORIZATION_ENDPOINT = f"{ISSUER}/o/oauth2/v2/auth"
-TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
-JWKS_URI = "https://www.googleapis.com/oauth2/v3/certs"
+TENANT = "0c1ea3a1-36e3-4a64-8a3a-2b3e8b0e2a51"
+MICROSOFT = "https://login.microsoftonline.com"
+MICROSOFT_ISSUER = f"{MICROSOFT}/{TENANT}/v2.0"
+MICROSOFT_AUTHORIZATION_ENDPOINT = f"{MICROSOFT}/organizations/oauth2/v2.0/authorize"
 CLIENT_ID = "client-id"
 PUBLIC_URL = "http://testserver"
 REDIRECT_URI = f"{PUBLIC_URL}/api/auth/google/callback"
 ENCRYPTION_KEY = "test-encryption-key"
-GOOGLE_KEY = RSAKey.generate_key(2048, parameters={"kid": "google"})
-FORGED_KEY = RSAKey.generate_key(2048, parameters={"kid": "google"})
+SIGNING_KEY = RSAKey.generate_key(2048, parameters={"kid": "signing"})
+FORGED_KEY = RSAKey.generate_key(2048, parameters={"kid": "signing"})
 
 
-class FakeGoogle:
-    """Google's OpenID endpoints, served from memory.
+class FakeIdentityProvider:
+    """An OpenID provider's endpoints, served from memory.
 
     Attributes:
+        provider_type: The login provider that talks to it.
+        issuer: The issuer its discovery document names.
+        authorization_endpoint: Where it sends the browser.
+        token_endpoint: Where the code is exchanged.
+        jwks_uri: Where its keys are published.
         claims: The ID token's claims, over the defaults; a ``None`` value
             drops the claim.
         signing_key: The key the ID token is signed with.
@@ -56,40 +79,63 @@ class FakeGoogle:
         token_requests: The forms the token endpoint received.
     """
 
+    provider_type: ClassVar[type[LoginProvider]]
+    issuer: ClassVar[str]
+    authorization_endpoint: ClassVar[str]
+    token_endpoint: ClassVar[str]
+    jwks_uri: ClassVar[str]
+
     def __init__(self) -> None:
-        """Serve a working Google."""
+        """Serve a working provider."""
         self.claims: dict[str, Any] = {}
-        self.signing_key = GOOGLE_KEY
+        self.signing_key = SIGNING_KEY
         self.token_error: str | None = None
         self.issues_id_token = True
         self.discovery_status = 200
         self.nonce: str | None = None
         self.token_requests: list[dict[str, list[str]]] = []
 
+    @property
+    def name(self) -> str:
+        """Name the provider in the login routes.
+
+        Returns:
+            The login provider's name.
+        """
+        return self.provider_type.name
+
+    def account_claims(self) -> dict[str, Any]:
+        """Name the account the ID token proves by default.
+
+        Returns:
+            The provider's own claims, before the token's time, audience and nonce.
+        """
+        raise NotImplementedError
+
     def handle(self, request: httpx2.Request) -> httpx2.Response:
-        """Answer one request to Google.
+        """Answer one request to the provider.
 
         Args:
             request: The request Authlib sent.
 
         Returns:
-            Google's answer.
+            The provider's answer.
         """
         url = str(request.url)
         if url.endswith("/.well-known/openid-configuration"):
             return httpx2.Response(
                 self.discovery_status,
                 json={
-                    "issuer": ISSUER,
-                    "authorization_endpoint": AUTHORIZATION_ENDPOINT,
-                    "token_endpoint": TOKEN_ENDPOINT,
-                    "jwks_uri": JWKS_URI,
+                    "issuer": self.issuer,
+                    "authorization_endpoint": self.authorization_endpoint,
+                    "token_endpoint": self.token_endpoint,
+                    "jwks_uri": self.jwks_uri,
                     "id_token_signing_alg_values_supported": ["RS256"],
                 },
             )
-        if url == JWKS_URI:
-            return httpx2.Response(200, json=KeySet([GOOGLE_KEY]).as_dict(private=False))
-        if url == TOKEN_ENDPOINT:
+        if url == self.jwks_uri:
+            return httpx2.Response(200, json=KeySet([SIGNING_KEY]).as_dict(private=False))
+        if url == self.token_endpoint:
             self.token_requests.append(parse_qs(request.content.decode()))
             if self.token_error:
                 return httpx2.Response(400, json={"error": self.token_error})
@@ -107,33 +153,90 @@ class FakeGoogle:
         """
         now = int(time.time())
         claims = {
-            "iss": ISSUER,
+            **self.account_claims(),
             "aud": CLIENT_ID,
-            "sub": "google-1",
-            "email": "Boss@Example.com",
-            "email_verified": True,
-            "name": "Boss",
             "iat": now,
             "exp": now + 3600,
             "nonce": self.nonce,
             **self.claims,
         }
         claims = {name: value for name, value in claims.items() if value is not None}
-        return jwt.encode({"alg": "RS256", "kid": "google"}, claims, self.signing_key)
+        return jwt.encode({"alg": "RS256", "kid": "signing"}, claims, self.signing_key)
+
+
+class FakeGoogle(FakeIdentityProvider):
+    """Google, whose issuer is its own."""
+
+    provider_type = GoogleProvider
+    issuer = ISSUER
+    authorization_endpoint = AUTHORIZATION_ENDPOINT
+    token_endpoint = "https://oauth2.googleapis.com/token"
+    jwks_uri = "https://www.googleapis.com/oauth2/v3/certs"
+
+    def account_claims(self) -> dict[str, Any]:
+        """Name a Google account with a verified address.
+
+        Returns:
+            The account's claims.
+        """
+        return {
+            "iss": ISSUER,
+            "sub": "google-1",
+            "email": "Boss@Example.com",
+            "email_verified": True,
+            "name": "Boss",
+        }
+
+
+class FakeMicrosoft(FakeIdentityProvider):
+    """Microsoft's multi-tenant endpoint, whose discovery document names a templated issuer."""
+
+    provider_type = MicrosoftProvider
+    issuer = f"{MICROSOFT}/{{tenantid}}/v2.0"
+    authorization_endpoint = MICROSOFT_AUTHORIZATION_ENDPOINT
+    token_endpoint = f"{MICROSOFT}/organizations/oauth2/v2.0/token"
+    jwks_uri = f"{MICROSOFT}/organizations/discovery/v2.0/keys"
+
+    def account_claims(self) -> dict[str, Any]:
+        """Name a work account whose domain owner verified its address.
+
+        Returns:
+            The account's claims.
+        """
+        return {
+            "iss": MICROSOFT_ISSUER,
+            "tid": TENANT,
+            "oid": "oid-1",
+            "sub": "pairwise-1",
+            "email": "ada@contoso.com",
+            "xms_edov": True,
+            "name": "Ada",
+        }
 
 
 class FakeStore:
-    """In-memory stand-in exposing only the store facet methods the callback calls."""
+    """In-memory stand-in exposing only the store facet methods the callback calls.
+
+    Attributes:
+        holders: The profiles holding the address signing in.
+        queried: The addresses the callback looked profiles up by.
+        linked: The identities linked, as ``(profile id, issuer, subject)``.
+    """
 
     def __init__(self, *, is_super_admin: bool = False, exists: bool = False, invited: bool = False) -> None:
         self.profile = SimpleNamespace(id=uuid4(), is_super_admin=is_super_admin)
         self.exists = exists
         self.invited = invited
+        self.holders: list[SimpleNamespace] = []
+        self.queried: list[str | None] = []
+        self.linked: list[tuple[UUID, str, str]] = []
         self.promoted: list[UUID] = []
         self.upserted: dict[str, Any] | None = None
         self.sessions_created: list[UUID] = []
         self.profiles = SimpleNamespace(
             get_by_identity=self._get_profile_by_identity,
+            list=self._list_profiles,
+            link=self._link,
             upsert=self._upsert_profile,
             set_super_admin=self._set_super_admin,
         )
@@ -142,6 +245,13 @@ class FakeStore:
 
     def _get_profile_by_identity(self, issuer: str, subject: str) -> SimpleNamespace | None:
         return self.profile if self.exists else None
+
+    def _list_profiles(self, query: ProfileQuery) -> Page:
+        self.queried.append(query.email)
+        return Page(items=self.holders, total=len(self.holders))
+
+    def _link(self, profile_id: UUID, *, issuer: str, subject: str) -> None:
+        self.linked.append((profile_id, issuer, subject))
 
     def _has_pending_invitation(self, email: str) -> bool:
         return self.invited
@@ -171,17 +281,17 @@ def _auth_config(super_admin_emails: list[str], allowed_domains: list[str]) -> A
 
 def _client(
     store: FakeStore,
-    google: FakeGoogle,
+    fake: FakeIdentityProvider,
     super_admin_emails: list[str] | None = None,
     allowed_domains: list[str] | None = None,
     *,
     encryption_key: str = ENCRYPTION_KEY,
 ) -> TestClient:
-    """Serve the auth routes at their real path, with a Google provider talking to ``google``.
+    """Serve the auth routes at their real path, with the fake's provider talking to it.
 
     Args:
         store: The fake store.
-        google: The fake Google.
+        fake: The fake provider the login runs against.
         super_admin_emails: The addresses promoted on login.
         allowed_domains: The domains signup is open to; empty for everyone.
         encryption_key: The secret the login's session cookie is signed from.
@@ -189,11 +299,11 @@ def _client(
     Returns:
         A client that does not follow redirects.
     """
-    provider = GoogleProvider(
+    provider = fake.provider_type(
         client_id=CLIENT_ID,
         client_secret="client-secret",
         public_url=PUBLIC_URL,
-        transport=httpx2.MockTransport(google.handle),
+        transport=httpx2.MockTransport(fake.handle),
     )
     app = FastAPI()
     install_error_handlers(app)
@@ -223,35 +333,35 @@ def _state_client(state: State) -> TestClient:
     return TestClient(app, follow_redirects=False)
 
 
-def _start(client: TestClient, google: FakeGoogle, destination: str | None = None) -> dict[str, str]:
-    """Start a login in ``client``'s browser and return what Google hands back.
+def _start(client: TestClient, fake: FakeIdentityProvider, destination: str | None = None) -> dict[str, str]:
+    """Start a login in ``client``'s browser and return what the provider hands back.
 
     Args:
         client: The browser.
-        google: The fake Google, told the nonce the login asked for.
+        fake: The fake provider, told the nonce the login asked for.
         destination: The post-login destination to ask for.
 
     Returns:
         The callback's query parameters.
     """
-    response = client.get("/api/auth/google/login", params={"redirect": destination} if destination else None)
+    response = client.get(f"/api/auth/{fake.name}/login", params={"redirect": destination} if destination else None)
     query = parse_qs(urlsplit(response.headers["location"]).query)
-    google.nonce = query["nonce"][0]
+    fake.nonce = query["nonce"][0]
     return {"code": "c", "state": query["state"][0]}
 
 
-def _sign_in(client: TestClient, google: FakeGoogle, destination: str | None = None) -> httpx2.Response:
+def _sign_in(client: TestClient, fake: FakeIdentityProvider, destination: str | None = None) -> httpx2.Response:
     """Run a whole login in ``client``'s browser.
 
     Args:
         client: The browser.
-        google: The fake Google.
+        fake: The fake provider.
         destination: The post-login destination to ask for.
 
     Returns:
         The callback's response.
     """
-    return client.get("/api/auth/google/callback", params=_start(client, google, destination))
+    return client.get(f"/api/auth/{fake.name}/callback", params=_start(client, fake, destination))
 
 
 @pytest.fixture
@@ -262,6 +372,16 @@ def google() -> FakeGoogle:
         The fake.
     """
     return FakeGoogle()
+
+
+@pytest.fixture
+def microsoft() -> FakeMicrosoft:
+    """A working Microsoft.
+
+    Returns:
+        The fake.
+    """
+    return FakeMicrosoft()
 
 
 def test_listed_email_is_promoted_case_insensitively(google: FakeGoogle) -> None:
@@ -373,6 +493,7 @@ def _me_client(store: FakeProfileStore) -> TestClient:
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_caller] = lambda: store.profile
     app.dependency_overrides[get_features] = lambda: {"agent": False}
+    app.dependency_overrides[get_login] = lambda: None
     return TestClient(app)
 
 
@@ -661,6 +782,126 @@ class TestCallbackState:
         assert store.sessions_created == []
 
 
+class TestMicrosoftLogin:
+    """A Microsoft work or school account signs in as the object in its own tenant."""
+
+    def test_redirects_to_the_work_and_school_account_picker(self, microsoft: FakeMicrosoft) -> None:
+        response = _client(FakeStore(), microsoft).get("/api/auth/microsoft/login")
+
+        location = response.headers["location"]
+        assert location.startswith(MICROSOFT_AUTHORIZATION_ENDPOINT)
+        query = parse_qs(urlsplit(location).query)
+        assert query["redirect_uri"] == [f"{PUBLIC_URL}/api/auth/microsoft/callback"]
+        assert query["prompt"] == ["select_account"]
+        assert query["code_challenge_method"] == ["S256"]
+
+    def test_signs_in_the_object_in_its_tenant(self, microsoft: FakeMicrosoft) -> None:
+        store = FakeStore()
+
+        response = _sign_in(_client(store, microsoft), microsoft)
+
+        assert response.headers["location"] == "/"
+        assert store.upserted == {
+            "issuer": MICROSOFT_ISSUER,
+            "subject": "oid-1",
+            "email": "ada@contoso.com",
+            "name": "Ada",
+            "avatar_url": None,
+        }
+        assert store.sessions_created == [store.profile.id]
+
+    @pytest.mark.parametrize(
+        "claims",
+        [
+            pytest.param({"iss": f"{MICROSOFT}/another-tenant/v2.0"}, id="issued by another tenant"),
+            pytest.param({"tid": "another-tenant"}, id="naming another tenant"),
+            pytest.param({"iss": FakeMicrosoft.issuer}, id="the templated issuer"),
+            pytest.param({"tid": None}, id="no tenant"),
+            pytest.param({"xms_edov": False}, id="unverified domain"),
+            pytest.param({"xms_edov": None}, id="no domain verification claim"),
+            pytest.param({"aud": "another-client"}, id="another audience"),
+        ],
+    )
+    def test_an_id_token_that_does_not_verify_is_refused(
+        self, microsoft: FakeMicrosoft, claims: dict[str, Any]
+    ) -> None:
+        microsoft.claims = claims
+        store = FakeStore()
+
+        response = _sign_in(_client(store, microsoft), microsoft)
+
+        assert response.headers["location"] == "/login?error=login_failed"
+        assert store.upserted is None
+        assert store.sessions_created == []
+
+
+class TestCallbackLinking:
+    """The address is the trust anchor: a first login joins the profile holding its address."""
+
+    def test_a_microsoft_login_joins_the_profile_holding_its_address(self, microsoft: FakeMicrosoft) -> None:
+        store = FakeStore()
+        holder = SimpleNamespace(id=uuid4())
+        store.holders = [holder]
+
+        response = _sign_in(_client(store, microsoft), microsoft)
+
+        assert response.headers["location"] == "/"
+        assert store.queried == ["ada@contoso.com"]
+        assert store.linked == [(holder.id, MICROSOFT_ISSUER, "oid-1")]
+        assert store.upserted is not None
+        assert store.sessions_created == [store.profile.id]
+
+    def test_another_google_account_joins_the_profile_holding_its_address(self, google: FakeGoogle) -> None:
+        store = FakeStore()
+        holder = SimpleNamespace(id=uuid4())
+        store.holders = [holder]
+
+        _sign_in(_client(store, google), google)
+
+        assert store.linked == [(holder.id, ISSUER, "google-1")]
+
+    def test_joining_a_profile_skips_the_signup_allowlist(self, microsoft: FakeMicrosoft) -> None:
+        store = FakeStore()
+        store.holders = [SimpleNamespace(id=uuid4())]
+
+        response = _sign_in(_client(store, microsoft, allowed_domains=["digitlcloud.com"]), microsoft)
+
+        assert response.headers["location"] == "/"
+        assert store.sessions_created == [store.profile.id]
+
+    def test_an_address_held_by_no_profile_signs_up(self, microsoft: FakeMicrosoft) -> None:
+        store = FakeStore()
+
+        response = _sign_in(_client(store, microsoft), microsoft)
+
+        assert response.headers["location"] == "/"
+        assert store.linked == []
+        assert store.upserted is not None
+
+    def test_an_address_several_profiles_hold_is_refused(self, microsoft: FakeMicrosoft) -> None:
+        store = FakeStore()
+        store.holders = [SimpleNamespace(id=uuid4()), SimpleNamespace(id=uuid4())]
+
+        response = _sign_in(_client(store, microsoft), microsoft)
+
+        assert response.headers["location"] == "/login?error=address_shared"
+        assert store.linked == []
+        assert store.upserted is None
+        assert store.sessions_created == []
+        assert "session_token" not in response.cookies
+
+    def test_a_known_identity_signs_in_without_looking_up_its_address(self, microsoft: FakeMicrosoft) -> None:
+        store = FakeStore(exists=True)
+        store.holders = [SimpleNamespace(id=uuid4()), SimpleNamespace(id=uuid4())]
+
+        response = _sign_in(_client(store, microsoft), microsoft)
+
+        assert response.headers["location"] == "/"
+        assert store.queried == []
+        assert store.linked == []
+        assert store.sessions_created == [store.profile.id]
+
+
 # -- Endpoints about the caller ------------------------------------------------
 
 
@@ -685,6 +926,7 @@ class CallerStore:
                 token was unknown or expired.
         """
         self.profile = _me_profile()
+        self.issuers: list[str] = []
         self.revoked_sessions: list[UUID] = []
         self.last_organisations: list[tuple[UUID, UUID | None]] = []
         self.accept_calls: list[tuple[str, UUID]] = []
@@ -695,7 +937,7 @@ class CallerStore:
         self.tokens = SimpleNamespace(
             resolve=lambda raw, audience: resolved, revoke_sessions=self.revoked_sessions.append
         )
-        self.profiles = SimpleNamespace(update=self._update_profile)
+        self.profiles = SimpleNamespace(update=self._update_profile, issuers=lambda profile_id: self.issuers)
         self.organisations = SimpleNamespace(
             list=lambda query: Page(items=self._organisations, total=len(self._organisations)),
             get=self._get_organisation,
@@ -720,13 +962,14 @@ class CallerStore:
         return self._accepted
 
 
-def _session_client(store: CallerStore) -> TestClient:
+def _session_client(store: CallerStore, login: Login | None = None) -> TestClient:
     app = FastAPI()
     install_error_handlers(app)
     app.include_router(auth_module.router)
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_settings] = lambda: SimpleNamespace(auth=_auth_config([], []))
     app.dependency_overrides[get_features] = lambda: {"agent": False}
+    app.dependency_overrides[get_login] = lambda: login
     client = TestClient(app, follow_redirects=False)
     client.cookies.set("session_token", "tok")
     return client
@@ -798,6 +1041,25 @@ class TestGetMe:
 
     def test_no_membership_is_an_empty_list(self) -> None:
         assert _session_client(CallerStore()).get("/auth/me").json()["memberships"] == []
+
+    def test_reports_the_providers_the_caller_signs_in_through(self) -> None:
+        providers = [
+            GoogleProvider(client_id=CLIENT_ID, client_secret="client-secret", public_url=PUBLIC_URL),
+            MicrosoftProvider(client_id=CLIENT_ID, client_secret="client-secret", public_url=PUBLIC_URL),
+        ]
+        login = Login(providers, encryption_key=ENCRYPTION_KEY, cookie_secure=False)
+        store = CallerStore()
+        store.issuers = [MICROSOFT_ISSUER]
+
+        payload = _session_client(store, login).get("/auth/me").json()
+
+        assert payload["login_providers"] == [{"name": "microsoft", "label": "Microsoft"}]
+
+    def test_a_deployment_without_a_login_reports_no_provider(self) -> None:
+        store = CallerStore()
+        store.issuers = [ISSUER]
+
+        assert _session_client(store).get("/auth/me").json()["login_providers"] == []
 
 
 class TestLogout:

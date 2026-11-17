@@ -28,9 +28,13 @@ class ProfileQuery(PageQuery):
     Attributes:
         super_admin: Keep only super-admins (``True``) or only everyone else
             (``False``); ``None`` keeps every profile.
+        email: Keep only the profiles holding this address, compared
+            case-insensitively as signup and super-admin promotion compare it;
+            ``None`` keeps every profile.
     """
 
     super_admin: bool | None = None
+    email: str | None = None
 
 
 class ProfileStore:
@@ -78,11 +82,30 @@ class ProfileStore:
         with session_scope(self._engine) as session:
             return self._by_identity(session, issuer, subject)
 
+    def issuers(self, profile_id: UUID) -> builtins.list[str]:
+        """Read the identity providers a profile signs in through.
+
+        Args:
+            profile_id: Profile UUID.
+
+        Returns:
+            The issuers of the profile's identities, oldest identity first;
+            empty when it has none.
+        """
+        statement = (
+            select(Identity.issuer)
+            .where(Identity.profile_id == profile_id)
+            .order_by(col(Identity.created_at), col(Identity.issuer))
+        )
+        with session_scope(self._engine) as session:
+            return builtins.list(session.exec(statement).all())
+
     def list(self, query: ProfileQuery) -> Page[Profile]:
         """List profiles, oldest first, each with the organisations it belongs to.
 
         Args:
-            query: Whether to keep super-admins only, and the window to read.
+            query: Whether to keep super-admins only, the address to keep, and
+                the window to read.
 
         Returns:
             The page of profiles, their ``organisations`` loaded.
@@ -94,8 +117,27 @@ class ProfileStore:
         )
         if query.super_admin is not None:
             statement = statement.where(col(Profile.is_super_admin).is_(query.super_admin))
+        if query.email is not None:
+            statement = statement.where(func.lower(Profile.email) == query.email.lower())
         with session_scope(self._engine) as session:
             return Page.read(session, statement, query)
+
+    def link(self, profile_id: UUID, *, issuer: str, subject: str) -> None:
+        """Add an identity to a profile, which the identity then signs in to.
+
+        Args:
+            profile_id: Profile UUID.
+            issuer: The identity provider's issuer identifier.
+            subject: The subject the provider names the person by.
+
+        Raises:
+            NotFoundError: If no profile carries that id.
+        """
+        with session_scope(self._engine) as session:
+            if session.get(Profile, profile_id) is None:
+                raise NotFoundError(f"Profile {profile_id} not found")
+            session.add(Identity(issuer=issuer, subject=subject, profile_id=profile_id))
+            commit(session)
 
     def upsert(
         self,

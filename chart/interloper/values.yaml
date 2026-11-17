@@ -274,17 +274,20 @@ smtp: {}
 #   port: 465
 #   user: "no-reply@example.com"
 
-# Auth config (OAuth client ID; the client secret goes in
-# secrets.googleClientSecret). The Google client's authorised redirect URI is
-# <externalUrl>/api/auth/google/callback. super_admin_emails bootstraps the first
-# platform super-admin(s): listed users are promoted whenever the api starts
-# and when they log in (promote-only: removing an email never demotes).
-# allowed_domains restricts signup to the listed email domains (plus
-# super-admins and invited emails); empty keeps signup open. Existing
+# Auth config: the client id of each sign-in provider offered. The Google
+# client's secret goes in secrets.googleClientSecret, its authorised redirect
+# URI is <externalUrl>/api/auth/google/callback. The Microsoft Entra app's
+# secret goes in secrets.env.INTERLOPER_AUTH_MICROSOFT_CLIENT_SECRET, its
+# redirect URI is <externalUrl>/api/auth/microsoft/callback. super_admin_emails
+# bootstraps the first platform super-admin(s): listed users are promoted
+# whenever the api starts and when they log in (promote-only: removing an email
+# never demotes). allowed_domains restricts signup to the listed email domains
+# (plus super-admins and invited emails); empty keeps signup open. Existing
 # profiles always keep signing in.
 auth: {}
 # auth:
 #   google_client_id: "..."
+#   microsoft_client_id: "..."
 #   super_admin_emails:
 #     - you@example.com
 #   allowed_domains:
@@ -361,6 +364,7 @@ secrets:
   # Any other key, under the env var name it is read as.
   env: {}
   #   INTERLOPER_GOOGLE_ADS_DEVELOPER_TOKEN: "..."
+  #   INTERLOPER_AUTH_MICROSOFT_CLIENT_SECRET: "..."  # paired with auth.microsoft_client_id
 
 # =============================================================================
 # Postgres

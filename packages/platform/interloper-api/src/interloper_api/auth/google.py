@@ -22,7 +22,8 @@ class GoogleProvider(LoginProvider):
 
     name = "google"
     label = "Google"
-    metadata_url = "https://accounts.google.com/.well-known/openid-configuration"
+    issuer = "https://accounts.google.com"
+    metadata_url = f"{issuer}/.well-known/openid-configuration"
 
     @classmethod
     def from_settings(cls, settings: ApiSettings) -> GoogleProvider | None:
@@ -43,6 +44,17 @@ class GoogleProvider(LoginProvider):
             client_secret=auth.google_client_secret,
             public_url=settings.server.public_url,
         )
+
+    def issues(self, issuer: str) -> bool:
+        """Tell whether an identity's issuer is Google.
+
+        Args:
+            issuer: The issuer an identity was recorded under.
+
+        Returns:
+            Whether it is Google's issuer.
+        """
+        return issuer == self.issuer
 
     def account(self, claims: dict[str, Any]) -> Account:
         """Read the Google account a verified ID token proves.

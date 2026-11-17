@@ -8,12 +8,14 @@ definePageMeta({
 const route = useRoute()
 const userStore = useUserStore()
 const appConfig = useAppConfig()
+const providerIcon = useLoginProviderIcon()
 const { apiFetch } = useApi()
 
 const errorMessages: Record<string, string> = {
     signup_not_allowed: 'This account is not allowed to sign up. Ask an administrator for an invitation.',
     login_expired: 'The sign-in did not complete in time. Please try again.',
     login_failed: 'Sign-in did not complete. Please try again.',
+    address_shared: 'This address belongs to more than one account. Ask an administrator.',
 }
 const error = ref(errorMessages[route.query.error as string] ?? '')
 const providers = ref<LoginProvider[] | null>(null)
@@ -28,11 +30,6 @@ onMounted(async () => {
         error.value = 'The sign-in options could not be loaded. Please try again.'
     }
 })
-
-/** The provider's brand mark from the icon map, or the generic sign-in icon. */
-function providerIcon(provider: LoginProvider): string {
-    return (appConfig.icons as Record<string, string>)[provider.name] ?? appConfig.icons.signIn
-}
 
 function signIn(provider: LoginProvider) {
     signingIn.value = provider.name
@@ -75,7 +72,7 @@ function signIn(provider: LoginProvider) {
                 <UButton v-for="provider in providers ?? []"
                          :key="provider.name"
                          block
-                         :icon="providerIcon(provider)"
+                         :icon="providerIcon(provider.name)"
                          :label="`Sign in with ${provider.label}`"
                          :loading="signingIn === provider.name"
                          :disabled="signingIn !== null && signingIn !== provider.name"

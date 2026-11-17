@@ -46,6 +46,12 @@ class AuthSettings(Settings):
         "`<server.external_url>/api/auth/google/callback`.",
     )
     google_client_secret: str = Field(default="", description="Google OAuth web client secret.")
+    microsoft_client_id: str = Field(
+        default="",
+        description="Microsoft Entra application (client) id, multi-tenant, emitting the `email` and `xms_edov` "
+        "optional ID token claims; its redirect URI is `<server.external_url>/api/auth/microsoft/callback`.",
+    )
+    microsoft_client_secret: str = Field(default="", description="Microsoft Entra client secret.")
     cookie_secure: bool = Field(default=True, description="Send the session cookie over HTTPS only.")
     session_expiry_days: int = Field(default=30, description="Days a session stays valid.")
     access_token_expiry_minutes: int = Field(default=60, description="Minutes an OAuth access token stays valid.")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 from urllib.parse import urlsplit
 from uuid import UUID
@@ -9,14 +10,15 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
-from interloper_db import OrganisationQuery, Profile, Store
+from interloper_db import OrganisationQuery, Profile, ProfileQuery, Store
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from interloper_api.auth import Account, LoginError, LoginProvider
+from interloper_api.auth import Account, Login, LoginError, LoginProvider
 from interloper_api.dependencies import (
     CurrentUserDep,
     FeaturesDep,
+    LoginDep,
     LoginProviderDep,
     SessionUserDep,
     SettingsDep,
@@ -25,6 +27,8 @@ from interloper_api.dependencies import (
     get_org_scope,
 )
 from interloper_api.routes.organisations import OrganisationResponse
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -90,58 +94,8 @@ class MembershipResponse(BaseModel):
     role: str
 
 
-class AuthUserResponse(BaseModel):
-    """The caller, the organisations they belong to, and the enabled features."""
-
-    id: UUID
-    email: str
-    name: str | None = None
-    avatar_url: str | None = None
-    timezone: str | None = None
-    is_super_admin: bool = False
-    memberships: list[MembershipResponse] = []
-    last_organisation_id: UUID | None = None
-    features: dict[str, bool] = {}
-
-    @classmethod
-    def from_profile(cls, profile: Profile, store: Store, features: dict[str, bool]) -> AuthUserResponse:
-        """Describe the caller with their memberships.
-
-        A super-admin's memberships carry ``admin``, the role every
-        organisation route grants them; organisations they do not belong to
-        are not listed.
-
-        Args:
-            profile: The caller's profile.
-            store: The Store instance the memberships and roles are read through.
-            features: The optional features this deployment enables.
-
-        Returns:
-            The response model, carrying the enabled feature flags.
-        """
-        organisations = store.organisations.list(OrganisationQuery(user_id=profile.id, limit=None)).items
-        memberships: list[MembershipResponse] = []
-        for organisation in organisations:
-            role = store.members.role_of(organisation.id, profile)
-            if role is not None:
-                memberships.append(
-                    MembershipResponse(id=organisation.id, name=organisation.name, key=organisation.key, role=role)
-                )
-        return cls(
-            id=profile.id,
-            email=profile.email,
-            name=profile.name,
-            avatar_url=profile.avatar_url,
-            timezone=profile.timezone,
-            is_super_admin=profile.is_super_admin,
-            memberships=memberships,
-            last_organisation_id=profile.last_organisation_id,
-            features=features,
-        )
-
-
 class LoginProviderResponse(BaseModel):
-    """A sign-in provider the login page offers.
+    """A sign-in provider the deployment offers.
 
     Attributes:
         name: The provider's name in the login routes.
@@ -162,6 +116,64 @@ class LoginProviderResponse(BaseModel):
             The response model.
         """
         return cls(name=provider.name, label=provider.label)
+
+
+class AuthUserResponse(BaseModel):
+    """The caller, how they sign in, the organisations they belong to, and the enabled features."""
+
+    id: UUID
+    email: str
+    name: str | None = None
+    avatar_url: str | None = None
+    timezone: str | None = None
+    is_super_admin: bool = False
+    login_providers: list[LoginProviderResponse] = []
+    memberships: list[MembershipResponse] = []
+    last_organisation_id: UUID | None = None
+    features: dict[str, bool] = {}
+
+    @classmethod
+    def from_profile(
+        cls, profile: Profile, store: Store, login: Login | None, features: dict[str, bool]
+    ) -> AuthUserResponse:
+        """Describe the caller with their sign-in providers and memberships.
+
+        A super-admin's memberships carry ``admin``, the role every
+        organisation route grants them; organisations they do not belong to
+        are not listed.
+
+        Args:
+            profile: The caller's profile.
+            store: The Store instance the identities, memberships and roles
+                are read through.
+            login: The sign-in providers the deployment offers; ``None``
+                reports none.
+            features: The optional features this deployment enables.
+
+        Returns:
+            The response model, carrying the enabled feature flags.
+        """
+        providers = login.providers_of(store.profiles.issuers(profile.id)) if login is not None else []
+        organisations = store.organisations.list(OrganisationQuery(user_id=profile.id, limit=None)).items
+        memberships: list[MembershipResponse] = []
+        for organisation in organisations:
+            role = store.members.role_of(organisation.id, profile)
+            if role is not None:
+                memberships.append(
+                    MembershipResponse(id=organisation.id, name=organisation.name, key=organisation.key, role=role)
+                )
+        return cls(
+            id=profile.id,
+            email=profile.email,
+            name=profile.name,
+            avatar_url=profile.avatar_url,
+            timezone=profile.timezone,
+            is_super_admin=profile.is_super_admin,
+            login_providers=[LoginProviderResponse.from_provider(provider) for provider in providers],
+            memberships=memberships,
+            last_organisation_id=profile.last_organisation_id,
+            features=features,
+        )
 
 
 @router.get("/providers")
@@ -217,8 +229,8 @@ async def login_callback(
 
     Returns:
         A redirect to the login's destination carrying the session cookie, or
-        to the login page when the login did not complete or signup is not
-        allowed.
+        to the login page when the login did not complete, several profiles
+        hold its address, or signup is not allowed.
     """
     try:
         account, destination = await provider.complete(request)
@@ -230,6 +242,11 @@ async def login_callback(
 def _sign_in(account: Account, destination: str, store: Store, auth_config: Any) -> RedirectResponse:
     """Open a login session for the account the provider proved.
 
+    The address is the trust anchor, as it already is for signup,
+    invitations and super-admin promotion: every provider vouches for the
+    addresses it hands over, so a first login whose address a profile holds
+    joins that profile as another way to sign in to it.
+
     Args:
         account: The verified account.
         destination: The destination the login asked for; honoured only when
@@ -239,14 +256,19 @@ def _sign_in(account: Account, destination: str, store: Store, auth_config: Any)
 
     Returns:
         A redirect to the destination carrying the session cookie, or to the
-        login page when signup is not allowed.
+        login page when several profiles hold the address or signup is not
+        allowed.
     """
-    # Gate signup only: existing profiles always sign in, a first login must
-    # pass the allowlist before a profile is created.
-    if not store.profiles.get_by_identity(account.issuer, account.subject) and not _signup_allowed(
-        account.email, auth_config, store
-    ):
-        return RedirectResponse(url="/login?error=signup_not_allowed", status_code=302)
+    if not store.profiles.get_by_identity(account.issuer, account.subject):
+        holders = store.profiles.list(ProfileQuery(email=account.email, limit=None)).items
+        if len(holders) > 1:
+            profile_ids = ", ".join(str(holder.id) for holder in holders)
+            logger.warning("Login refused: profiles %s all hold its address", profile_ids)
+            return RedirectResponse(url="/login?error=address_shared", status_code=302)
+        if holders:
+            store.profiles.link(holders[0].id, issuer=account.issuer, subject=account.subject)
+        elif not _signup_allowed(account.email, auth_config, store):
+            return RedirectResponse(url="/login?error=signup_not_allowed", status_code=302)
 
     profile = store.profiles.upsert(
         issuer=account.issuer,
@@ -295,19 +317,21 @@ def logout(user: SessionUserDep, store: StoreDep) -> Response:
 
 
 @router.get("/me")
-def get_me(user: CurrentUserDep, store: StoreDep, features: FeaturesDep) -> AuthUserResponse:
-    """Return the current user and the organisations they belong to.
+def get_me(user: CurrentUserDep, store: StoreDep, login: LoginDep, features: FeaturesDep) -> AuthUserResponse:
+    """Return the current user, how they sign in, and the organisations they belong to.
 
     Args:
         user: The authenticated caller.
         store: The database store.
+        login: The sign-in providers the deployment offers.
         features: Optional-feature availability, reported back.
 
     Returns:
-        The caller's profile, their memberships with the role in each, the
-        organisation they last used, and the enabled feature flags.
+        The caller's profile, the providers they sign in through, their
+        memberships with the role in each, the organisation they last used,
+        and the enabled feature flags.
     """
-    return AuthUserResponse.from_profile(user, store, features)
+    return AuthUserResponse.from_profile(user, store, login, features)
 
 
 # -- Profile -------------------------------------------------------------------
@@ -325,13 +349,16 @@ class UpdateMeRequest(BaseModel):
 
 
 @router.patch("/me")
-def update_me(body: UpdateMeRequest, user: CurrentUserDep, store: StoreDep, features: FeaturesDep) -> AuthUserResponse:
+def update_me(
+    body: UpdateMeRequest, user: CurrentUserDep, store: StoreDep, login: LoginDep, features: FeaturesDep
+) -> AuthUserResponse:
     """Update the current user's profile (display name, timezone).
 
     Args:
         body: The fields to change; omitted fields stay untouched.
         user: The authenticated caller.
         store: The database store.
+        login: The sign-in providers the deployment offers.
         features: Optional-feature availability, reported back.
 
     Returns:
@@ -346,7 +373,7 @@ def update_me(body: UpdateMeRequest, user: CurrentUserDep, store: StoreDep, feat
         except (KeyError, ValueError):
             raise HTTPException(status_code=422, detail=f"Unknown timezone {body.timezone!r}")
     profile = store.profiles.update(user.id, name=body.name, timezone=body.timezone)
-    return AuthUserResponse.from_profile(profile, store, features)
+    return AuthUserResponse.from_profile(profile, store, login, features)
 
 
 class LastOrganisationRequest(BaseModel):
