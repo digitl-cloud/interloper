@@ -1,0 +1,92 @@
+"""The Facebook Graph API engine every Facebook Insights request goes through."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import httpx2
+import interloper as il
+
+
+class FacebookInsightsApi:
+    """The Facebook Graph API: its objects, its paged edges and its refusals.
+
+    Graph refuses a request with an error status and an ``error`` object
+    carrying its own ``code``: every method raises the status as
+    ``httpx2.HTTPStatusError``, and `error_code` reads Graph's code from it.
+
+    List parameters (``fields``, ``metric``) travel as comma-separated names;
+    every method joins them, so a caller passes plain lists.
+    """
+
+    def __init__(self, client: il.AsyncRESTClient) -> None:
+        """Build the engine on an authenticated client.
+
+        Args:
+            client: The client every request goes through, carrying a user or a Page access token.
+        """
+        self.client = client
+
+    async def get(self, path: str, **params: Any) -> dict[str, Any]:
+        """Read one object.
+
+        Args:
+            path: The object, relative to the versioned base URL, such as ``/{page_id}``.
+            **params: The query parameters; a list value is sent comma-separated.
+
+        Returns:
+            The object as Graph sends it.
+        """
+        response = await self.client.get(path, params=self._query(params))
+        response.raise_for_status()
+        return response.json()
+
+    async def rows(self, path: str, **params: Any) -> list[dict[str, Any]]:
+        """Read every row of an edge, following ``paging.next``.
+
+        The ``next`` link is absolute and carries the first request's
+        parameters on, so pages are read one after the other. A response
+        without one is the last page.
+
+        Args:
+            path: The edge, relative to the versioned base URL, such as ``/{page_id}/insights``.
+            **params: The first request's query parameters; a list value is sent comma-separated.
+
+        Returns:
+            The ``data`` rows of every page, in page order.
+        """
+        pages = self.client.paginate(
+            path,
+            il.JSONLinkPaginator(next_url_path="paging.next"),
+            params=self._query(params),
+            data_selector="data",
+        )
+        return [row async for page in pages for row in page]
+
+    @staticmethod
+    def error_code(error: httpx2.HTTPStatusError) -> int | None:
+        """Read Graph's own code from a refused request.
+
+        Args:
+            error: The error status a method raised.
+
+        Returns:
+            The ``error.code`` of the response body, or None when the body is
+            not JSON or carries no code.
+        """
+        try:
+            return error.response.json().get("error", {}).get("code")
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _query(params: dict[str, Any]) -> dict[str, Any]:
+        """Join list parameters into comma-separated names, as Graph reads them.
+
+        Args:
+            params: The query parameters as the caller passed them.
+
+        Returns:
+            The parameters, each list value comma-joined and every other value unchanged.
+        """
+        return {key: ",".join(value) if isinstance(value, list) else value for key, value in params.items()}

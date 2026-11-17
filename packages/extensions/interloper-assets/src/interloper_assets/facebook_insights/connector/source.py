@@ -8,6 +8,7 @@ import interloper as il
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.facebook_insights import constants
+from interloper_assets.facebook_insights.api import FacebookInsightsApi
 from interloper_assets.facebook_insights.connection import FacebookInsightsConnection
 from interloper_assets.facebook_insights.connector.schemas import PageStats, PostsStats
 
@@ -38,24 +39,6 @@ def _insight_values(insight: dict[str, Any]) -> Iterator[tuple[str | None, str, 
         yield entry.get("end_time"), column, entry.get("value")
 
 
-async def _paginate(client: il.AsyncRESTClient, path: str, params: dict[str, Any]) -> list[dict[str, Any]]:
-    """GET every page of a Graph API edge, following ``paging.next``.
-
-    Used by the page, post and story fetches alike.
-
-    Args:
-        client: The client to send the requests with (a Page client for Page edges).
-        path: The edge path, relative to the versioned base URL.
-        params: The query parameters of the first request; ``next`` links carry them on.
-
-    Returns:
-        The concatenated ``data`` of every page.
-    """
-    paginator = il.JSONLinkPaginator(next_url_path="paging.next")
-    pages = client.paginate(path, paginator, params=params, data_selector="data")
-    return [row async for page in pages for row in page]
-
-
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
     tags=["Social Media"],
@@ -79,27 +62,16 @@ class FacebookInsights(il.Source):
     @il.asset(schema=PageStats, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
     async def page_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Daily Facebook Page insights: reactions, follows, media views, engagement and video views."""
-        since = context.partition_date.isoformat()
-        until = (context.partition_date + dt.timedelta(days=1)).isoformat()
-        async with await self.connection.page_client(self.page_id) as client:
-            insights = await _paginate(
-                client,
-                f"/{self.page_id}/insights",
-                {"metric": ",".join(constants.INSIGHTS_PAGE_METRICS), "period": "day", "since": since, "until": until},
-            )
+        window = {
+            "since": context.partition_date.isoformat(),
+            "until": (context.partition_date + dt.timedelta(days=1)).isoformat(),
+        }
+        async with self.connection.page_api(self.page_id) as api:
+            path = f"/{self.page_id}/insights"
+            insights = await api.rows(path, metric=constants.INSIGHTS_PAGE_METRICS, period="day", **window)
             # breakdown (singular) is the parameter Graph honours; one breakdown per request
             for breakdown in constants.MEDIA_VIEW_BREAKDOWNS:
-                insights += await _paginate(
-                    client,
-                    f"/{self.page_id}/insights",
-                    {
-                        "metric": "page_media_view",
-                        "breakdown": breakdown,
-                        "period": "day",
-                        "since": since,
-                        "until": until,
-                    },
-                )
+                insights += await api.rows(path, metric="page_media_view", breakdown=breakdown, period="day", **window)
 
         rows: dict[str | None, dict[str, Any]] = {}
         for insight in insights:
@@ -113,44 +85,28 @@ class FacebookInsights(il.Source):
         """Lifetime insights of every Facebook Page post and story updated in the last 180 days, snapshotted daily."""
         since = context.partition_date - dt.timedelta(days=constants.POSTS_LOOKBACK_DAYS)
         until = context.partition_date + dt.timedelta(days=1)
+        window = {"since": since.isoformat(), "until": until.isoformat()}
         insights_field = f"insights.metric({','.join(constants.INSIGHTS_POST_METRICS)}){{name,values,id}}"
 
-        async def breakdown_insights(client: il.AsyncRESTClient, post_id: str, breakdown: str) -> list[dict]:
+        async def breakdown_insights(api: FacebookInsightsApi, post_id: str, breakdown: str) -> list[dict]:
             try:
-                return await _paginate(
-                    client,
-                    f"/{post_id}/insights",
-                    {"metric": "post_media_view", "breakdown": breakdown, "period": "lifetime"},
+                return await api.rows(
+                    f"/{post_id}/insights", metric="post_media_view", breakdown=breakdown, period="lifetime"
                 )
             except httpx2.HTTPStatusError as error:
-                try:
-                    code = error.response.json().get("error", {}).get("code")
-                except ValueError:
-                    code = None
                 # (#100) is Graph rejecting the breakdown for this kind of post; anything else is real
+                code = api.error_code(error)
                 if error.response.status_code != 400 or code != constants.UNSUPPORTED_BREAKDOWN_ERROR_CODE:
                     raise
                 logger.warning("post_media_view breakdown %s is unsupported for post %s: %s", breakdown, post_id, error)
                 return []
 
-        async with await self.connection.page_client(self.page_id) as client:
-            posts = await _paginate(
-                client,
-                f"/{self.page_id}/published_posts",
-                {
-                    "fields": ",".join([*constants.POST_FIELDS, insights_field]),
-                    "since": since.isoformat(),
-                    "until": until.isoformat(),
-                },
+        async with self.connection.page_api(self.page_id) as api:
+            posts = await api.rows(
+                f"/{self.page_id}/published_posts", fields=[*constants.POST_FIELDS, insights_field], **window
             )
-            stories = await _paginate(
-                client,
-                f"/{self.page_id}/stories",
-                {
-                    "fields": ",".join([*constants.STORY_FIELDS, insights_field]),
-                    "since": since.isoformat(),
-                    "until": until.isoformat(),
-                },
+            stories = await api.rows(
+                f"/{self.page_id}/stories", fields=[*constants.STORY_FIELDS, insights_field], **window
             )
 
             since_instant = dt.datetime.combine(since, dt.time.min, tzinfo=dt.UTC)
@@ -165,7 +121,7 @@ class FacebookInsights(il.Source):
             feed_ids = [item["id"] for item in items if item.get("status_type") is not None]
             requests = [(post_id, breakdown) for post_id in feed_ids for breakdown in constants.MEDIA_VIEW_BREAKDOWNS]
             results = await il.bounded_gather(
-                (breakdown_insights(client, post_id, breakdown) for post_id, breakdown in requests),
+                (breakdown_insights(api, post_id, breakdown) for post_id, breakdown in requests),
                 limit=constants.BREAKDOWN_CONCURRENCY,
             )
         breakdowns: dict[str, list[dict]] = {}

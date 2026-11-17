@@ -5,7 +5,9 @@ Graph API insights are metric-major (``{name, values: [{value, end_time}]}``);
 lifts each post's lifetime insights into columns, both through the shared
 ``_insight_values`` helper, which keys breakdown values on
 ``<metric>_<breakdown>_<value>``. Neither response carries a report day, so both
-stamp ``date``. Requests run against a mock transport.
+stamp ``date``. Every Graph API client the source builds runs against one mock
+transport, so each test sees the Page token lookup made with the user token and
+every Page request made with the Page token.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
+from interloper_assets.facebook_insights import constants
 from interloper_assets.facebook_insights.connection import FacebookInsightsConnection
 from interloper_assets.facebook_insights.connector.source import FacebookInsights, _insight_values
 
@@ -47,12 +50,56 @@ def _asset(source: Any, key: str) -> Any:
     return next(a for a in source.assets if type(a).key == key)
 
 
-def _faked_source(monkeypatch: Any, handler: Any) -> Any:
-    async def page_client(self: Any, page_id: str) -> il.AsyncRESTClient:
-        return il.AsyncRESTClient(GRAPH, transport=httpx2.MockTransport(handler))
+def _graph(monkeypatch: Any, handler: Any) -> None:
+    """Send every Graph API client built during the test through *handler*.
 
-    monkeypatch.setattr(FacebookInsightsConnection, "page_client", page_client)
+    Args:
+        monkeypatch: Replaces ``il.AsyncRESTClient`` for the test only.
+        handler: Answers every request those clients send.
+    """
+
+    class GraphClient(il.AsyncRESTClient):
+        def __init__(self, base_url: str, **kwargs: Any) -> None:
+            super().__init__(base_url, transport=httpx2.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(il, "AsyncRESTClient", GraphClient)
+
+
+def _faked_source(monkeypatch: Any, handler: Any) -> Any:
+    """Build a source whose Page requests go to *handler*.
+
+    The Page token lookup (``GET /42?fields=access_token``) is answered here
+    with ``page-token``; every other request goes to *handler*.
+
+    Args:
+        monkeypatch: Routes the Graph API clients for the test only.
+        handler: Answers every request but the Page token lookup.
+
+    Returns:
+        The source, for page ``42`` on a connection holding ``user-token``.
+    """
+
+    def page_token_or(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path == "/v26.0/42":
+            return httpx2.Response(200, json={"access_token": "page-token", "id": "42"})
+        return handler(request)
+
+    _graph(monkeypatch, page_token_or)
     return _source(_connection())
+
+
+def _sent(request: httpx2.Request) -> tuple[str, str, list[tuple[str, str]], str, bytes]:
+    """Snapshot what a request sends, at send time: the paginator advances the same request object.
+
+    Args:
+        request: The request as the transport receives it.
+
+    Returns:
+        Its method, URL without the query, query parameters in order, ``Authorization`` header and body.
+    """
+    params = list(request.url.params.multi_items())
+    url = str(request.url.copy_with(query=None))
+    return request.method, url, params, request.headers["Authorization"], request.content
 
 
 async def _run(source: Any, key: str) -> list[dict[str, Any]]:
@@ -147,6 +194,33 @@ class TestInsightValues:
         ]
 
 
+class TestPageAccess:
+    """Both reports read the Page's edges as the Page, with a token the user token derives."""
+
+    async def test_derives_the_page_token_with_the_user_token(self, monkeypatch: Any):
+        lookups: list[tuple[str, str, list[tuple[str, str]], str, bytes]] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            if request.url.path == "/v26.0/42":
+                lookups.append(_sent(request))
+                return httpx2.Response(200, json={"access_token": "page-token", "id": "42"})
+            return httpx2.Response(200, json={"data": []})
+
+        _graph(monkeypatch, handler)
+        for key in ASSETS:
+            await _run(_source(_connection()), key)
+
+        lookup = ("GET", f"{GRAPH}/42", [("fields", "access_token")], "Bearer user-token", b"")
+        assert lookups == [lookup, lookup]
+
+    @pytest.mark.parametrize("key", ASSETS)
+    async def test_a_user_who_cannot_act_as_the_page_fails_the_report(self, monkeypatch: Any, key: str):
+        _graph(monkeypatch, lambda request: httpx2.Response(200, json={"id": "42"}))
+
+        with pytest.raises(PermissionError, match="cannot obtain a Page access token for page 42"):
+            await _run(_source(_connection()), key)
+
+
 class TestPageStats:
     async def test_insights_and_breakdowns_pivot_into_one_row_per_end_time(self, monkeypatch: Any):
         requests: list[httpx2.Request] = []
@@ -171,6 +245,72 @@ class TestPageStats:
         assert rows[0]["page_media_view_is_from_ads_1"] == 10
         assert rows[0]["page_media_view_is_from_followers_0"] == 30
         assert rows[0]["date"] == DAY
+
+    async def test_sends_every_insights_page_as_the_page(self, monkeypatch: Any):
+        sent: list[tuple[str, str, list[tuple[str, str]], str, bytes]] = []
+        end_time = "2026-09-16T07:00:00+0000"
+        next_link = f"{GRAPH}/42/insights?after=c2"
+        views = {"name": "page_views_total", "period": "day", "values": [{"value": 7, "end_time": end_time}]}
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            sent.append(_sent(request))
+            breakdown = request.url.params.get("breakdown")
+            if request.url.params.get("after") == "c2":
+                return httpx2.Response(200, json={"data": [views]})
+            if breakdown is None:
+                return httpx2.Response(200, json={"data": PAGE_INSIGHTS, "paging": {"next": next_link}})
+            data = [_breakdown_insight("page_media_view", breakdown, {"0": 30, "1": 10}, end_time)]
+            return httpx2.Response(200, json={"data": data, "paging": {"cursors": {"before": "b", "after": "a"}}})
+
+        rows = await _run(_faked_source(monkeypatch, handler), "page_stats")
+
+        window = [("period", "day"), ("since", "2026-09-15"), ("until", "2026-09-16")]
+        page = "Bearer page-token"
+        assert sent == [
+            (
+                "GET",
+                f"{GRAPH}/42/insights",
+                [("metric", ",".join(constants.INSIGHTS_PAGE_METRICS)), *window],
+                page,
+                b"",
+            ),
+            ("GET", f"{GRAPH}/42/insights", [("after", "c2")], page, b""),
+            (
+                "GET",
+                f"{GRAPH}/42/insights",
+                [("metric", "page_media_view"), ("breakdown", "is_from_ads"), *window],
+                page,
+                b"",
+            ),
+            (
+                "GET",
+                f"{GRAPH}/42/insights",
+                [("metric", "page_media_view"), ("breakdown", "is_from_followers"), *window],
+                page,
+                b"",
+            ),
+        ]
+        assert rows == [
+            {
+                "end_time": end_time,
+                "date": DAY,
+                "page_follows": 1200,
+                "page_actions_post_reactions_total": {"like": 5, "love": 2},
+                "page_video_views_by_paid_non_paid": {"total": 9, "paid": 4, "unpaid": 5},
+                "page_views_total": 7,
+                "page_media_view_is_from_ads_0": 30,
+                "page_media_view_is_from_ads_1": 10,
+                "page_media_view_is_from_followers_0": 30,
+                "page_media_view_is_from_followers_1": 10,
+            }
+        ]
+
+    async def test_a_refused_insights_request_raises(self, monkeypatch: Any):
+        refusal = {"error": {"message": "(#100) The value must be a valid insights metric", "code": 100}}
+        source = _faked_source(monkeypatch, lambda request: httpx2.Response(400, json=refusal))
+
+        with pytest.raises(httpx2.HTTPStatusError, match="400 Bad Request"):
+            await _run(source, "page_stats")
 
     def test_row_reconciles_with_flattened_dict_metrics(self):
         row = {
@@ -266,6 +406,63 @@ class TestPostsStats:
 
         return handler
 
+    async def test_sends_the_post_and_story_pages_then_each_feed_post_breakdown_as_the_page(self, monkeypatch: Any):
+        sent: list[tuple[str, str, list[tuple[str, str]], str, bytes]] = []
+        respond = self._handler([])
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            sent.append(_sent(request))
+            return respond(request)
+
+        rows = await _run(_faked_source(monkeypatch, handler), "posts_stats")
+
+        insights = f"insights.metric({','.join(constants.INSIGHTS_POST_METRICS)}){{name,values,id}}"
+        window = [("since", "2026-03-19"), ("until", "2026-09-16")]
+        page = "Bearer page-token"
+        post_fields = [("fields", ",".join([*constants.POST_FIELDS, insights])), *window]
+        story_fields = [("fields", ",".join([*constants.STORY_FIELDS, insights])), *window]
+        assert sent[:3] == [
+            ("GET", f"{GRAPH}/42/published_posts", post_fields, page, b""),
+            ("GET", f"{GRAPH}/42/published_posts", [("after", "c2")], page, b""),
+            ("GET", f"{GRAPH}/42/stories", story_fields, page, b""),
+        ]
+        # the breakdowns run concurrently, so they arrive in no fixed order
+        assert sorted(sent[3:]) == [
+            (
+                "GET",
+                f"{GRAPH}/42_1001/insights",
+                [("metric", "post_media_view"), ("breakdown", breakdown), ("period", "lifetime")],
+                page,
+                b"",
+            )
+            for breakdown in ("is_from_ads", "is_from_followers")
+        ]
+        assert rows == [
+            {
+                "id": "42_1001",
+                "message": "Hello",
+                "created_time": "2026-09-01T10:00:00+0000",
+                "updated_time": "2026-09-10T10:00:00+0000",
+                "status_type": "added_photos",
+                "permalink_url": "https://facebook.com/42/posts/1001",
+                "post_clicks": 12,
+                "post_reactions_by_type_total": {"like": 8, "love": 1},
+                "post_clicks_by_type": {"link clicks": 4, "other clicks": 6},
+                "post_media_view_is_from_ads_0": 70,
+                "post_media_view_is_from_ads_1": 30,
+                "post_media_view_is_from_followers_0": 70,
+                "post_media_view_is_from_followers_1": 30,
+                "date": DAY,
+            },
+            {
+                "id": "42_2002",
+                "created_time": "2026-09-14T10:00:00+0000",
+                "updated_time": "2026-09-14T10:00:00+0000",
+                "post_media_view": 50,
+                "date": DAY,
+            },
+        ]
+
     async def test_posts_and_stories_carry_lifetime_metrics_and_breakdowns(self, monkeypatch: Any):
         requests: list[httpx2.URL] = []
         rows = await _run(_faked_source(monkeypatch, self._handler(requests)), "posts_stats")
@@ -299,6 +496,8 @@ class TestPostsStats:
             httpx2.Response(429, json={"error": {"message": "rate limited", "code": 4}}),
             httpx2.Response(403, json={"error": {"message": "permission", "code": 10}}),
             httpx2.Response(500, text="oops"),
+            httpx2.Response(500, json=UNSUPPORTED),
+            httpx2.Response(400, text="<html>bad request</html>"),
             httpx2.Response(400, json={"error": {"message": "token expired", "code": 190}}),
         ],
     )
