@@ -3,7 +3,8 @@
 The connection's client carries the long-lived user token as its bearer, and
 the ``pages`` lookup walks ``/me/accounts`` along its absolute ``paging.next``
 links. Page and post insights only answer to a Page access token, which the
-connection derives from its user token via ``GET /{page_id}?fields=access_token``.
+connection derives from its user token via ``GET /{page_id}?fields=access_token``
+to open a Graph API engine acting as the Page.
 """
 
 from __future__ import annotations
@@ -37,6 +38,13 @@ class TestClient:
         assert request.headers["Authorization"] == "Bearer user-token"
 
 
+class TestApi:
+    def test_the_api_is_built_on_the_client(self):
+        connection = _connection(lambda request: httpx2.Response(200, json={"data": []}))
+
+        assert connection.api.client is connection.client
+
+
 class TestPages:
     async def test_follows_the_next_link_across_pages(self):
         next_link = f"{GRAPH}/me/accounts?fields=id%2Cname&limit=100&after=cursor-1"
@@ -61,7 +69,7 @@ class TestPages:
             await connection.check()
 
 
-class TestPageClient:
+class TestPageApi:
     async def test_derives_the_page_token_from_the_user_token(self):
         seen: list[httpx2.Request] = []
 
@@ -69,17 +77,18 @@ class TestPageClient:
             seen.append(request)
             return httpx2.Response(200, json={"access_token": "page-token", "id": "42"})
 
-        connection = _connection(handler)
-        client = await connection.page_client("42")
-        assert seen[0].url.path == "/v26.0/42"
-        assert seen[0].url.params["fields"] == "access_token"
-        request = client.build_request("GET", "/42/insights")
-        assert client.auth is not None
-        next(client.auth.auth_flow(request))
-        assert request.headers["Authorization"] == "Bearer page-token"
-        assert str(request.url) == f"{GRAPH}/42/insights"
+        async with _connection(handler).page_api("42") as page:
+            assert str(seen[0].url) == f"{GRAPH}/42?fields=access_token"
+            assert seen[0].headers["Authorization"] == "Bearer user-token"
+            request = page.client.build_request("GET", "/42/insights")
+            assert page.client.auth is not None
+            next(page.client.auth.auth_flow(request))
+            assert request.headers["Authorization"] == "Bearer page-token"
+            assert str(request.url) == f"{GRAPH}/42/insights"
+        assert page.client.is_closed
 
     async def test_raises_when_the_user_cannot_act_as_the_page(self):
         connection = _connection(lambda request: httpx2.Response(200, json={"id": "42"}))
-        with pytest.raises(PermissionError):
-            await connection.page_client("42")
+        with pytest.raises(PermissionError, match="cannot obtain a Page access token for page 42"):
+            async with connection.page_api("42"):
+                pass

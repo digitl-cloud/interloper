@@ -1,9 +1,12 @@
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from functools import cached_property
 
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.facebook_insights import constants
+from interloper_assets.facebook_insights.api import FacebookInsightsApi
 
 
 @il.connection(
@@ -36,13 +39,20 @@ class FacebookInsightsConnection(il.RefreshTokenOAuthConnection):
         Returns:
             The client, pinned to ``constants.API_VERSION`` and cached per connection instance.
         """
-        return il.AsyncRESTClient(
-            f"{constants.BASE_URL}/{constants.API_VERSION}",
-            auth=il.HTTPBearerAuth(self.refresh_token),
-        )
+        return self._client(self.refresh_token)
 
-    async def page_client(self, page_id: str) -> il.AsyncRESTClient:
-        """Build a Graph API client authenticated as the Page.
+    @cached_property
+    def api(self) -> FacebookInsightsApi:
+        """The Graph API engine acting as the user, built on ``client``.
+
+        Returns:
+            The engine, cached per connection instance.
+        """
+        return FacebookInsightsApi(self.client)
+
+    @asynccontextmanager
+    async def page_api(self, page_id: str) -> AsyncGenerator[FacebookInsightsApi, None]:
+        """Open a Graph API engine acting as the Page.
 
         Page and post insights (and the Page's published posts and stories)
         only answer to a Page access token; the connection holds a user token,
@@ -52,21 +62,18 @@ class FacebookInsightsConnection(il.RefreshTokenOAuthConnection):
         Args:
             page_id: The Facebook Page to act as.
 
-        Returns:
-            A new client carrying the Page access token as its bearer; the caller closes it.
+        Yields:
+            An engine on a new client carrying the Page access token as its bearer, closed on exit.
 
         Raises:
             PermissionError: If the user token yields no Page access token for *page_id*.
         """
-        response = await self.client.get(f"/{page_id}", params={"fields": "access_token"})
-        response.raise_for_status()
-        page_token = response.json().get("access_token")
+        page = await self.api.get(f"/{page_id}", fields="access_token")
+        page_token = page.get("access_token")
         if not page_token:
             raise PermissionError(f"The connection's user cannot obtain a Page access token for page {page_id}")
-        return il.AsyncRESTClient(
-            f"{constants.BASE_URL}/{constants.API_VERSION}",
-            auth=il.HTTPBearerAuth(page_token),
-        )
+        async with self._client(page_token) as client:
+            yield FacebookInsightsApi(client)
 
     @il.fetch_field_provider
     async def pages(self) -> list[dict[str, str]]:
@@ -81,28 +88,8 @@ class FacebookInsightsConnection(il.RefreshTokenOAuthConnection):
             The options for the field's dropdown.
 
         """
-        pages: list[dict[str, str]] = []
-        path: str | None = "/me/accounts"
-        params: dict[str, str] | None = {"fields": "id,name", "limit": "100"}
-
-        while path:
-            response = await self.client.get(path, params=params)
-            response.raise_for_status()
-            data = response.json()
-
-            for page in data.get("data", []):
-                pages.append(
-                    {
-                        "id": page["id"],
-                        "name": page.get("name", page["id"]),
-                    }
-                )
-
-            # The "next" link already carries the cursor + fields params.
-            path = data.get("paging", {}).get("next")
-            params = None
-
-        return pages
+        pages = await self.api.rows("/me/accounts", fields=["id", "name"], limit=100)
+        return [{"id": page["id"], "name": page.get("name", page["id"])} for page in pages]
 
     async def check(self) -> bool:
         """Prove the credentials work by running the ``pages`` lookup.
@@ -112,3 +99,18 @@ class FacebookInsightsConnection(il.RefreshTokenOAuthConnection):
         """
         await self.pages()
         return True
+
+    @staticmethod
+    def _client(access_token: str) -> il.AsyncRESTClient:
+        """Build a Graph API client sending *access_token* as its bearer.
+
+        Args:
+            access_token: The user or Page access token every request carries.
+
+        Returns:
+            A new client, pinned to ``constants.API_VERSION``.
+        """
+        return il.AsyncRESTClient(
+            f"{constants.BASE_URL}/{constants.API_VERSION}",
+            auth=il.HTTPBearerAuth(access_token),
+        )
