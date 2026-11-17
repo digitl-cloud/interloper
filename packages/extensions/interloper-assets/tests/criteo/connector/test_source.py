@@ -17,6 +17,7 @@ import asyncio
 import copy
 import datetime as dt
 import json
+from collections.abc import Callable
 from typing import Any
 
 import httpx2
@@ -29,7 +30,6 @@ from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.criteo import constants
 from interloper_assets.criteo.connection import CriteoConnection
-from interloper_assets.criteo.connector import source as source_module
 from interloper_assets.criteo.connector.schemas import AdsStats, CampaignsStats
 from interloper_assets.criteo.connector.source import Criteo
 
@@ -334,9 +334,10 @@ class TestEntityAssets:
         assert row["targeting_frequency_capping_value_maximum_impressions"] == 6
         assert row["targeting_delivery_limitations_devices"] == "[]"
 
-    def test_every_field_of_an_ad_set_is_declared(self):
-        asset = _entity(_source(), "ad_sets")
-        rows = source_module._snapshot_rows([AD_SET], SNAPSHOT_DAY)
+    async def test_every_field_of_an_ad_set_is_declared(self):
+        source = _connected(lambda request: httpx2.Response(200, json={"data": [AD_SET], "errors": [], "warnings": []}))
+        asset = _entity(source, "ad_sets")
+        rows = await asset.data(context=il.ExecutionContext(asset, il.TimePartition(value=SNAPSHOT_DAY).window))
         assert set(asset.normalizer.normalize(rows).columns) == set(asset.schema.model_fields)
 
     async def test_an_unset_schedule_end_is_empty(self):
@@ -378,3 +379,131 @@ class TestEntityAssets:
         asset = _entity(source, "campaigns")
         with pytest.raises(httpx2.HTTPStatusError):
             await asset.data(context=il.ExecutionContext(asset, il.TimePartition(value=SNAPSHOT_DAY).window))
+
+
+REPORT_DAY = dt.date(2026, 10, 26)
+
+
+async def _sent(
+    key: str, respond: Callable[[httpx2.Request], dict[str, Any]], day: dt.date = SNAPSHOT_DAY
+) -> tuple[list[dict[str, Any]], list[httpx2.Request]]:
+    """Run one asset of a source against a mock Criteo that answers each request with *respond*'s body.
+
+    Args:
+        key: The asset to run.
+        respond: The JSON body of Criteo's answer to each request, given the request.
+        day: The partition the asset runs for.
+
+    Returns:
+        The asset's rows as it returns them, and every request it sent, in order.
+    """
+    requests: list[httpx2.Request] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        return httpx2.Response(200, json=respond(request))
+
+    asset = _entity(_connected(handler), key)
+    rows = await asset.data(context=il.ExecutionContext(asset, il.TimePartition(value=day).window))
+    return rows, requests
+
+
+def _entities(*resources: dict[str, Any]) -> Callable[[httpx2.Request], dict[str, Any]]:
+    return lambda request: {"data": list(resources), "errors": [], "warnings": []}
+
+
+class TestRequests:
+    """What each asset sends to Criteo, request by request, and the rows it returns."""
+
+    @pytest.mark.parametrize(
+        ("key", "dimensions"),
+        [("ads_stats", ["Day", "AdId", "AdsetId", "CampaignId"]), ("campaigns_stats", ["Day", "CampaignId"])],
+    )
+    async def test_a_report_posts_its_query_for_its_day(self, key: str, dimensions: list[str]):
+        report_row = {"Day": "2026-10-26", "CampaignId": "7", "Currency": "EUR", "Clicks": 3}
+
+        rows, requests = await _sent(key, lambda request: {"Rows": [report_row], "Total": {}}, day=REPORT_DAY)
+
+        (request,) = requests
+        assert (request.method, request.url.path) == ("POST", "/2026-07/statistics/report")
+        assert not request.url.params
+        assert json.loads(request.content) == {
+            "advertiserIds": "123",
+            "dimensions": dimensions,
+            "startDate": "2026-10-26",
+            "endDate": "2026-10-26",
+            "currency": "EUR",
+            "timezone": "UTC",
+            "metrics": constants.STATISTICS_METRICS,
+            "format": "json",
+        }
+        assert rows == [report_row]
+
+    async def test_a_report_without_rows_is_empty(self):
+        rows, _ = await _sent("campaigns_stats", lambda request: {"Rows": [], "Total": {}}, day=REPORT_DAY)
+
+        assert rows == []
+
+    async def test_the_advertiser_is_read_from_the_connections_advertisers(self):
+        advertiser = {"id": "123", "type": "Advertiser", "attributes": {"advertiserName": "Example"}}
+
+        rows, requests = await _sent("advertisers", _entities(advertiser))
+
+        (request,) = requests
+        assert (request.method, request.url.path) == ("GET", "/2026-07/advertisers/me")
+        assert not request.url.params
+        assert not request.content
+        assert rows == [{"advertiserName": "Example", "id": "123", "type": "Advertiser", "date": SNAPSHOT_DAY}]
+
+    @pytest.mark.parametrize(
+        ("key", "path", "resource"),
+        [
+            ("campaigns", "/2026-07/marketing-solutions/campaigns/search", CAMPAIGN),
+            ("ad_sets", "/2026-07/marketing-solutions/ad-sets/search", AD_SET),
+        ],
+    )
+    async def test_a_search_posts_the_advertisers_filter(self, key: str, path: str, resource: dict[str, Any]):
+        rows, requests = await _sent(key, _entities(resource))
+
+        (request,) = requests
+        assert (request.method, request.url.path) == ("POST", path)
+        assert not request.url.params
+        assert json.loads(request.content) == {"filters": {"advertiserIds": ["123"]}}
+        fields = {"id": resource["id"], "type": resource["type"], "date": SNAPSHOT_DAY}
+        assert rows == [{**resource["attributes"], **fields}]
+
+    async def test_a_search_without_data_is_empty(self):
+        rows, _ = await _sent("campaigns", lambda request: {"data": None, "errors": [], "warnings": []})
+
+        assert rows == []
+
+    async def test_ads_are_read_fifty_at_a_time(self):
+        second = {**AD, "id": "701", "attributes": {**AD["attributes"], "id": "701"}}
+        queries: list[dict[str, str]] = []
+
+        def respond(request: httpx2.Request) -> dict[str, Any]:
+            queries.append(dict(request.url.params))
+            pages = {"0": [AD], "50": [second]}
+            return {"data": pages.get(request.url.params["offset"], []), "errors": [], "warnings": []}
+
+        rows, requests = await _sent("ads", respond)
+
+        assert [(request.method, request.url.path) for request in requests] == [
+            ("GET", "/2026-07/marketing-solutions/advertisers/123/ads")
+        ] * 3
+        assert queries == [
+            {"limit": "50", "offset": "0"},
+            {"limit": "50", "offset": "50"},
+            {"limit": "50", "offset": "100"},
+        ]
+        assert rows == [
+            {**AD["attributes"], "id": "700", "type": "Ad", "date": SNAPSHOT_DAY},
+            {**second["attributes"], "id": "701", "type": "Ad", "date": SNAPSHOT_DAY},
+        ]
+
+    async def test_a_refused_report_raises_the_http_error(self):
+        source = _connected(lambda request: httpx2.Response(401, json={"errors": [{"title": "Unauthorized"}]}))
+        asset = _entity(source, "ads_stats")
+
+        with pytest.raises(httpx2.HTTPStatusError, match="401"):
+            await asset.data(context=il.ExecutionContext(asset, il.TimePartition(value=REPORT_DAY).window))
