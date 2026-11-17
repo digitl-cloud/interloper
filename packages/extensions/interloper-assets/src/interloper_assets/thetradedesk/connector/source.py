@@ -1,7 +1,3 @@
-import asyncio
-import csv
-import datetime as dt
-import logging
 from typing import Any
 
 import interloper as il
@@ -12,14 +8,14 @@ from interloper_assets.thetradedesk import constants
 from interloper_assets.thetradedesk.connection import TheTradeDeskConnection
 from interloper_assets.thetradedesk.connector import schemas
 
-logger = logging.getLogger(__name__)
-
 _Record = dict[str, Any]
 
-# Report executions queue server-side; poll with backoff until complete.
-_POLL_START_INTERVAL = 60.0
-_POLL_MAX_INTERVAL = 300.0
-_REPORT_TIMEOUT = 3 * 60 * 60  # 3 hours
+# reports arrive in the international format TheTradeDeskNormalizer reads, every day a UTC day
+_INTERNATIONAL_UTC = {
+    "ReportDateFormat": "International",
+    "ReportNumericFormat": "International",
+    "TimeZone": constants.REPORT_TIMEZONE,
+}
 
 
 # -- NORMALIZER ----------------------------------------------------------------
@@ -78,132 +74,6 @@ class TheTradeDeskNormalizer(DataFrameNormalizer):
 _ENTITY_NORMALIZER = DataFrameNormalizer(flatten_max_level=1)
 
 
-# -- HELPERS -------------------------------------------------------------------
-async def _advertiser_nodes(
-    connection: TheTradeDeskConnection, partner_id: str, query: str, field: str
-) -> list[_Record]:
-    """Run an advertiser-scoped GraphQL query for every advertiser of a partner.
-
-    Used by the ``campaigns`` and ``ad_groups`` assets: GraphQL lists both
-    under an advertiser, so the partner's advertisers are listed first and
-    each one's nodes are fetched concurrently.
-
-    Args:
-        connection: The connection to query through.
-        partner_id: The partner whose advertisers are walked.
-        query: A query taking ``$advertiserId``.
-        field: The advertiser's field the query pages through (``campaigns``, ``adGroups``).
-
-    Returns:
-        Every advertiser's nodes, as the API returned them.
-    """
-    advertisers = await connection.nodes(
-        constants.ADVERTISER_IDS_QUERY, {"partnerId": partner_id}, ("partner", "advertisers")
-    )
-    pages = await il.bounded_gather(
-        (
-            connection.nodes(query, {"advertiserId": advertiser["id"]}, ("advertiser", field))
-            for advertiser in advertisers
-        ),
-        limit=constants.ADVERTISER_CONCURRENCY,
-    )
-    return [node for page in pages for node in page]
-
-
-async def _create_report_schedule(
-    connection: TheTradeDeskConnection, template_id: str, partner_id: str, date: dt.date
-) -> str:
-    """Create a one-time report schedule and return its id."""
-    response = await connection.client.post(
-        "/myreports/reportschedule",
-        json={
-            "RequestedByUserName": "interloper",
-            "IncludeHeaders": True,
-            "PartnerFilters": [partner_id],
-            "ReportDateFormat": "International",
-            "ReportDateRange": "Custom",
-            "ReportStartDateInclusive": date.isoformat(),
-            "ReportEndDateExclusive": (date + dt.timedelta(days=1)).isoformat(),
-            "ReportFileFormat": "CSV",
-            "ReportFrequency": "Once",
-            "ReportNumericFormat": "International",
-            "ReportScheduleName": f"interloper_{template_id}_{date.isoformat()}",
-            "ReportTemplateId": template_id,
-            "TimeZone": constants.REPORT_TIMEZONE,
-        },
-    )
-    response.raise_for_status()
-    return str(response.json()["ReportScheduleId"])
-
-
-async def _wait_for_execution(connection: TheTradeDeskConnection, partner_id: str, schedule_id: str) -> dict:
-    """Poll the schedule's execution until it completes; return the execution.
-
-    Raises:
-        RuntimeError: If the execution fails, or does not finish in time.
-
-    """
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + _REPORT_TIMEOUT
-    interval = _POLL_START_INTERVAL
-    while True:
-        logger.info(f"Waiting for report schedule {schedule_id}...")
-        response = await connection.client.post(
-            "/myreports/reportexecution/query/partners",
-            json={
-                "PageStartIndex": 0,
-                "PageSize": 100,
-                "PartnerIds": [partner_id],
-                "ReportScheduleIds": [schedule_id],
-            },
-        )
-        response.raise_for_status()
-        executions = response.json().get("Result") or []
-
-        if executions:
-            if len(executions) > 1:
-                logger.warning(f"Schedule {schedule_id} has multiple executions; using the first")
-            execution = executions[0]
-            state = execution["ReportExecutionState"]
-            if state == "Complete":
-                return execution
-            if state in ("Failed", "Error"):
-                raise RuntimeError(f"Report schedule {schedule_id} failed with state {state}")
-
-        if loop.time() >= deadline:
-            raise RuntimeError(f"Report schedule {schedule_id} did not complete within {_REPORT_TIMEOUT:.0f}s")
-        await asyncio.sleep(interval)
-        interval = min(interval * 2, _POLL_MAX_INTERVAL)
-
-
-async def _download_report(connection: TheTradeDeskConnection, url: str) -> list[_Record]:
-    """Download a report delivery and parse its CSV rows (values stay strings)."""
-    response = await connection.client.get(url, follow_redirects=True)
-    response.raise_for_status()
-    return list(csv.DictReader(response.text.splitlines()))
-
-
-async def _get_report(
-    connection: TheTradeDeskConnection, template_id: str, partner_id: str, date: dt.date
-) -> list[_Record]:
-    """Schedule, wait for, and download a one-time report, deleting the schedule after."""
-    schedule_id = await _create_report_schedule(connection, template_id, partner_id, date)
-    logger.info(f"Report schedule id: {schedule_id} (template {template_id})")
-    try:
-        execution = await _wait_for_execution(connection, partner_id, schedule_id)
-        deliveries = execution["ReportDeliveries"]
-        if len(deliveries) > 1:
-            logger.warning(f"Schedule {schedule_id} has multiple deliveries; using the first")
-        return await _download_report(connection, deliveries[0]["DownloadURL"])
-    finally:
-        # One-shot schedules; clean up best-effort so they don't pile up.
-        try:
-            response = await connection.client.delete(f"/myreports/reportschedule/{schedule_id}")
-            response.raise_for_status()
-        except Exception as exc:  # noqa: BLE001 - cleanup only, the data is already downloaded
-            logger.warning(f"Failed to delete report schedule {schedule_id}: {exc}")
-
-
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
     tags=["Advertising"],
@@ -231,11 +101,8 @@ class TheTradeDesk(il.Source):
     )
     async def ad_groups_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Ad-group performance metrics per day, including video-player and conversion metrics."""
-        return await _get_report(
-            self.connection,
-            template_id=constants.ADGROUPS_REPORT_TEMPLATE_ID,
-            partner_id=self.partner_id,
-            date=context.partition_date,
+        return await self.connection.api.report(
+            self.partner_id, constants.ADGROUPS_REPORT_TEMPLATE_ID, context.partition_date, **_INTERNATIONAL_UTC
         )
 
     @il.asset(
@@ -246,8 +113,8 @@ class TheTradeDesk(il.Source):
     )
     async def advertisers(self, context: il.ExecutionContext) -> list[_Record]:
         """The partner's advertisers with their currency, category, attribution windows and vetting status."""
-        rows = await self.connection.nodes(
-            constants.ADVERTISERS_QUERY, {"partnerId": self.partner_id}, ("partner", "advertisers")
+        rows = await self.connection.api.nodes(
+            constants.ADVERTISERS_QUERY, ("partner", "advertisers"), partnerId=self.partner_id
         )
         return [{**row, "date": context.partition_date} for row in rows]
 
@@ -259,7 +126,7 @@ class TheTradeDesk(il.Source):
     )
     async def campaigns(self, context: il.ExecutionContext) -> list[_Record]:
         """The partner's campaigns with their advertiser, status, schedule (UTC instants), budget, pacing and goals."""
-        rows = await _advertiser_nodes(self.connection, self.partner_id, constants.CAMPAIGNS_QUERY, "campaigns")
+        rows = await self.connection.api.advertiser_nodes(self.partner_id, constants.CAMPAIGNS_QUERY, "campaigns")
         return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
@@ -270,5 +137,5 @@ class TheTradeDesk(il.Source):
     )
     async def ad_groups(self, context: il.ExecutionContext) -> list[_Record]:
         """The partner's ad groups with their campaign, status, channel and budget; template ad groups excluded."""
-        rows = await _advertiser_nodes(self.connection, self.partner_id, constants.AD_GROUPS_QUERY, "adGroups")
+        rows = await self.connection.api.advertiser_nodes(self.partner_id, constants.AD_GROUPS_QUERY, "adGroups")
         return [{**row, "date": context.partition_date} for row in rows]

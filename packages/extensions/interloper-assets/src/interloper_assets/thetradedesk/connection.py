@@ -1,10 +1,10 @@
 from functools import cached_property
-from typing import Any
 
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
-from interloper_assets.thetradedesk.constants import BASE_URL, GRAPHQL_PAGE_SIZE, GRAPHQL_URL
+from interloper_assets.thetradedesk.api import TheTradeDeskApi
+from interloper_assets.thetradedesk.constants import BASE_URL
 
 
 @il.connection(
@@ -21,12 +21,25 @@ class TheTradeDeskConnection(il.Connection):
 
     @cached_property
     def client(self) -> il.AsyncRESTClient:
-        """Async REST client for the The Trade Desk API."""
+        """The Trade Desk API client every caller shares.
+
+        Returns:
+            The client authenticated by the ``TTD-Auth`` header, cached per connection instance.
+        """
         return il.AsyncRESTClient(
             BASE_URL,
             headers={"TTD-Auth": self.api_key},
             timeout=60,
         )
+
+    @cached_property
+    def api(self) -> TheTradeDeskApi:
+        """The Trade Desk API engine every caller shares, built on ``client``.
+
+        Returns:
+            The engine, cached per connection instance.
+        """
+        return TheTradeDeskApi(self.client)
 
     @il.fetch_field_provider
     async def partners(self) -> list[dict[str, str]]:
@@ -36,64 +49,11 @@ class TheTradeDeskConnection(il.Connection):
             The options for the field's dropdown.
 
         """
-        response = await self.client.post("/partner/query", json={"PageStartIndex": 0, "PageSize": 100})
-        response.raise_for_status()
+        partners = await self.api.query("/partner/query")
         return [
-            {
-                "partner_id": p["PartnerId"],
-                "name": p.get("PartnerName", p["PartnerId"]),
-            }
-            for p in response.json().get("Result", [])
+            {"partner_id": partner["PartnerId"], "name": partner.get("PartnerName", partner["PartnerId"])}
+            for partner in partners
         ]
-
-    async def nodes(self, query: str, variables: dict[str, Any], path: tuple[str, ...]) -> list[dict[str, Any]]:
-        """Run a paginated GraphQL query and return every node of the connection at *path*.
-
-        The query declares ``$first`` and ``$after`` and selects ``nodes`` and
-        ``pageInfo { hasNextPage endCursor }`` on the connection; each page
-        asks for the next cursor until the connection says there is none.
-        The Trade Desk answers a failed query with HTTP 200 and an
-        ``errors`` list, so the list is checked on every page.
-
-        Args:
-            query: The GraphQL document.
-            variables: The query's variables, without ``first`` and ``after``.
-            path: The fields leading from ``data`` to the connection, such as
-                ``("partner", "advertisers")``. A null connection under an
-                existing object reads as no nodes.
-
-        Returns:
-            The nodes of every page, as the API returned them.
-
-        Raises:
-            RuntimeError: If the API answers with GraphQL errors, or with no
-                object at the path's root: the key cannot see that id, and
-                reading it as no nodes would snapshot an empty account.
-        """
-        nodes: list[dict[str, Any]] = []
-        after: str | None = None
-        while True:
-            response = await self.client.post(
-                GRAPHQL_URL,
-                json={"query": query, "variables": {**variables, "first": GRAPHQL_PAGE_SIZE, "after": after}},
-            )
-            response.raise_for_status()
-            payload = response.json()
-            if payload.get("errors"):
-                messages = "; ".join(error.get("message", str(error)) for error in payload["errors"])
-                raise RuntimeError(f"The Trade Desk GraphQL query failed: {messages}")
-            listing = (payload.get("data") or {}).get(path[0])
-            if listing is None:
-                raise RuntimeError(f"The Trade Desk returned no {path[0]} for {variables}: the API key cannot see it")
-            for field in path[1:]:
-                listing = listing.get(field) if listing is not None else None
-            if listing is None:
-                return nodes
-            nodes.extend(listing.get("nodes") or [])
-            page = listing.get("pageInfo") or {}
-            if not page.get("hasNextPage"):
-                return nodes
-            after = page["endCursor"]
 
     async def check(self) -> bool:
         """Prove the credentials work by running the ``partners`` lookup.
