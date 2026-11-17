@@ -252,15 +252,18 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # is built per-target-arch (a trivial COPY).
 FROM --platform=$BUILDPLATFORM node:26-alpine AS build-spa
 
-WORKDIR /app
+WORKDIR /repo
 # Node ships without corepack since v25; it installs the pnpm `packageManager` pins.
 RUN npm install --global corepack && corepack enable
-COPY packages/platform/interloper-app/app/package.json packages/platform/interloper-app/app/pnpm-lock.yaml packages/platform/interloper-app/app/pnpm-workspace.yaml ./
-COPY packages/platform/interloper-app/app/patches/ patches/
-RUN pnpm install --frozen-lockfile --ignore-scripts
-COPY packages/platform/interloper-app/app/ ./
-# One level up from the app dir: nuxt.config reads the workspace version from it.
-COPY packages/platform/interloper-app/pyproject.toml /pyproject.toml
+# The pnpm workspace is the repository's; the app is the one project installed here.
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY packages/platform/interloper-app/app/package.json packages/platform/interloper-app/app/
+COPY packages/platform/interloper-app/app/patches/ packages/platform/interloper-app/app/patches/
+RUN pnpm install --frozen-lockfile --ignore-scripts --filter @interloper/app
+COPY packages/platform/interloper-app/app/ packages/platform/interloper-app/app/
+# nuxt.config reads the workspace version from the Python package beside the app.
+COPY packages/platform/interloper-app/pyproject.toml packages/platform/interloper-app/
+WORKDIR /repo/packages/platform/interloper-app/app
 RUN pnpm exec nuxt prepare && NUXT_PRESET=static pnpm build
 
 
@@ -318,7 +321,7 @@ CMD ["interloper-mcp"]
 
 # ── frontend (nginx serving the pre-built SPA) ────────────────
 FROM nginx:1.30-alpine-slim AS frontend
-COPY --from=build-spa /app/.output/public/ /usr/share/nginx/html/
+COPY --from=build-spa /repo/packages/platform/interloper-app/app/.output/public/ /usr/share/nginx/html/
 # nginx-alpine expands /etc/nginx/templates/*.template into
 # /etc/nginx/conf.d/ at startup with envsubst. API_UPSTREAM is required;
 # the Helm chart sets it to the in-cluster API service.

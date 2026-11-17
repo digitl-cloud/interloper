@@ -1,0 +1,15 @@
+/*
+ * Tailwind for an extension's UI: `@import "@interloper/ui/tailwind.css";` in its stylesheet.
+ *
+ * Utilities only, against the app's theme: the app's page already carries the preflight
+ * and every token, so a class here resolves to what it does in the app (`text-muted` to
+ * `var(--ui-text-muted)`), and nothing here redefines a variable the app sets.
+ */
+@layer theme, base, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme) theme(reference inline);
+@import "../dist/theme.css";
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant light (&:where(.light, .light *));

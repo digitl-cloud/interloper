@@ -1,0 +1,2 @@
+# The UI's build, written by `pnpm --filter @interloper/example build`
+src/interloper_example/static/

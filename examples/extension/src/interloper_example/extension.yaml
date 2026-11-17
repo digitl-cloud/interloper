@@ -1,0 +1,6 @@
+manifest_version: 1
+key: example
+name: Example
+description: "An API route and a page built with the @interloper/ui SDK."
+routes: interloper_example.routes:router
+ui: interloper_example.ui:UI

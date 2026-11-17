@@ -6,6 +6,7 @@ wheels/
 *.egg-info
 .pytest_cache
 .venv
+node_modules/
 .DS_Store
 .env
 data/

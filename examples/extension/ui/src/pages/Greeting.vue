@@ -1,0 +1,45 @@
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import { useExtension } from '@interloper/host'
+
+interface Greeting {
+    organisation: string
+    role: string
+}
+
+const { apiFetch } = useExtension()
+const greeting = ref<Greeting | null>(null)
+const error = ref<unknown>(null)
+
+async function load() {
+    error.value = null
+    try {
+        greeting.value = await apiFetch<Greeting>('/greeting')
+    }
+    catch (caught) {
+        error.value = caught
+    }
+}
+
+onMounted(load)
+</script>
+
+<template>
+    <UDashboardPanel id="example">
+        <template #header>
+            <AppNavbar title="Example" />
+        </template>
+        <template #body>
+            <LoadError v-if="error" title="Couldn't load the greeting" :error="error" @retry="load" />
+            <UCard v-else>
+                <template #header>
+                    <CardHeader title="Greeting" description="Read from the example's own API route." />
+                </template>
+                <div class="flex items-center gap-2">
+                    <span class="text-sm text-highlighted">{{ greeting?.organisation ?? '…' }}</span>
+                    <UBadge v-if="greeting" color="neutral" size="sm" :label="greeting.role" />
+                </div>
+            </UCard>
+        </template>
+    </UDashboardPanel>
+</template>

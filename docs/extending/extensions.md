@@ -284,6 +284,71 @@ a page's path as `addRoute` does. A sidebar entry, its `views` a submenu, follow
 and is found by the command palette under its label and keywords. An extension that fails to
 load is reported in a toast and skipped; the app and the other extensions carry on.
 
+### Building it with the SDK
+
+`@interloper/ui` (`packages/platform/interloper-app/sdk/`) builds an extension's UI the way the
+app is built: Vue single-file components, Nuxt UI components used in templates without an
+import, Tailwind classes that resolve to the app's theme, and types for `@interloper/host`. The
+repository's pnpm workspace holds the app, the SDK, every `packages/extensions/*/ui` and the
+examples' UIs; a first-party extension keeps its UI there, beside its Python package.
+`examples/extension/` is a complete one, an API route and a page:
+
+```
+examples/extension/
+  pyproject.toml
+  src/interloper_example/
+    extension.yaml         routes and ui entries
+    routes.py
+    ui.py                  UI = UIBundle.from_vite(Path(__file__).parent / "static")
+    static/                the UI's build, gitignored
+  ui/
+    package.json           devDependencies: @interloper/ui, vite, vue, typescript, vue-tsc
+    vite.config.ts         export default interloper({ outDir: '../src/interloper_example/static' })
+    tsconfig.json          { "extends": "@interloper/ui/tsconfig", "include": ["src"] }
+    src/index.ts           export default defineExtension({ setup(host) { ... } })
+    src/main.css           @import "@interloper/ui/tailwind.css";
+    src/pages/Greeting.vue
+```
+
+`interloper()` is the whole Vite configuration: it leaves the shared modules to the import map,
+resolves the components `@interloper/host` exports (`UButton`, `UCard`, `AppNavbar`, ...) where
+a template uses them, compiles Tailwind and writes the bundle with its manifest and relative
+chunks into `outDir`, for `UIBundle.from_vite`. The Tailwind entry adds utilities only: the
+app's page already carries the preflight and the theme, so `text-muted` resolves to
+`var(--ui-text-muted)` and nothing in the extension's stylesheet redefines a variable the app
+sets.
+
+The SDK derives what it knows of the app from the app itself, so it is built after the app is
+prepared, and again when `host.ts` or the theme changes:
+
+```sh
+pnpm install                                # the workspace; prepares the app
+pnpm --filter @interloper/ui build          # @interloper/host's types, its components, the theme
+pnpm --filter @interloper/example build     # the UI, into the Python package
+pnpm --filter @interloper/example typecheck
+```
+
+The types are the app's own declarations of `host.ts` and every file it reaches, so a page is
+checked against the stores, composables and component props the app runs; a declaration error
+in any of those files fails the SDK's build. The components `@interloper/host` exports are the
+contract: one it does not export cannot be used, since a copy bundled with the extension would
+miss the app's theme. Exporting every Nuxt UI component would add about 450 KB, gzipped, to
+every page that shows an extension, so each is added to `host.ts` when an extension needs it.
+
+To work on a UI with hot reload, run its dev server beside the app's and name it in
+`INTERLOPER_UI_DEV` (`<key>=<entry URL>`, several separated by commas):
+
+```sh
+pnpm --filter @interloper/example dev       # http://localhost:5173
+INTERLOPER_UI_DEV=example=http://localhost:5173/src/index.ts make dev-up
+```
+
+The app then imports the extension's entry from its dev server instead of its bundle, built
+or not, and an edit to a page, a class or a stylesheet applies in place. Only the app's dev
+server reads the variable, so no deployment can be made to import code from elsewhere. The
+Python package is installed as for any other run (`uv pip install -e examples/extension` for
+the example, which is not a workspace package and is never published).
+
 ## The installed packages
 
 `GET /api/extensions` lists the installed packages that ship a manifest, the platform's own
