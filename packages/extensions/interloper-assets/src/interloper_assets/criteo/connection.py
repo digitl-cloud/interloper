@@ -4,6 +4,7 @@ import interloper as il
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.criteo import constants
+from interloper_assets.criteo.api import CriteoApi
 
 
 @il.connection(
@@ -23,6 +24,9 @@ class CriteoConnection(il.RefreshTokenOAuthConnection):
 
         The token exchange is async-native (yielded into this client's flow), so
         no blocking refresh runs on the event loop — no up-front token fetch needed.
+
+        Returns:
+            The authenticated client, cached per connection instance.
         """
         return il.AsyncRESTClient(
             constants.BASE_URL,
@@ -30,6 +34,15 @@ class CriteoConnection(il.RefreshTokenOAuthConnection):
                 constants.BASE_URL, self.client_id, self.client_secret, refresh_token=self.refresh_token
             ),
         )
+
+    @cached_property
+    def api(self) -> CriteoApi:
+        """The Criteo API engine every caller shares, built on ``client``.
+
+        Returns:
+            The engine, cached per connection instance.
+        """
+        return CriteoApi(self.client)
 
     @il.fetch_field_provider
     async def advertisers(self) -> list[dict[str, str]]:
@@ -39,14 +52,12 @@ class CriteoConnection(il.RefreshTokenOAuthConnection):
             The options for the field's dropdown.
 
         """
-        response = await self.client.get(f"/{constants.API_VERSION}/advertisers/me")
-        response.raise_for_status()
-        advertisers = response.json().get("data", [])
-
+        advertisers = await self.api.get("/advertisers/me")
         results = [
-            {"id": a["id"], "name": a.get("attributes", {}).get("advertiserName") or a["id"]} for a in advertisers
+            {"id": advertiser["id"], "name": advertiser.get("advertiserName") or advertiser["id"]}
+            for advertiser in advertisers
         ]
-        return sorted(results, key=lambda a: a["name"].lower())
+        return sorted(results, key=lambda advertiser: advertiser["name"].lower())
 
     async def check(self) -> bool:
         """Prove the credentials work by running the ``advertisers`` lookup.
