@@ -1,3 +1,26 @@
+TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+OAUTH_SCOPE = "https://ads.microsoft.com/msads.manage offline_access"
+CUSTOMER_MANAGEMENT_URL = (
+    "https://clientcenter.api.bingads.microsoft.com/Api/CustomerManagement/v13/CustomerManagementService.svc"
+)
+CUSTOMER_NAMESPACE = "https://bingads.microsoft.com/Customer/v13"
+ENTITIES_NAMESPACE = "https://bingads.microsoft.com/Customer/v13/Entities"
+
+# How long the SDK waits for a report or Bulk file, in milliseconds.
+DOWNLOAD_TIMEOUT = 3600000
+
+# The Bing time zone whose today a report's end date may not pass; it does not decide the day a row is dated in.
+REPORT_TIME_ZONE = "AmsterdamBerlinBernRomeStockholmVienna"
+
+# The ad report's rate columns, which Reporting writes as percentage strings (``"1.50%"``).
+PERCENTAGE_COLUMNS = [
+    "Ctr",
+    "ConversionRate",
+    "AllConversionRate",
+    "AbsoluteTopImpressionRatePercent",
+    "TopImpressionRatePercent",
+]
+
 AD_PERFORMANCE_FIELDS = [
     "AccountName",
     "AccountNumber",
