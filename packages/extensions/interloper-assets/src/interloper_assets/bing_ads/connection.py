@@ -176,7 +176,8 @@ class BingAdsConnection(il.RefreshTokenOAuthConnection):
         shared ``/tmp`` path it creates with a racy exists-then-makedirs,
         so concurrent report assets in one pod crash with ``FileExistsError``.
         """
-        from bingads.v13.reporting.reporting_service_manager import ReportingServiceManager
+        # Through the package: threads entering it by different submodules deadlock on its import locks.
+        from bingads.v13.reporting import ReportingServiceManager
 
         return ReportingServiceManager(
             self.authorization_data(account_id),

@@ -133,7 +133,8 @@ def _translate_soap_fault(error: Exception) -> None:
 
 def _download_report(connection: BingAdsConnection, account_id: str, request: Any) -> pd.DataFrame:
     """Download a report request to a temp CSV and return it as a DataFrame."""
-    from bingads.v13.reporting.reporting_download_parameters import ReportingDownloadParameters
+    # Through the package: threads entering it by different submodules deadlock on its import locks.
+    from bingads.v13.reporting import ReportingDownloadParameters
 
     with tempfile.TemporaryDirectory() as result_dir:
         download_parameters = ReportingDownloadParameters(

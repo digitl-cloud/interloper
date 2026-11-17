@@ -22,7 +22,7 @@ class TestReportingServiceManagerWorkingDirectory:
     """
 
     def test_each_manager_gets_a_fresh_working_directory(self, monkeypatch):
-        import bingads.v13.reporting.reporting_service_manager as rsm_module
+        import bingads.v13.reporting as reporting_module
 
         captured: list[dict[str, Any]] = []
 
@@ -30,7 +30,7 @@ class TestReportingServiceManagerWorkingDirectory:
             def __init__(self, authorization_data: Any, **kwargs: Any):
                 captured.append(kwargs)
 
-        monkeypatch.setattr(rsm_module, "ReportingServiceManager", FakeManager)
+        monkeypatch.setattr(reporting_module, "ReportingServiceManager", FakeManager)
         monkeypatch.setattr(
             BingAdsConnection, "authorization_data", lambda self, account_id, customer_id=None: SimpleNamespace()
         )
