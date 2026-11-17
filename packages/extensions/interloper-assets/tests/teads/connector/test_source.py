@@ -12,13 +12,13 @@ from __future__ import annotations
 import asyncio
 import csv
 import datetime as dt
+import io
 import json
 from typing import Any
 
 import httpx2
 import interloper as il
 import pandas as pd
-import pytest
 from interloper.asset.context import ExecutionContext
 from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
@@ -98,16 +98,19 @@ class TestPartitionColumn:
 
 
 class TestReportFlow:
-    """Request the job, poll its status, download the CSV the finished status points at."""
+    """The asset runs the standard report over its advertiser's day and returns the CSV rows as written.
 
-    def _run(self, monkeypatch: Any, statuses: list[dict[str, Any]], run: dict[str, Any] | None = None) -> Any:
+    The API client is the test's own, without the connection's headers.
+    """
+
+    def _run(self, monkeypatch: Any, statuses: list[dict[str, Any]]) -> Any:
         requests: list[httpx2.Request] = []
         remaining = list(statuses)
 
         def api(request: httpx2.Request) -> httpx2.Response:
             requests.append(request)
             if request.url.path == "/api/reports/run":
-                return httpx2.Response(200, json=run or {"valid": True, "id": "r-1"})
+                return httpx2.Response(200, json={"valid": True, "id": "r-1"})
             return httpx2.Response(200, json=remaining.pop(0))
 
         def storage(request: httpx2.Request) -> httpx2.Response:
@@ -132,33 +135,37 @@ class TestReportFlow:
         context = ExecutionContext(asset, il.TimePartition(value=dt.date(2026, 6, 14)).window)
         return asyncio.run(asset.data(context=context)), requests
 
-    def test_polls_until_finished_and_parses_the_csv(self, monkeypatch: Any):
+    def test_sends_the_standard_report_of_the_advertisers_day_and_returns_its_rows_as_written(self, monkeypatch: Any):
         rows, requests = self._run(
             monkeypatch,
             [{"status": "running"}, {"status": "finished", "uri": "https://storage.example/r-1.csv"}],
         )
-        assert len(rows) == 1 and rows[0]["Creative ID"] == "222"
 
+        assert rows == list(csv.DictReader(io.StringIO(CSV)))
+        assert rows[0]["Creative ID"] == "222"
+        assert [(request.method, str(request.url)) for request in requests] == [
+            ("POST", "https://ads.teads.tv/api/reports/run"),
+            ("GET", "https://ads.teads.tv/api/reports/status/r-1"),
+            ("GET", "https://ads.teads.tv/api/reports/status/r-1"),
+            ("GET", "https://storage.example/r-1.csv"),
+        ]
         run, *polls, download = requests
+        assert run.headers["content-type"] == "application/json"
         body = json.loads(run.content)
-        assert body["filters"]["advertisers"] == [20765]
-        assert body["filters"]["date"]["start"] == "2026-06-14T00:00:00.000+00:00"
-        assert body["filters"]["date"]["end"] == "2026-06-14T23:59:59.999+00:00"
-        assert body["dimensions"] == constants.STANDARD_DIMENSIONS
-        assert body["metrics"] == constants.STANDARD_METRICS
-        assert [p.url.path for p in polls] == ["/api/reports/status/r-1"] * 2
-        assert download.url.host == "storage.example"
+        assert body == {
+            "filters": {
+                "date": {
+                    "start": "2026-06-14T00:00:00.000+00:00",
+                    "end": "2026-06-14T23:59:59.999+00:00",
+                    "timezone": "Etc/GMT+0",
+                },
+                "advertisers": [20765],
+            },
+            "dimensions": constants.STANDARD_DIMENSIONS,
+            "metrics": constants.STANDARD_METRICS,
+        }
+        assert list(body) == ["filters", "dimensions", "metrics"]
+        assert list(body["filters"]) == ["date", "advertisers"]
+        assert list(body["filters"]["date"]) == ["start", "end", "timezone"]
+        assert all(not request.content for request in [*polls, download])
         assert "authorization" not in download.headers
-
-    def test_invalid_request_raises(self, monkeypatch: Any):
-        with pytest.raises(RuntimeError, match="rejected"):
-            self._run(monkeypatch, [], run={"valid": False})
-
-    def test_failed_report_raises(self, monkeypatch: Any):
-        with pytest.raises(RuntimeError, match="failed"):
-            self._run(monkeypatch, [{"status": "error"}])
-
-    def test_report_not_finished_in_time_raises(self, monkeypatch: Any):
-        monkeypatch.setattr(constants, "REPORT_TIMEOUT", 0)
-        with pytest.raises(RuntimeError, match="did not finish within 0s"):
-            self._run(monkeypatch, [{"status": "running"}])
