@@ -1,0 +1,32 @@
+"""The example's API, mounted under ``/api/organisations/{org_id}/ext/example``."""
+
+from fastapi import APIRouter
+from interloper_api.dependencies import ViewerDep
+from pydantic import BaseModel
+
+router = APIRouter()
+
+
+class Greeting(BaseModel):
+    """Who the page greets.
+
+    Attributes:
+        organisation: The organisation's name.
+        role: The caller's role in it.
+    """
+
+    organisation: str
+    role: str
+
+
+@router.get("/greeting")
+def greeting(scope: ViewerDep) -> Greeting:
+    """Greet the caller in the organisation the path names.
+
+    Args:
+        scope: The organisation and the caller's role in it.
+
+    Returns:
+        The organisation's name and the caller's role.
+    """
+    return Greeting(organisation=scope.organisation.name, role=scope.role)

@@ -1,0 +1,35 @@
+{
+  "name": "@interloper/ui",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./vite": "./src/vite.ts",
+    "./tailwind.css": "./src/tailwind.css",
+    "./tsconfig": "./tsconfig.extension.json"
+  },
+  "scripts": {
+    "build": "node scripts/build.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@iconify/vue": "^5.0.4",
+    "@nuxt/ui": "~4.12.0",
+    "@tailwindcss/vite": "^4.3.5",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "@vueuse/core": "^14.4.0",
+    "pinia": "^4.1.0",
+    "tailwindcss": "^4.3.5",
+    "unplugin-vue-components": "^32.1.0",
+    "vue": "^3.5.45",
+    "vue-router": "^5.5.0"
+  },
+  "peerDependencies": {
+    "vite": "^8.3.8"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.8",
+    "vue-tsc": "3.3.11"
+  }
+}

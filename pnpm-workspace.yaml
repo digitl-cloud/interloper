@@ -1,0 +1,14 @@
+packages:
+  - packages/platform/interloper-app/app
+  - packages/platform/interloper-app/sdk
+  - packages/extensions/*/ui
+  - examples/*/ui
+
+patchedDependencies:
+  'vaul-vue@0.4.1': packages/platform/interloper-app/app/patches/vaul-vue@0.4.1.patch
+
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true
+  unrs-resolver: true
+  vue-demi: true

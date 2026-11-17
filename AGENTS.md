@@ -11,7 +11,7 @@ packages/
     interloper-db/             database persistence layer, platform errors, `interloper db`
     interloper-scheduler/      cron + queue worker + reaper + launchers; `interloper scheduler`
     interloper-api/            FastAPI HTTP backend, `interloper api`; reads catalog metadata only, never executes assets
-    interloper-app/            Nuxt SPA + Python package serving it; `interloper app` (all roles in one process)
+    interloper-app/            Nuxt SPA (app/) + Python package serving it; `interloper app` (all roles in one process); sdk/ is @interloper/ui, what extension UIs build with
     interloper-toolkit/        tool functions shared by the agent and the MCP server
     interloper-agent/          the assistant (pydantic-ai)
     interloper-mcp/            MCP server over the catalog, lineage and run history
@@ -29,7 +29,7 @@ packages/
     interloper-slack/          Slack connection and notification hook
     interloper-docker/         Docker runner + launcher
     interloper-k8s/            Kubernetes runner + launcher
-examples/                      runnable usage examples
+examples/                      runnable usage examples; extension/ is an extension with routes and a UI, never published
 chart/                         Helm chart
 docker/                        uv-sync.sh helper and nginx template
 dockerfile                     multi-target build (api / frontend / core / scheduler / mcp; all but frontend also as -slim)
@@ -39,7 +39,7 @@ dev/docs_macros.py             macros the reference pages render settings and CL
 
 A package lives in `platform/` when a role process imports it by name, and in `extensions/` when the platform reaches it only through a registry reading its `extension.yaml` (see [docs/extending/extensions.md](docs/extending/extensions.md)). The workspace glob is `packages/*/*`, so a new package goes in one of the two groups.
 
-The frontend lives at `packages/platform/interloper-app/app/` and has its own toolchain (pnpm + Nuxt) and its own [AGENTS.md](packages/platform/interloper-app/app/AGENTS.md). `make build-app` builds the SPA and copies it into `packages/platform/interloper-app/src/interloper_app/static/`.
+The frontend lives at `packages/platform/interloper-app/app/` and has its own toolchain (pnpm + Nuxt) and its own [AGENTS.md](packages/platform/interloper-app/app/AGENTS.md). `make build-app` builds the SPA and copies it into `packages/platform/interloper-app/src/interloper_app/static/`. One pnpm workspace, rooted at the repository (`pnpm-workspace.yaml`, one `pnpm-lock.yaml`), holds the app, the SDK and the extensions' UIs (`packages/extensions/*/ui`, `examples/*/ui`); `pnpm install` anywhere in it installs them all. Building an extension's UI is in [docs/extending/extensions.md](docs/extending/extensions.md#building-it-with-the-sdk).
 
 ## Commands
 
