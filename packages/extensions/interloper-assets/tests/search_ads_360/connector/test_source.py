@@ -103,13 +103,16 @@ class TestAssets:
 class TestSearch:
     """POST the query, follow ``nextPageToken`` in the body, route through the manager where the report needs it."""
 
-    def _run(self, monkeypatch: Any, key: str, pages: list[dict[str, Any]]) -> tuple[list[Any], list[httpx2.Request]]:
+    def _run(
+        self, monkeypatch: Any, key: str, pages: list[dict[str, Any] | httpx2.Response]
+    ) -> tuple[list[Any], list[httpx2.Request]]:
         requests: list[httpx2.Request] = []
         remaining = list(pages)
 
         def api(request: httpx2.Request) -> httpx2.Response:
             requests.append(request)
-            return httpx2.Response(200, json=remaining.pop(0))
+            page = remaining.pop(0)
+            return page if isinstance(page, httpx2.Response) else httpx2.Response(200, json=page)
 
         connection = SearchAds360Connection(service_account_key="{}")
         monkeypatch.setitem(
@@ -122,12 +125,13 @@ class TestSearch:
         return asyncio.run(asset.data(context=context)), requests
 
     def test_campaigns_follow_the_page_token(self, monkeypatch: Any):
+        second_row = {**CAMPAIGN_ROW, "campaign": {**CAMPAIGN_ROW["campaign"], "id": "457"}}
         rows, requests = self._run(
             monkeypatch,
             "campaigns_stats",
-            [{"results": [CAMPAIGN_ROW], "nextPageToken": "p2"}, {"results": [CAMPAIGN_ROW]}],
+            [{"results": [CAMPAIGN_ROW], "nextPageToken": "p2"}, {"results": [second_row]}],
         )
-        assert len(rows) == 2
+        assert rows == [CAMPAIGN_ROW, second_row]
         first, second = (json.loads(r.content) for r in requests)
         assert first == {
             "query": (
@@ -138,7 +142,8 @@ class TestSearch:
         assert second == {**first, "pageToken": "p2"}
         for request in requests:
             assert request.method == "POST"
-            assert request.url.path == "/v0/customers/222/searchAds360:search"
+            assert str(request.url) == "https://searchads360.googleapis.com/v0/customers/222/searchAds360:search"
+            assert request.headers["content-type"] == "application/json"
             assert request.headers["login-customer-id"] == "111"
 
     def test_empty_result_pages_yield_no_rows(self, monkeypatch: Any):
@@ -153,6 +158,26 @@ class TestSearch:
             "query": f"SELECT {', '.join(constants.CUSTOMER_CLIENT_FIELDS)} FROM customer_client"
         }
         assert rows[0]["date"] == DAY
+
+    def test_customer_clients_follow_the_page_token_and_stamp_every_row(self, monkeypatch: Any):
+        second_row = {**CUSTOMER_CLIENT_ROW, "customerClient": {**CUSTOMER_CLIENT_ROW["customerClient"], "id": "333"}}
+        rows, requests = self._run(
+            monkeypatch,
+            "customer_clients",
+            [{"results": [CUSTOMER_CLIENT_ROW], "nextPageToken": "p2"}, {"results": [second_row]}],
+        )
+        assert rows == [{**CUSTOMER_CLIENT_ROW, "date": DAY}, {**second_row, "date": DAY}]
+        first, second = (json.loads(r.content) for r in requests)
+        assert second == {**first, "pageToken": "p2"}
+        for request in requests:
+            assert request.method == "POST"
+            assert str(request.url) == "https://searchads360.googleapis.com/v0/customers/111/searchAds360:search"
+            assert "login-customer-id" not in request.headers
+
+    def test_a_refused_query_raises_the_http_error(self, monkeypatch: Any):
+        refusal = httpx2.Response(400, json={"error": {"code": 400, "status": "INVALID_ARGUMENT"}})
+        with pytest.raises(httpx2.HTTPStatusError, match="400 Bad Request"):
+            self._run(monkeypatch, "campaigns_stats", [refusal])
 
 
 class TestReconcile:

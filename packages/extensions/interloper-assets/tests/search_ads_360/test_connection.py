@@ -46,6 +46,13 @@ class TestClient:
         assert str(_connection().client.base_url).rstrip("/") == BASE_URL
 
 
+class TestApi:
+    def test_the_api_is_built_on_the_client(self):
+        connection = _connection()
+
+        assert connection.api.client is connection.client
+
+
 class TestServiceAccountAuth:
     def _serve(self, api_statuses: list[int]) -> tuple[list[httpx2.Request], Any]:
         requests: list[httpx2.Request] = []
