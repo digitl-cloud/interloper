@@ -12,6 +12,7 @@ from urllib.parse import parse_qs
 
 import httpx2
 import interloper as il
+import pytest
 
 from interloper_assets.pinterest_ads import constants
 from interloper_assets.pinterest_ads.connection import PinterestAdsConnection, PinterestRefreshTokenAuth
@@ -49,6 +50,13 @@ class TestTokenRefresh:
         assert form["refresh_token"] == ["refresh"]
 
 
+class TestApi:
+    def test_the_api_is_built_on_the_client(self):
+        connection = _connection()
+
+        assert connection.api.client is connection.client
+
+
 class TestAccounts:
     async def test_accounts_follow_the_bookmark(self):
         pages = {
@@ -56,15 +64,38 @@ class TestAccounts:
             "next": {"items": [{"id": "2"}], "bookmark": None},
         }
         seen: list[dict[str, str]] = []
+        paths: list[str] = []
 
         def handler(request: httpx2.Request) -> httpx2.Response:
             params = dict(request.url.params)
             seen.append(params)
+            paths.append(f"{request.method} {request.url.path}")
             return httpx2.Response(200, json=pages[params.get("bookmark")])
 
         connection = _connection()
         connection.__dict__["client"] = il.AsyncRESTClient(constants.BASE_URL, transport=httpx2.MockTransport(handler))
 
         assert await connection.accounts() == [{"id": "1", "name": "First"}, {"id": "2", "name": "2"}]
-        assert [params.get("bookmark") for params in seen] == [None, "next"]
-        assert all(params["page_size"] == str(constants.PAGE_SIZE) for params in seen)
+        assert paths == ["GET /v5/ad_accounts", "GET /v5/ad_accounts"]
+        page_size = str(constants.PAGE_SIZE)
+        assert seen == [{"page_size": page_size}, {"page_size": page_size, "bookmark": "next"}]
+
+
+class TestCheck:
+    def _connection(self, response: httpx2.Response) -> PinterestAdsConnection:
+        connection = _connection()
+        connection.__dict__["client"] = il.AsyncRESTClient(
+            constants.BASE_URL, transport=httpx2.MockTransport(lambda _: response)
+        )
+        return connection
+
+    async def test_listing_the_accounts_proves_the_credentials(self):
+        connection = self._connection(httpx2.Response(200, json={"items": [], "bookmark": None}))
+
+        assert await connection.check() is True
+
+    async def test_a_refused_listing_fails_the_check(self):
+        connection = self._connection(httpx2.Response(401, json={"code": 2, "message": "Authentication failed."}))
+
+        with pytest.raises(httpx2.HTTPStatusError):
+            await connection.check()

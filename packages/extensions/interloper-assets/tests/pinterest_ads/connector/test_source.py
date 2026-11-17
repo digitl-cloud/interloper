@@ -7,7 +7,7 @@ snake-case onto the schemas, with ``column_overrides`` for the ``3SEC`` /
 ``15SEC`` names. Entities are bookmark-paginated objects with nested settings
 and Unix-second timestamps, typed by the entity normalizer's epoch option. These
 tests pin the key set, both reshapes, the spec round-trip, the partition
-columns, and the report and pagination helpers against a faked API.
+columns, and what each asset sends and returns against a faked API.
 """
 
 from __future__ import annotations
@@ -23,10 +23,10 @@ from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
+from interloper_assets.pinterest_ads import api as api_module
 from interloper_assets.pinterest_ads import constants
 from interloper_assets.pinterest_ads.connection import PinterestAdsConnection
 from interloper_assets.pinterest_ads.connector import schemas
-from interloper_assets.pinterest_ads.connector import source as source_module
 from interloper_assets.pinterest_ads.connector.source import PinterestAds
 
 REPORT_ASSETS = ("ads_stats", "campaigns_stats", "ads_conversions_stats", "videos_stats_by_targeting")
@@ -229,10 +229,13 @@ class _FakeReportApi:
     def __init__(self, final: dict[str, Any], download: bytes = b"") -> None:
         self.final = final
         self.download = download
+        self.requests: list[httpx2.Request] = []
+        self.downloads: list[httpx2.Request] = []
         self.created: list[dict[str, Any]] = []
         self.polls = 0
 
     def api(self, request: httpx2.Request) -> httpx2.Response:
+        self.requests.append(request)
         assert request.url.path == "/v5/ad_accounts/549759962542/reports"
         if request.method == "POST":
             self.created.append(json.loads(request.content))
@@ -244,8 +247,8 @@ class _FakeReportApi:
         return httpx2.Response(200, json=self.final)
 
     def storage(self, request: httpx2.Request) -> httpx2.Response:
-        assert request.extensions["timeout"]["read"] == constants.DOWNLOAD_TIMEOUT.read
-        assert "Authorization" not in request.headers
+        self.downloads.append(request)
+        assert request.extensions["timeout"] == constants.DOWNLOAD_TIMEOUT.as_dict()
         return httpx2.Response(200, content=self.download)
 
 
@@ -254,9 +257,9 @@ def fake_api(monkeypatch: Any):
     def install(final: dict[str, Any], download: bytes = b"") -> tuple[Any, _FakeReportApi]:
         api = _FakeReportApi(final, download)
         real_client = httpx2.AsyncClient
-        monkeypatch.setattr(source_module, "_POLL_INTERVAL", 0)
+        monkeypatch.setattr(api_module, "_POLL_INTERVAL", 0)
         monkeypatch.setattr(
-            source_module.httpx2,
+            httpx2,
             "AsyncClient",
             lambda **kwargs: real_client(transport=httpx2.MockTransport(api.storage), **kwargs),
         )
@@ -266,52 +269,6 @@ def fake_api(monkeypatch: Any):
 
 
 class TestReportFlow:
-    async def test_rows_are_flattened_across_entities(self, fake_api):
-        payload = {"687001": [{"DATE": "2026-09-14", "AD_ID": "687001"}], "687002": [{"DATE": "2026-09-14"}]}
-        source, api = fake_api(
-            {"report_status": "FINISHED", "url": "https://storage.example/r.json"},
-            json.dumps(payload).encode(),
-        )
-        rows = await source._report(DAY, level="PIN_PROMOTION", columns=["AD_ID"])
-        assert rows == [{"DATE": "2026-09-14", "AD_ID": "687001"}, {"DATE": "2026-09-14"}]
-        assert api.polls == 2
-        (body,) = api.created
-        assert body == {
-            "start_date": "2026-09-14",
-            "end_date": "2026-09-14",
-            "granularity": "DAY",
-            "level": "PIN_PROMOTION",
-            "columns": ["AD_ID"],
-            "report_format": "JSON",
-        }
-
-    async def test_targeting_types_are_sent_only_when_given(self, fake_api):
-        source, api = fake_api({"report_status": "FINISHED", "url": None})
-        rows = await source._report(
-            DAY,
-            level="PIN_PROMOTION_TARGETING",
-            columns=["PIN_PROMOTION_ID"],
-            targeting_types=constants.VIDEO_TARGETING_TYPES,
-        )
-        assert rows == []
-        assert api.created[0]["targeting_types"] == ["APPTYPE", "PLACEMENT"]
-
-    async def test_failed_report_raises(self, fake_api):
-        source, _ = fake_api({"report_status": "FAILED"})
-        with pytest.raises(RuntimeError, match="FAILED"):
-            await source._report(DAY, level="CAMPAIGN", columns=["CAMPAIGN_ID"])
-
-    async def test_report_not_ready_in_time_raises(self, fake_api, monkeypatch: Any):
-        source, api = fake_api({"report_status": "IN_PROGRESS"})
-        monkeypatch.setattr(source_module, "_REPORT_TIMEOUT", 0)
-        with pytest.raises(RuntimeError, match="not ready within 0s"):
-            await source._report(DAY, level="CAMPAIGN", columns=["CAMPAIGN_ID"])
-        assert api.polls == 1
-
-    async def test_empty_download_yields_no_rows(self, fake_api):
-        source, _ = fake_api({"report_status": "FINISHED", "url": "https://storage.example/r.json"})
-        assert await source._report(DAY, level="CAMPAIGN", columns=["CAMPAIGN_ID"]) == []
-
     @pytest.mark.parametrize(
         ("key", "level", "columns", "targeting_types"),
         [
@@ -326,33 +283,45 @@ class TestReportFlow:
             ),
         ],
     )
-    async def test_asset_requests_its_level_and_columns(
+    async def test_asset_runs_its_report_job_and_returns_the_files_rows(
         self, fake_api, key: str, level: str, columns: list[str], targeting_types: list[str] | None
     ):
-        source, api = fake_api({"report_status": "FINISHED", "url": None})
-        assert await _run(source, key) == []
-        (body,) = api.created
-        assert body["level"] == level
-        assert body["columns"] == columns
-        assert body.get("targeting_types") == targeting_types
+        payload = {"1": [{"DATE": "2026-09-14", "ID": "1"}], "2": [{"DATE": "2026-09-14", "ID": "2"}]}
+        source, api = fake_api(
+            {"report_status": "FINISHED", "url": "https://storage.example/r.json"},
+            json.dumps(payload).encode(),
+        )
+
+        rows = await _run(source, key)
+
+        assert rows == [{"DATE": "2026-09-14", "ID": "1"}, {"DATE": "2026-09-14", "ID": "2"}]
+        path = "/v5/ad_accounts/549759962542/reports"
+        assert [(request.method, request.url.path, dict(request.url.params)) for request in api.requests] == [
+            ("POST", path, {}),
+            ("GET", path, {"token": "tok"}),
+            ("GET", path, {"token": "tok"}),
+        ]
+        body: dict[str, Any] = {
+            "start_date": "2026-09-14",
+            "end_date": "2026-09-14",
+            "granularity": "DAY",
+            "level": level,
+            "columns": columns,
+            "report_format": "JSON",
+        }
+        if targeting_types is not None:
+            body["targeting_types"] = targeting_types
+        assert api.created == [body]
+        (download,) = api.downloads
+        assert (download.method, str(download.url)) == ("GET", "https://storage.example/r.json")
+
+    async def test_asset_raises_the_report_jobs_failure(self, fake_api):
+        source, _ = fake_api({"report_status": "EXPIRED"})
+        with pytest.raises(RuntimeError, match="Pinterest report tok ended with status EXPIRED"):
+            await _run(source, "campaigns_stats")
 
 
 class TestEntityListing:
-    async def test_list_follows_the_bookmark_and_stamps_the_date(self):
-        pages = {
-            None: {"items": [{"id": "1"}, {"id": "2"}], "bookmark": "b2"},
-            "b2": {"items": [{"id": "3"}], "bookmark": None},
-        }
-        paths: set[str] = set()
-
-        def handler(request: httpx2.Request) -> httpx2.Response:
-            paths.add(request.url.path)
-            return httpx2.Response(200, json=pages[request.url.params.get("bookmark")])
-
-        rows = await _source_with_api(handler)._list("ads", DAY)
-        assert rows == [{"id": "1", "date": DAY}, {"id": "2", "date": DAY}, {"id": "3", "date": DAY}]
-        assert paths == {"/v5/ad_accounts/549759962542/ads"}
-
     async def test_ad_accounts_fetches_the_sources_account(self):
         seen: list[httpx2.Request] = []
 
@@ -362,16 +331,27 @@ class TestEntityListing:
 
         rows = await _run(_source_with_api(handler), "ad_accounts")
         assert rows == [{"id": "549759962542", "name": "Brand", "currency": "EUR", "date": DAY}]
-        assert [request.url.path for request in seen] == ["/v5/ad_accounts/549759962542"]
+        assert [(request.method, request.url.path, request.url.query) for request in seen] == [
+            ("GET", "/v5/ad_accounts/549759962542", b"")
+        ]
 
     @pytest.mark.parametrize("key", ["campaigns", "ad_groups", "ads"])
-    async def test_listing_assets_page_through_their_resource(self, key: str):
-        seen: list[httpx2.URL] = []
+    async def test_listing_assets_follow_the_bookmark_and_stamp_the_day(self, key: str):
+        pages = {
+            None: {"items": [{"id": "1"}], "bookmark": "b2"},
+            "b2": {"items": [{"id": "2"}], "bookmark": None},
+        }
+        sent: list[tuple[str, str, dict[str, str]]] = []
 
         def handler(request: httpx2.Request) -> httpx2.Response:
-            seen.append(request.url)
-            return httpx2.Response(200, json={"items": [{"id": "1"}], "bookmark": None})
+            # the cursor paginator rewrites one request in place, so record each page as it is sent
+            sent.append((request.method, request.url.path, dict(request.url.params)))
+            return httpx2.Response(200, json=pages[request.url.params.get("bookmark")])
 
-        assert await _run(_source_with_api(handler), key) == [{"id": "1", "date": DAY}]
-        assert [url.path for url in seen] == [f"/v5/ad_accounts/549759962542/{key}"]
-        assert seen[0].params["page_size"] == str(constants.PAGE_SIZE)
+        assert await _run(_source_with_api(handler), key) == [{"id": "1", "date": DAY}, {"id": "2", "date": DAY}]
+        path = f"/v5/ad_accounts/549759962542/{key}"
+        page_size = str(constants.PAGE_SIZE)
+        assert sent == [
+            ("GET", path, {"page_size": page_size}),
+            ("GET", path, {"page_size": page_size, "bookmark": "b2"}),
+        ]
