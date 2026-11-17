@@ -10,7 +10,13 @@ ADGROUPS_REPORT_TEMPLATE_ID = "168005"
 REPORT_TIMEZONE = "UTC"
 
 GRAPHQL_PAGE_SIZE = 100
+QUERY_PAGE_SIZE = 100
 ADVERTISER_CONCURRENCY = 4
+
+# Report executions queue server-side; poll with backoff until complete.
+POLL_START_INTERVAL = 60.0
+POLL_MAX_INTERVAL = 300.0
+REPORT_TIMEOUT = 3 * 60 * 60
 
 # The entity fields are those The Trade Desk's REST-to-GraphQL migration
 # references map from the legacy REST entities (GET /v3/advertiser/{id},

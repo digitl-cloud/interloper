@@ -4,7 +4,8 @@ MyReports are requested in "International" format: metric values carry decimal
 commas ("12,34"), the date column is DD/MM/YYYY, and quartile headers spell
 ``%`` ("Player 25% Complete" → ``player_25pct_complete``). The custom
 normalizer must convert all three so the generic casts succeed — and survive
-the host→child DAG-spec round-trip.
+the host→child DAG-spec round-trip. Each asset's requests and returned rows
+are pinned against a mock transport.
 """
 
 from __future__ import annotations
@@ -134,7 +135,7 @@ def _entity(connection: TheTradeDeskConnection, key: str) -> Any:
     return next(a for a in source.assets if type(a).key == key)
 
 
-def _snapshot(connection: TheTradeDeskConnection, key: str) -> list[dict]:
+def _run(connection: TheTradeDeskConnection, key: str) -> list[dict]:
     asset = _entity(connection, key)
     context = il.ExecutionContext(asset, il.TimePartition(value=DAY).window)
     return asyncio.run(asset.data(context=context))
@@ -157,55 +158,6 @@ _CAMPAIGN = {
 class TestGraphQL:
     """Entities come from The Trade Desk's GraphQL API, page by page."""
 
-    def test_nodes_follow_the_cursor_until_the_last_page(self):
-        def handler(body: dict) -> dict:
-            if body["variables"]["after"] is None:
-                return _page(("partner", "advertisers"), [{"id": "adv1"}], cursor="next")
-            return _page(("partner", "advertisers"), [{"id": "adv2"}])
-
-        connection, bodies = _graphql(handler)
-        rows = asyncio.run(
-            connection.nodes(constants.ADVERTISER_IDS_QUERY, {"partnerId": "p"}, ("partner", "advertisers"))
-        )
-        assert rows == [{"id": "adv1"}, {"id": "adv2"}]
-        assert [body["variables"]["after"] for body in bodies] == [None, "next"]
-        assert bodies[0]["variables"] == {"partnerId": "p", "first": constants.GRAPHQL_PAGE_SIZE, "after": None}
-
-    def test_errors_answered_at_200_fail_the_query(self):
-        connection, _ = _graphql(lambda body: {"errors": [{"message": "AUTHENTICATION_FAILURE"}], "data": None})
-        with pytest.raises(RuntimeError, match="AUTHENTICATION_FAILURE"):
-            asyncio.run(connection.nodes(constants.ADVERTISERS_QUERY, {"partnerId": "p"}, ("partner", "advertisers")))
-
-    def test_an_unseen_parent_fails_rather_than_reading_as_no_nodes(self):
-        connection, _ = _graphql(lambda body: {"data": {"advertiser": None}})
-        with pytest.raises(RuntimeError, match="returned no advertiser"):
-            asyncio.run(connection.nodes(constants.CAMPAIGNS_QUERY, {"advertiserId": "a"}, ("advertiser", "campaigns")))
-
-    def test_a_parent_without_the_connection_reads_as_no_nodes(self):
-        connection, _ = _graphql(lambda body: {"data": {"advertiser": {"campaigns": None}}})
-        rows = asyncio.run(
-            connection.nodes(constants.CAMPAIGNS_QUERY, {"advertiserId": "a"}, ("advertiser", "campaigns"))
-        )
-        assert rows == []
-
-    def test_advertisers_are_the_partners_stamped_with_the_snapshot_day(self):
-        connection, bodies = _graphql(lambda body: _page(("partner", "advertisers"), [{"id": "adv1", "name": "A"}]))
-        assert _snapshot(connection, "advertisers") == [{"id": "adv1", "name": "A", "date": DAY}]
-        assert bodies[0]["variables"]["partnerId"] == "qz94j5z"
-
-    @pytest.mark.parametrize(("key", "field"), [("campaigns", "campaigns"), ("ad_groups", "adGroups")])
-    def test_campaigns_and_ad_groups_are_walked_per_advertiser(self, key: str, field: str):
-        def handler(body: dict) -> dict:
-            if "partnerId" in body["variables"]:
-                return _page(("partner", "advertisers"), [{"id": "adv1"}, {"id": "adv2"}])
-            return _page(("advertiser", field), [{"id": f"x-{body['variables']['advertiserId']}"}])
-
-        connection, bodies = _graphql(handler)
-        rows = _snapshot(connection, key)
-        assert sorted(row["id"] for row in rows) == ["x-adv1", "x-adv2"]
-        assert {row["date"] for row in rows} == {DAY}
-        assert sorted(body["variables"].get("advertiserId", "") for body in bodies[1:]) == ["adv1", "adv2"]
-
     def test_a_campaign_conforms_with_its_parent_id_flattened_and_its_schedule_as_utc_instants(self):
         def handler(body: dict) -> dict:
             if "partnerId" in body["variables"]:
@@ -213,7 +165,7 @@ class TestGraphQL:
             return _page(("advertiser", "campaigns"), [_CAMPAIGN])
 
         connection, _ = _graphql(handler)
-        frame = _entity(connection, "campaigns").normalizer.normalize(_snapshot(connection, "campaigns"))
+        frame = _entity(connection, "campaigns").normalizer.normalize(_run(connection, "campaigns"))
         assert set(frame.columns) <= set(schemas.Campaigns.model_fields)
         record = TableData.from_data(frame).reconcile(schemas.Campaigns).to_dict("records")[0]
         assert (record["advertiser_id"], record["budget_total"], record["primary_goal_type"]) == ("adv1", 1000.5, "CPA")
@@ -227,3 +179,115 @@ class TestGraphQL:
                 assert isinstance(asset.partitioning, il.SnapshotPartitionConfig), type(asset).key
                 assert asset.partitioning.column == "date"
                 assert asset.tags == ["Entity"]
+
+
+def _recorded(handler) -> tuple[TheTradeDeskConnection, list[httpx2.Request]]:
+    requests: list[httpx2.Request] = []
+
+    def respond(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        return handler(request)
+
+    connection = TheTradeDeskConnection(id="ttd", api_key="x")
+    connection.__dict__["client"] = il.AsyncRESTClient(constants.BASE_URL, transport=httpx2.MockTransport(respond))
+    return connection, requests
+
+
+_DOWNLOAD_URL = "https://download.example/delivery/report.csv"
+_DELIVERED_URL = "https://download.example/files/report.csv"
+_CSV = 'Date,Partner ID,TTD Cost (USD)\n01/10/2026,qz94j5z,"12,34"\n'
+
+
+def _myreports(request: httpx2.Request) -> httpx2.Response:
+    url = str(request.url)
+    if url == f"{constants.BASE_URL}/myreports/reportschedule" and request.method == "POST":
+        return httpx2.Response(200, json={"ReportScheduleId": 42})
+    if url == f"{constants.BASE_URL}/myreports/reportexecution/query/partners":
+        delivery = {"DownloadURL": _DOWNLOAD_URL}
+        return httpx2.Response(
+            200, json={"Result": [{"ReportExecutionState": "Complete", "ReportDeliveries": [delivery]}]}
+        )
+    if url == _DOWNLOAD_URL:
+        return httpx2.Response(302, headers={"Location": _DELIVERED_URL})
+    if url == _DELIVERED_URL:
+        return httpx2.Response(200, text=_CSV)
+    if url == f"{constants.BASE_URL}/myreports/reportschedule/42" and request.method == "DELETE":
+        return httpx2.Response(200)
+    raise AssertionError(f"unexpected request {request.method} {url}")
+
+
+class TestRequests:
+    """What each asset sends The Trade Desk, and the rows it returns."""
+
+    def test_the_report_runs_a_one_time_schedule_for_its_day_and_deletes_it(self):
+        connection, requests = _recorded(_myreports)
+
+        rows = _run(connection, "ad_groups_stats")
+
+        assert rows == [{"Date": "01/10/2026", "Partner ID": "qz94j5z", "TTD Cost (USD)": "12,34"}]
+        assert [(request.method, str(request.url)) for request in requests] == [
+            ("POST", f"{constants.BASE_URL}/myreports/reportschedule"),
+            ("POST", f"{constants.BASE_URL}/myreports/reportexecution/query/partners"),
+            ("GET", _DOWNLOAD_URL),
+            ("GET", _DELIVERED_URL),
+            ("DELETE", f"{constants.BASE_URL}/myreports/reportschedule/42"),
+        ]
+        assert json.loads(requests[0].content) == {
+            "RequestedByUserName": "interloper",
+            "IncludeHeaders": True,
+            "PartnerFilters": ["qz94j5z"],
+            "ReportDateFormat": "International",
+            "ReportDateRange": "Custom",
+            "ReportStartDateInclusive": "2026-10-01",
+            "ReportEndDateExclusive": "2026-10-02",
+            "ReportFileFormat": "CSV",
+            "ReportFrequency": "Once",
+            "ReportNumericFormat": "International",
+            "ReportScheduleName": "interloper_168005_2026-10-01",
+            "ReportTemplateId": "168005",
+            "TimeZone": "UTC",
+        }
+        assert json.loads(requests[1].content) == {
+            "PageStartIndex": 0,
+            "PageSize": 100,
+            "PartnerIds": ["qz94j5z"],
+            "ReportScheduleIds": ["42"],
+        }
+
+    def test_advertisers_read_the_partners_advertisers_in_one_query(self):
+        connection, bodies = _graphql(lambda body: _page(("partner", "advertisers"), [{"id": "adv1"}]))
+
+        assert _run(connection, "advertisers") == [{"id": "adv1", "date": DAY}]
+        assert bodies == [
+            {
+                "query": constants.ADVERTISERS_QUERY,
+                "variables": {"partnerId": "qz94j5z", "first": constants.GRAPHQL_PAGE_SIZE, "after": None},
+            }
+        ]
+
+    @pytest.mark.parametrize(
+        ("key", "field", "query"),
+        [("campaigns", "campaigns", constants.CAMPAIGNS_QUERY), ("ad_groups", "adGroups", constants.AD_GROUPS_QUERY)],
+    )
+    def test_advertiser_entities_list_the_advertisers_then_query_each(self, key: str, field: str, query: str):
+        def handler(body: dict) -> dict:
+            if "partnerId" in body["variables"]:
+                return _page(("partner", "advertisers"), [{"id": "adv1"}, {"id": "adv2"}])
+            return _page(("advertiser", field), [{"id": f"x-{body['variables']['advertiserId']}"}])
+
+        connection, bodies = _graphql(handler)
+
+        rows = _run(connection, key)
+
+        assert sorted(rows, key=lambda row: row["id"]) == [{"id": "x-adv1", "date": DAY}, {"id": "x-adv2", "date": DAY}]
+        assert bodies[0] == {
+            "query": constants.ADVERTISER_IDS_QUERY,
+            "variables": {"partnerId": "qz94j5z", "first": constants.GRAPHQL_PAGE_SIZE, "after": None},
+        }
+        assert sorted(bodies[1:], key=lambda body: body["variables"]["advertiserId"]) == [
+            {
+                "query": query,
+                "variables": {"advertiserId": advertiser, "first": constants.GRAPHQL_PAGE_SIZE, "after": None},
+            }
+            for advertiser in ("adv1", "adv2")
+        ]
