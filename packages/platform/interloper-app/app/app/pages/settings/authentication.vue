@@ -2,6 +2,7 @@
 import { h, resolveComponent } from 'vue'
 import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import type { AuthorisedApp, PersonalAccessToken } from '~/types/token'
+import type { Identity } from '~/types/user'
 
 definePageMeta({ layout: 'settings' })
 
@@ -23,6 +24,8 @@ const createOpen = ref(false)
 const apps = ref<AuthorisedApp[]>([])
 const appsLoading = ref(false)
 const appsError = ref<Error | null>(null)
+const identities = ref<Identity[] | null>(null)
+const identitiesError = ref<Error | null>(null)
 
 type Tab = 'signin' | 'tokens' | 'apps'
 
@@ -36,6 +39,7 @@ onMounted(() => {
     if (!route.query.tab) {
         router.replace({ query: { tab: 'signin' } })
     }
+    loadIdentities()
     loadTokens()
     loadApps()
 })
@@ -57,6 +61,41 @@ const tabs = computed<PageTab[]>(() => [
         active: activeTab.value === 'apps',
     },
 ])
+
+async function loadIdentities() {
+    identitiesError.value = null
+    try {
+        identities.value = await apiFetch<Identity[]>('/auth/identities')
+    }
+    catch (err) {
+        identitiesError.value = err as Error
+    }
+}
+
+/** The provider's name, or a generic one for a provider the deployment no longer offers. */
+function identityLabel(identity: Identity): string {
+    return identity.provider?.label ?? 'Another provider'
+}
+
+async function removeIdentity(identity: Identity) {
+    const confirmed = await confirm({
+        title: 'Remove sign-in method',
+        description: 'You will no longer sign in to Interloper with {subject}. '
+            + 'Your other sessions end, so anyone signed in through it is signed out.',
+        subject: { name: identityLabel(identity), icon: providerIcon(identity.provider?.name ?? '') },
+        confirmLabel: 'Remove',
+    })
+    if (!confirmed) return
+
+    try {
+        await apiFetch(`/auth/identities/${identity.id}`, { method: 'DELETE' })
+        toast.add({ title: `${identityLabel(identity)} removed`, color: 'success' })
+        await Promise.all([loadIdentities(), userStore.fetchMe()])
+    }
+    catch (err) {
+        toast.add(errorToast(err, "Couldn't remove the sign-in method"))
+    }
+}
 
 async function loadTokens() {
     loading.value = true
@@ -266,29 +305,43 @@ const columns: TableColumn<PersonalAccessToken>[] = [
                            orientation="horizontal"
                            title="Sign in"
                            description="The accounts you sign in to Interloper with." />
-                <UCard>
-                    <template v-for="(provider, index) in userStore.user?.login_providers ?? []"
-                              :key="provider.name">
+                <LoadError v-if="identitiesError"
+                           title="Couldn't load your sign-in methods"
+                           :error="identitiesError"
+                           @retry="loadIdentities" />
+                <USkeleton v-else-if="identities === null"
+                           class="h-16 w-full" />
+                <UCard v-else
+                       :ui="{ body: 'flex flex-col gap-4' }">
+                    <template v-for="(identity, index) in identities"
+                              :key="identity.id">
                         <USeparator v-if="index > 0" />
-                        <UFormField :label="provider.label"
-                                    :description="userStore.user?.email"
+                        <UFormField :label="identityLabel(identity)"
+                                    :description="identity.created_at ? `Added ${formatDay(identity.created_at)}` : undefined"
                                     orientation="horizontal">
                             <template #label>
                                 <span class="flex items-center gap-2">
-                                    <UIcon :name="providerIcon(provider.name)"
+                                    <UIcon :name="providerIcon(identity.provider?.name ?? '')"
                                            class="size-4" />
-                                    {{ provider.label }}
+                                    {{ identityLabel(identity) }}
                                 </span>
                             </template>
-                            <UBadge label="Connected"
+                            <UButton v-if="identities.length > 1"
+                                     label="Remove"
+                                     color="error"
+                                     variant="soft"
+                                     size="sm"
+                                     @click="removeIdentity(identity)" />
+                            <UBadge v-else
+                                    label="Connected"
                                     color="success" />
                         </UFormField>
                     </template>
-                    <UEmpty v-if="!userStore.user?.login_providers.length"
+                    <UEmpty v-if="!identities.length"
                             variant="naked"
                             size="sm"
-                            title="No sign-in provider"
-                            description="None of the providers this deployment offers is linked to your account." />
+                            title="No sign-in method"
+                            description="Nothing signs in to your account yet." />
                 </UCard>
             </div>
 

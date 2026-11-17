@@ -2,6 +2,7 @@
 
 from interloper_api.notifications.base import Email
 from interloper_api.notifications.invitations import InvitationEmail
+from interloper_api.notifications.links import LinkConfirmationEmail
 from interloper_api.notifications.super_admins import SuperAdminPromotionEmail
 
-__all__ = ["Email", "InvitationEmail", "SuperAdminPromotionEmail"]
+__all__ = ["Email", "InvitationEmail", "LinkConfirmationEmail", "SuperAdminPromotionEmail"]

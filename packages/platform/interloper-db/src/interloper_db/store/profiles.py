@@ -16,7 +16,7 @@ from sqlalchemy import Engine, delete, func
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, select
 
-from interloper_db.errors import NotFoundError
+from interloper_db.errors import ConflictError, NotFoundError
 from interloper_db.models import AuthorizationCode, Identity, Invitation, Profile, Token, UserOrganisation
 from interloper_db.session import commit, save, session_scope
 from interloper_db.store.page import Page, PageQuery
@@ -92,10 +92,21 @@ class ProfileStore:
             The issuers of the profile's identities, oldest identity first;
             empty when it has none.
         """
+        return [identity.issuer for identity in self.identities(profile_id)]
+
+    def identities(self, profile_id: UUID) -> builtins.list[Identity]:
+        """Read the identities a profile signs in through.
+
+        Args:
+            profile_id: Profile UUID.
+
+        Returns:
+            The identities, oldest first; empty when it has none.
+        """
         statement = (
-            select(Identity.issuer)
+            select(Identity)
             .where(Identity.profile_id == profile_id)
-            .order_by(col(Identity.created_at), col(Identity.issuer))
+            .order_by(col(Identity.created_at), col(Identity.issuer), col(Identity.subject))
         )
         with session_scope(self._engine) as session:
             return builtins.list(session.exec(statement).all())
@@ -139,6 +150,45 @@ class ProfileStore:
             session.add(Identity(issuer=issuer, subject=subject, profile_id=profile_id))
             commit(session)
 
+    def unlink(self, profile_id: UUID, reference: UUID) -> None:
+        """Remove a way a profile signs in.
+
+        Args:
+            profile_id: Profile UUID.
+            reference: The identity's :attr:`~interloper_db.models.Identity.reference`.
+
+        Raises:
+            NotFoundError: If the profile signs in through no identity with
+                that reference.
+            ConflictError: If it is the last way the profile signs in.
+        """
+        with session_scope(self._engine) as session:
+            identities = session.exec(select(Identity).where(Identity.profile_id == profile_id)).all()
+            target = next((identity for identity in identities if identity.reference == reference), None)
+            if target is None:
+                raise NotFoundError(f"Identity {reference} not found")
+            if len(identities) == 1:
+                raise ConflictError("A profile keeps at least one way to sign in")
+            session.delete(target)
+            commit(session)
+
+    def provision(self, *, email: str, name: str | None = None) -> Profile:
+        """Create a profile no identity signs in to yet.
+
+        The first login whose address it holds claims it, through any provider.
+
+        Args:
+            email: The address the profile holds.
+            name: Display name.
+
+        Returns:
+            The created profile.
+        """
+        with session_scope(self._engine) as session:
+            db_profile = Profile(email=email, name=name)
+            save(session, db_profile)
+            return db_profile
+
     def upsert(
         self,
         *,
@@ -150,12 +200,16 @@ class ProfileStore:
     ) -> Profile:
         """Create or update the profile an identity signs in to.
 
-        A new identity creates a new profile with it, in one commit.
+        A new identity creates a new profile with it, in one commit. The
+        profile's address is set then and no later login changes it: linking,
+        signup and super-admin rights trust it, so it must not follow
+        whichever provider signed in last.
 
         Args:
             issuer: The identity provider's issuer identifier.
             subject: The subject the provider names the person by.
-            email: User email.
+            email: The address the provider verified; it becomes a new
+                profile's address and leaves an existing one's untouched.
             name: Display name. Only fills an empty profile — a name the user
                 set themselves (:meth:`update`) survives logins.
             avatar_url: Avatar URL (``None`` leaves the stored value untouched).
@@ -166,7 +220,6 @@ class ProfileStore:
         with session_scope(self._engine) as session:
             db_profile = self._by_identity(session, issuer, subject)
             if db_profile:
-                db_profile.email = email
                 if name is not None and not db_profile.name:
                     db_profile.name = name
                 if avatar_url is not None:
