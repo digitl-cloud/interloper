@@ -7,6 +7,7 @@ import interloper as il
 from pydantic import model_validator
 from pydantic_settings import SettingsConfigDict
 
+from interloper_assets.google_ads.api import GoogleAdsApi
 from interloper_assets.google_ads.constants import API_VERSION
 
 if TYPE_CHECKING:
@@ -81,9 +82,21 @@ class GoogleAdsConnection(il.RefreshTokenOAuthConnection):
         }
         return GoogleAdsClient.load_from_dict(config)
 
+    @cached_property
+    def api(self) -> GoogleAdsApi:
+        """The Google Ads API engine every report shares, built on ``client``.
+
+        Returns:
+            The engine, cached per connection instance.
+        """
+        return GoogleAdsApi(self.client)
+
     @il.fetch_field_provider
     async def customers(self) -> list[dict[str, str]]:
         """Fetch Google Ads customer accounts accessible by this connection.
+
+        Runs over the REST API rather than through ``api``: the lookup runs in
+        the API process, which carries no Google Ads SDK.
 
         Returns:
             The options for the field's dropdown.
