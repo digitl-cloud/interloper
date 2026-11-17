@@ -4,6 +4,7 @@ import interloper as il
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.linkedin_organic import constants
+from interloper_assets.linkedin_organic.api import LinkedinOrganicApi
 
 
 @il.connection(
@@ -47,56 +48,52 @@ class LinkedinOrganicConnection(il.RefreshTokenOAuthConnection):
         )
         return client
 
+    @cached_property
+    def api(self) -> LinkedinOrganicApi:
+        """The LinkedIn REST API engine every caller shares, built on ``client``.
+
+        Returns:
+            The engine, cached per connection instance.
+        """
+        return LinkedinOrganicApi(self.client)
+
     @il.fetch_field_provider
     async def organizations(self) -> list[dict[str, str]]:
         """List the organizations this connection administers.
 
-        Backs the source's ``organization_id`` ``FetchField``. Reuses
-        ``self.client`` to read the ``ADMINISTRATOR`` organization ACLs and
-        decorates each entry with the organization entity to resolve its
-        localized name.
+        Backs the source's ``organization_id`` ``FetchField``. Reads the
+        ``ADMINISTRATOR`` organization ACLs and decorates each entry with the
+        organization entity to resolve its localized name.
 
         Returns:
             The options for the field's dropdown.
 
         """
-        paginator = il.OffsetPaginator(
-            limit=100,
-            offset_param="start",
-            limit_param="count",
-            total_path="paging.total",
-            data_selector="elements",
-        )
-        params = {
-            "q": "roleAssignee",
-            "role": "ADMINISTRATOR",
-            "state": "APPROVED",
+        elements = await self.api.rows(
+            "/organizationAcls",
+            q="roleAssignee",
+            role="ADMINISTRATOR",
+            state="APPROVED",
             # Decorate the ACL with the organization entity so the localized
             # name comes back in a single request.
-            "projection": "(elements*(organization~(id,localizedName)),paging)",
-        }
-        pages = self.client.paginate(
-            "/organizationAcls",
-            paginator,
-            params=params,
-            data_selector="elements",
+            projection="(elements*(organization~(id,localizedName)),paging)",
+            count=100,
         )
 
         organizations: list[dict[str, str]] = []
-        async for page in pages:
-            for element in page:
-                # ``organization`` is the URN (e.g. "urn:li:organization:12345");
-                # ``organization~`` is the decorated entity when the projection
-                # resolves.
-                org_urn = element.get("organization", "")
-                org_id = org_urn.rsplit(":", 1)[-1] if org_urn else ""
-                if not org_id:
-                    continue
+        for element in elements:
+            # ``organization`` is the URN (e.g. "urn:li:organization:12345");
+            # ``organization~`` is the decorated entity when the projection
+            # resolves.
+            urn = element.get("organization", "")
+            organization_id = urn.rsplit(":", 1)[-1] if urn else ""
+            if not organization_id:
+                continue
 
-                org_entity = element.get("organization~") or {}
-                name = org_entity.get("localizedName") or org_id
+            entity = element.get("organization~") or {}
+            name = entity.get("localizedName") or organization_id
 
-                organizations.append({"id": org_id, "name": name})
+            organizations.append({"id": organization_id, "name": name})
 
         return organizations
 

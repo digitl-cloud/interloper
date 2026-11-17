@@ -12,10 +12,12 @@ and taxonomies follow ``paging.links``; both are pinned against a mock transport
 from __future__ import annotations
 
 import datetime as dt
+import re
 from typing import Any
 
 import httpx2
 import interloper as il
+import pytest
 from interloper.asset.context import ExecutionContext
 from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
@@ -28,6 +30,23 @@ ENTITY_ASSETS = ("industries", "job_functions", "seniorities")
 DAY = dt.date(2026, 9, 15)
 DAY_START_MILLIS = 1789430400000
 DAY_END_MILLIS = 1789516800000
+BASE_URL = "https://api.linkedin.com/rest"
+ORGANIZATION_URN = "urn%3Ali%3Aorganization%3A2414183"
+DAY_WINDOW = f"timeIntervals=(timeGranularityType:DAY,timeRange:(start:{DAY_START_MILLIS},end:{DAY_END_MILLIS}))"
+ASSET_URLS = {
+    "followers_stats": (
+        f"{BASE_URL}/organizationalEntityFollowerStatistics"
+        f"?q=organizationalEntity&organizationalEntity={ORGANIZATION_URN}"
+    ),
+    "page_stats": f"{BASE_URL}/organizationPageStatistics?q=organization&organization={ORGANIZATION_URN}&{DAY_WINDOW}",
+    "share_stats": (
+        f"{BASE_URL}/organizationalEntityShareStatistics"
+        f"?q=organizationalEntity&organizationalEntity={ORGANIZATION_URN}&{DAY_WINDOW}"
+    ),
+    "industries": f"{BASE_URL}/industryTaxonomyVersions/DEFAULT/industries",
+    "job_functions": f"{BASE_URL}/functions",
+    "seniorities": f"{BASE_URL}/seniorities",
+}
 
 
 def _source(connection: LinkedinOrganicConnection | None = None) -> Any:
@@ -50,6 +69,14 @@ def _faked_source(handler: Any) -> Any:
         "https://api.linkedin.com/rest", transport=httpx2.MockTransport(handler)
     )
     return _source(connection)
+
+
+def _recording(sent: list[tuple[str, str]], respond: Any) -> Any:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        sent.append((request.method, str(request.url)))
+        return respond(request)
+
+    return handler
 
 
 async def _run(source: Any, key: str) -> list[dict[str, Any]]:
@@ -276,3 +303,58 @@ class TestRequests:
 
             assert await _run(_faked_source(handler), key) == [{"id": 1, "date": DAY}], key
             assert [url.path for url in seen] == [path], key
+
+    async def test_every_asset_sends_one_get_with_its_raw_rest_li_query(self):
+        for key, url in ASSET_URLS.items():
+            sent: list[tuple[str, str]] = []
+            handler = _recording(sent, lambda _: httpx2.Response(200, json={"elements": [{"id": 1}]}))
+
+            assert await _run(_faked_source(handler), key) == [{"id": 1, "date": DAY}], key
+            assert sent == [("GET", url)], key
+
+    async def test_a_response_without_elements_yields_no_rows(self):
+        for key in ASSET_URLS:
+            sent: list[tuple[str, str]] = []
+            handler = _recording(sent, lambda _: httpx2.Response(200, json={"paging": {"start": 0, "count": 10}}))
+
+            assert await _run(_faked_source(handler), key) == [], key
+            assert len(sent) == 1, key
+
+    async def test_taxonomy_follows_an_absolute_next_link_as_is(self):
+        sent: list[tuple[str, str]] = []
+        next_page = f"{BASE_URL}/seniorities?start=10&count=10"
+
+        def respond(request: httpx2.Request) -> httpx2.Response:
+            if str(request.url) == next_page:
+                return httpx2.Response(200, json={"elements": [{"id": 2}], "paging": {"links": []}})
+            return httpx2.Response(
+                200, json={"elements": [{"id": 1}], "paging": {"links": [{"rel": "next", "href": next_page}]}}
+            )
+
+        rows = await _run(_faked_source(_recording(sent, respond)), "seniorities")
+        assert [row["id"] for row in rows] == [1, 2]
+        assert sent == [("GET", f"{BASE_URL}/seniorities"), ("GET", next_page)]
+
+    async def test_a_refusal_on_a_later_taxonomy_page_raises_with_its_url(self):
+        def respond(request: httpx2.Request) -> httpx2.Response:
+            if "start=" in str(request.url):
+                return httpx2.Response(403, json={"status": 403, "message": "Not enough permissions"})
+            links = [{"rel": "next", "href": "/rest/functions?start=10&count=10"}]
+            return httpx2.Response(200, json={"elements": [{"id": 1}], "paging": {"links": links}})
+
+        with pytest.raises(
+            httpx2.HTTPStatusError,
+            match=re.escape(f"Client error '403 Forbidden' for url '{BASE_URL}/functions?start=10&count=10'"),
+        ):
+            await _run(_faked_source(_recording([], respond)), "job_functions")
+
+    async def test_a_refused_statistics_request_raises_with_its_url(self):
+        handler = _recording(
+            [], lambda _: httpx2.Response(401, json={"status": 401, "message": "Invalid access token"})
+        )
+
+        with pytest.raises(
+            httpx2.HTTPStatusError,
+            match=re.escape(f"Client error '401 Unauthorized' for url '{ASSET_URLS['share_stats']}'"),
+        ):
+            await _run(_faked_source(handler), "share_stats")
