@@ -1,19 +1,26 @@
-"""Tests for FacebookGraphApi: every Graph API request waits, retries and asks for less in one place."""
+"""Tests for the Graph API client and the Marketing API engine built on it.
+
+The client waits, retries and asks for less in one place; the engine reads
+nodes, walks paged edges by their ``after`` cursor and runs insights reports
+as jobs. Both are pinned against a fake HTTP session under the SDK.
+"""
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 from typing import Any
 
 import pytest
 import requests
-from facebook_business.exceptions import FacebookRequestError
+from facebook_business.exceptions import FacebookError, FacebookRequestError
 from requests.structures import CaseInsensitiveDict
 
 from interloper_assets.facebook_ads import api as graph
-from interloper_assets.facebook_ads.api import Attempts, FacebookGraphApi
+from interloper_assets.facebook_ads.api import Attempts, FacebookGraphApi, FacebookMarketingApi
 
 REFUSAL = "Please reduce the amount of data you're asking for, then retry your request"
+GRAPH = "https://graph.facebook.com/v23.0/"
 
 
 class _Reply:
@@ -69,6 +76,14 @@ def _api(*replies: _Reply | Exception) -> FacebookGraphApi:
 
 def _sent(api: FacebookGraphApi) -> list[dict[str, Any]]:
     return api._session.requests.sent
+
+
+def _engine(*replies: _Reply | Exception) -> FacebookMarketingApi:
+    return FacebookMarketingApi(_api(*replies))
+
+
+def _requests(engine: FacebookMarketingApi) -> list[dict[str, Any]]:
+    return [{**request, "url": request["url"].removeprefix(GRAPH)} for request in _sent(engine.client)]
 
 
 class TestThrottling:
@@ -198,3 +213,150 @@ class TestAskingForLess:
         with pytest.raises(FacebookRequestError):
             api.call("POST", ("act_1", "insights"), params={"fields": "spend,impressions"})
         assert len(_sent(api)) == 1
+
+
+def _page(rows: list[dict], after: str | None = None) -> _Reply:
+    paging = {"paging": {"cursors": {"after": after}, "next": f"{GRAPH}next"}} if after else {}
+    return _ok({"data": rows, **paging})
+
+
+def _encoded(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+class TestGet:
+    def test_reads_one_node_with_its_fields_comma_separated(self, sleeps):
+        engine = _engine(_ok({"id": "act_1", "account_id": "1", "name": None}))
+
+        assert engine.get("act_1", fields=["account_id", "name"]) == {"id": "act_1", "account_id": "1", "name": None}
+        assert _requests(engine) == [{"method": "GET", "url": "act_1/", "fields": "account_id,name"}]
+
+    def test_an_http_error_raises_facebooks_refusal(self, sleeps):
+        engine = _engine(_error(400, 100, "(#100) Tried accessing nonexisting field"))
+
+        with pytest.raises(FacebookRequestError) as raised:
+            engine.get("act_1", fields=["nonexisting"])
+        assert raised.value.api_error_message() == "(#100) Tried accessing nonexisting field"
+
+
+class TestRows:
+    def test_every_page_is_read_by_its_after_cursor(self, sleeps):
+        engine = _engine(_page([{"id": "1"}], after="A"), _page([{"id": "2"}], after="B"), _page([{"id": "3"}]))
+
+        assert engine.rows("act_1/ads", fields=["id", "name"], limit=100) == [{"id": "1"}, {"id": "2"}, {"id": "3"}]
+        assert _requests(engine) == [
+            {"method": "GET", "url": "act_1/ads", "fields": "id,name", "limit": 100},
+            {"method": "GET", "url": "act_1/ads", "fields": "id,name", "limit": 100, "after": "A"},
+            {"method": "GET", "url": "act_1/ads", "fields": "id,name", "limit": 100, "after": "B"},
+        ]
+
+    def test_a_refusal_on_a_later_page_raises(self, sleeps):
+        engine = _engine(_page([{"id": "1"}], after="A"), _error(400, 190, "Error validating access token"))
+
+        with pytest.raises(FacebookRequestError) as raised:
+            engine.rows("act_1/campaigns", fields=["id"])
+        assert raised.value.api_error_code() == 190
+
+    def test_nothing_to_list_reads_one_page(self, sleeps):
+        engine = _engine(_ok({"data": []}))
+
+        assert engine.rows("act_1/customaudiences", fields=["id"]) == []
+        assert len(_requests(engine)) == 1
+
+    def test_a_response_without_paging_is_read_once(self, sleeps):
+        engine = _engine(_ok({"data": [{"id": "1"}]}), _ok({"data": [{"id": "1"}]}))
+
+        assert engine.rows("act_1/adsets", fields=["id"]) == [{"id": "1"}]
+        assert len(_requests(engine)) == 1
+
+    def test_an_empty_page_ends_the_walk_whatever_its_cursor_says(self, sleeps):
+        engine = _engine(_page([{"id": "1"}], after="A"), _page([], after="B"), _page([{"id": "3"}]))
+
+        assert engine.rows("act_1/ads", fields=["id"]) == [{"id": "1"}]
+        assert len(_requests(engine)) == 2
+
+    def test_a_cursor_without_an_after_ends_the_walk(self, sleeps):
+        engine = _engine(_ok({"data": [{"id": "1"}], "paging": {"cursors": {}, "next": f"{GRAPH}next"}}))
+
+        assert engine.rows("act_1/ads", fields=["id"]) == [{"id": "1"}]
+        assert len(_requests(engine)) == 1
+
+    def test_a_field_list_given_as_one_string_is_sent_as_is(self, sleeps):
+        engine = _engine(_page([{"id": "1"}]))
+
+        engine.rows("act_1/ads", fields="id,name")
+        assert _requests(engine)[0]["fields"] == "id,name"
+
+    def test_a_page_halved_for_size_keeps_that_size_for_the_pages_after_it(self, sleeps):
+        engine = _engine(_error(500, 1, REFUSAL), _page([{"id": "1"}], after="A"), _page([{"id": "2"}]))
+
+        assert engine.rows("act_1/ads", fields=["id"], limit=100) == [{"id": "1"}, {"id": "2"}]
+        assert [request["limit"] for request in _requests(engine)] == [100, 50, 50]
+
+    def test_records_come_back_as_graph_sends_them(self, sleeps):
+        record = {"id": "1", "bid_amount": None, "targeting": {"age_min": 18, "age_max": None}}
+        engine = _engine(_page([record]))
+
+        assert engine.rows("act_1/adsets", fields=["id", "bid_amount", "targeting"]) == [record]
+
+
+class TestReport:
+    @staticmethod
+    def _status(status: str, completion: int) -> _Reply:
+        return _ok({"id": "9", "async_status": status, "async_percent_completion": completion})
+
+    def test_runs_one_day_as_a_job_polls_it_and_reads_every_page_of_its_rows(self, sleeps):
+        engine = _engine(
+            _ok({"report_run_id": "9"}),
+            self._status("Job Running", 50),
+            self._status("Job Completed", 100),
+            _page([{"ad_id": "1"}], after="A"),
+            _page([{"ad_id": "2"}]),
+        )
+
+        rows = engine.report(
+            "act_1/insights",
+            dt.date(2026, 10, 1),
+            fields=["ad_id", "spend"],
+            level="ad",
+            breakdowns=["country"],
+        )
+
+        assert rows == [{"ad_id": "1"}, {"ad_id": "2"}]
+        assert _requests(engine) == [
+            {
+                "method": "POST",
+                "url": "act_1/insights",
+                "fields": _encoded(["ad_id", "spend"]),
+                "level": "ad",
+                "breakdowns": _encoded(["country"]),
+                "time_range": _encoded({"since": "2026-10-01", "until": "2026-10-01"}),
+            },
+            {"method": "GET", "url": "9/"},
+            {"method": "GET", "url": "9/"},
+            {"method": "GET", "url": "9/insights"},
+            {"method": "GET", "url": "9/insights", "after": "A"},
+        ]
+        assert sleeps == [FacebookMarketingApi.REPORT_POLL.total_seconds()]
+
+    def test_a_refused_job_raises_facebooks_refusal(self, sleeps):
+        engine = _engine(_error(400, 100, "(#100) Invalid breakdowns"))
+
+        with pytest.raises(FacebookRequestError) as raised:
+            engine.report("act_1/insights", dt.date(2026, 10, 1), fields=["spend"], breakdowns=["nonexisting"])
+        assert raised.value.api_error_message() == "(#100) Invalid breakdowns"
+        assert len(_requests(engine)) == 1
+
+    def test_a_failed_job_raises(self, sleeps):
+        engine = _engine(_ok({"report_run_id": "9"}), self._status("Job Failed", 40))
+
+        with pytest.raises(FacebookError, match="Facebook insights report failed"):
+            engine.report("act_1/insights", dt.date(2026, 10, 1), fields=["spend"], level="campaign")
+
+    def test_a_job_that_does_not_complete_in_time_raises_its_last_status(self, sleeps, monkeypatch):
+        monkeypatch.setattr(FacebookMarketingApi, "REPORT_TIMEOUT", dt.timedelta(0))
+        engine = _engine(_ok({"report_run_id": "9"}), self._status("Job Running", 99))
+
+        with pytest.raises(TimeoutError, match=r"did not complete within 0:00:00 \(last status: Job Running 99%\)"):
+            engine.report("act_1/insights", dt.date(2026, 10, 1), fields=["spend"], level="campaign")
+        assert sleeps == []

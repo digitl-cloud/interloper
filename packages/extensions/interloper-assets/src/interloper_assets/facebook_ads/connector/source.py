@@ -1,18 +1,13 @@
-import datetime as dt
-import logging
 import re
 from typing import Any
 
 import interloper as il
 import pandas as pd
-import tenacity as tc
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.facebook_ads import constants
 from interloper_assets.facebook_ads.connection import FacebookAdsConnection
 from interloper_assets.facebook_ads.connector import schemas
-
-logger = logging.getLogger(__name__)
 
 # Insight columns whose cells are lists of ``{action_type, value}``; each is
 # pivoted into one column per action type (``actions`` -> ``actions_link_click``).
@@ -45,9 +40,10 @@ PIVOT_COLUMNS = [
 _PLATFORM_BREAKDOWNS = ["publisher_platform", "platform_position", "impression_device"]
 _ACTION_BREAKDOWNS = ["action_device", "action_type"]
 
-# Async insights reports can run long (they often sit at "Job Running 99%" for
-# minutes before completing), so poll generously before giving up.
-INSIGHTS_TIMEOUT = dt.timedelta(hours=1)
+# entity lists read live objects, Graph's default, in pages of 100 rather than 25: deleted ones cannot be asked for
+# (error 100/1815001), and archived ones, nearly spendless, would multiply a rate-limited snapshot several times over;
+# an archived object keeps the row read while it was live, or gets its dimension row from the reports
+_SNAPSHOT_PAGE = {"limit": 100}
 
 
 # -- HELPERS: flattening -------------------------------------------------------
@@ -117,120 +113,6 @@ class FacebookActionsNormalizer(DataFrameNormalizer):
         return super().normalize(df)
 
 
-# -- HELPERS: SDK calls --------------------------------------------------------
-def _account(connection: FacebookAdsConnection, account_id: str) -> Any:
-    from facebook_business.adobjects.adaccount import AdAccount
-
-    return AdAccount(f"act_{account_id}", api=connection.api)
-
-
-def _wait_for_job(job: Any, timeout: dt.timedelta = INSIGHTS_TIMEOUT) -> None:
-    """Poll an async report run until it completes.
-
-    Raises:
-        FacebookError: If the report reports a failed status.
-        TimeoutError: If it does not complete within *timeout*.
-    """
-    from facebook_business.adobjects.adreportrun import AdReportRun
-    from facebook_business.exceptions import FacebookError
-
-    last_status: dict[str, Any] = {}
-    try:
-        for attempt in tc.Retrying(
-            wait=tc.wait_fixed(10),
-            stop=tc.stop_after_delay(timeout),
-            before_sleep=tc.before_sleep_log(logger, logging.DEBUG),
-            reraise=True,
-            retry=tc.retry_if_result(lambda s: s[AdReportRun.Field.async_status] != "Job Completed"),
-        ):
-            with attempt:
-                last_status = job.api_get()._json
-                logger.info(
-                    f"Waiting for report... ({last_status[AdReportRun.Field.async_status]} "
-                    f"{last_status[AdReportRun.Field.async_percent_completion]}%)"
-                )
-                if last_status[AdReportRun.Field.async_status] == "Job Failed":
-                    raise FacebookError("Facebook insights report failed")
-            if attempt.retry_state.outcome and not attempt.retry_state.outcome.failed:
-                attempt.retry_state.set_result(last_status)
-    except tc.RetryError as exc:
-        raise TimeoutError(
-            f"Facebook insights report did not complete within {timeout} "
-            f"(last status: {last_status.get(AdReportRun.Field.async_status)} "
-            f"{last_status.get(AdReportRun.Field.async_percent_completion)}%)"
-        ) from exc
-
-
-def _get_ads_insights(
-    connection: FacebookAdsConnection,
-    account_id: str,
-    fields: list[str],
-    params: dict,
-) -> list[dict]:
-    """Run an async insights report and return its rows."""
-    job = _account(connection, account_id).get_insights(fields=fields, params=params, is_async=True)
-    _wait_for_job(job)
-    return [item._json for item in job.get_result()]
-
-
-def _get_custom_audiences(
-    connection: FacebookAdsConnection,
-    account_id: str,
-    fields: list[str],
-    params: dict,
-) -> list[dict]:
-    account = _account(connection, account_id)
-    return [audience._json for audience in account.get_custom_audiences(fields=fields, params=params)]
-
-
-def _snapshot_params() -> dict[str, Any]:
-    """The edge parameters an entity snapshot reads with: live objects, in pages of 100.
-
-    Used by the ``campaigns``, ``adsets`` and ``ads`` assets. No status is
-    asked for, so the edges return what Graph returns by default: every
-    object but the archived and deleted ones. Deleted objects cannot be asked
-    for at all (error 100/1815001), and archived ones are not worth it: they
-    carry almost no spend, yet on a large account they outnumber the live
-    objects several times over and multiply a snapshot that Facebook's
-    per-account rate limit already makes slow. An archived object keeps the
-    last row a snapshot read while it was live; one archived before the
-    first snapshot gets its dimension row from the reports. Pages of 100
-    rather than the default 25 cut the calls; a page too heavy for Facebook
-    is halved by the request engine, in this very mapping, hence a new one
-    per read.
-
-    Returns:
-        The ``params`` of the edge call.
-    """
-    return {"limit": 100}
-
-
-def _get_campaigns(connection: FacebookAdsConnection, account_id: str) -> list[dict]:
-    account = _account(connection, account_id)
-    campaigns = account.get_campaigns(fields=constants.CAMPAIGN_ENTITY_FIELDS, params=_snapshot_params())
-    return [campaign._json for campaign in campaigns]
-
-
-def _get_ads(connection: FacebookAdsConnection, account_id: str) -> list[dict]:
-    account = _account(connection, account_id)
-    ads = account.get_ads(fields=constants.AD_ENTITY_FIELDS, params=_snapshot_params())
-    return [ad.export_all_data() for ad in ads]
-
-
-def _get_adsets(connection: FacebookAdsConnection, account_id: str) -> list[dict]:
-    account = _account(connection, account_id)
-    adsets = account.get_ad_sets(fields=constants.ADSET_ENTITY_FIELDS, params=_snapshot_params())
-    return [adset.export_all_data() for adset in adsets]
-
-
-def _get_ad_account(connection: FacebookAdsConnection, account_id: str) -> dict:
-    return _account(connection, account_id).api_get(fields=constants.AD_ACCOUNT_ENTITY_FIELDS).export_all_data()
-
-
-def _time_range(date: dt.date) -> dict[str, str]:
-    return {"since": date.isoformat(), "until": date.isoformat()}
-
-
 # Entity nodes nest objects (targeting, creative, business) that the source normalizer would
 # flatten into open-ended columns, and flattening business.name would overwrite the vendor's own
 # business_name; the entity assets keep every object whole as JSON under the vendor's name.
@@ -263,18 +145,14 @@ class FacebookAds(il.Source):
     )
     def campaigns_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Campaign-level performance insights with metrics, engagement, and cost breakdowns."""
-        rows = _get_ads_insights(
-            self.connection,
-            self.account_id,
+        return self.connection.api.report(
+            f"act_{self.account_id}/insights",
+            context.partition_date,
             fields=constants.CAMPAIGNS_FIELDS,
-            params={
-                "level": "campaign",
-                "time_range": _time_range(context.partition_date),
-                "breakdowns": _PLATFORM_BREAKDOWNS,
-                "action_breakdown": _ACTION_BREAKDOWNS,
-            },
+            level="campaign",
+            breakdowns=_PLATFORM_BREAKDOWNS,
+            action_breakdown=_ACTION_BREAKDOWNS,
         )
-        return rows
 
     @il.asset(
         schema=schemas.AdsStats,
@@ -283,18 +161,14 @@ class FacebookAds(il.Source):
     )
     def ads_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad-level performance insights with platform, device, and action breakdowns."""
-        rows = _get_ads_insights(
-            self.connection,
-            self.account_id,
+        return self.connection.api.report(
+            f"act_{self.account_id}/insights",
+            context.partition_date,
             fields=constants.ADS_INSIGHT_FIELDS,
-            params={
-                "level": "ad",
-                "time_range": _time_range(context.partition_date),
-                "breakdowns": _PLATFORM_BREAKDOWNS,
-                "action_breakdown": _ACTION_BREAKDOWNS,
-            },
+            level="ad",
+            breakdowns=_PLATFORM_BREAKDOWNS,
+            action_breakdown=_ACTION_BREAKDOWNS,
         )
-        return rows
 
     @il.asset(
         schema=schemas.AdsStatsByAgeGender,
@@ -303,18 +177,14 @@ class FacebookAds(il.Source):
     )
     def ads_stats_by_age_gender(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad-level performance insights broken down by age and gender demographics."""
-        rows = _get_ads_insights(
-            self.connection,
-            self.account_id,
+        return self.connection.api.report(
+            f"act_{self.account_id}/insights",
+            context.partition_date,
             fields=constants.GENDER_AGE_FIELDS,
-            params={
-                "level": "ad",
-                "time_range": _time_range(context.partition_date),
-                "breakdowns": ["gender", "age"],
-                "action_breakdown": _ACTION_BREAKDOWNS,
-            },
+            level="ad",
+            breakdowns=["gender", "age"],
+            action_breakdown=_ACTION_BREAKDOWNS,
         )
-        return rows
 
     @il.asset(
         schema=schemas.AdsStatsByCountry,
@@ -323,18 +193,14 @@ class FacebookAds(il.Source):
     )
     def ads_stats_by_country(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad-level performance insights broken down by country and region."""
-        rows = _get_ads_insights(
-            self.connection,
-            self.account_id,
+        return self.connection.api.report(
+            f"act_{self.account_id}/insights",
+            context.partition_date,
             fields=constants.GEO_FIELDS,
-            params={
-                "level": "ad",
-                "time_range": _time_range(context.partition_date),
-                "breakdowns": ["country", "region"],
-                "action_breakdown": _ACTION_BREAKDOWNS,
-            },
+            level="ad",
+            breakdowns=["country", "region"],
+            action_breakdown=_ACTION_BREAKDOWNS,
         )
-        return rows
 
     @il.asset(
         schema=schemas.VideosStats,
@@ -343,18 +209,14 @@ class FacebookAds(il.Source):
     )
     def videos_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Video ad performance with view retention, engagement, and conversion metrics."""
-        rows = _get_ads_insights(
-            self.connection,
-            self.account_id,
+        return self.connection.api.report(
+            f"act_{self.account_id}/insights",
+            context.partition_date,
             fields=constants.VIDEOS_FIELDS,
-            params={
-                "level": "ad",
-                "time_range": _time_range(context.partition_date),
-                "breakdowns": _PLATFORM_BREAKDOWNS,
-                "action_breakdown": _ACTION_BREAKDOWNS,
-            },
+            level="ad",
+            breakdowns=_PLATFORM_BREAKDOWNS,
+            action_breakdown=_ACTION_BREAKDOWNS,
         )
-        return rows
 
     @il.asset(
         schema=schemas.CustomAudiences,
@@ -363,11 +225,8 @@ class FacebookAds(il.Source):
     )
     def custom_audiences(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Custom audiences with approximate size bounds for the account."""
-        rows = _get_custom_audiences(
-            self.connection,
-            self.account_id,
-            fields=constants.CUSTOM_AUDIENCES_FIELDS,
-            params={},
+        rows = self.connection.api.rows(
+            f"act_{self.account_id}/customaudiences", fields=constants.CUSTOM_AUDIENCES_FIELDS
         )
         return [{**row, "date": context.partition_date} for row in rows]
 
@@ -379,7 +238,10 @@ class FacebookAds(il.Source):
     )
     def ads(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad entities including creative, status, bidding and targeting."""
-        return [{**row, "date": context.partition_date} for row in _get_ads(self.connection, self.account_id)]
+        rows = self.connection.api.rows(
+            f"act_{self.account_id}/ads", fields=constants.AD_ENTITY_FIELDS, **_SNAPSHOT_PAGE
+        )
+        return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
         schema=schemas.Campaigns,
@@ -389,7 +251,10 @@ class FacebookAds(il.Source):
     )
     def campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Campaign entities including objective, budget, and status configuration."""
-        return [{**row, "date": context.partition_date} for row in _get_campaigns(self.connection, self.account_id)]
+        rows = self.connection.api.rows(
+            f"act_{self.account_id}/campaigns", fields=constants.CAMPAIGN_ENTITY_FIELDS, **_SNAPSHOT_PAGE
+        )
+        return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
         schema=schemas.AdAccounts,
@@ -399,7 +264,8 @@ class FacebookAds(il.Source):
     )
     def ad_accounts(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """The ad account with its name, currency, timezone, status and billing settings."""
-        return [{**_get_ad_account(self.connection, self.account_id), "date": context.partition_date}]
+        account = self.connection.api.get(f"act_{self.account_id}", fields=constants.AD_ACCOUNT_ENTITY_FIELDS)
+        return [{**account, "date": context.partition_date}]
 
     @il.asset(
         schema=schemas.Adsets,
@@ -409,4 +275,7 @@ class FacebookAds(il.Source):
     )
     def adsets(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad set entities including schedule, budget, bidding, learning stage and targeting."""
-        return [{**row, "date": context.partition_date} for row in _get_adsets(self.connection, self.account_id)]
+        rows = self.connection.api.rows(
+            f"act_{self.account_id}/adsets", fields=constants.ADSET_ENTITY_FIELDS, **_SNAPSHOT_PAGE
+        )
+        return [{**row, "date": context.partition_date} for row in rows]
