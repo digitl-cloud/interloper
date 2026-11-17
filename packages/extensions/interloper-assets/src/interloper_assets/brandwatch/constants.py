@@ -1,6 +1,10 @@
 BASE_URL = "https://api.falcon.io/measure/v2/insights"
 MAX_METRICS_PER_REQUEST = 20
 
+# Insights requests queue server-side; poll every few seconds, for up to 10 minutes.
+POLL_INTERVAL = 3.0
+POLL_TIMEOUT = 600.0
+
 TWITTER_METRICS = [
     "channel/fans/day",
     "channel/followers/day",
@@ -191,11 +195,3 @@ INSTAGRAM_METRICS = [
     "channel/views/day",
     "channel/website_clicks/day",
 ]
-
-NETWORK_METRICS = {
-    "twitter": TWITTER_METRICS,
-    "youtube": YOUTUBE_METRICS,
-    "facebook": FACEBOOK_METRICS,
-    "linkedin": LINKEDIN_METRICS,
-    "instagram": INSTAGRAM_METRICS,
-}
