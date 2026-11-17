@@ -2593,17 +2593,25 @@ the Nuxt dev server with hot reload instead of the built assets.</p>
 </span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="nt">auth</span><span class="p">:</span>
 </span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">  </span><span class="nt">google_client_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">...</span>
 </span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">  </span><span class="nt">google_client_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">...</span>
-</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">  </span><span class="nt">allowed_domains</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">example.com</span><span class="p p-Indicator">]</span>
-</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>
-</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="nt">catalog</span><span class="p">:</span>
-</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="w">  </span><span class="nt">include</span><span class="p">:</span>
-</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_package.sources.Shop</span>
-</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper_assets.facebook_ads.connector.source.FacebookAds</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">  </span><span class="nt">microsoft_client_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">  </span><span class="nt">microsoft_client_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">  </span><span class="nt">allowed_domains</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">example.com</span><span class="p p-Indicator">]</span>
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>
+</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="nt">catalog</span><span class="p">:</span>
+</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="w">  </span><span class="nt">include</span><span class="p">:</span>
+</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_package.sources.Shop</span>
+</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper_assets.facebook_ads.connector.source.FacebookAds</span>
 </span></code></pre></div>
 <p>The file is not interpolated: a field left out of a block is read from its <code>INTERLOPER_&lt;SECTION&gt;_&lt;FIELD&gt;</code>
 variable, which is where secrets go. <code>INTERLOPER_ENCRYPTION_KEY</code> is required: resource configs are
-encrypted at rest, and the Google login signs the cookie it keeps between Google's two legs with a key
-derived from it, so every replica can finish a login another one started. Login is Google OAuth. <code>allowed_domains</code> restricts who may sign up; <code>super_admin_emails</code>
+encrypted at rest, and a login signs the cookie it keeps between the provider's two legs with a key
+derived from it, so every replica can finish a login another one started. People sign in with a
+Google account or a Microsoft work or school account, whichever providers have a client configured.
+The Microsoft app registration is multi-tenant and emits the optional ID token claims <code>email</code> and
+<code>xms_edov</code>: a login whose address does not belong to a verified domain is refused. The address is
+what a profile is trusted by: a first login, through either provider, whose address a profile already
+holds joins that profile as another way to sign in to it.
+<code>allowed_domains</code> restricts who may sign up; <code>super_admin_emails</code>
 bootstraps platform administrators, promoted when the API starts and at login (promote-only). Once
 one exists, super-admins grant and revoke the access from the admin portal's Users page, and
 register the OAuth clients of apps that cannot register themselves on its OAuth clients page (see
