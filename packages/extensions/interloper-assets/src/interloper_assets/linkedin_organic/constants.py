@@ -1,5 +1,4 @@
 BASE_URL = "https://api.linkedin.com/rest"
-API_URL = "https://api.linkedin.com"
 AUTH_BASE_URL = "https://www.linkedin.com"
 TOKEN_ENDPOINT = "/oauth/v2/accessToken"
 LINKEDIN_VERSION = "202607"
