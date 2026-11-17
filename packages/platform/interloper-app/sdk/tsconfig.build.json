@@ -1,0 +1,13 @@
+{
+  // The Vite preset as npm installs it: compiled into dist/, which publishConfig.exports names.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "allowImportingTsExtensions": false,
+    "declaration": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "files": ["src/vite.ts"],
+  "include": []
+}

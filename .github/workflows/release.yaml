@@ -121,8 +121,21 @@ jobs:
         if: steps.release.outputs.released == 'true'
         run: make build-app build-extensions
 
+      # Packed before the PyPI publish, so an SDK that does not pack stops both publishes.
+      - name: Pack the UI SDK
+        if: steps.release.outputs.released == 'true'
+        working-directory: packages/platform/interloper-app/sdk
+        run: pnpm pack --pack-destination "$RUNNER_TEMP/sdk"
+
       - name: Build & Publish
         if: steps.release.outputs.released == 'true'
         run: |
           uv build --all-packages
           uv publish --trusted-publishing always
+
+      - name: Publish the UI SDK
+        if: steps.release.outputs.released == 'true'
+        # npm refuses a prerelease without a dist-tag; a release candidate must never become `latest`.
+        run: |
+          npm --version
+          npm publish "$RUNNER_TEMP"/sdk/*.tgz --provenance --access public --tag ${{ inputs.release_type == 'release-candidate' && 'rc' || 'latest' }}

@@ -50,6 +50,11 @@ build-extensions:
 	pnpm --filter @interloper/ui build
 	pnpm $(EXTENSION_UIS) build
 
+# The SDK as npm installs it, from a project outside the workspace.
+check-sdk-package:
+	pnpm --filter @interloper/ui build
+	pnpm --filter @interloper/ui check:package
+
 
 # ###############
 # DOCKER
