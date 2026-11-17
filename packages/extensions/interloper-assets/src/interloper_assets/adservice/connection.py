@@ -4,6 +4,8 @@ import httpx2
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
+from interloper_assets.adservice.api import AdserviceApi
+
 
 @il.connection(
     name="Adservice",
@@ -20,7 +22,7 @@ class AdserviceConnection(il.Connection):
 
     @cached_property
     def client(self) -> il.AsyncRESTClient:
-        """The Adtraction API client every caller shares.
+        """The Adservice API client every caller shares.
 
         Returns:
             The authenticated client, cached per connection instance.
@@ -28,3 +30,12 @@ class AdserviceConnection(il.Connection):
         base_url = "https://api.adservice.com/v2/client"
         auth = httpx2.BasicAuth(username="api", password=self.api_key)
         return il.AsyncRESTClient(base_url, auth)
+
+    @cached_property
+    def api(self) -> AdserviceApi:
+        """The Adservice API engine every caller shares, built on ``client``.
+
+        Returns:
+            The engine, cached per connection instance.
+        """
+        return AdserviceApi(self.client)

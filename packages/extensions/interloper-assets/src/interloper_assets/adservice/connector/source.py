@@ -1,5 +1,3 @@
-import datetime as dt
-import logging
 from typing import Any
 
 import interloper as il
@@ -15,44 +13,8 @@ from interloper_assets.adservice.connector.schemas import (
     ConversionsStatsByTimeOfDay,
 )
 
-logger = logging.getLogger(__name__)
-
-
-# -- HELPERS -------------------------------------------------------------------
-
-
-async def get_report(
-    client: il.AsyncRESTClient,
-    start_date: dt.date,
-    end_date: dt.date,
-    report_type: str,
-    group_by: str | None = None,
-    end_group: str | None = None,
-    sales_amount: int | None = None,
-) -> dict:
-    """Fetch a report from the Adservice API."""
-    response = await client.get(
-        url=f"/{report_type}",
-        params={
-            "from_date": start_date.isoformat(),
-            "to_date": end_date.isoformat(),
-            "sales_amount": sales_amount,
-            "group_by": group_by,
-            "end_group": end_group,
-        },
-    )
-    response.raise_for_status()
-    return response.json()
-
-
-def _with_date(rows: list[dict[str, Any]], date: dt.date) -> list[dict[str, Any]]:
-    """Stamp the partition date onto each row of a single-day report, which Adservice returns without one."""
-    return [{**row, "date": date} for row in rows]
-
 
 # -- SOURCE --------------------------------------------------------------------
-
-
 @il.source(
     tags=["Advertising"],
     icon="carbon:analytics",
@@ -72,16 +34,10 @@ class Adservice(il.Source):
     )
     async def campaigns_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Campaign performance statistics with metrics like impressions, clicks, and conversions."""
-        response = await get_report(
-            client=self.connection.client,
-            start_date=context.partition_date,
-            end_date=context.partition_date,
-            report_type="statistics",
-            group_by="stamp,camp_id",
-            end_group="stamp",
-            sales_amount=1,
+        statistics = await self.connection.api.report(
+            "/statistics", context.partition_date, sales_amount=1, group_by="stamp,camp_id", end_group="stamp"
         )
-        return response["data"]["rows"]
+        return statistics["rows"]
 
     @il.asset(
         schema=Conversions,
@@ -90,13 +46,8 @@ class Adservice(il.Source):
     )
     async def conversions(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Conversion events and attribution data."""
-        response = await get_report(
-            client=self.connection.client,
-            start_date=context.partition_date,
-            end_date=context.partition_date,
-            report_type="conversions",
-        )
-        return _with_date(response["data"], context.partition_date)
+        rows = await self.connection.api.report("/conversions", context.partition_date)
+        return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
         schema=ConversionsStatsByTimeOfDay,
@@ -105,13 +56,8 @@ class Adservice(il.Source):
     )
     async def conversions_stats_by_time_of_day(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Conversion events broken down by time of day."""
-        response = await get_report(
-            client=self.connection.client,
-            start_date=context.partition_date,
-            end_date=context.partition_date,
-            report_type="statistics/conversions/timeofday",
-        )
-        return _with_date(response["data"], context.partition_date)
+        rows = await self.connection.api.report("/statistics/conversions/timeofday", context.partition_date)
+        return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
         schema=CampaignsStatsByCity,
@@ -120,14 +66,8 @@ class Adservice(il.Source):
     )
     async def campaigns_stats_by_city(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Campaign performance segmented by city."""
-        response = await get_report(
-            client=self.connection.client,
-            start_date=context.partition_date,
-            end_date=context.partition_date,
-            report_type="statistics/devicedetails",
-            group_by="city",
-        )
-        return _with_date(response["data"], context.partition_date)
+        rows = await self.connection.api.report("/statistics/devicedetails", context.partition_date, group_by="city")
+        return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
         schema=CampaignsStatsByBrowser,
@@ -136,14 +76,8 @@ class Adservice(il.Source):
     )
     async def campaigns_stats_by_browser(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Campaign performance segmented by browser."""
-        response = await get_report(
-            client=self.connection.client,
-            start_date=context.partition_date,
-            end_date=context.partition_date,
-            report_type="statistics/devicedetails",
-            group_by="browser",
-        )
-        return _with_date(response["data"], context.partition_date)
+        rows = await self.connection.api.report("/statistics/devicedetails", context.partition_date, group_by="browser")
+        return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
         schema=CampaignsStatsByDeviceType,
@@ -152,11 +86,7 @@ class Adservice(il.Source):
     )
     async def campaigns_stats_by_device_type(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Campaign performance segmented by device type."""
-        response = await get_report(
-            client=self.connection.client,
-            start_date=context.partition_date,
-            end_date=context.partition_date,
-            report_type="statistics/devicedetails",
-            group_by="device_type",
+        rows = await self.connection.api.report(
+            "/statistics/devicedetails", context.partition_date, group_by="device_type"
         )
-        return _with_date(response["data"], context.partition_date)
+        return [{**row, "date": context.partition_date} for row in rows]
