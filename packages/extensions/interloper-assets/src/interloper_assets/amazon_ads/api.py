@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 _SCOPE = "Amazon-Advertising-API-Scope"
 _REPORT_MEDIA_TYPE = "application/vnd.createasyncreportrequest.v3+json"
+_TRANSIENT_STATUSES = frozenset({425, 429, 500, 502, 503, 504})
 
 
 class AmazonAdsApi:
@@ -29,10 +30,11 @@ class AmazonAdsApi:
     the profile first. Amazon refuses a request with an HTTP error status,
     which every method raises as is.
 
-    A report is a job: created, polled until it completes, then downloaded as
-    gzipped JSON from a signed URL outside the API. Each phase repeats a
-    failure until its deadline (``REPORT_*_DEADLINE``), and every attempt
-    first drops the cached access token, so it authenticates afresh.
+    A report is a job: created, polled until it completes or fails, then
+    downloaded as gzipped JSON from a signed URL outside the API. Creating
+    and downloading repeat a transient failure until their deadline
+    (``REPORT_*_DEADLINE``) and raise any other at once; the signed URL is a
+    credential, so it is neither logged nor named in an error.
     """
 
     def __init__(self, client: il.RESTClient) -> None:
@@ -129,10 +131,10 @@ class AmazonAdsApi:
         return self._download_report(url)
 
     def _create_report(self, profile_id: str, day: dt.date, configuration: dict[str, Any]) -> str:
-        """Create a report job, asking again while Amazon refuses it.
+        """Create a report job, asking again while it fails transiently.
 
-        A refusal is asked again after a minute, then after five more minutes
-        each time, up to fifteen.
+        Such a failure is asked again after a minute, then after five more
+        minutes each time, up to fifteen.
 
         Args:
             profile_id: The profile reported on.
@@ -167,7 +169,7 @@ class AmazonAdsApi:
         return report_id
 
     def _await_report(self, profile_id: str, report_id: str) -> str:
-        """Poll a report job until it completes, polling again after an HTTP error.
+        """Poll a report job until it completes or fails, polling again after an HTTP error.
 
         Args:
             profile_id: The profile reported on.
@@ -175,13 +177,18 @@ class AmazonAdsApi:
 
         Returns:
             The signed URL of the completed report's file.
+
+        Raises:
+            RuntimeError: If Amazon marks the job ``FAILED``, with its ``failureReason``.
         """
         polling = self._retrying(
             stop=tc.stop_after_delay(constants.REPORT_WAIT_DEADLINE),
             retry=tc.retry_if_result(self._pending) | tc.retry_if_exception_type(httpx2.HTTPError),
         )
         report = polling(self._poll_report, profile_id, report_id)
-        logger.info(f"Report URL: {report['url']} for profile {profile_id}")
+        if report["status"] == "FAILED":
+            raise RuntimeError(f"Report {report_id} for profile {profile_id} failed: {report.get('failureReason')}")
+        logger.info(f"Report {report_id} completed for profile {profile_id}")
         return report["url"]
 
     def _poll_report(self, profile_id: str, report_id: str) -> dict[str, Any]:
@@ -192,7 +199,8 @@ class AmazonAdsApi:
             report_id: The job's id.
 
         Returns:
-            The job as Amazon describes it, its ``url`` set once its ``status`` is ``COMPLETED``.
+            The job as Amazon describes it: its ``url`` set once its ``status``
+            is ``COMPLETED``, its ``failureReason`` once it is ``FAILED``.
         """
         logger.info(f"Waiting for report {report_id} (profile {profile_id}) ")
         headers = {_SCOPE: profile_id, "Content-Type": _REPORT_MEDIA_TYPE}
@@ -202,42 +210,48 @@ class AmazonAdsApi:
 
     @staticmethod
     def _pending(report: dict[str, Any]) -> bool:
-        """Whether a report job has yet to complete.
+        """Whether a report job has yet to complete or fail.
 
         Args:
             report: The job as a poll read it.
 
         Returns:
-            True unless its status is ``COMPLETED``.
+            True unless its status is ``COMPLETED`` or ``FAILED``.
         """
-        return report["status"] != "COMPLETED"
+        return report["status"] not in {"COMPLETED", "FAILED"}
 
     def _download_report(self, url: str) -> list[dict[str, Any]]:
-        """Download a completed report's file and decompress its rows, downloading again after a failure.
+        """Download a completed report's file and decompress its rows, downloading again after a transient failure.
 
         The file lives outside the API and its URL carries its own signature,
-        so it is fetched without the client's credentials.
+        so it is fetched without the client's credentials, and a refusal is
+        raised without the URL.
 
         Args:
             url: The signed URL of the report's file.
 
         Returns:
             The report's rows.
+
+        Raises:
+            HTTPStatusError: If the file's host refuses the download.
         """
         for attempt in self._retrying(stop=tc.stop_after_delay(constants.REPORT_DOWNLOAD_DEADLINE)):
             with attempt:
                 logger.info(f"Downloading report (attempt {attempt.retry_state.attempt_number})")
                 response = httpx2.get(url, timeout=None)
-                response.raise_for_status()
+                if response.is_error:
+                    message = f"Report download refused with HTTP {response.status_code}"
+                    raise httpx2.HTTPStatusError(message, request=response.request, response=response)
                 rows = json.loads(gzip.decompress(response.content))
         return rows
 
     def _retrying(self, **options: Any) -> tc.Retrying:
         """Build the retry loop of one phase of a report job.
 
-        A phase waits ten seconds, doubling to a minute, unless it says
-        otherwise; drops the cached access token before each attempt; and logs
-        each repeat. Past its deadline it raises the last attempt's error, or
+        A phase repeats a transient failure (see `_transient`) and waits ten
+        seconds, doubling to a minute, unless it says otherwise, and logs each
+        repeat. Past its deadline it raises the last attempt's error, or
         tenacity's ``RetryError`` when the last attempt found the job pending.
 
         Args:
@@ -249,20 +263,30 @@ class AmazonAdsApi:
         defaults: dict[str, Any] = {
             "sleep": sleep,
             "wait": tc.wait_exponential(multiplier=10, max=60),
-            "before": self._forget_token,
+            "retry": tc.retry_if_exception(self._transient),
             "before_sleep": self._log_retry,
             "reraise": True,
         }
         return tc.Retrying(**{**defaults, **options})
 
-    def _forget_token(self, retry_state: tc.RetryCallState) -> None:
-        """Drop the cached access token, so the attempt about to run authenticates afresh.
+    @staticmethod
+    def _transient(error: BaseException) -> bool:
+        """Whether a failed attempt is transient: it may succeed if made again.
+
+        A dropped connection, a throttled request, a server error and Amazon's
+        425 for a duplicate of a report it is still creating are transient. Any
+        other refusal, such as a 400 for a configuration Amazon rejects, would
+        be refused again.
 
         Args:
-            retry_state: The attempt about to run.
+            error: What the attempt raised.
+
+        Returns:
+            True for a transport error or a status in ``_TRANSIENT_STATUSES``.
         """
-        if isinstance(self.client.auth, il.OAuth2RefreshTokenAuth):
-            self.client.auth.clear_token()
+        if isinstance(error, httpx2.HTTPStatusError):
+            return error.response.status_code in _TRANSIENT_STATUSES
+        return isinstance(error, httpx2.TransportError)
 
     @staticmethod
     def _log_retry(retry_state: tc.RetryCallState) -> None:
