@@ -15,7 +15,7 @@ agent:
 catalog:
   include:
     - interloper.destination.csv.CSVDestination
-    - interloper_assets.adservice.connector.source.Adservice
+    - interloper_assets.adtraction.connector.source.Adtraction
     - interloper_assets.adup.connector.source.Adup
     - interloper_assets.amazon_ads.connector.source.AmazonAds
     - interloper_assets.amazon_ads.star_schema.source.AmazonAdsStarSchema
