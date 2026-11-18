@@ -200,10 +200,19 @@ class TestQuery:
 
         assert await api.query("/partner/query") == []
 
-    async def test_an_http_error_raises(self):
+    async def test_a_refusal_raises_with_the_trade_desks_message(self):
         api = _api(lambda _: httpx2.Response(403, json={"Message": "Forbidden"}))
 
-        with pytest.raises(httpx2.HTTPStatusError, match="403"):
+        with pytest.raises(
+            httpx2.HTTPStatusError, match="The Trade Desk refused POST /v3/partner/query with HTTP 403: Forbidden"
+        ) as raised:
+            await api.query("/partner/query")
+        assert raised.value.response.status_code == 403
+
+    async def test_a_refusal_without_a_message_raises_its_status(self):
+        api = _api(lambda _: httpx2.Response(502, text="<html>Bad Gateway</html>"))
+
+        with pytest.raises(httpx2.HTTPStatusError, match="502"):
             await api.query("/partner/query")
 
 
@@ -268,6 +277,26 @@ class TestNodes:
         api = _api(lambda _: httpx2.Response(200, json=_page(("advertiser", "campaigns"), [])))
 
         assert await api.nodes(constants.CAMPAIGNS_QUERY, ("advertiser", "campaigns"), advertiserId="a") == []
+
+    @pytest.mark.parametrize("page_info", [{"hasNextPage": True, "endCursor": None}, {"hasNextPage": True}])
+    async def test_a_next_page_without_a_cursor_raises(self, page_info: dict[str, Any]):
+        requests: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            # without a cursor the walk would ask for the first page forever; end a runaway walk
+            if len(requests) > 3:
+                return httpx2.Response(200, json={"errors": [{"message": "runaway walk"}]})
+            listing = {"nodes": [{"id": "c1"}], "pageInfo": page_info}
+            return httpx2.Response(200, json={"data": {"advertiser": {"campaigns": listing}}})
+
+        with pytest.raises(
+            RuntimeError,
+            match=r"The Trade Desk said advertiser.campaigns for \{'advertiserId': 'a'\} has a next page "
+            r"but gave no cursor",
+        ):
+            await _api(handler).nodes(constants.CAMPAIGNS_QUERY, ("advertiser", "campaigns"), advertiserId="a")
+        assert len(requests) == 1
 
     async def test_a_connection_without_page_info_is_read_once(self):
         requests: list[httpx2.Request] = []
@@ -422,6 +451,22 @@ class TestReport:
         assert "Schedule 42 has multiple executions; using the first" in caplog.text
         assert "Schedule 42 has multiple deliveries; using the first" in caplog.text
 
+    @pytest.mark.parametrize("delivered", [{"ReportDeliveries": []}, {"ReportDeliveries": None}, {}])
+    async def test_a_complete_execution_without_a_delivery_raises_and_still_deletes_the_schedule(
+        self, delivered: dict[str, Any], sleeps: list[float]
+    ):
+        server = _MyReports("Complete")
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            response = server(request)
+            if str(request.url) == EXECUTIONS:
+                return httpx2.Response(200, json={"Result": [{"ReportExecutionState": "Complete", **delivered}]})
+            return response
+
+        with pytest.raises(RuntimeError, match="Report schedule 42 completed without a delivery"):
+            await _api(handler).report("p", "168005", DAY)
+        assert server.sent() == [("POST", SCHEDULES), ("POST", EXECUTIONS), ("DELETE", f"{SCHEDULES}/42")]
+
     async def test_an_empty_report_reads_as_no_rows(self, sleeps: list[float]):
         assert await _api(_MyReports("Complete", csv="Date,Impressions\n")).report("p", "168005", DAY) == []
 
@@ -443,6 +488,6 @@ class TestReport:
             requests.append(request)
             return httpx2.Response(400, json={"Message": "Invalid ReportTemplateId"})
 
-        with pytest.raises(httpx2.HTTPStatusError, match="400"):
+        with pytest.raises(httpx2.HTTPStatusError, match="HTTP 400: Invalid ReportTemplateId"):
             await _api(handler).report("p", "unknown", DAY)
         assert len(requests) == 1
