@@ -264,11 +264,13 @@ export default defineAppConfig({
       ]
     },
     // Only the body scrolls (the theme scrolls the whole container), so the
-    // header and a wizard's Back/Next footer stay pinned. Side drawers share one width.
+    // header and a wizard's Back/Next footer stay pinned. The body reaches into the
+    // container's padding (p-4) and pads itself back, so the rings and focus outlines
+    // of what scrolls in it are not clipped at its edge. Side drawers share one width.
     drawer: {
       slots: {
         container: 'overflow-hidden',
-        body: 'min-h-0 overflow-y-auto'
+        body: '-mx-4 -my-1 min-h-0 overflow-y-auto px-4 py-1'
       },
       compoundVariants: [
         {
