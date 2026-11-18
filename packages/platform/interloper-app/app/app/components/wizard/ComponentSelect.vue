@@ -55,33 +55,35 @@ function deselectVisible() {
 </script>
 
 <template>
-    <div class="flex flex-col gap-3">
-        <!-- A single kind or type is no choice at all. -->
-        <div v-if="kinds > 1 || keys > 1"
-             class="flex items-center gap-2">
-            <KindFilter v-if="kinds > 1"
-                        v-model="kindFilter"
-                        :components="components" />
-            <TypeFilter v-if="keys > 1"
-                        v-model="keyFilter"
-                        :components="byKind" />
-        </div>
+    <div class="flex flex-col gap-6">
+        <div class="flex flex-col gap-3">
+            <!-- A single kind or type is no choice at all. -->
+            <div v-if="kinds > 1 || keys > 1"
+                 class="flex items-center gap-2">
+                <KindFilter v-if="kinds > 1"
+                            v-model="kindFilter"
+                            :components="components" />
+                <TypeFilter v-if="keys > 1"
+                            v-model="keyFilter"
+                            :components="byKind" />
+            </div>
 
-        <div class="flex items-center justify-between">
-            <span class="text-sm text-muted tabular-nums">
-                {{ selectedIds.length }} of {{ components.length }} components {{ noun ?? 'selected' }}
-            </span>
-            <div class="flex gap-2">
-                <UButton size="sm"
-                         color="neutral"
-                         variant="ghost"
-                         label="Select all"
-                         @click="selectVisible()" />
-                <UButton size="sm"
-                         color="neutral"
-                         variant="ghost"
-                         label="Deselect all"
-                         @click="deselectVisible()" />
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-muted tabular-nums">
+                    {{ selectedIds.length }} of {{ components.length }} components {{ noun ?? 'selected' }}
+                </span>
+                <div class="flex gap-2">
+                    <UButton size="sm"
+                             color="neutral"
+                             variant="ghost"
+                             label="Select all"
+                             @click="selectVisible()" />
+                    <UButton size="sm"
+                             color="neutral"
+                             variant="ghost"
+                             label="Deselect all"
+                             @click="deselectVisible()" />
+                </div>
             </div>
         </div>
 

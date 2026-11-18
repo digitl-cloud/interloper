@@ -50,7 +50,7 @@ const groups = computed(() => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-4">
+    <div class="flex flex-col gap-6">
         <UInput v-model="search"
                 placeholder="Search…"
                 :icon="appConfig.ui.icons.search"
@@ -68,7 +68,7 @@ const groups = computed(() => {
                  class="flex flex-col gap-3">
                 <span v-if="tag"
                       class="caption text-muted">{{ tag }}</span>
-                <div class="grid grid-cols-2 gap-3">
+                <div class="grid grid-cols-2 gap-4">
                     <SelectionCard v-for="defn in items"
                                    :key="defn.key"
                                    :selected="selectedKey === defn.key"

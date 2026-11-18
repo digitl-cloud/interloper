@@ -192,36 +192,38 @@ function setDep(assetKey: string, dep: AssetDep, value: string | string[]) {
 </script>
 
 <template>
-    <div class="flex flex-col gap-3">
-        <div class="flex items-center gap-2">
-            <UTabs v-if="tagTabs.length > 2"
-                   v-model="tagFilter"
-                   :items="tagTabs"
-                   variant="pill"
-                   size="xs"
-                   :content="false"
-                   class="w-fit" />
-            <UInput v-model="search"
-                    placeholder="Search assets…"
-                    :icon="appConfig.ui.icons.search"
-                    class="min-w-0 flex-1" />
-        </div>
+    <div class="flex flex-col gap-6">
+        <div class="flex flex-col gap-3">
+            <div class="flex items-center gap-2">
+                <UTabs v-if="tagTabs.length > 2"
+                       v-model="tagFilter"
+                       :items="tagTabs"
+                       variant="pill"
+                       size="xs"
+                       :content="false"
+                       class="w-fit" />
+                <UInput v-model="search"
+                        placeholder="Search assets…"
+                        :icon="appConfig.ui.icons.search"
+                        class="min-w-0 flex-1" />
+            </div>
 
-        <div class="flex items-center justify-between">
-            <span class="text-sm text-muted tabular-nums">
-                {{ selectedKeys.length }} of {{ sourceDefn.assets.length }} assets selected
-            </span>
-            <div class="flex gap-2">
-                <UButton size="sm"
-                         color="neutral"
-                         variant="ghost"
-                         label="Select all"
-                         @click="selectAll()" />
-                <UButton size="sm"
-                         color="neutral"
-                         variant="ghost"
-                         label="Deselect all"
-                         @click="deselectAll()" />
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-muted tabular-nums">
+                    {{ selectedKeys.length }} of {{ sourceDefn.assets.length }} assets selected
+                </span>
+                <div class="flex gap-2">
+                    <UButton size="sm"
+                             color="neutral"
+                             variant="ghost"
+                             label="Select all"
+                             @click="selectAll()" />
+                    <UButton size="sm"
+                             color="neutral"
+                             variant="ghost"
+                             label="Deselect all"
+                             @click="deselectAll()" />
+                </div>
             </div>
         </div>
 

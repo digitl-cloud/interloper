@@ -101,6 +101,7 @@ No `font-bold`.
 **Page rhythm**
 - `UDashboardPanel` pads the body.
 - Sections stack at `gap-4 sm:gap-6`.
+- In a drawer (a wizard, an edit form), header, stepper, body sections and footer stack at `gap-6`: the theme spaces the drawer and the stepper, and a step's own sections (summary card, controls, tiles or list) follow. Tiles in a grid sit at `gap-4`, a list's rows at `gap-2`, a group's caption at `gap-3` above its tiles.
 - A component's internal padding is its own; our markup only places it.
 
 **Radius**
@@ -201,7 +202,7 @@ Graph node states (`idle`, `attention`, `paused`, ...) map onto the same colours
 | Form | `UForm` + `UFormField` (`label`, `description`, `required`, `error`) for every field; no hand-built labels or error text. Vertical in modals and drawers, horizontal in settings. Inputs are `w-full` in vertical forms. |
 | Confirm | `useConfirm()` (ConfirmModal) |
 | Short form | `UModal`; footer right-aligned by the theme: Cancel (neutral outline), then the primary button |
-| Multi-step or long form | right `UDrawer` (`WizardDrawer`), with its `close` prop |
+| Multi-step or long form | right `UDrawer` (`WizardDrawer`), with its `close` prop; the steps in a `UStepper` with Nuxt UI's own look |
 | Secret shown once | `CopyField` in an overlay with `:dismissible="false"` until it is closed with its button |
 | Meter | `UProgress`; a split bar is `UProgressGroup` with segments from the status table |
 | Avatar | `UAvatar` with initials; no colour palette |
