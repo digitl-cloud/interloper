@@ -158,12 +158,9 @@ DEV_DIR := dev
 # below. Set it once in .env, e.g.:
 #   INTERLOPER_DEV_USER_EMAIL=you@example.com
 -include .env
-# Export every .env-loaded var to recipe environments, so the app subprocess
-# also sees vars the harness doesn't forward explicitly — connector OAuth creds
-# (<PROVIDER>_CLIENT_ID, …), GEMINI_API_KEY, INTERLOPER_SMTP_PASSWORD, etc. The
-# explicit INTERLOPER_* below still pin the harness-critical settings (they're
-# set inline on each recipe, which wins over the exported value).
-export
+# Read only for the variables DEV_ENV and COMPOSE_ENV forward, never exported:
+# the app loads the rest of .env itself (the CLI on the host, env_file in
+# compose), and an export would hand it to every recipe, the test run included.
 INTERLOPER_DEV_USER_EMAIL ?= admin@dev.local
 
 # The app login's providers (the /auth flow), Google and Microsoft. Put each
