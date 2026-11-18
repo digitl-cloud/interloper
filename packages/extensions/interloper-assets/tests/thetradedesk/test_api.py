@@ -142,6 +142,49 @@ class TestQuery:
         assert (request.method, str(request.url)) == ("POST", f"{constants.BASE_URL}/partner/query")
         assert json.loads(request.content) == {"PageStartIndex": 0, "PageSize": 100, "PartnerIds": ["p1"]}
 
+    async def test_reads_every_page_until_the_filtered_total(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(constants, "QUERY_PAGE_SIZE", 2)
+        partners = [{"PartnerId": f"p{index}"} for index in range(5)]
+        bodies: list[dict[str, Any]] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            body = json.loads(request.content)
+            bodies.append(body)
+            page = partners[body["PageStartIndex"] : body["PageStartIndex"] + body["PageSize"]]
+            return httpx2.Response(
+                200, json={"Result": page, "ResultCount": len(page), "TotalFilteredCount": len(partners)}
+            )
+
+        assert await _api(handler).query("/partner/query", PartnerIds=["p"]) == partners
+        assert bodies == [
+            {"PageStartIndex": 0, "PageSize": 2, "PartnerIds": ["p"]},
+            {"PageStartIndex": 2, "PageSize": 2, "PartnerIds": ["p"]},
+            {"PageStartIndex": 4, "PageSize": 2, "PartnerIds": ["p"]},
+        ]
+
+    async def test_a_response_without_a_filtered_total_is_read_once(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(constants, "QUERY_PAGE_SIZE", 2)
+        requests: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            return httpx2.Response(200, json={"Result": [{"PartnerId": "p0"}, {"PartnerId": "p1"}], "ResultCount": 2})
+
+        assert await _api(handler).query("/partner/query") == [{"PartnerId": "p0"}, {"PartnerId": "p1"}]
+        assert len(requests) == 1
+
+    async def test_an_empty_page_ends_the_walk_short_of_the_total(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(constants, "QUERY_PAGE_SIZE", 2)
+        requests: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            page = [{"PartnerId": "p0"}, {"PartnerId": "p1"}] if len(requests) == 1 else []
+            return httpx2.Response(200, json={"Result": page, "ResultCount": len(page), "TotalFilteredCount": 9})
+
+        assert await _api(handler).query("/partner/query") == [{"PartnerId": "p0"}, {"PartnerId": "p1"}]
+        assert len(requests) == 2
+
     async def test_an_empty_result_reads_as_no_rows(self):
         api = _api(lambda _: httpx2.Response(200, json={"Result": [], "ResultCount": 0}))
 
