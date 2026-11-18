@@ -78,7 +78,9 @@ class FacebookGraphApi(FacebookAdsApi):
     - **Too much data** (code 1, "reduce the amount of data"): ask for less in
       the same request. A page halves its ``limit`` in the cursor's own
       parameters, so the following pages keep the size that fits; an object
-      is read again in two halves of its fields and the answers merged.
+      is read again in two halves of its fields and the answers merged. A
+      page of one row still too heavy is raised: merging two pages keeps the
+      second page's rows, so its halves cannot be merged the same way.
     - Anything else is raised at once.
 
     A response announcing a lockout also pauses the caller that long before
@@ -139,7 +141,8 @@ class FacebookGraphApi(FacebookAdsApi):
                 if self._asks_for_less(error):
                     if self._shrinks_page(method, path, params):
                         continue
-                    if method == "GET" and len(str(params.get("fields", "")).split(",")) > 1:
+                    fields = str(params.get("fields", "")).split(",")
+                    if method == "GET" and not self._is_edge(path) and len(fields) > 1:
                         return self._read_halves(path, params, headers, url_override, api_version)
                     raise
                 if error.api_error_code() in self.THROTTLE_CODES:

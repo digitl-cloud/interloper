@@ -179,6 +179,16 @@ class TestAskingForLess:
         with pytest.raises(FacebookRequestError, match="Call was not successful"):
             api.call("GET", ("act_1", "ads"), params={"limit": 1})
 
+    def test_a_page_of_one_still_too_heavy_fails_rather_than_dropping_fields(self, sleeps):
+        api = _api(
+            _error(500, 1, REFUSAL),
+            _ok({"data": [{"id": "1", "name": "Ad"}], "paging": {"cursors": {"after": "a1"}}}),
+            _ok({"data": [{"status": "ACTIVE"}], "paging": {"cursors": {"after": "a1"}}}),
+        )
+        with pytest.raises(FacebookRequestError, match="Call was not successful"):
+            api.call("GET", ("act_1", "ads"), params={"fields": "id,name,status", "limit": 1})
+        assert len(_sent(api)) == 1
+
     def test_an_object_too_heavy_is_read_in_halves_of_its_fields_and_merged(self, sleeps):
         api = _api(
             _error(500, 1, REFUSAL),
