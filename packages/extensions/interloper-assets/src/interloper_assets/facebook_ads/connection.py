@@ -97,18 +97,17 @@ class FacebookAdsConnection(il.OAuthConnection):
         Facebook SDK, so that it runs in the API process, which omits the
         heavy SDK extras.
 
+        The access token travels as the bearer, never in the URL, which a
+        refusal's error message and the HTTP client's request log both carry.
+
         Returns:
             The options for the field's dropdown.
 
         """
-        async with httpx2.AsyncClient(timeout=30) as client:
+        async with httpx2.AsyncClient(timeout=30, auth=il.HTTPBearerAuth(self.access_token)) as client:
             response = await client.get(
                 f"{_GRAPH_URL}/me/adaccounts",
-                params={
-                    "access_token": self.access_token,
-                    "fields": "account_id,name,account_status",
-                    "limit": "500",
-                },
+                params={"fields": "account_id,name,account_status", "limit": "500"},
             )
             response.raise_for_status()
             data = response.json().get("data", [])
