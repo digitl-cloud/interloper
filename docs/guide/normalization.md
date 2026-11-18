@@ -43,6 +43,12 @@ class Amazon(il.Source): ...
 Transformations apply in this order: empty-dict replacement, flattening, empty-string
 replacement, column dropping, renaming, key filling.
 
+Renaming spells the symbols listed in `interloper.normalizer.base.SYMBOL_WORDS` as words before
+snake-casing, which turns every other run of non-alphanumeric characters into `_`: `%` becomes
+`pct`, so `% Viewable Impressions` stays apart from `Viewable Impressions`, and `$`, `€` and `£`
+become `usd`, `eur` and `gbp`, so `Cost ($)` stays apart from `Cost (€)`. A `column_overrides`
+entry matches the raw name, before any symbol is spelled.
+
 ## Accepted input
 
 `dict`, `list[dict]`, a pydantic model or a list of them, and generators or iterators of those.

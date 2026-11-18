@@ -44,6 +44,23 @@ class TestColumnName:
         assert n.column_name("eCPAddToCart") == "ecp_add_to_cart"
         assert n.column_name("eCPBrandSearch") == "e_cp_brand_search"  # no override -> default rule
 
+    def test_symbols_are_spelled_as_words(self):
+        n = Normalizer()
+        assert n.column_name("Active View: % Viewable Impressions") == "active_view_pct_viewable_impressions"
+        assert n.column_name("Active View: Viewable Impressions") == "active_view_viewable_impressions"
+        assert n.column_name("Player 25% Complete") == "player_25pct_complete"
+
+    def test_currency_symbols_are_spelled_as_their_codes(self):
+        n = Normalizer()
+        assert n.column_name("Cost ($)") == "cost_usd"
+        assert n.column_name("Cost (€)") == "cost_eur"
+        assert n.column_name("Cost (£)") == "cost_gbp"
+        assert n.column_name("€ Revenue") == "eur_revenue"
+
+    def test_overrides_match_the_raw_name_before_symbols_are_spelled(self):
+        n = Normalizer(column_overrides={"CTR %": "ctr"})
+        assert n.column_name("CTR %") == "ctr"
+
     def test_overrides_apply_during_normalize(self):
         n = Normalizer(column_overrides={"eCPAddToCart": "ecp_add_to_cart"})
         rows = n.normalize([{"eCPAddToCart": 1.0, "campaignName": "x"}])

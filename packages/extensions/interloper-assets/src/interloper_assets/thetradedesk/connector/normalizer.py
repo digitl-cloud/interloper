@@ -26,21 +26,8 @@ class TheTradeDeskNormalizer(DataFrameNormalizer):
 
     Reports are requested in "International" format, so metric values carry
     decimal commas ("1,5") and the date column is DD/MM/YYYY; convert both so
-    the generic numeric/date casts succeed. Headers also spell quartiles with
-    ``%`` ("Player 25% Complete" → ``player_25pct_complete``), which the generic
-    snake-casing would drop.
+    the generic numeric/date casts succeed.
     """
-
-    def column_name(self, name: str) -> str:
-        """Rewrite one vendor column name before the standard mapping.
-
-        Args:
-            name: The column name as the API returned it.
-
-        Returns:
-            The mapped column name.
-        """
-        return super().column_name(name.replace("%", "pct"))
 
     def normalize(self, data: Any) -> pd.DataFrame:
         """Reshape the vendor payload before the standard normalization.

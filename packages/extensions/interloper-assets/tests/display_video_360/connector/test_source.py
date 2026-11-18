@@ -23,7 +23,6 @@ from interloper_pandas import DataFrameNormalizer
 from interloper_assets.display_video_360 import constants
 from interloper_assets.display_video_360.connection import DisplayVideo360Connection
 from interloper_assets.display_video_360.connector import schemas
-from interloper_assets.display_video_360.connector.normalizer import DisplayVideo360Normalizer
 from interloper_assets.display_video_360.connector.source import DisplayVideo360
 
 _ASSET_KEY = "partners"
@@ -79,6 +78,15 @@ class TestReports:
             {"type": "FILTER_ADVERTISER", "value": "9"},
         ]
 
+    def test_percent_headers_do_not_collide(self):
+        normalizer = _source().normalizer
+        assert normalizer.column_name("Active View: % Viewable Impressions") == ("active_view_pct_viewable_impressions")
+        assert normalizer.column_name("Active View: Viewable Impressions") == "active_view_viewable_impressions"
+        assert normalizer.column_name("CM360 Placement ID") == "cm_360_placement_id"
+        assert normalizer.column_name("YouTube Revenue (eCPV) (Adv Currency)") == (
+            "you_tube_revenue_e_cpv_adv_currency"
+        )
+
     def test_report_rows_conform_to_schema(self, google, connection, download):
         google.serve({"queryId": "q"}, {"key": {"reportId": "r"}}, _DONE_REPORT)
         rows = _run(connection, "line_items_stats")
@@ -115,7 +123,7 @@ class TestNormalizerMapping:
         src = _source()
         assert len(src.assets) == 5
         for asset in src.assets:
-            assert isinstance(asset.normalizer, DisplayVideo360Normalizer), type(asset).key
+            assert type(asset.normalizer) is DataFrameNormalizer, type(asset).key
 
 
 _DAY = dt.date(2026, 7, 10)
@@ -240,9 +248,9 @@ class TestRequests:
 
 
 class TestSpecRoundtrip:
-    """The host→child spec round-trip must preserve the normalizer subclass."""
+    """The host→child spec round-trip must preserve the normalizer and its options."""
 
-    def test_child_asset_keeps_custom_normalizer(self):
+    def test_child_asset_keeps_the_normalizer(self):
         src = _source()
         asset = next(a for a in src.assets if type(a).key == _ASSET_KEY)
         spec_json = DAG(src).mini_dag(asset.id).to_spec().model_dump(mode="json")
@@ -251,7 +259,7 @@ class TestSpecRoundtrip:
         assert isinstance(child_asset, Asset)
 
         normalizer = child_asset.normalizer
-        assert isinstance(normalizer, DisplayVideo360Normalizer)
+        assert type(normalizer) is DataFrameNormalizer
         assert normalizer.snake_case_digits is True
         assert normalizer.flatten_max_level == 2
         # The % -> pct behavior must survive in the child pod.

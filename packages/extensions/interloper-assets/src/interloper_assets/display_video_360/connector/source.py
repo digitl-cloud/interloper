@@ -1,11 +1,11 @@
 from typing import Any
 
 import interloper as il
+from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.display_video_360 import constants
 from interloper_assets.display_video_360.connection import DisplayVideo360Connection
 from interloper_assets.display_video_360.connector import schemas
-from interloper_assets.display_video_360.connector.normalizer import DisplayVideo360Normalizer
 
 # both reports are standard reports; reach, Floodlight and YouTube reports are other types
 _STANDARD_REPORT = {"type": "STANDARD", "options": {}}
@@ -18,7 +18,7 @@ _STANDARD_REPORT = {"type": "STANDARD", "options": {}}
     icon="icon:dv360",
     # Partner objects nest config two levels deep (dataAccessConfig.sdfConfig.*);
     # digit splitting maps dv360ToCm... -> dv_360_to_cm_... onto the schema fields.
-    normalizer=DisplayVideo360Normalizer(snake_case_digits=True, flatten_max_level=2),
+    normalizer=DataFrameNormalizer(snake_case_digits=True, flatten_max_level=2),
     maturity="beta",
 )
 class DisplayVideo360(il.Source):

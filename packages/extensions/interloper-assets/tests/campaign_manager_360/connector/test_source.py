@@ -2,10 +2,10 @@
 
 CM360 report downloads are CSV files with a metadata preamble (ending at a
 "Report Fields" line), human-readable headers, and a trailing "Grand Total:"
-summary row. The custom normalizer must map those headers onto the schema
-columns — notably spelling ``%`` out as ``pct`` so "% Viewable Impressions"
-does not collide with "Viewable Impressions" — and survive the host→child
-DAG-spec round-trip. What each asset sends and returns is pinned at the HTTP
+summary row. The source's normalizer must map those headers onto the schema
+columns (``%`` is spelled ``pct``, so "% Viewable Impressions" does not
+collide with "Viewable Impressions") and survive the host→child DAG-spec
+round-trip. What each asset sends and returns is pinned at the HTTP
 level, over a scripted exchange.
 """
 
@@ -23,11 +23,11 @@ import pytest
 from interloper.asset import Asset
 from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
+from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.campaign_manager_360 import constants
 from interloper_assets.campaign_manager_360.connection import CampaignManager360Connection
 from interloper_assets.campaign_manager_360.connector import schemas
-from interloper_assets.campaign_manager_360.connector.normalizer import CampaignManager360Normalizer
 from interloper_assets.campaign_manager_360.connector.source import CampaignManager360
 
 _ASSET_KEY = "campaigns_stats"
@@ -49,8 +49,8 @@ def _source() -> Any:
     )
 
 
-def _normalizer() -> CampaignManager360Normalizer:
-    return CampaignManager360Normalizer(snake_case_digits=True, flatten_max_level=2)
+def _normalizer() -> DataFrameNormalizer:
+    return _source().normalizer
 
 
 _BASE = "https://dfareporting.googleapis.com/dfareporting/v5"
@@ -148,6 +148,18 @@ def _data(asset: Any) -> list[dict[str, Any]]:
 class TestHeaderNormalization:
     """CSV headers land on schema columns; ``%`` becomes ``pct``, digits split."""
 
+    def test_percent_headers_do_not_collide(self):
+        normalizer = _normalizer()
+        assert normalizer.column_name("Active View: % Viewable Impressions") == ("active_view_pct_viewable_impressions")
+        assert normalizer.column_name("Active View: Viewable Impressions") == "active_view_viewable_impressions"
+
+    def test_digit_and_symbol_headers(self):
+        normalizer = _normalizer()
+        assert normalizer.column_name("Site (CM360)") == "site_cm_360"
+        assert normalizer.column_name("DV360 Cost (USD)") == "dv_360_cost_usd"
+        assert normalizer.column_name("Package/Roadblock ID") == "package_roadblock_id"
+        assert normalizer.column_name("TrueView: Views") == "true_view_views"
+
     def test_parsed_report_conforms_to_schema(self):
         server = FakeApi(*_report_answers("REPORT_AVAILABLE", file=_REPORT_FILE))
         rows = _data(_asset(server, "campaigns_stats"))
@@ -167,7 +179,7 @@ class TestSourceNormalizer:
         src = _source()
         assert len(src.assets) == 4
         for asset in src.assets:
-            assert isinstance(asset.normalizer, CampaignManager360Normalizer), type(asset).key
+            assert type(asset.normalizer) is DataFrameNormalizer, type(asset).key
 
 
 class TestRequests:
@@ -316,9 +328,9 @@ class TestRequests:
 
 
 class TestSpecRoundtrip:
-    """The host→child spec round-trip must preserve the normalizer subclass."""
+    """The host→child spec round-trip must preserve the normalizer and its options."""
 
-    def test_child_asset_keeps_custom_normalizer(self):
+    def test_child_asset_keeps_the_normalizer(self):
         src = _source()
         asset = next(a for a in src.assets if type(a).key == _ASSET_KEY)
         spec_json = DAG(src).mini_dag(asset.id).to_spec().model_dump(mode="json")
@@ -327,7 +339,7 @@ class TestSpecRoundtrip:
         assert isinstance(child_asset, Asset)
 
         normalizer = child_asset.normalizer
-        assert isinstance(normalizer, CampaignManager360Normalizer)
+        assert type(normalizer) is DataFrameNormalizer
         assert normalizer.snake_case_digits is True
         assert normalizer.flatten_max_level == 2
         # The % -> pct behavior must survive in the child pod.
