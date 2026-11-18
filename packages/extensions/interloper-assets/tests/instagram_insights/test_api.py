@@ -171,12 +171,20 @@ class TestReport:
             ("until", "2026-10-01"),
         ]
 
-    async def test_follows_every_page(self):
-        def handler(request: httpx2.Request) -> httpx2.Response:
-            if request.url.params.get("after") == "p2":
-                return httpx2.Response(200, json={"data": [{"name": "likes"}]})
-            next_link = f"{GRAPH}/1784/insights?after=p2"
-            return httpx2.Response(200, json={"data": [{"name": "reach"}], "paging": {"next": next_link}})
+    async def test_reads_one_response_never_the_next_window(self):
+        # Graph pages an insights edge by time window: next asks the same query for the following days
+        requests: list[httpx2.Request] = []
+        day = dt.date(2026, 9, 30)
 
-        insights = await _api(handler).report("/1784/insights", dt.date(2026, 9, 30), metric="reach,likes")
-        assert insights == [{"name": "reach"}, {"name": "likes"}]
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            since = dt.date.fromisoformat(request.url.params["since"])
+            following, after = since + dt.timedelta(days=1), since + dt.timedelta(days=2)
+            next_window = f"{GRAPH}/1784/insights?metric=reach&since={following}&until={after}"
+            paging = {"next": next_window} if since < day + dt.timedelta(days=3) else {}
+            return httpx2.Response(200, json={"data": [{"name": str(since)}], "paging": paging})
+
+        insights = await _api(handler).report("/1784/insights", day, metric="reach")
+
+        assert insights == [{"name": "2026-09-30"}]
+        assert len(requests) == 1

@@ -8,6 +8,7 @@ names. These tests pin each against a mock transport.
 
 from __future__ import annotations
 
+import datetime as dt
 from collections.abc import Callable
 
 import httpx2
@@ -169,6 +170,48 @@ class TestRows:
             return httpx2.Response(200, json={"data": [{"id": "1"}]})
 
         assert await _api(handler).rows("/42_1001/insights", metric="post_media_view") == [{"id": "1"}]
+        assert len(requests) == 1
+
+
+class TestReport:
+    async def test_asks_an_insights_edge_for_one_day(self):
+        requests: list[httpx2.Request] = []
+        insight = {"name": "page_follows", "period": "day", "values": [{"value": 1200}]}
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            return httpx2.Response(200, json={"data": [insight]})
+
+        insights = await _api(handler).report(
+            "/42/insights", dt.date(2026, 9, 15), metric=["page_follows", "page_views_total"], period="day"
+        )
+
+        assert insights == [insight]
+        (request,) = requests
+        assert request.url.path == f"/{API_VERSION}/42/insights"
+        assert list(request.url.params.multi_items()) == [
+            ("metric", "page_follows,page_views_total"),
+            ("period", "day"),
+            ("since", "2026-09-15"),
+            ("until", "2026-09-16"),
+        ]
+
+    async def test_reads_one_response_never_the_next_window(self):
+        # Graph pages an insights edge by time window: next asks the same query for the following days
+        requests: list[httpx2.Request] = []
+        day = dt.date(2026, 9, 15)
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            since = dt.date.fromisoformat(request.url.params["since"])
+            following, after = since + dt.timedelta(days=1), since + dt.timedelta(days=2)
+            next_window = f"{GRAPH}/42/insights?metric=page_follows&since={following}&until={after}"
+            paging = {"next": next_window} if since < day + dt.timedelta(days=3) else {}
+            return httpx2.Response(200, json={"data": [{"name": str(since)}], "paging": paging})
+
+        insights = await _api(handler).report("/42/insights", day, metric="page_follows")
+
+        assert insights == [{"name": "2026-09-15"}]
         assert len(requests) == 1
 
 
