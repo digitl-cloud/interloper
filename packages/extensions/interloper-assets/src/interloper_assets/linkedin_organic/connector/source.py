@@ -1,9 +1,9 @@
 from typing import Any
 
 import interloper as il
+from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.linkedin_organic.connection import LinkedinOrganicConnection
-from interloper_assets.linkedin_organic.connector.normalizer import LinkedinOrganicNormalizer
 from interloper_assets.linkedin_organic.connector.schemas import (
     FollowersStats,
     Industries,
@@ -17,9 +17,11 @@ from interloper_assets.linkedin_organic.connector.schemas import (
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
     tags=["Social Media"],
-    normalizer=LinkedinOrganicNormalizer(
+    normalizer=DataFrameNormalizer(
         flatten_max_level=3,
+        # LinkedIn sends timeRange instants as milliseconds since the epoch
         epoch_columns=["time_range_start", "time_range_end"],
+        epoch_unit="ms",
     ),
     icon="devicon:linkedin",
     maturity="beta",

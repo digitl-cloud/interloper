@@ -3,7 +3,7 @@
 The statistics endpoints date their rows only by the request (lifetime follower
 counts) or by epoch-millisecond ``timeRange`` instants (page and share
 statistics), so every asset stamps ``date``; the source's
-``LinkedinOrganicNormalizer`` flattens the nested ``totalPageStatistics`` /
+``DataFrameNormalizer`` flattens the nested ``totalPageStatistics`` /
 ``totalShareStatistics`` blocks to their full vendor path and converts the
 instants to UTC datetimes. Requests are written as raw Rest.li 2.0 query strings
 and taxonomies follow ``paging.links``; both are pinned against a mock transport.
@@ -21,9 +21,9 @@ import pytest
 from interloper.asset.context import ExecutionContext
 from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
+from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.linkedin_organic.connection import LinkedinOrganicConnection
-from interloper_assets.linkedin_organic.connector.normalizer import LinkedinOrganicNormalizer
 from interloper_assets.linkedin_organic.connector.source import LinkedinOrganic
 
 REPORT_ASSETS = ("followers_stats", "page_stats", "share_stats")
@@ -158,14 +158,15 @@ class TestSourceNormalizer:
     def test_every_asset_uses_the_source_normalizer(self):
         for key in REPORT_ASSETS + ENTITY_ASSETS:
             normalizer = _asset(_source(), key).normalizer
-            assert isinstance(normalizer, LinkedinOrganicNormalizer), key
+            assert type(normalizer) is DataFrameNormalizer, key
             assert normalizer.flatten_max_level == 3, key
             assert normalizer.epoch_columns == ["time_range_start", "time_range_end"], key
+            assert normalizer.epoch_unit == "ms", key
 
     def test_normalizer_survives_the_roundtrip(self):
         for key in REPORT_ASSETS + ENTITY_ASSETS:
             child = _child(key).normalizer
-            assert isinstance(child, LinkedinOrganicNormalizer), key
+            assert type(child) is DataFrameNormalizer, key
             assert child.model_dump() == _asset(_source(), key).normalizer.model_dump(), key
 
 
