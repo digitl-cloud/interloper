@@ -23,7 +23,8 @@ from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
 
 from interloper_assets.linkedin_organic.connection import LinkedinOrganicConnection
-from interloper_assets.linkedin_organic.connector.source import LinkedinOrganic, LinkedinOrganicNormalizer
+from interloper_assets.linkedin_organic.connector.normalizer import LinkedinOrganicNormalizer
+from interloper_assets.linkedin_organic.connector.source import LinkedinOrganic
 
 REPORT_ASSETS = ("followers_stats", "page_stats", "share_stats")
 ENTITY_ASSETS = ("industries", "job_functions", "seniorities")

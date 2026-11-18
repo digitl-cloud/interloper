@@ -22,7 +22,8 @@ from interloper_pandas import DataFrameNormalizer
 from interloper_assets.display_video_360 import constants
 from interloper_assets.display_video_360.connection import DisplayVideo360Connection
 from interloper_assets.display_video_360.connector import schemas
-from interloper_assets.display_video_360.connector.source import DisplayVideo360, DisplayVideo360Normalizer
+from interloper_assets.display_video_360.connector.normalizer import DisplayVideo360Normalizer
+from interloper_assets.display_video_360.connector.source import DisplayVideo360
 
 _ASSET_KEY = "partners"
 
@@ -76,15 +77,6 @@ class TestReports:
             {"type": "FILTER_PARTNER", "value": "123"},
             {"type": "FILTER_ADVERTISER", "value": "9"},
         ]
-
-    def test_percent_headers_do_not_collide(self):
-        normalizer = DisplayVideo360Normalizer(snake_case_digits=True, flatten_max_level=2)
-        assert normalizer.column_name("Active View: % Viewable Impressions") == ("active_view_pct_viewable_impressions")
-        assert normalizer.column_name("Active View: Viewable Impressions") == "active_view_viewable_impressions"
-        assert normalizer.column_name("CM360 Placement ID") == "cm_360_placement_id"
-        assert normalizer.column_name("YouTube Revenue (eCPV) (Adv Currency)") == (
-            "you_tube_revenue_e_cpv_adv_currency"
-        )
 
     def test_report_rows_conform_to_schema(self, google, connection, download):
         google.serve({"queryId": "q"}, {"key": {"reportId": "r"}}, _DONE_REPORT)

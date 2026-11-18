@@ -3,8 +3,8 @@
 Stats rows nest metrics under a ``stats`` dict (flattened and de-prefixed) or,
 for dimensioned reports, a ``dimension_stats`` list (exploded into one row per
 dimension) — reshaped by ``SnapchatStatsNormalizer``. Entity records are
-flattened by a configured ``DataFrameNormalizer``. These tests pin the
-normalizers, that they survive the host→child spec round-trip (the AmazonAds
+flattened by a configured ``DataFrameNormalizer``. These tests pin which
+normalizer each asset gets, that the normalizers survive the host→child spec round-trip (the AmazonAds
 failure mode), that results reconcile against the ported schemas, and what
 every asset sends and returns against a mock transport.
 """
@@ -25,7 +25,8 @@ from interloper_pandas import DataFrameNormalizer
 from interloper_assets.snapchat_ads import constants
 from interloper_assets.snapchat_ads.connection import SnapchatAdsConnection
 from interloper_assets.snapchat_ads.connector import schemas
-from interloper_assets.snapchat_ads.connector.source import SnapchatAds, SnapchatStatsNormalizer
+from interloper_assets.snapchat_ads.connector.normalizer import SnapchatStatsNormalizer
+from interloper_assets.snapchat_ads.connector.source import SnapchatAds
 
 
 def _source() -> Any:
@@ -62,26 +63,6 @@ class TestSource:
             assert isinstance(norm, DataFrameNormalizer) and not isinstance(norm, SnapchatStatsNormalizer), key
             assert norm.flatten_max_level == 3
             assert norm.drop_na_columns is True
-
-
-class TestStatsNormalizer:
-    def test_strips_stats_prefix_and_keeps_date(self):
-        rows = [
-            {"id": "ad1", "type": "AD", "stats": {"impressions": "100", "spend": "5"}, "date": dt.date(2026, 6, 10)}
-        ]
-        df = SnapchatStatsNormalizer().normalize(rows)
-        assert {"id", "type", "impressions", "spend", "date"} <= set(df.columns)
-        assert "stats_impressions" not in df.columns
-
-    def test_explodes_dimension_stats(self):
-        rows = [{"id": "ad1", "dimension_stats": [{"country": "us"}, {"country": "fr"}], "date": dt.date(2026, 6, 10)}]
-        df = SnapchatStatsNormalizer().normalize(rows)
-        assert len(df) == 2
-        assert set(df["country"]) == {"us", "fr"}
-        assert (df["date"] == dt.date(2026, 6, 10)).all()
-
-    def test_empty(self):
-        assert SnapchatStatsNormalizer().normalize([]).empty
 
 
 class TestSpecRoundtripAndReconcile:
