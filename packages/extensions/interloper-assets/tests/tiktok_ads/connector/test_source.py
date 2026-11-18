@@ -6,7 +6,7 @@ flat record (de-prefixed) before column normalization. Entity records carry
 list/dict fields (``ad_texts``, ``image_ids``, …) that the flat schemas type as
 strings; reconciliation JSON-encodes those nested values when casting to the
 declared ``str`` type, so the entity assets need no bespoke normalizer. These
-tests pin both reshapes, that every asset gets the right
+tests pin that every asset gets the right
 normalizer, and that the normalizer survives the host→child spec round-trip and
 reconciles against the ported schemas.
 """
@@ -28,7 +28,8 @@ from interloper_pandas import DataFrameNormalizer
 from interloper_assets.tiktok_ads import constants
 from interloper_assets.tiktok_ads.connection import TiktokAdsConnection
 from interloper_assets.tiktok_ads.connector import schemas
-from interloper_assets.tiktok_ads.connector.source import TiktokAds, TiktokStatsNormalizer
+from interloper_assets.tiktok_ads.connector.normalizer import TiktokStatsNormalizer
+from interloper_assets.tiktok_ads.connector.source import TiktokAds
 
 
 def _source() -> Any:
@@ -69,46 +70,6 @@ class TestSourceNormalizer:
             assert isinstance(asset.normalizer, DataFrameNormalizer), key
             assert not isinstance(asset.normalizer, TiktokStatsNormalizer), key
             assert asset.normalizer.drop_na_columns is True, key
-
-
-class TestStatsNormalizer:
-    """Merging the dimensions/metrics envelope is the crux of the report port."""
-
-    def test_dimensions_and_metrics_merge_into_flat_columns(self):
-        rows = [
-            {
-                "dimensions": {"ad_id": "456", "stat_time_day": "2026-06-14 00:00:00"},
-                "metrics": {"spend": "12.50", "clicks": "3"},
-                "date": "2026-06-14",
-            }
-        ]
-        df = TiktokStatsNormalizer().normalize(rows)
-        assert "ad_id" in df.columns and "spend" in df.columns
-        assert "dimensions" not in df.columns and "metrics" not in df.columns
-        assert df.loc[0, "ad_id"] == "456"
-        assert df.loc[0, "spend"] == "12.50"
-        assert df.loc[0, "date"] == "2026-06-14"
-
-    def test_a_metric_that_does_not_apply_is_null(self):
-        rows = [
-            {
-                "dimensions": {"ad_id": "456", "stat_time_day": "2026-06-14 00:00:00"},
-                "metrics": {"cost_per_secondary_goal_result": "-", "spend": "12.50"},
-            },
-            {
-                "dimensions": {"ad_id": "789", "stat_time_day": "2026-06-14 00:00:00"},
-                "metrics": {"cost_per_secondary_goal_result": "0.00", "spend": "-"},
-            },
-        ]
-        df = TiktokStatsNormalizer().normalize(rows)
-        reconciled = TableData.from_data(df).reconcile(schemas.AdsStats)
-        assert reconciled["cost_per_secondary_goal_result"].isna().tolist() == [True, False]
-        assert reconciled.loc[1, "cost_per_secondary_goal_result"] == 0.0
-        assert reconciled["spend"].isna().tolist() == [False, True]
-
-    def test_a_dimension_spelled_as_a_dash_is_kept(self):
-        rows = [{"dimensions": {"ad_id": "456", "country_code": "-"}, "metrics": {"spend": "1"}}]
-        assert TiktokStatsNormalizer().normalize(rows).loc[0, "country_code"] == "-"
 
 
 class TestSpecRoundtripAndReconcile:

@@ -25,7 +25,8 @@ from interloper_pandas import DataFrameNormalizer
 from interloper_assets.linkedin_ads import constants
 from interloper_assets.linkedin_ads.connection import LinkedinAdsConnection
 from interloper_assets.linkedin_ads.connector import schemas
-from interloper_assets.linkedin_ads.connector.source import LinkedinAds, LinkedinAdsStatsNormalizer
+from interloper_assets.linkedin_ads.connector.normalizer import LinkedinAdsStatsNormalizer
+from interloper_assets.linkedin_ads.connector.source import LinkedinAds
 
 REPORT_ASSETS = ("ads_stats",)
 ENTITY_ASSETS = ("ad_accounts", "campaign_groups", "campaigns")

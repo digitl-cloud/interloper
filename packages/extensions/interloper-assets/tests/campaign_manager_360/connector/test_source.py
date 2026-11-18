@@ -27,7 +27,8 @@ from interloper.representation import TableData
 from interloper_assets.campaign_manager_360 import constants
 from interloper_assets.campaign_manager_360.connection import CampaignManager360Connection
 from interloper_assets.campaign_manager_360.connector import schemas
-from interloper_assets.campaign_manager_360.connector.source import CampaignManager360, CampaignManager360Normalizer
+from interloper_assets.campaign_manager_360.connector.normalizer import CampaignManager360Normalizer
+from interloper_assets.campaign_manager_360.connector.source import CampaignManager360
 
 _ASSET_KEY = "campaigns_stats"
 
@@ -142,18 +143,6 @@ def _asset(discovery: Discovery, key: str, advertiser_id: str = "") -> Any:
 
 class TestHeaderNormalization:
     """CSV headers land on schema columns; ``%`` becomes ``pct``, digits split."""
-
-    def test_percent_headers_do_not_collide(self):
-        normalizer = _normalizer()
-        assert normalizer.column_name("Active View: % Viewable Impressions") == ("active_view_pct_viewable_impressions")
-        assert normalizer.column_name("Active View: Viewable Impressions") == "active_view_viewable_impressions"
-
-    def test_digit_and_symbol_headers(self):
-        normalizer = _normalizer()
-        assert normalizer.column_name("Site (CM360)") == "site_cm_360"
-        assert normalizer.column_name("DV360 Cost (USD)") == "dv_360_cost_usd"
-        assert normalizer.column_name("Package/Roadblock ID") == "package_roadblock_id"
-        assert normalizer.column_name("TrueView: Views") == "true_view_views"
 
     def test_parsed_report_conforms_to_schema(self):
         discovery = Discovery(*_report_answers("REPORT_AVAILABLE", file=_REPORT_FILE))

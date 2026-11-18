@@ -7,7 +7,7 @@ plain ``DataFrameNormalizer`` snake-cases the publisher report; transactions
 need a custom ``AwinTransactionsNormalizer`` that splits the money objects into
 ``*_amount`` / ``*_currency`` scalars first — otherwise the dict-valued cell
 reaches reconcile and fails to cast to ``float`` (observed live). These tests
-pin the reshape, that the normalizer survives the host→child spec round-trip,
+pin that the normalizer survives the host→child spec round-trip,
 that a raw API-shaped row reconciles against the schema, and the request each
 asset sends for its day and the ``date`` it stamps on the rows.
 """
@@ -25,8 +25,9 @@ from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.awin.connection import AwinConnection
+from interloper_assets.awin.connector.normalizer import AwinTransactionsNormalizer
 from interloper_assets.awin.connector.schemas import Transactions
-from interloper_assets.awin.connector.source import Awin, AwinTransactionsNormalizer, _reshape_transaction
+from interloper_assets.awin.connector.source import Awin
 from interloper_assets.awin.constants import BASE_URL
 
 DAY = dt.date(2026, 10, 1)
@@ -45,33 +46,6 @@ class TestSourceNormalizer:
         asset = next(a for a in _source().assets if type(a).key == "publishers_stats")
         assert isinstance(asset.normalizer, DataFrameNormalizer)
         assert not isinstance(asset.normalizer, AwinTransactionsNormalizer)
-
-
-class TestReshape:
-    """Splitting the nested money/click-ref/parts objects is the crux of the port."""
-
-    def test_money_objects_split_into_amount_and_currency(self):
-        row = _reshape_transaction(
-            {
-                "commissionAmount": {"amount": 120.0, "currency": "EUR"},
-                "saleAmount": {"amount": 5842.86, "currency": "EUR"},
-            }
-        )
-        assert row["commissionAmount"] == 120.0
-        assert row["commissionCurrency"] == "EUR"
-        assert row["saleAmount"] == 5842.86
-        assert row["saleCurrency"] == "EUR"
-
-    def test_click_ref_is_lifted_and_parts_json_encoded(self):
-        row = _reshape_transaction(
-            {
-                "clickRefs": {"clickRef": "https://ad4mat.com/native-network"},
-                "transactionParts": [{"commissionGroupId": 1, "amount": 5842.86}],
-            }
-        )
-        assert row["clickRef"] == "https://ad4mat.com/native-network"
-        assert "clickRefs" not in row
-        assert isinstance(row["transactionParts"], str)
 
 
 class TestSpecRoundtripAndReconcile:

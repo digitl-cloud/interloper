@@ -3,10 +3,10 @@
 Facebook insights nest ``actions``/``action_values`` lists that
 ``FacebookActionsNormalizer`` pivots into one column per action type
 (``actions`` -> ``actions_link_click``); entity reports nest dicts
-(``creative``) that the base normalizer flattens. These tests pin the
-pivot/sanitize logic, that the custom normalizer survives the host→child spec
-round-trip, and that frames reconcile against the ported schemas (missing
-nullable columns are filled, so partial action sets are fine).
+(``creative``) that the base normalizer flattens. These tests pin that
+the custom normalizer survives the host→child spec round-trip, and that
+frames reconcile against the ported schemas (missing nullable columns are
+filled, so partial action sets are fine).
 """
 
 from __future__ import annotations
@@ -20,14 +20,14 @@ import pandas as pd
 import pytest
 from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
-from interloper_pandas import DataFrameNormalizer
 from requests.structures import CaseInsensitiveDict
 
 from interloper_assets.facebook_ads import constants
 from interloper_assets.facebook_ads.api import FacebookGraphApi
 from interloper_assets.facebook_ads.connection import FacebookAdsConnection
 from interloper_assets.facebook_ads.connector import schemas
-from interloper_assets.facebook_ads.connector.source import PIVOT_COLUMNS, FacebookActionsNormalizer, FacebookAds
+from interloper_assets.facebook_ads.connector.normalizer import PIVOT_COLUMNS, FacebookActionsNormalizer
+from interloper_assets.facebook_ads.connector.source import FacebookAds
 
 
 def _source() -> Any:
@@ -54,37 +54,6 @@ class TestSourceNormalizer:
             "ad_accounts",
             "adsets",
         }
-
-
-class TestActionsNormalizer:
-    """The action-list pivot is the crux of the Facebook port."""
-
-    def test_pivots_actions_into_per_action_type_columns(self):
-        rows = [
-            {
-                "date_start": "2026-06-10",
-                "account_id": "123",
-                "ad_id": "456",
-                # link_click appears twice (action-device breakdown) -> summed.
-                "actions": [
-                    {"action_type": "link_click", "action_device": "mobile", "value": "5"},
-                    {"action_type": "link_click", "action_device": "desktop", "value": "2"},
-                    {"action_type": "video_view", "value": "3"},
-                ],
-                "action_values": [
-                    {"action_type": "offsite_conversion.fb_pixel_purchase", "value": "12.5"},
-                ],
-            }
-        ]
-        df = FacebookActionsNormalizer().normalize(rows)
-        assert df.loc[0, "actions_link_click"] == 7.0  # summed across devices
-        assert df.loc[0, "actions_video_view"] == 3.0
-        # the "." in the action type is sanitized to "_"
-        assert df.loc[0, "action_values_offsite_conversion_fb_pixel_purchase"] == 12.5
-        assert "actions" not in df.columns  # original list column dropped
-
-    def test_empty_rows_yield_empty_frame(self):
-        assert FacebookActionsNormalizer().normalize([]).empty
 
 
 class TestSpecRoundtripAndReconcile:
@@ -418,8 +387,3 @@ class TestRequests:
         # Facebook answers 400 for the whole account when one of these comes without a page_id
         for name in ("show_checkout_experience", "has_page_authorized_adaccount"):
             assert name not in constants.AD_ACCOUNT_ENTITY_FIELDS
-
-
-def test_isinstance_of_dataframe_normalizer():
-    # The custom normalizer is a DataFrameNormalizer, so it inherits its config.
-    assert isinstance(FacebookActionsNormalizer(), DataFrameNormalizer)

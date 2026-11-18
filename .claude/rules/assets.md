@@ -51,6 +51,8 @@ Vendors serialize loosely: counts as floats, numbers as strings, dates as string
 
 Assets of a source share the source's normalizer and its discriminator. Keep per-asset special cases out of the source: if one report needs a different reshape, give that asset its own normalizer rather than branching inside a shared one. A helper used by a single asset belongs in its body; a helper used by several is a module-level function with a docstring saying which ones and why.
 
+A normalizer class lives in its source folder's `normalizer.py`, with the helpers and constants only it uses. Configuring one is the source's wiring and stays in `source.py`: the instance passed to the decorator or an asset, or a module-level instance several assets share.
+
 ## 5. A vendor's API has one engine
 
 Every request a source sends goes through its container's `api.py`: one class, `<Vendor>Api`, holding how the vendor's API works, so no asset or connection repeats it.

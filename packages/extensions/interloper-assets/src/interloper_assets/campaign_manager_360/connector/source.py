@@ -1,36 +1,13 @@
 from typing import Any
 
 import interloper as il
-from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.campaign_manager_360 import constants
 from interloper_assets.campaign_manager_360.connection import CampaignManager360Connection
 from interloper_assets.campaign_manager_360.connector import schemas
+from interloper_assets.campaign_manager_360.connector.normalizer import CampaignManager360Normalizer
 
 _Record = dict[str, Any]
-
-
-# -- NORMALIZER ----------------------------------------------------------------
-class CampaignManager360Normalizer(DataFrameNormalizer):
-    """Snake-case CM360's CSV report headers onto the schema columns.
-
-    Headers are human-readable ("Active View: % Viewable Impressions",
-    "Site (CM360)", "DV360 Cost (USD)"). The generic pass drops ``%`` outright,
-    which would collide "% Viewable Impressions" with "Viewable Impressions", so
-    spell it out as ``pct`` first, then defer to snake-casing with digit
-    splitting (CM360 → cm_360).
-    """
-
-    def column_name(self, name: str) -> str:
-        """Rewrite one vendor column name before the standard mapping.
-
-        Args:
-            name: The column name as the API returned it.
-
-        Returns:
-            The mapped column name.
-        """
-        return super().column_name(name.replace("%", "pct"))
 
 
 # -- SOURCE --------------------------------------------------------------------
