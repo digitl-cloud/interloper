@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import Any
 
 import httpx2
@@ -31,7 +32,7 @@ class _NextLink(il.JSONLinkPaginator):
 
 
 class FacebookInsightsApi:
-    """The Facebook Graph API: its objects, its paged edges and its refusals.
+    """The Facebook Graph API: its objects, its paged edges, its insights and its refusals.
 
     Graph refuses a request with an error status and an ``error`` object
     carrying its own ``code``: every method raises the status as
@@ -72,7 +73,7 @@ class FacebookInsightsApi:
         last page.
 
         Args:
-            path: The edge, relative to the versioned base URL, such as ``/{page_id}/insights``.
+            path: The edge, relative to the versioned base URL, such as ``/{page_id}/published_posts``.
             **params: The first request's query parameters; a list value is sent comma-separated.
 
         Returns:
@@ -80,6 +81,25 @@ class FacebookInsightsApi:
         """
         pages = self.client.paginate(path, _NextLink(), params=self._query(params), data_selector="data")
         return [row async for page in pages for row in page]
+
+    async def report(self, path: str, day: dt.date, **params: Any) -> list[dict[str, Any]]:
+        """Read one day of an insights edge, as one response.
+
+        An insights edge pages by time window, not by cursor: its
+        ``paging.next`` asks the same query for the days after, so following
+        it would read past *day*.
+
+        Args:
+            path: The insights edge, relative to the versioned base URL, such as ``/{page_id}/insights``.
+            day: The report's only day, sent as ``since`` and, the day after, as ``until``.
+            **params: What the report is: its ``metric``, ``period``, ``breakdown``; a list value is sent
+                comma-separated.
+
+        Returns:
+            The insight objects, each one metric as Graph sends it (``{name, period, values, ...}``).
+        """
+        window = {"since": day.isoformat(), "until": (day + dt.timedelta(days=1)).isoformat()}
+        return (await self.get(path, **params, **window))["data"]
 
     @staticmethod
     def error_code(error: httpx2.HTTPStatusError) -> int | None:

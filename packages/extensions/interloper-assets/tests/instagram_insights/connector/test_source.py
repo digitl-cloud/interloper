@@ -439,27 +439,28 @@ class TestRequests:
 
 
 class TestPaging:
-    """Every edge follows its absolute ``paging.next`` link, which carries the cursor and the query."""
+    """An edge follows its absolute ``paging.next`` link; an insights window is read as one response."""
 
-    async def test_account_insights_follow_every_page(self):
-        next_link = f"{GRAPH}/1784/insights?metric=likes&after=p2"
-        pages = {
-            None: {
-                "data": [{"name": "likes", "total_value": {"value": 25}}],
-                "paging": {"next": next_link},
-            },
-            "p2": {"data": [{"name": "accounts_engaged", "total_value": {"value": 9}}]},
-        }
+    async def test_account_insights_read_the_partition_day_only_never_the_next_window(self):
+        # Graph pages an insights edge by time window: next asks the same query for the following days
         urls: list[httpx2.URL] = []
 
         def handler(request: httpx2.Request) -> httpx2.Response:
             urls.append(request.url)
-            return httpx2.Response(200, json=pages[request.url.params.get("after")])
+            since = dt.date.fromisoformat(request.url.params["since"])
+            until = since + dt.timedelta(days=1)
+            end_time = f"{until.isoformat()}T07:00:00+0000"
+            insight = {"name": "reach", "period": "day", "values": [{"value": since.day, "end_time": end_time}]}
+            next_since = until.isoformat()
+            next_until = (until + dt.timedelta(days=1)).isoformat()
+            next_window = f"{GRAPH}/1784/insights?metric=reach&period=day&since={next_since}&until={next_until}"
+            paging = {"next": next_window} if since < DAY + dt.timedelta(days=3) else {}
+            return httpx2.Response(200, json={"data": [insight], "paging": paging})
 
-        rows = await _run(_faked_source(handler), "engagement_stats")
-        assert rows == [{"likes": 25, "accounts_engaged": 9, "date": DAY}]
-        assert urls[0].params.multi_items()[0] == ("metric", ",".join(constants.ENGAGEMENT_METRICS))
-        assert str(urls[1]) == next_link
+        rows = await _run(_faked_source(handler), "account_stats")
+
+        assert rows == [{"end_time": "2026-09-16T07:00:00+0000", "date": DAY, "reach": 15}]
+        assert len(urls) == 1
 
     async def test_media_stats_follows_every_page_of_every_edge(self):
         def handler(request: httpx2.Request) -> httpx2.Response:

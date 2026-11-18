@@ -86,7 +86,11 @@ class InstagramInsightsApi:
         return [row async for page in pages for row in page]
 
     async def report(self, path: str, day: dt.date, **params: Any) -> list[dict[str, Any]]:
-        """Read one day of an insights edge.
+        """Read one day of an insights edge, as one response.
+
+        An insights edge pages by time window, not by cursor: its
+        ``paging.next`` asks the same query for the days after, so following
+        it would read past *day*.
 
         Args:
             path: The insights edge, relative to the versioned base URL, such as ``/<account_id>/insights``.
@@ -94,11 +98,11 @@ class InstagramInsightsApi:
             **params: What the report is: its ``metric``, ``period``, ``metric_type``, ``breakdown``.
 
         Returns:
-            The insight objects of every page, each one metric as Graph sends it
+            The insight objects, each one metric as Graph sends it
             (``{name, period, values | total_value, ...}``).
         """
         window = {"since": day.isoformat(), "until": (day + dt.timedelta(days=1)).isoformat()}
-        return await self.rows(path, **params, **window)
+        return (await self.get(path, **params, **window))["data"]
 
     @staticmethod
     def _query(params: dict[str, Any]) -> dict[str, Any]:

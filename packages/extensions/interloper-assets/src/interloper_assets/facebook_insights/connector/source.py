@@ -62,16 +62,13 @@ class FacebookInsights(il.Source):
     @il.asset(schema=PageStats, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
     async def page_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Daily Facebook Page insights: reactions, follows, media views, engagement and video views."""
-        window = {
-            "since": context.partition_date.isoformat(),
-            "until": (context.partition_date + dt.timedelta(days=1)).isoformat(),
-        }
+        day = context.partition_date
         async with self.connection.page_api(self.page_id) as api:
             path = f"/{self.page_id}/insights"
-            insights = await api.rows(path, metric=constants.INSIGHTS_PAGE_METRICS, period="day", **window)
+            insights = await api.report(path, day, metric=constants.INSIGHTS_PAGE_METRICS, period="day")
             # breakdown (singular) is the parameter Graph honours; one breakdown per request
             for breakdown in constants.MEDIA_VIEW_BREAKDOWNS:
-                insights += await api.rows(path, metric="page_media_view", breakdown=breakdown, period="day", **window)
+                insights += await api.report(path, day, metric="page_media_view", breakdown=breakdown, period="day")
 
         rows: dict[str | None, dict[str, Any]] = {}
         for insight in insights:

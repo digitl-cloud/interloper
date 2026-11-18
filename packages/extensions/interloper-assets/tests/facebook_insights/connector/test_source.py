@@ -246,17 +246,14 @@ class TestPageStats:
         assert rows[0]["page_media_view_is_from_followers_0"] == 30
         assert rows[0]["date"] == DAY
 
-    async def test_sends_every_insights_page_as_the_page(self, monkeypatch: Any):
+    async def test_sends_each_insights_request_once_as_the_page(self, monkeypatch: Any):
         sent: list[tuple[str, str, list[tuple[str, str]], str, bytes]] = []
         end_time = "2026-09-16T07:00:00+0000"
-        next_link = f"{GRAPH}/42/insights?after=c2"
-        views = {"name": "page_views_total", "period": "day", "values": [{"value": 7, "end_time": end_time}]}
+        next_link = f"{GRAPH}/42/insights?period=day&since=2026-09-16&until=2026-09-17"
 
         def handler(request: httpx2.Request) -> httpx2.Response:
             sent.append(_sent(request))
             breakdown = request.url.params.get("breakdown")
-            if request.url.params.get("after") == "c2":
-                return httpx2.Response(200, json={"data": [views]})
             if breakdown is None:
                 return httpx2.Response(200, json={"data": PAGE_INSIGHTS, "paging": {"next": next_link}})
             data = [_breakdown_insight("page_media_view", breakdown, {"0": 30, "1": 10}, end_time)]
@@ -274,7 +271,6 @@ class TestPageStats:
                 page,
                 b"",
             ),
-            ("GET", f"{GRAPH}/42/insights", [("after", "c2")], page, b""),
             (
                 "GET",
                 f"{GRAPH}/42/insights",
@@ -297,13 +293,33 @@ class TestPageStats:
                 "page_follows": 1200,
                 "page_actions_post_reactions_total": {"like": 5, "love": 2},
                 "page_video_views_by_paid_non_paid": {"total": 9, "paid": 4, "unpaid": 5},
-                "page_views_total": 7,
                 "page_media_view_is_from_ads_0": 30,
                 "page_media_view_is_from_ads_1": 10,
                 "page_media_view_is_from_followers_0": 30,
                 "page_media_view_is_from_followers_1": 10,
             }
         ]
+
+    async def test_reads_the_partition_day_only_never_the_next_window(self, monkeypatch: Any):
+        # Graph pages an insights edge by time window: next asks the same query for the following days
+        requests: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            since = dt.date.fromisoformat(request.url.params["since"])
+            until = since + dt.timedelta(days=1)
+            end_time = f"{until.isoformat()}T07:00:00+0000"
+            insight = {"name": "page_follows", "period": "day", "values": [{"value": since.day, "end_time": end_time}]}
+            next_since = until.isoformat()
+            next_until = (until + dt.timedelta(days=1)).isoformat()
+            next_window = f"{GRAPH}/42/insights?period=day&since={next_since}&until={next_until}"
+            paging = {"next": next_window} if since < DAY + dt.timedelta(days=3) else {}
+            return httpx2.Response(200, json={"data": [insight], "paging": paging})
+
+        rows = await _run(_faked_source(monkeypatch, handler), "page_stats")
+
+        assert rows == [{"end_time": "2026-09-16T07:00:00+0000", "date": DAY, "page_follows": 15}]
+        assert len(requests) == 1 + len(constants.MEDIA_VIEW_BREAKDOWNS)
 
     async def test_a_refused_insights_request_raises(self, monkeypatch: Any):
         refusal = {"error": {"message": "(#100) The value must be a valid insights metric", "code": 100}}
