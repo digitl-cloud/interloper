@@ -1,11 +1,11 @@
 from typing import Any
 
 import interloper as il
+from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.campaign_manager_360 import constants
 from interloper_assets.campaign_manager_360.connection import CampaignManager360Connection
 from interloper_assets.campaign_manager_360.connector import schemas
-from interloper_assets.campaign_manager_360.connector.normalizer import CampaignManager360Normalizer
 
 _Record = dict[str, Any]
 
@@ -15,7 +15,7 @@ _Record = dict[str, Any]
     key="campaign_manager_360",
     tags=["Advertising"],
     icon="icon:cm360",
-    normalizer=CampaignManager360Normalizer(snake_case_digits=True, flatten_max_level=2),
+    normalizer=DataFrameNormalizer(snake_case_digits=True, flatten_max_level=2),
     maturity="beta",
 )
 class CampaignManager360(il.Source):

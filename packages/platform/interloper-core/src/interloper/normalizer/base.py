@@ -11,6 +11,15 @@ from interloper.errors import NormalizerError
 from interloper.serializable import Serializable
 from interloper.utils.text import to_snake_case
 
+# Symbols a column name spells as words before snake-casing, which would otherwise drop them:
+# "% Viewable Impressions" stays apart from "Viewable Impressions", "Cost ($)" from "Cost (€)".
+SYMBOL_WORDS: dict[str, str] = {
+    "%": "pct",
+    "$": "usd",
+    "€": "eur",
+    "£": "gbp",
+}
+
 
 class Normalizer(Serializable):
     """Type-native normalizer for ``list[dict]`` asset data.
@@ -108,9 +117,9 @@ class Normalizer(Serializable):
     def column_name(self, name: str) -> str:
         """Transform a column name according to the normalizer's convention.
 
-        Explicit ``column_overrides`` win; otherwise converts to
-        ``snake_case``, optionally splitting letter→digit boundaries
-        (see ``snake_case_digits``).
+        Explicit ``column_overrides`` win; otherwise spells the symbols in
+        ``SYMBOL_WORDS`` as words and converts to ``snake_case``, optionally
+        splitting letter→digit boundaries (see ``snake_case_digits``).
 
         Args:
             name: Original column name.
@@ -120,6 +129,8 @@ class Normalizer(Serializable):
         """
         if name in self.column_overrides:
             return self.column_overrides[name]
+        for symbol, word in SYMBOL_WORDS.items():
+            name = name.replace(symbol, word)
         name = to_snake_case(name)
         if self.snake_case_digits:
             name = re.sub(r"([a-z])(\d)", r"\1_\2", name)
