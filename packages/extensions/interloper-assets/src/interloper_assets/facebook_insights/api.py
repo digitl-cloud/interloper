@@ -8,6 +8,28 @@ import httpx2
 import interloper as il
 
 
+class _NextLink(il.JSONLinkPaginator):
+    """Graph's ``paging.next`` link, followed without the access token Graph may copy into it.
+
+    The client sends its token as the bearer. Left in the URL, the token would
+    reach the HTTP client's request log and, on a refused page, the error's
+    message.
+    """
+
+    def __init__(self) -> None:
+        """Follow the link at ``paging.next``."""
+        super().__init__(next_url_path="paging.next")
+
+    def update_request(self, request: httpx2.Request) -> None:
+        """Point the request at the next link, its ``access_token`` dropped.
+
+        Args:
+            request: The request to advance, mutated in place.
+        """
+        super().update_request(request)
+        request.url = request.url.copy_remove_param("access_token")
+
+
 class FacebookInsightsApi:
     """The Facebook Graph API: its objects, its paged edges and its refusals.
 
@@ -45,8 +67,9 @@ class FacebookInsightsApi:
         """Read every row of an edge, following ``paging.next``.
 
         The ``next`` link is absolute and carries the first request's
-        parameters on, so pages are read one after the other. A response
-        without one is the last page.
+        parameters on, so pages are read one after the other, each without
+        the token Graph may copy into the link. A response without one is the
+        last page.
 
         Args:
             path: The edge, relative to the versioned base URL, such as ``/{page_id}/insights``.
@@ -55,12 +78,7 @@ class FacebookInsightsApi:
         Returns:
             The ``data`` rows of every page, in page order.
         """
-        pages = self.client.paginate(
-            path,
-            il.JSONLinkPaginator(next_url_path="paging.next"),
-            params=self._query(params),
-            data_selector="data",
-        )
+        pages = self.client.paginate(path, _NextLink(), params=self._query(params), data_selector="data")
         return [row async for page in pages for row in page]
 
     @staticmethod

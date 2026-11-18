@@ -5,7 +5,30 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any
 
+import httpx2
 import interloper as il
+
+
+class _NextLink(il.JSONLinkPaginator):
+    """Graph's ``paging.next`` link, followed without the access token Graph may copy into it.
+
+    The client sends its token as the bearer. Left in the URL, the token would
+    reach the HTTP client's request log and, on a refused page, the error's
+    message.
+    """
+
+    def __init__(self) -> None:
+        """Follow the link at ``paging.next``."""
+        super().__init__(next_url_path="paging.next")
+
+    def update_request(self, request: httpx2.Request) -> None:
+        """Point the request at the next link, its ``access_token`` dropped.
+
+        Args:
+            request: The request to advance, mutated in place.
+        """
+        super().update_request(request)
+        request.url = request.url.copy_remove_param("access_token")
 
 
 class InstagramInsightsApi:
@@ -48,7 +71,8 @@ class InstagramInsightsApi:
     async def rows(self, path: str, **params: Any) -> list[dict[str, Any]]:
         """Read every record of an edge, following its ``paging.next`` links.
 
-        A response without a next link is the last page, so an edge that does
+        Each link is followed without the token Graph may copy into it. A
+        response without a next link is the last page, so an edge that does
         not page is read once.
 
         Args:
@@ -58,8 +82,7 @@ class InstagramInsightsApi:
         Returns:
             The ``data`` records of every page, in page order.
         """
-        paginator = il.JSONLinkPaginator(next_url_path="paging.next")
-        pages = self.client.paginate(path, paginator, params=self._query(params), data_selector="data")
+        pages = self.client.paginate(path, _NextLink(), params=self._query(params), data_selector="data")
         return [row async for page in pages for row in page]
 
     async def report(self, path: str, day: dt.date, **params: Any) -> list[dict[str, Any]]:
