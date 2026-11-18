@@ -182,6 +182,36 @@ class TestRows:
         assert rows == [{"campaignId": "1"}]
         assert len(requests) == 1
 
+    def test_a_page_repeating_the_token_it_was_asked_with_is_the_last(self):
+        requests: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            if len(requests) > 3:
+                raise AssertionError("read past a repeated token")
+            return httpx2.Response(200, json={"campaigns": [{"campaignId": str(len(requests))}], "nextToken": "t1"})
+
+        rows = _api(handler).rows("123", "/sp/campaigns/list", media_type=CAMPAIGN_MEDIA_TYPE, key="campaigns")
+
+        assert rows == [{"campaignId": "1"}, {"campaignId": "2"}]
+        assert [json.loads(request.content).get("nextToken") for request in requests] == [None, "t1"]
+
+    def test_a_page_returning_an_earlier_token_is_the_last(self):
+        tokens = {None: "t1", "t1": "t2", "t2": "t1"}
+        requests: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            if len(requests) > 4:
+                raise AssertionError("read past a repeated token")
+            token = json.loads(request.content).get("nextToken")
+            return httpx2.Response(200, json={"campaigns": [{"campaignId": token}], "nextToken": tokens[token]})
+
+        rows = _api(handler).rows("123", "/sp/campaigns/list", media_type=CAMPAIGN_MEDIA_TYPE, key="campaigns")
+
+        assert rows == [{"campaignId": None}, {"campaignId": "t1"}, {"campaignId": "t2"}]
+        assert len(requests) == 3
+
     def test_nothing_to_list_reads_one_page(self):
         requests: list[httpx2.Request] = []
 
