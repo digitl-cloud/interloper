@@ -34,9 +34,9 @@ class SearchConsole(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def page_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+    async def page_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Search performance per day, page, query, country, device and search type, aggregated by page."""
-        return self.connection.api.report(
+        return await self.connection.api.report(
             self.site_url,
             context.partition_date,
             dimensions=constants.PAGE_DIMENSIONS,
@@ -50,9 +50,9 @@ class SearchConsole(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def site_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+    async def site_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Search performance per day, query, country, device and search type, aggregated by property."""
-        return self.connection.api.report(
+        return await self.connection.api.report(
             self.site_url,
             context.partition_date,
             dimensions=constants.SITE_DIMENSIONS,
@@ -66,9 +66,9 @@ class SearchConsole(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def site_stats_by_country_device(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+    async def site_stats_by_country_device(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Search performance per day, country, device and search type."""
-        return self.connection.api.report(
+        return await self.connection.api.report(
             self.site_url,
             context.partition_date,
             dimensions=constants.SITE_BY_COUNTRY_DEVICE_DIMENSIONS,
@@ -82,9 +82,9 @@ class SearchConsole(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def site_stats_by_country_page(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+    async def site_stats_by_country_page(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Search performance per day, country, page and search type, Discover and Google News included."""
-        return self.connection.api.report(
+        return await self.connection.api.report(
             self.site_url,
             context.partition_date,
             dimensions=constants.SITE_BY_COUNTRY_PAGE_DIMENSIONS,
@@ -98,9 +98,9 @@ class SearchConsole(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def search_appearance_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+    async def search_appearance_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Search performance per search result feature and search type, Discover and Google News included."""
-        rows = self.connection.api.report(
+        rows = await self.connection.api.report(
             self.site_url,
             context.partition_date,
             dimensions=constants.SEARCH_APPEARANCE_DIMENSIONS,

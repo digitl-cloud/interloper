@@ -8,6 +8,7 @@ schema columns — and survive the host→child DAG-spec round-trip.
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import json
 from types import SimpleNamespace
@@ -63,7 +64,7 @@ class TestAudienceScope:
         src = _source()
         asset = next(a for a in src.assets if type(a).key == "custom_audiences")
         with pytest.raises(ValueError, match="audience_id"):
-            asset.data(context=object())
+            asyncio.run(asset.data(context=object()))
 
 
 class TestReports:
@@ -127,7 +128,7 @@ def _run(connection: DisplayVideo360Connection, key: str, **fields: str) -> list
     settings: dict[str, Any] = {"partner_id": "123", **fields}
     source = DisplayVideo360(id="src-1", connection=connection, **settings)
     asset = next(a for a in source.assets if type(a).key == key)
-    return asset.data(context=SimpleNamespace(partition_date=_DAY))
+    return asyncio.run(asset.data(context=SimpleNamespace(partition_date=_DAY)))
 
 
 def _report_requests(title: str, dimensions: list[str], metrics: list[str], filters: list[dict]) -> list[tuple]:
@@ -142,15 +143,15 @@ def _report_requests(title: str, dimensions: list[str], metrics: list[str], filt
         "schedule": {"frequency": "ONE_TIME"},
     }
     return [
-        ("POST", f"{_BID_MANAGER}/queries?alt=json", query),
-        ("POST", f"{_BID_MANAGER}/queries/q:run?synchronous=false&alt=json", None),
-        ("GET", f"{_BID_MANAGER}/queries/q/reports/r?alt=json", None),
-        ("DELETE", f"{_BID_MANAGER}/queries/q?", None),
+        ("POST", f"{_BID_MANAGER}/queries", query),
+        ("POST", f"{_BID_MANAGER}/queries/q:run?synchronous=false", None),
+        ("GET", f"{_BID_MANAGER}/queries/q/reports/r", None),
+        ("DELETE", f"{_BID_MANAGER}/queries/q", None),
     ]
 
 
 class TestRequests:
-    """What each asset sends, on one service of its own since the transport is not thread-safe, and returns."""
+    """What each asset sends and returns."""
 
     def test_line_items_stats_runs_one_query_for_its_day(self, google, connection, download):
         google.serve({"queryId": "q"}, {"key": {"reportId": "r"}}, _DONE_REPORT)
@@ -163,8 +164,7 @@ class TestRequests:
             constants.LINE_ITEM_METRICS,
             [{"type": "FILTER_PARTNER", "value": "123"}],
         )
-        assert google.builds == [constants.DBM_API_SERVICE]
-        assert download.downloads == [{"url": "https://storage/report.csv", "timeout": None}]
+        assert [d["url"] for d in download.downloads] == ["https://storage/report.csv"]
         assert rows == [
             {
                 "Date": "2026/07/10",
@@ -193,7 +193,6 @@ class TestRequests:
             constants.LINE_ITEM_COUNTRY_METRICS,
             [{"type": "FILTER_PARTNER", "value": "123"}, {"type": "FILTER_ADVERTISER", "value": "9"}],
         )
-        assert google.builds == [constants.DBM_API_SERVICE]
         assert len(rows) == 2
 
     @pytest.mark.parametrize("strict", [False, True])
@@ -204,10 +203,9 @@ class TestRequests:
         rows = _run(connection, "partners")
 
         assert google.requests == [
-            ("GET", f"{_DISPLAY_VIDEO}/partners?alt=json", None),
-            ("GET", f"{_DISPLAY_VIDEO}/partners?pageToken=next&alt=json", None),
+            ("GET", f"{_DISPLAY_VIDEO}/partners", None),
+            ("GET", f"{_DISPLAY_VIDEO}/partners?pageToken=next", None),
         ]
-        assert google.builds == [constants.DV_API_SERVICE]
         source = _source()
         table = TableData.from_data(source.normalizer.normalize(rows)).reconcile(schemas.Partners, strict=strict)
         first, second = table.to_dict("records")
@@ -223,18 +221,13 @@ class TestRequests:
 
         rows = _run(connection, "audiences")
 
-        assert google.requests == [
-            ("GET", f"{_DISPLAY_VIDEO}/firstPartyAndPartnerAudiences?partnerId=123&alt=json", None)
-        ]
-        assert google.builds == [constants.DV_API_SERVICE]
+        assert google.requests == [("GET", f"{_DISPLAY_VIDEO}/firstPartyAndPartnerAudiences?partnerId=123", None)]
         assert rows == [{"name": "a", "date": _DAY}]
 
     def test_audiences_list_the_advertisers_audiences_when_set(self, google, connection):
         rows = _run(connection, "audiences", advertiser_id="9")
 
-        assert google.requests == [
-            ("GET", f"{_DISPLAY_VIDEO}/firstPartyAndPartnerAudiences?advertiserId=9&alt=json", None)
-        ]
+        assert google.requests == [("GET", f"{_DISPLAY_VIDEO}/firstPartyAndPartnerAudiences?advertiserId=9", None)]
         assert rows == []
 
     def test_custom_audiences_read_the_configured_audience(self, google, connection):
@@ -242,10 +235,7 @@ class TestRequests:
 
         rows = _run(connection, "custom_audiences", audience_id="7")
 
-        assert google.requests == [
-            ("GET", f"{_DISPLAY_VIDEO}/firstPartyAndPartnerAudiences/7?partnerId=123&alt=json", None)
-        ]
-        assert google.builds == [constants.DV_API_SERVICE]
+        assert google.requests == [("GET", f"{_DISPLAY_VIDEO}/firstPartyAndPartnerAudiences/7?partnerId=123", None)]
         assert rows == [{"name": "audience", "audienceSize": "10", "date": _DAY}]
 
 

@@ -1,5 +1,4 @@
-API_SERVICE = "searchconsole"
-API_VERSION = "v1"
+BASE_URL = "https://searchconsole.googleapis.com"
 SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
 
 # Search Analytics caps a single response at 25,000 rows; page with startRow.

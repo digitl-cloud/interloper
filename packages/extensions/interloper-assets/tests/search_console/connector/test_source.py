@@ -10,14 +10,15 @@ and returns. Every report grouped by ``DATE`` partitions on it;
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
-from types import SimpleNamespace
+import json
 from typing import Any
+from urllib.parse import unquote
 
-import httplib2
+import httpx2
 import interloper as il
 import pytest
-from googleapiclient.errors import HttpError
 from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
@@ -39,50 +40,51 @@ REPORT_ASSETS = {
 
 
 class FakeSearchAnalytics:
-    """Serve canned Search Analytics pages and record every request body."""
+    """Serve canned Search Analytics pages over HTTP and record every query."""
 
-    def __init__(self, pages: dict[str, list[list[dict[str, Any]]]], refusal: HttpError | None = None):
-        """Hold the pages to serve, keyed by search type, in startRow order, or the refusal to raise."""
+    def __init__(self, pages: dict[str, list[list[dict[str, Any]]]], refusal: int | None = None):
+        """Hold the pages to serve, keyed by search type, in startRow order, or the status to refuse with."""
         self.pages = pages
         self.refusal = refusal
         self.requests: list[dict[str, Any]] = []
 
-    def searchanalytics(self) -> FakeSearchAnalytics:
-        return self
-
-    def query(self, siteUrl: str, body: dict[str, Any]) -> SimpleNamespace:
-        self.requests.append({"siteUrl": siteUrl, **body})
+    def __call__(self, request: httpx2.Request) -> httpx2.Response:
+        site_url = unquote(request.url.raw_path.decode().split("/")[4])
+        body = json.loads(request.content)
+        self.requests.append({"siteUrl": site_url, **body})
         if self.refusal is not None:
-            raise self.refusal
+            return httpx2.Response(self.refusal, json={"error": {"code": self.refusal, "message": "No access"}})
         pages = self.pages.get(body["type"], [])
         index = body["startRow"] // constants.ROW_LIMIT
         rows = pages[index] if index < len(pages) else []
-        return SimpleNamespace(execute=lambda: {"rows": rows, "responseAggregationType": "byProperty"} if rows else {})
+        return httpx2.Response(200, json={"rows": rows, "responseAggregationType": "byProperty"} if rows else {})
 
 
 def _row(*keys: str, clicks: float = 3.0) -> dict[str, Any]:
     return {"keys": list(keys), "clicks": clicks, "impressions": 40.0, "ctr": 0.075, "position": 4.25}
 
 
-def _connection(client: Any) -> SearchConsoleConnection:
+def _connection(server: FakeSearchAnalytics) -> SearchConsoleConnection:
     connection = SearchConsoleConnection(service_account_key="{}")
-    connection.__dict__["client"] = lambda: client
+    connection.__dict__["client"] = il.AsyncRESTClient(
+        constants.BASE_URL, transport=httpx2.MockTransport(server), retry=il.RetryPolicy(max_attempts=1)
+    )
     return connection
 
 
-def _source(client: Any = None, site_url: str = "sc-domain:example.com") -> Any:
-    if client is None:
+def _source(server: FakeSearchAnalytics | None = None, site_url: str = "sc-domain:example.com") -> Any:
+    if server is None:
         return SearchConsole(id="src-1", site_url=site_url, connection=SearchConsoleConnection(service_account_key="x"))
-    return SearchConsole(id="src-1", site_url=site_url, connection=_connection(client))
+    return SearchConsole(id="src-1", site_url=site_url, connection=_connection(server))
 
 
 def _asset(key: str, source: Any = None) -> Any:
     return next(a for a in (source or _source()).assets if type(a).key == key)
 
 
-def _data(key: str, client: Any) -> list[dict[str, Any]]:
-    asset = _asset(key, _source(client))
-    return asset.data(context=il.ExecutionContext(asset, il.TimePartition(value=_DAY).window))
+def _data(key: str, server: FakeSearchAnalytics) -> list[dict[str, Any]]:
+    asset = _asset(key, _source(server))
+    return asyncio.run(asset.data(context=il.ExecutionContext(asset, il.TimePartition(value=_DAY).window)))
 
 
 class TestSourceAssets:
@@ -138,11 +140,11 @@ class TestAssetQueries:
         stamped: dict[str, Any],
     ):
         pages = {search_type: [[_row(*(f"{search_type}-{d}" for d in dimensions))]] for search_type in search_types}
-        client = FakeSearchAnalytics(pages)
+        server = FakeSearchAnalytics(pages)
 
-        rows = _data(key, client)
+        rows = _data(key, server)
 
-        assert client.requests == [
+        assert server.requests == [
             {
                 "siteUrl": "sc-domain:example.com",
                 "startDate": "2026-09-28",
@@ -171,13 +173,13 @@ class TestAssetQueries:
 
     def test_an_asset_pages_past_the_row_limit(self):
         full_page = [_row("2026-09-28", "deu", f"device-{i}") for i in range(constants.ROW_LIMIT)]
-        client = FakeSearchAnalytics({"WEB": [full_page, [_row("2026-09-28", "fra", "MOBILE")]]})
+        server = FakeSearchAnalytics({"WEB": [full_page, [_row("2026-09-28", "fra", "MOBILE")]]})
 
-        rows = _data("site_stats_by_country_device", client)
+        rows = _data("site_stats_by_country_device", server)
 
         assert len(rows) == constants.ROW_LIMIT + 1
         assert rows[-1]["country"] == "fra"
-        assert [(r["type"], r["startRow"]) for r in client.requests] == [
+        assert [(r["type"], r["startRow"]) for r in server.requests] == [
             ("WEB", 0),
             ("WEB", 25_000),
             ("IMAGE", 0),
@@ -186,19 +188,18 @@ class TestAssetQueries:
         ]
 
     def test_an_asset_with_nothing_to_report_returns_no_rows(self):
-        client = FakeSearchAnalytics({})
+        server = FakeSearchAnalytics({})
 
-        assert _data("search_appearance_stats", client) == []
-        assert len(client.requests) == len(constants.ALL_SEARCH_TYPES)
+        assert _data("search_appearance_stats", server) == []
+        assert len(server.requests) == len(constants.ALL_SEARCH_TYPES)
 
-    def test_a_refusal_raises_out_of_the_asset_as_google_sent_it(self):
-        refusal = HttpError(httplib2.Response({"status": 403}), b'{"error": {"message": "No access to the site"}}')
-        client = FakeSearchAnalytics({}, refusal=refusal)
+    def test_a_refusal_raises_out_of_the_asset_with_its_status(self):
+        server = FakeSearchAnalytics({}, refusal=403)
 
-        with pytest.raises(HttpError) as raised:
-            _data("page_stats", client)
+        with pytest.raises(httpx2.HTTPStatusError) as raised:
+            _data("page_stats", server)
 
-        assert raised.value is refusal
+        assert raised.value.response.status_code == 403
 
 
 class TestSpecRoundtripAndReconcile:
@@ -216,8 +217,8 @@ class TestSpecRoundtripAndReconcile:
             assert type(self._child(key).normalizer) is DataFrameNormalizer, key
 
     def test_dated_report_row_reconciles(self):
-        client = FakeSearchAnalytics({"WEB": [[_row("2026-09-28", "https://example.com/a", "shoes", "deu", "MOBILE")]]})
-        records = _data("page_stats", client)
+        server = FakeSearchAnalytics({"WEB": [[_row("2026-09-28", "https://example.com/a", "shoes", "deu", "MOBILE")]]})
+        records = _data("page_stats", server)
         normalized = self._child("page_stats").normalizer.normalize(records)
         reconciled = TableData.from_data(normalized).reconcile(schemas.PageStats)
         TableData.from_data(reconciled).reconcile(schemas.PageStats, strict=True)

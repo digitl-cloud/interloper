@@ -70,9 +70,9 @@ class DisplayVideo360(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def line_items_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+    async def line_items_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Line-item performance, cost and fee metrics per day."""
-        return self.connection.api.report(
+        return await self.connection.api.report(
             context.partition_date,
             title=f"line_items_stats_{context.partition_date.isoformat()}",
             groupBys=constants.LINE_ITEM_DIMENSIONS,
@@ -86,9 +86,9 @@ class DisplayVideo360(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def line_items_stats_by_country(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+    async def line_items_stats_by_country(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Line-item performance and cost metrics per day, broken down by country."""
-        return self.connection.api.report(
+        return await self.connection.api.report(
             context.partition_date,
             title=f"line_items_stats_by_country_{context.partition_date.isoformat()}",
             groupBys=constants.LINE_ITEM_COUNTRY_DIMENSIONS,
@@ -104,9 +104,9 @@ class DisplayVideo360(il.Source):
         partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
     )
-    def partners(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+    async def partners(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """DV360 partners and their configuration."""
-        rows = self.connection.api.rows("partners")
+        rows = await self.connection.api.rows("/partners")
         return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
@@ -114,9 +114,9 @@ class DisplayVideo360(il.Source):
         partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
     )
-    def audiences(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+    async def audiences(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """First-party and partner audiences of the configured partner or advertiser."""
-        rows = self.connection.api.rows("firstPartyAndPartnerAudiences", **self._audience_scope)
+        rows = await self.connection.api.rows("/firstPartyAndPartnerAudiences", **self._audience_scope)
         return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
@@ -124,14 +124,14 @@ class DisplayVideo360(il.Source):
         partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
     )
-    def custom_audiences(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+    async def custom_audiences(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Detail of the configured audience, including per-surface audience sizes.
 
         Needs the source's Audience ID, and fails without one.
         """
         if not self.audience_id:
             raise ValueError("The custom_audiences asset requires the source's audience_id to be set")
-        audience = self.connection.api.get(
-            "firstPartyAndPartnerAudiences", **self._audience_scope, firstPartyAndPartnerAudienceId=self.audience_id
+        audience = await self.connection.api.get(
+            f"/firstPartyAndPartnerAudiences/{self.audience_id}", **self._audience_scope
         )
         return [{**audience, "date": context.partition_date}]

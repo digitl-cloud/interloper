@@ -1,101 +1,73 @@
 """Regression tests for the CampaignManager360 connection.
 
-The discovery service wraps an ``httplib2`` transport that is not thread-safe,
-and the runner executes sync assets concurrently in threads, so the connection
-caches only the credentials and builds a fresh service on every ``client()``.
+Its profile lookup and ``check()`` run in the API process, which installs no
+vendor SDK extra, so they go over plain HTTP through the engine like the
+assets do.
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
-from types import SimpleNamespace
+import sys
 from typing import Any
 
+import httpx2
+import interloper as il
 import pytest
-from google.oauth2 import service_account
-from googleapiclient import discovery
-from googleapiclient.errors import HttpError
-from googleapiclient.http import HttpMockSequence
 
 from interloper_assets.campaign_manager_360 import constants
 from interloper_assets.campaign_manager_360.connection import CampaignManager360Connection
+from interloper_assets.google.auth import ServiceAccountAuth
+
+CLIENT_EMAIL = "reporter@project.iam.gserviceaccount.com"
 
 
-class FakeUserProfiles:
-    """Serve a canned ``userProfiles.list`` response."""
+def _connection(status: int, body: dict[str, Any]) -> tuple[CampaignManager360Connection, list[tuple[str, str]]]:
+    requests: list[tuple[str, str]] = []
 
-    def __init__(self, response: dict[str, Any]):
-        """Hold the response to serve."""
-        self.response = response
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        requests.append((request.method, str(request.url)))
+        return httpx2.Response(status, json=body)
 
-    def userProfiles(self) -> FakeUserProfiles:
-        return self
-
-    def list(self) -> SimpleNamespace:
-        return SimpleNamespace(execute=lambda: self.response)
-
-
-@pytest.fixture
-def builds(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
-    """Stub the Google auth and discovery calls, recording every service build.
-
-    Args:
-        monkeypatch: The pytest monkeypatch fixture that undoes the stubs after the test.
-
-    Returns:
-        The recorded builds, in call order: each one's service name, version and credentials.
-    """
-    recorded: list[dict[str, Any]] = []
-    monkeypatch.setattr(
-        service_account.Credentials,
-        "from_service_account_info",
-        lambda info, scopes: SimpleNamespace(info=info, scopes=scopes),
+    connection = CampaignManager360Connection(service_account_key="{}")
+    connection.__dict__["client"] = il.AsyncRESTClient(
+        constants.BASE_URL, transport=httpx2.MockTransport(handler), retry=il.RetryPolicy(max_attempts=1)
     )
-
-    def build(service_name: str, version: str, credentials: Any) -> object:
-        recorded.append({"service_name": service_name, "version": version, "credentials": credentials})
-        return object()
-
-    monkeypatch.setattr(discovery, "build", build)
-    return recorded
-
-
-def _connection(response: dict[str, Any] | None = None) -> CampaignManager360Connection:
-    connection = CampaignManager360Connection(service_account_key='{"type": "service_account"}')
-    if response is not None:
-        connection.__dict__["client"] = lambda: FakeUserProfiles(response)
-    return connection
+    return connection, requests
 
 
 class TestClient:
-    def test_credentials_are_cached_and_scoped(self, builds: list[dict[str, Any]]):
-        connection = _connection()
-        credentials = connection.credentials
-        assert connection.credentials is credentials
-        assert credentials.info == {"type": "service_account"}
-        assert credentials.scopes == constants.SCOPES
+    def test_authenticates_as_the_service_account_for_reporting_and_trafficking(self):
+        connection = CampaignManager360Connection(service_account_key=json.dumps({"client_email": CLIENT_EMAIL}))
+        client = connection.client
 
-    def test_every_call_builds_its_own_service(self, builds: list[dict[str, Any]]):
-        connection = _connection()
-        assert connection.client() is not connection.client()
-        assert [(build["service_name"], build["version"]) for build in builds] == [
-            (constants.API_SERVICE, constants.API_VERSION)
-        ] * 2
-        assert builds[0]["credentials"] is builds[1]["credentials"] is connection.credentials
+        assert str(client.base_url).rstrip("/") == "https://dfareporting.googleapis.com/dfareporting/v5"
+        assert isinstance(client.auth, ServiceAccountAuth)
+        assert (client.auth._client_id, client.auth._scope) == (CLIENT_EMAIL, " ".join(constants.SCOPES))
+        assert connection.client is client
+
+
+class TestApi:
+    def test_the_api_is_cached_and_built_on_the_client(self):
+        connection, _ = _connection(200, {})
+
+        assert connection.api is connection.api
+        assert connection.api.client is connection.client
 
 
 class TestProfiles:
-    def test_lists_every_profile_with_its_account(self):
-        connection = _connection(
+    async def test_lists_every_profile_with_its_account_in_one_request(self):
+        connection, requests = _connection(
+            200,
             {
                 "items": [
                     {"profileId": "111", "accountId": "222", "userName": "reporting", "accountName": "Digitl"},
                     {"profileId": 333, "accountId": 444},
                 ]
-            }
+            },
         )
-        assert asyncio.run(connection.profiles()) == [
+
+        assert await connection.profiles() == [
             {
                 "profile_id": "111",
                 "account_id": "222",
@@ -104,32 +76,33 @@ class TestProfiles:
             },
             {"profile_id": "333", "account_id": "444", "name": "333 (444)", "account_name": "444"},
         ]
+        assert requests == [("GET", "https://dfareporting.googleapis.com/dfareporting/v5/userprofiles")]
 
-    def test_no_profiles(self):
-        assert asyncio.run(_connection({}).profiles()) == []
+    async def test_no_profiles(self):
+        connection, _ = _connection(200, {})
 
-    def test_check_runs_the_lookup(self):
-        assert asyncio.run(_connection({}).check()) is True
+        assert await connection.profiles() == []
 
-    def test_reads_every_profile_in_one_request(self):
-        http = HttpMockSequence(
-            [({"status": "200"}, json.dumps({"items": [{"profileId": "111", "accountId": "222"}]}))]
-        )
-        connection = _connection()
-        connection.__dict__["client"] = lambda: discovery.build(constants.API_SERVICE, constants.API_VERSION, http=http)
+    async def test_runs_without_the_sdk_extras(self, monkeypatch: pytest.MonkeyPatch):
+        for module in ("bingads", "facebook_business", "google.ads"):
+            monkeypatch.setitem(sys.modules, module, None)
+        connection, _ = _connection(200, {"items": [{"profileId": "111", "accountId": "222"}]})
 
-        assert asyncio.run(connection.profiles()) == [
+        assert await connection.profiles() == [
             {"profile_id": "111", "account_id": "222", "name": "111 (222)", "account_name": "222"}
         ]
-        assert [(method, uri, body) for uri, method, body, _ in http.request_sequence] == [
-            ("GET", "https://dfareporting.googleapis.com/dfareporting/v5/userprofiles?alt=json", None)
-        ]
 
-    def test_a_refused_lookup_fails_the_check_with_the_vendors_error(self):
-        refusal = json.dumps({"error": {"code": 403, "message": "The service account has no profile"}})
-        http = HttpMockSequence([({"status": "403"}, refusal)])
-        connection = _connection()
-        connection.__dict__["client"] = lambda: discovery.build(constants.API_SERVICE, constants.API_VERSION, http=http)
 
-        with pytest.raises(HttpError, match="The service account has no profile"):
-            asyncio.run(connection.check())
+class TestCheck:
+    async def test_runs_the_lookup(self):
+        connection, requests = _connection(200, {})
+
+        assert await connection.check() is True
+        assert len(requests) == 1
+
+    async def test_a_refusal_reads_as_rejected_credentials(self):
+        connection, _ = _connection(403, {"error": {"code": 403, "message": "The service account has no profile"}})
+
+        result = await connection.verify(timeout=5)
+
+        assert (result.ok, result.category) == (False, "auth")

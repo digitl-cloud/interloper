@@ -1,11 +1,10 @@
-import asyncio
 import json
 from functools import cached_property
-from typing import Any
 
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
+from interloper_assets.google.auth import ServiceAccountAuth
 from interloper_assets.search_console import constants
 from interloper_assets.search_console.api import SearchConsoleApi
 
@@ -24,43 +23,23 @@ class SearchConsoleConnection(il.Connection):
     service_account_key: str = il.JsonField(description="Google service account key JSON")
 
     @cached_property
-    def credentials(self) -> Any:
-        """Load the read-only service account credentials, shared across clients.
+    def client(self) -> il.AsyncRESTClient:
+        """The Search Console API client every caller shares.
 
         Returns:
-            The ``google.oauth2`` service account credentials, scoped read-only.
+            The client authenticated as the service account with read-only scopes, cached per connection instance.
         """
-        from google.oauth2 import service_account
+        auth = ServiceAccountAuth(json.loads(self.service_account_key), constants.SCOPES)
+        return il.AsyncRESTClient(constants.BASE_URL, auth=auth)
 
-        return service_account.Credentials.from_service_account_info(
-            json.loads(self.service_account_key),
-            scopes=constants.SCOPES,
-        )
-
-    def client(self) -> Any:
-        """Build a fresh Search Console API service client.
-
-        Not cached: the client's ``httplib2`` transport is not thread-safe and
-        the assets run concurrently in threads, so each caller builds its own.
-
-        Returns:
-            The ``searchconsole`` v1 discovery client over the shared credentials.
-        """
-        from googleapiclient.discovery import build
-
-        return build(constants.API_SERVICE, constants.API_VERSION, credentials=self.credentials)
-
-    @property
+    @cached_property
     def api(self) -> SearchConsoleApi:
-        """Build a Search Console API engine on a fresh ``client``.
-
-        Not cached, for the reason ``client`` is not: every caller gets a
-        transport of its own.
+        """The Search Console API engine every caller shares, built on ``client``.
 
         Returns:
-            The engine, on a client of its own.
+            The engine, cached per connection instance.
         """
-        return SearchConsoleApi(self.client())
+        return SearchConsoleApi(self.client)
 
     @il.fetch_field_provider
     async def sites(self) -> list[dict[str, str]]:
@@ -70,7 +49,7 @@ class SearchConsoleConnection(il.Connection):
             One option per property: its ``site_url`` and a ``name`` label carrying
             the service account's permission level on it.
         """
-        response = await asyncio.to_thread(lambda: self.api.get("sites.list"))
+        response = await self.api.get("/webmasters/v3/sites")
         return [
             {"site_url": site["siteUrl"], "name": f"{site['siteUrl']} ({site.get('permissionLevel', 'UNKNOWN')})"}
             for site in response.get("siteEntry", [])

@@ -3,62 +3,52 @@
 from __future__ import annotations
 
 import datetime as dt
-from typing import TYPE_CHECKING, Any
+from typing import Any
+from urllib.parse import quote
+
+import interloper as il
 
 from interloper_assets.search_console.constants import ROW_LIMIT
 
-if TYPE_CHECKING:
-    from googleapiclient.discovery import Resource
-
 
 class SearchConsoleApi:
-    """The Search Console API: its discovery methods and its Search Analytics report.
+    """The Search Console API: its JSON reads and its Search Analytics report.
 
-    Every request goes through Google's discovery client, which encodes it from
-    the API's discovery document, so a method is named the way Google names it:
-    its resources, then its verb (``sites.list``, ``urlInspection.index.inspect``).
-    Google refuses a request with an HTTP status, which the client raises as
-    ``HttpError`` carrying Google's message; nothing is retried beyond
-    google-auth's token refresh on a 401.
+    Google refuses a request by its HTTP status, raised as
+    ``httpx2.HTTPStatusError``. A property is addressed by its URL, encoded
+    whole into the path: ``https://example.com/`` and ``sc-domain:example.com``
+    are one path segment each.
 
     A Search Analytics row only makes sense against the query that asked for
     it: its dimension values are a positional ``keys`` list, and its search
     type is the query's ``type``, which it does not echo. The engine sent that
     query, so ``report`` names each key after its dimension and tags each row
     with its ``search_type``.
-
-    The client is passed in and this module imports nothing from the SDK, so the
-    connection that builds the engine loads where the SDK is not installed.
     """
 
-    def __init__(self, client: Resource) -> None:
-        """Build the engine on an authenticated discovery client.
+    def __init__(self, client: il.AsyncRESTClient) -> None:
+        """Build the engine on an authenticated client.
 
         Args:
-            client: The ``searchconsole`` v1 discovery client every request goes through,
-                carrying the connection's credentials. Its transport is not thread-safe,
-                so the engine is never shared across threads.
+            client: The client every request goes through, authenticated as the connection's service account.
         """
         self.client = client
 
-    def get(self, method: str, **params: Any) -> dict[str, Any]:
-        """Read the one response of a method.
+    async def get(self, path: str, **params: Any) -> dict[str, Any]:
+        """Read the one response of a GET.
 
         Args:
-            method: The method, by its resources and its verb, such as ``sites.list``.
-            **params: The method's parameters as the discovery client takes them: path and
-                query parameters by name (``siteUrl``), the request body as ``body``.
+            path: The endpoint's path, such as ``/webmasters/v3/sites``.
+            **params: The query parameters, under the vendor's names.
 
         Returns:
             The response's JSON body.
         """
-        *resources, verb = method.split(".")
-        target = self.client
-        for resource in resources:
-            target = getattr(target, resource)()
-        return getattr(target, verb)(**params).execute()
+        response = await self.client.get(path, params=params)
+        response.raise_for_status()
+        return response.json()
 
-    def report(
+    async def report(
         self,
         site_url: str,
         day: dt.date,
@@ -93,14 +83,14 @@ class SearchConsoleApi:
         records: list[dict[str, Any]] = []
         for search_type in search_types:
             query = {**window, "dimensions": dimensions, "type": search_type, **body}
-            for row in self._rows(site_url, query):
+            for row in await self._rows(site_url, query):
                 record = {dimension.lower(): key for dimension, key in zip(dimensions, row.get("keys") or [])}
                 record.update({name: value for name, value in row.items() if name != "keys"})
                 record["search_type"] = search_type.lower()
                 records.append(record)
         return records
 
-    def _rows(self, site_url: str, query: dict[str, Any]) -> list[dict[str, Any]]:
+    async def _rows(self, site_url: str, query: dict[str, Any]) -> list[dict[str, Any]]:
         """Read every row of one Search Analytics query, page by page.
 
         A response holds at most ``ROW_LIMIT`` rows, so a full page asks for the
@@ -113,11 +103,13 @@ class SearchConsoleApi:
         Returns:
             The rows of every page, in order, as Google sends them.
         """
+        path = f"/webmasters/v3/sites/{quote(site_url, safe='')}/searchAnalytics/query"
         rows: list[dict[str, Any]] = []
         start_row = 0
         while True:
-            body = {**query, "rowLimit": ROW_LIMIT, "startRow": start_row}
-            page = self.get("searchanalytics.query", siteUrl=site_url, body=body).get("rows") or []
+            response = await self.client.post(path, json={**query, "rowLimit": ROW_LIMIT, "startRow": start_row})
+            response.raise_for_status()
+            page = response.json().get("rows") or []
             rows.extend(page)
             if len(page) < ROW_LIMIT:
                 return rows
