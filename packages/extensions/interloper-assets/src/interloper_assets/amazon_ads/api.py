@@ -65,7 +65,9 @@ class AmazonAdsApi:
 
         Sponsored Products and Sponsored Brands list their entities by a POST
         whose body carries the filters and, from the second page on, the token
-        the previous page returned. A page without a token is the last.
+        the previous page returned. A page without a token is the last, and so
+        is a page returning a token already sent, which would read the same
+        pages again.
 
         Args:
             profile_id: The profile whose entities are listed.
@@ -81,14 +83,20 @@ class AmazonAdsApi:
         headers = {_SCOPE: profile_id, "Content-Type": media_type, "Accept": media_type}
         body = {**body, "maxResults": constants.PAGE_SIZE}
         rows: list[dict[str, Any]] = []
+        sent: set[str] = set()
         while True:
             response = self.client.post(path, headers=headers, json=body)
             response.raise_for_status()
             page = response.json()
             rows.extend(page.get(key, []))
-            if not page.get("nextToken"):
+            token = page.get("nextToken")
+            if not token:
                 return rows
-            body = {**body, "nextToken": page["nextToken"]}
+            if token in sent:
+                logger.warning(f"{path} for profile {profile_id} returned the token {token} again; reading no further")
+                return rows
+            sent.add(token)
+            body = {**body, "nextToken": token}
 
     def offset_rows(self, profile_id: str, path: str, **params: Any) -> list[dict[str, Any]]:
         """Read every row of a list call that pages by ``startIndex``, until an empty page.
