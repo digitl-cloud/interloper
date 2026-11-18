@@ -68,11 +68,13 @@ class Downloads:
     def __init__(self) -> None:
         """Start with every download succeeding with no rows."""
         self.calls: list[tuple[str, dict[str, Any]]] = []
-        self.responses: list[httpx2.Response] = []
+        self.responses: list[httpx2.Response | httpx2.TransportError] = []
         self.rows: list[dict[str, Any]] = []
 
     def __call__(self, url: str, **kwargs: Any) -> httpx2.Response:
         """Answer one download: the next queued response, else the gzipped JSON of ``rows``.
+
+        A queued transport error is raised instead, as a dropped connection would be.
 
         Args:
             url: The report file's URL.
@@ -85,6 +87,8 @@ class Downloads:
         request = httpx2.Request("GET", url)
         if self.responses:
             response = self.responses.pop(0)
+            if isinstance(response, httpx2.TransportError):
+                raise response
             response.request = request
             return response
         return httpx2.Response(200, content=gzip.compress(json.dumps(self.rows).encode()), request=request)
@@ -278,7 +282,19 @@ class ReportServer:
         body = {"reportId": "r-1", "status": status}
         if status == "COMPLETED":
             body["url"] = REPORT_URL
+        if status == "FAILED":
+            body["failureReason"] = "Report generation failed"
         return httpx2.Response(200, json=body)
+
+
+def _auth() -> il.OAuth2RefreshTokenAuth:
+    return il.OAuth2RefreshTokenAuth(
+        base_url=AUTH_URL,
+        token_endpoint="/auth/o2/token",
+        client_id="cid",
+        client_secret="secret",
+        refresh_token="refresh",
+    )
 
 
 def _report(engine: AmazonAdsApi) -> list[dict[str, Any]]:
@@ -347,15 +363,58 @@ class TestReport:
         assert [request.method for request in server.requests] == ["POST"] * 6 + ["GET"]
         assert sleeps == [60, 360, 660, 900, 900]
 
+    @pytest.mark.parametrize("status", [425, 500, 503])
+    def test_a_creation_failing_transiently_is_asked_again(
+        self, status: int, downloads: Downloads, sleeps: list[float]
+    ):
+        server = ReportServer(["COMPLETED"], create=[httpx2.Response(status, json={"code": str(status)})])
+
+        assert _report(_api(server)) == []
+
+        assert [request.method for request in server.requests] == ["POST", "POST", "GET"]
+        assert sleeps == [60]
+
+    def test_a_creation_whose_connection_drops_is_asked_again(self, downloads: Downloads, sleeps: list[float]):
+        server = ReportServer(["COMPLETED"])
+        drops = iter([httpx2.ConnectError("connection refused")])
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            if request.method == "POST":
+                drop = next(drops, None)
+                if drop is not None:
+                    raise drop
+            return server(request)
+
+        assert _report(_api(handler)) == []
+        assert sleeps == [60]
+
+    @pytest.mark.parametrize("status", [400, 401, 403, 404, 422])
+    def test_a_creation_refused_for_good_raises_at_once(self, status: int, downloads: Downloads, sleeps: list[float]):
+        server = ReportServer(["COMPLETED"], create=[httpx2.Response(status, json={"code": str(status)})])
+
+        with pytest.raises(httpx2.HTTPStatusError, match=str(status)):
+            _report(_api(server))
+        assert [request.method for request in server.requests] == ["POST"]
+        assert sleeps == []
+
     def test_creation_past_its_deadline_raises_the_last_refusal(
         self, monkeypatch: pytest.MonkeyPatch, downloads: Downloads, sleeps: list[float]
     ):
         monkeypatch.setattr(constants, "REPORT_CREATE_DEADLINE", dt.timedelta(0))
-        server = ReportServer(["COMPLETED"], create=[httpx2.Response(400, json={"code": "400"})])
+        server = ReportServer(["COMPLETED"], create=[httpx2.Response(425, json={"code": "425"})])
 
-        with pytest.raises(httpx2.HTTPStatusError, match="400"):
+        with pytest.raises(httpx2.HTTPStatusError, match="425"):
             _report(_api(server))
         assert sleeps == []
+
+    def test_a_failed_job_raises_amazons_reason_at_once(self, downloads: Downloads, sleeps: list[float]):
+        server = ReportServer(["PENDING", "FAILED"])
+
+        with pytest.raises(RuntimeError, match="Report r-1 for profile 123 failed: Report generation failed"):
+            _report(_api(server))
+        assert [request.method for request in server.requests] == ["POST", "GET", "GET"]
+        assert sleeps == [10]
+        assert downloads.calls == []
 
     def test_a_job_still_pending_past_its_deadline_raises_a_retry_error(
         self, monkeypatch: pytest.MonkeyPatch, downloads: Downloads, sleeps: list[float]
@@ -403,14 +462,46 @@ class TestReport:
         assert _report(_api(handler)) == []
         assert sleeps == [10]
 
-    def test_a_failed_download_is_downloaded_again(self, downloads: Downloads, sleeps: list[float]):
-        downloads.responses = [httpx2.Response(503)]
+    @pytest.mark.parametrize(
+        "failure", [httpx2.Response(503), httpx2.Response(500), httpx2.ReadTimeout("timed out")], ids=str
+    )
+    def test_a_download_failing_transiently_is_downloaded_again(
+        self, failure: httpx2.Response | httpx2.TransportError, downloads: Downloads, sleeps: list[float]
+    ):
+        downloads.responses = [failure]
         downloads.rows = [{"campaignId": 1}]
 
         assert _report(_api(ReportServer(["COMPLETED"]))) == [{"campaignId": 1}]
 
         assert len(downloads.calls) == 2
         assert sleeps == [10]
+
+    @pytest.mark.parametrize("status", [400, 403, 404])
+    def test_a_download_refused_for_good_raises_at_once(self, status: int, downloads: Downloads, sleeps: list[float]):
+        downloads.responses = [httpx2.Response(status)]
+
+        with pytest.raises(httpx2.HTTPStatusError, match=str(status)):
+            _report(_api(ReportServer(["COMPLETED"])))
+        assert len(downloads.calls) == 1
+        assert sleeps == []
+
+    def test_a_failed_download_does_not_name_the_signed_url(self, downloads: Downloads, sleeps: list[float]):
+        downloads.responses = [httpx2.Response(403)]
+
+        with pytest.raises(httpx2.HTTPStatusError) as raised:
+            _report(_api(ReportServer(["COMPLETED"])))
+        assert "signature" not in str(raised.value)
+
+    def test_the_signed_url_is_never_logged(
+        self, caplog: pytest.LogCaptureFixture, downloads: Downloads, sleeps: list[float]
+    ):
+        downloads.responses = [httpx2.Response(503)]
+
+        with caplog.at_level(logging.DEBUG):
+            _report(_api(ReportServer(["PENDING", "COMPLETED"])))
+
+        assert caplog.messages
+        assert not [message for message in caplog.messages if "signature" in message]
 
     def test_a_poll_that_is_not_an_http_error_fails_at_once(self, downloads: Downloads, sleeps: list[float]):
         def handler(request: httpx2.Request) -> httpx2.Response:
@@ -422,23 +513,30 @@ class TestReport:
             _report(_api(handler))
         assert sleeps == []
 
-    def test_each_attempt_at_the_api_authenticates_afresh(self, downloads: Downloads, sleeps: list[float]):
-        server = ReportServer(["PENDING", "COMPLETED"])
-        auth = il.OAuth2RefreshTokenAuth(
-            base_url=AUTH_URL,
-            token_endpoint="/auth/o2/token",
-            client_id="cid",
-            client_secret="secret",
-            refresh_token="refresh",
-        )
+    def test_the_job_authenticates_once(self, downloads: Downloads, sleeps: list[float]):
+        server = ReportServer(["PENDING", "PENDING", "COMPLETED"])
 
-        _report(_api(server, auth=auth))
+        _report(_api(server, auth=_auth()))
+
+        assert [request.headers["Authorization"] for request in server.requests] == ["Bearer token-0"] * 4
+
+    def test_a_token_expiring_during_the_job_is_exchanged_again(self, downloads: Downloads, sleeps: list[float]):
+        server = ReportServer(["PENDING", "COMPLETED"])
+        expired = {"Bearer token-0"}
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            if request.method == "GET" and request.headers.get("Authorization") in expired:
+                return httpx2.Response(401, json={"code": "UNAUTHORIZED"})
+            return server(request)
+
+        assert _report(_api(handler, auth=_auth())) == []
 
         assert [request.headers["Authorization"] for request in server.requests] == [
             "Bearer token-0",
             "Bearer token-1",
-            "Bearer token-2",
+            "Bearer token-1",
         ]
+        assert sleeps == [10]
 
 
 def _retry_state() -> tc.RetryCallState:
