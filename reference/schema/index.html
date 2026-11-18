@@ -3316,9 +3316,9 @@ dict(**kwargs) -&gt; new dictionary initialized with the name=value pairs
     <div class="doc doc-contents ">
 
         <p>Transform a column name according to the normalizer's convention.</p>
-<p>Explicit <code>column_overrides</code> win; otherwise converts to
-<code>snake_case</code>, optionally splitting letter→digit boundaries
-(see <code>snake_case_digits</code>).</p>
+<p>Explicit <code>column_overrides</code> win; otherwise spells the symbols in
+<code>SYMBOL_WORDS</code> as words and converts to <code>snake_case</code>, optionally
+splitting letter→digit boundaries (see <code>snake_case_digits</code>).</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>

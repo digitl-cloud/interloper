@@ -2549,6 +2549,11 @@ follows it always runs.</p>
 </table>
 <p>Transformations apply in this order: empty-dict replacement, flattening, empty-string
 replacement, column dropping, renaming, key filling.</p>
+<p>Renaming spells the symbols listed in <code>interloper.normalizer.base.SYMBOL_WORDS</code> as words before
+snake-casing, which turns every other run of non-alphanumeric characters into <code>_</code>: <code>%</code> becomes
+<code>pct</code>, so <code>% Viewable Impressions</code> stays apart from <code>Viewable Impressions</code>, and <code>$</code>, <code>€</code> and <code>£</code>
+become <code>usd</code>, <code>eur</code> and <code>gbp</code>, so <code>Cost ($)</code> stays apart from <code>Cost (€)</code>. A <code>column_overrides</code>
+entry matches the raw name, before any symbol is spelled.</p>
 <h2 id="accepted-input">Accepted input<a class="headerlink" href="#accepted-input" title="Permanent link">&para;</a></h2>
 <p><code>dict</code>, <code>list[dict]</code>, a pydantic model or a list of them, and generators or iterators of those.
 <code>None</code> yields an empty list. Anything else raises <code>NormalizerError</code>. With <code>interloper-pandas</code>
