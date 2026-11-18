@@ -8,11 +8,18 @@ description = "Interloper Assets"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 requires-python = ">=3.11"
-dependencies = ["interloper-core", "interloper-pandas", "interloper-sql", "httpx2>=2.13.1", "tenacity>=9.1.4"]
+dependencies = [
+    "interloper-core",
+    "interloper-pandas",
+    "interloper-sql",
+    "httpx2>=2.13.1",
+    "tenacity>=9.1.4",
+    "google-auth>=2.40.0",
+]
 
 [project.optional-dependencies]
 bing = ["bingads>=13.0.24.1"]
-google = ["google-api-python-client>=2.167.0", "google-ads>=29.2.0"]
+google = ["google-ads>=29.2.0"]
 facebook = ["facebook-business>=20.0.0"]
 
 [project.entry-points."interloper.extensions"]

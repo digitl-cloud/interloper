@@ -1,5 +1,4 @@
-API_SERVICE = "dfareporting"
-API_VERSION = "v5"
+BASE_URL = "https://dfareporting.googleapis.com/dfareporting/v5"
 
 SCOPES = [
     "https://www.googleapis.com/auth/dfareporting",

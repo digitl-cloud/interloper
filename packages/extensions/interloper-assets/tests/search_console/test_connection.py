@@ -1,155 +1,105 @@
-"""Regression tests for the SearchConsole connection."""
+"""Regression tests for the SearchConsole connection.
+
+Its property lookup and ``check()`` run in the API process, which installs no
+vendor SDK extra, so they go over plain HTTP through the engine like the
+assets do.
+"""
 
 from __future__ import annotations
 
-import asyncio
-import subprocess
+import json
 import sys
-import threading
-from types import SimpleNamespace
 from typing import Any
 
-import httplib2
+import httpx2
+import interloper as il
 import pytest
-from google.oauth2 import service_account
-from googleapiclient import discovery
-from googleapiclient.errors import HttpError
 
+from interloper_assets.google.auth import ServiceAccountAuth
 from interloper_assets.search_console import constants
 from interloper_assets.search_console.connection import SearchConsoleConnection
 
-
-class FakeSites:
-    """Serve a canned ``sites.list`` response."""
-
-    def __init__(self, response: dict[str, Any], refusal: HttpError | None = None):
-        """Hold the response to serve, or the refusal to raise."""
-        self.response = response
-        self.refusal = refusal
-
-    def sites(self) -> FakeSites:
-        return self
-
-    def list(self) -> SimpleNamespace:
-        return SimpleNamespace(execute=self.execute)
-
-    def execute(self) -> dict[str, Any]:
-        if self.refusal is not None:
-            raise self.refusal
-        return self.response
+CLIENT_EMAIL = "reader@project.iam.gserviceaccount.com"
 
 
-def _connection(response: dict[str, Any]) -> SearchConsoleConnection:
+def _connection(status: int, body: dict[str, Any]) -> tuple[SearchConsoleConnection, list[httpx2.Request]]:
+    requests: list[httpx2.Request] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        return httpx2.Response(status, json=body)
+
     connection = SearchConsoleConnection(service_account_key="{}")
-    connection.__dict__["client"] = lambda: FakeSites(response)
-    return connection
-
-
-class TestCredentials:
-    def test_loads_the_key_with_the_read_only_scopes(self, monkeypatch: Any):
-        calls: list[tuple[dict[str, Any], list[str]]] = []
-        sentinel = object()
-
-        def from_service_account_info(info: dict[str, Any], scopes: list[str]) -> object:
-            calls.append((info, scopes))
-            return sentinel
-
-        monkeypatch.setattr(service_account.Credentials, "from_service_account_info", from_service_account_info)
-        connection = SearchConsoleConnection(service_account_key='{"client_email": "reader@example.com"}')
-        assert connection.credentials is sentinel
-        assert connection.credentials is sentinel
-        assert calls == [({"client_email": "reader@example.com"}, constants.SCOPES)]
+    connection.__dict__["client"] = il.AsyncRESTClient(
+        constants.BASE_URL, transport=httpx2.MockTransport(handler), retry=il.RetryPolicy(max_attempts=1)
+    )
+    return connection, requests
 
 
 class TestClient:
-    def test_builds_a_fresh_discovery_client_per_call(self, monkeypatch: Any):
-        calls: list[tuple[str, str, object]] = []
+    def test_authenticates_as_the_service_account_with_the_read_only_scopes(self):
+        connection = SearchConsoleConnection(service_account_key=json.dumps({"client_email": CLIENT_EMAIL}))
+        client = connection.client
 
-        def build(service: str, version: str, *, credentials: object) -> object:
-            calls.append((service, version, credentials))
-            return object()
-
-        monkeypatch.setattr(discovery, "build", build)
-        connection = SearchConsoleConnection(service_account_key="{}")
-        credentials = object()
-        connection.__dict__["credentials"] = credentials
-        assert connection.client() is not connection.client()
-        assert calls == [("searchconsole", "v1", credentials)] * 2
+        assert str(client.base_url).rstrip("/") == "https://searchconsole.googleapis.com"
+        assert isinstance(client.auth, ServiceAccountAuth)
+        assert (client.auth._client_id, client.auth._scope) == (CLIENT_EMAIL, " ".join(constants.SCOPES))
+        assert connection.client is client
 
 
 class TestApi:
-    def test_every_engine_is_built_on_a_fresh_client(self):
-        clients = [object(), object()]
-        connection = SearchConsoleConnection(service_account_key="{}")
-        connection.__dict__["client"] = iter(clients).__next__
+    def test_the_api_is_built_on_the_client(self):
+        connection, _ = _connection(200, {})
 
-        first, second = connection.api, connection.api
-
-        assert [first.client, second.client] == clients
-
-
-class TestImport:
-    def test_the_connection_and_its_source_load_without_the_sdk(self):
-        script = (
-            "import sys\n"
-            "sys.modules['googleapiclient'] = None\n"
-            "sys.modules['httplib2'] = None\n"
-            "sys.modules['google.oauth2'] = None\n"
-            "import interloper_assets.search_console.connection\n"
-            "import interloper_assets.search_console.connector.source\n"
-        )
-
-        result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=False)
-
-        assert result.returncode == 0, result.stderr
+        assert connection.api.client is connection.client
+        assert connection.api is connection.api
 
 
 class TestSites:
-    def test_lists_every_property_with_its_permission_level(self):
-        connection = _connection(
+    async def test_lists_every_property_with_its_permission_level(self):
+        connection, requests = _connection(
+            200,
             {
                 "siteEntry": [
                     {"siteUrl": "sc-domain:example.com", "permissionLevel": "SITE_OWNER"},
                     {"siteUrl": "https://example.org/", "permissionLevel": "SITE_FULL_USER"},
                 ]
-            }
+            },
         )
-        assert asyncio.run(connection.sites()) == [
+
+        assert await connection.sites() == [
             {"site_url": "sc-domain:example.com", "name": "sc-domain:example.com (SITE_OWNER)"},
             {"site_url": "https://example.org/", "name": "https://example.org/ (SITE_FULL_USER)"},
         ]
+        assert [(r.method, str(r.url)) for r in requests] == [
+            ("GET", "https://searchconsole.googleapis.com/webmasters/v3/sites")
+        ]
 
-    def test_the_client_is_built_off_the_event_loop(self):
-        built_in: list[int] = []
+    async def test_no_properties(self):
+        connection, _ = _connection(200, {})
 
-        def client() -> FakeSites:
-            built_in.append(threading.get_ident())
-            return FakeSites({})
+        assert await connection.sites() == []
 
-        async def lookup() -> int:
-            await connection.sites()
-            return threading.get_ident()
+    async def test_runs_without_the_sdk_extras(self, monkeypatch: pytest.MonkeyPatch):
+        for module in ("bingads", "facebook_business", "google.ads"):
+            monkeypatch.setitem(sys.modules, module, None)
+        connection, _ = _connection(200, {"siteEntry": [{"siteUrl": "sc-domain:example.com"}]})
 
-        connection = SearchConsoleConnection(service_account_key="{}")
-        connection.__dict__["client"] = client
+        assert await connection.sites() == [
+            {"site_url": "sc-domain:example.com", "name": "sc-domain:example.com (UNKNOWN)"}
+        ]
 
-        loop_thread = asyncio.run(lookup())
 
-        assert len(built_in) == 1
-        assert built_in[0] != loop_thread
+class TestCheck:
+    async def test_runs_the_lookup(self):
+        connection, requests = _connection(200, {})
 
-    def test_no_properties(self):
-        assert asyncio.run(_connection({}).sites()) == []
+        assert await connection.check() is True
+        assert len(requests) == 1
 
-    def test_check_runs_the_lookup(self):
-        assert asyncio.run(_connection({}).check()) is True
+    async def test_a_refusal_reads_as_rejected_credentials(self):
+        connection, _ = _connection(403, {"error": {"code": 403, "message": "Permission denied"}})
 
-    def test_a_refusal_raises_out_of_the_check_as_google_sent_it(self):
-        refusal = HttpError(httplib2.Response({"status": 403}), b'{"error": {"message": "Permission denied"}}')
-        connection = SearchConsoleConnection(service_account_key="{}")
-        connection.__dict__["client"] = lambda: FakeSites({}, refusal=refusal)
+        result = await connection.verify(timeout=5)
 
-        with pytest.raises(HttpError) as raised:
-            asyncio.run(connection.check())
-
-        assert raised.value is refusal
+        assert (result.ok, result.category) == (False, "auth")

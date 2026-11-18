@@ -1,12 +1,9 @@
-DV_API_SERVICE = "displayvideo"
-DV_API_VERSION = "v4"
-DV_SCOPES = ["https://www.googleapis.com/auth/display-video"]
+DISPLAY_VIDEO_URL = "https://displayvideo.googleapis.com/v4"
 
-# -- Bid Manager (reporting) API -------------------------------------------------
-# DBM was folded into DV360; its API remains DV360's reporting surface.
-DBM_API_SERVICE = "doubleclickbidmanager"
-DBM_API_VERSION = "v2"
-DBM_SCOPES = ["https://www.googleapis.com/auth/doubleclickbidmanager"]
+# DBM was folded into DV360; its Bid Manager API remains DV360's reporting surface.
+BID_MANAGER_URL = "https://doubleclickbidmanager.googleapis.com/v2"
+
+SCOPES = ["https://www.googleapis.com/auth/display-video", "https://www.googleapis.com/auth/doubleclickbidmanager"]
 
 # Report polling bounds (seconds).
 MIN_RETRY_INTERVAL = 60

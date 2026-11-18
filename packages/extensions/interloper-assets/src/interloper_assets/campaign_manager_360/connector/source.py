@@ -72,9 +72,9 @@ class CampaignManager360(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def campaigns_stats(self, context: il.ExecutionContext) -> list[_Record]:
+    async def campaigns_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Campaign performance metrics per day."""
-        return self.connection.api.report(
+        return await self.connection.api.report(
             self.profile_id,
             context.partition_date,
             account_id=self.account_id,
@@ -88,9 +88,9 @@ class CampaignManager360(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def ads_stats(self, context: il.ExecutionContext) -> list[_Record]:
+    async def ads_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Ad performance metrics per day at placement/creative grain."""
-        return self.connection.api.report(
+        return await self.connection.api.report(
             self.profile_id,
             context.partition_date,
             account_id=self.account_id,
@@ -104,9 +104,9 @@ class CampaignManager360(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
-    def reach_stats(self, context: il.ExecutionContext) -> list[_Record]:
+    async def reach_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Unique-reach metrics per campaign and country."""
-        rows = self.connection.api.report(
+        rows = await self.connection.api.report(
             self.profile_id,
             context.partition_date,
             account_id=self.account_id,
@@ -122,14 +122,14 @@ class CampaignManager360(il.Source):
         partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
     )
-    def custom_audiences(self, context: il.ExecutionContext) -> list[_Record]:
+    async def custom_audiences(self, context: il.ExecutionContext) -> list[_Record]:
         """Remarketing lists (custom audiences) of the configured advertiser.
 
         Needs the source's Advertiser ID, and fails without one.
         """
         if not self.advertiser_id:
             raise ValueError("The custom_audiences asset requires the source's advertiser_id to be set")
-        rows = self.connection.api.rows(
-            "remarketingLists.list", "remarketingLists", profileId=self.profile_id, advertiserId=self.advertiser_id
+        rows = await self.connection.api.rows(
+            f"/userprofiles/{self.profile_id}/remarketingLists", "remarketingLists", advertiserId=self.advertiser_id
         )
         return [{**row, "date": context.partition_date} for row in rows]

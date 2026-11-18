@@ -6,20 +6,20 @@ summary row. The custom normalizer must map those headers onto the schema
 columns — notably spelling ``%`` out as ``pct`` so "% Viewable Impressions"
 does not collide with "Viewable Impressions" — and survive the host→child
 DAG-spec round-trip. What each asset sends and returns is pinned at the HTTP
-level, on a real ``dfareporting`` client over a scripted exchange.
+level, over a scripted exchange.
 """
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import json
 from types import SimpleNamespace
 from typing import Any
 
+import httpx2
+import interloper as il
 import pytest
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-from googleapiclient.http import HttpMockSequence
 from interloper.asset import Asset
 from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
@@ -70,14 +70,14 @@ _PINNED_ROWS = [
     {"Date": "2026-07-10", "Campaign": "Campaign B", "Impressions": 200, "Clicks": 10},
 ]
 
-_Answer = tuple[dict[str, str], str | bytes]
+_Answer = tuple[int, bytes]
 
 
 def _json(body: dict[str, Any]) -> _Answer:
-    return {"status": "200"}, json.dumps(body)
+    return 200, json.dumps(body).encode()
 
 
-_DELETED: _Answer = ({"status": "204"}, "")
+_DELETED: _Answer = (204, b"")
 
 
 def _report_answers(*statuses: str, file: bytes = _PINNED_FILE) -> list[_Answer]:
@@ -85,59 +85,63 @@ def _report_answers(*statuses: str, file: bytes = _PINNED_FILE) -> list[_Answer]
         _json({"id": "1"}),
         _json({"id": "2"}),
         *(_json({"status": status}) for status in statuses),
-        ({"status": "200"}, file),
+        (200, file),
         _DELETED,
     ]
 
 
-def _report_requests(body: dict[str, Any]) -> list[tuple[str, str, str | None]]:
+def _report_requests(body: dict[str, Any]) -> list[tuple[str, str, Any]]:
     return [
-        ("POST", f"{_BASE}/userprofiles/111/reports?alt=json", json.dumps(body)),
-        ("POST", f"{_BASE}/userprofiles/111/reports/1/run?alt=json", None),
-        ("GET", f"{_BASE}/userprofiles/111/reports/1/files/2?alt=json", None),
+        ("POST", f"{_BASE}/userprofiles/111/reports", body),
+        ("POST", f"{_BASE}/userprofiles/111/reports/1/run", None),
+        ("GET", f"{_BASE}/userprofiles/111/reports/1/files/2", None),
         ("GET", f"{_BASE}/reports/1/files/2?alt=media", None),
-        ("DELETE", f"{_BASE}/userprofiles/111/reports/1?", None),
+        ("DELETE", f"{_BASE}/userprofiles/111/reports/1", None),
     ]
 
 
-class Discovery:
-    """Build real ``dfareporting`` clients over one scripted HTTP exchange, counting the builds.
-
-    Stands in for the connection's ``client``: every request its clients send is
-    recorded on the one HTTP mock, which answers them in order.
-    """
+class FakeApi:
+    """Answer the API's requests from a script, in order, recording each one's method, URL and JSON body."""
 
     def __init__(self, *answers: _Answer):
         """Script the answers.
 
         Args:
-            *answers: One answer per request, in order: its headers, ``status`` included, and its body.
+            *answers: One answer per request, in order: its status and its body.
         """
-        self.http = HttpMockSequence(list(answers))
-        self.builds = 0
+        self.answers = list(answers)
+        self.requests: list[tuple[str, str, Any]] = []
+        self.client = il.AsyncRESTClient(
+            constants.BASE_URL, transport=httpx2.MockTransport(self.answer), retry=il.RetryPolicy(max_attempts=1)
+        )
 
-    def __call__(self) -> Any:
-        """Build a client on the scripted HTTP, as the connection's ``client`` does.
+    def answer(self, request: httpx2.Request) -> httpx2.Response:
+        """Record one request and serve the next answer.
+
+        Args:
+            request: The request.
 
         Returns:
-            A ``dfareporting`` discovery client.
+            The next scripted answer.
         """
-        self.builds += 1
-        return build(constants.API_SERVICE, constants.API_VERSION, http=self.http)
-
-    @property
-    def requests(self) -> list[tuple[str, str, str | None]]:
-        """The requests sent so far: each one's method, URL and body as sent."""
-        return [(method, uri, body) for uri, method, body, _ in self.http.request_sequence]
+        self.requests.append(
+            (request.method, str(request.url), json.loads(request.content) if request.content else None)
+        )
+        status, body = self.answers.pop(0)
+        return httpx2.Response(status, content=body)
 
 
-def _asset(discovery: Discovery, key: str, advertiser_id: str = "") -> Any:
+def _asset(server: FakeApi, key: str, advertiser_id: str = "") -> Any:
     connection = CampaignManager360Connection(service_account_key="{}")
-    connection.__dict__["client"] = discovery
+    connection.__dict__["client"] = server.client
     source = CampaignManager360(
         id="src-1", profile_id="111", account_id="222", advertiser_id=advertiser_id, connection=connection
     )
     return next(asset for asset in source.assets if type(asset).key == key)
+
+
+def _data(asset: Any) -> list[dict[str, Any]]:
+    return asyncio.run(asset.data(context=_CONTEXT))
 
 
 class TestHeaderNormalization:
@@ -156,8 +160,8 @@ class TestHeaderNormalization:
         assert normalizer.column_name("TrueView: Views") == "true_view_views"
 
     def test_parsed_report_conforms_to_schema(self):
-        discovery = Discovery(*_report_answers("REPORT_AVAILABLE", file=_REPORT_FILE))
-        rows = _asset(discovery, "campaigns_stats").data(context=_CONTEXT)
+        server = FakeApi(*_report_answers("REPORT_AVAILABLE", file=_REPORT_FILE))
+        rows = _data(_asset(server, "campaigns_stats"))
         normalized = _normalizer().normalize(rows)
         table = TableData.from_data(normalized)
         df = table.reconcile(schemas.CampaignsStats)
@@ -178,13 +182,13 @@ class TestSourceNormalizer:
 
 
 class TestRequests:
-    """What each asset sends and returns, pinned at the HTTP level on a real ``dfareporting`` client."""
+    """What each asset sends and returns, pinned at the HTTP level."""
 
     def test_campaigns_stats_runs_a_standard_report_of_the_day(self):
-        discovery = Discovery(*_report_answers("REPORT_AVAILABLE"))
+        server = FakeApi(*_report_answers("REPORT_AVAILABLE"))
 
-        assert _asset(discovery, "campaigns_stats").data(context=_CONTEXT) == _PINNED_ROWS
-        assert discovery.requests == _report_requests(
+        assert _data(_asset(server, "campaigns_stats")) == _PINNED_ROWS
+        assert server.requests == _report_requests(
             {
                 "accountId": "222",
                 "name": "report_standard_2026-07-10_2026-07-10",
@@ -196,13 +200,12 @@ class TestRequests:
                 },
             }
         )
-        assert discovery.builds == 1
 
     def test_ads_stats_runs_a_standard_report_of_the_day(self):
-        discovery = Discovery(*_report_answers("REPORT_AVAILABLE"))
+        server = FakeApi(*_report_answers("REPORT_AVAILABLE"))
 
-        assert _asset(discovery, "ads_stats").data(context=_CONTEXT) == _PINNED_ROWS
-        assert discovery.requests == _report_requests(
+        assert _data(_asset(server, "ads_stats")) == _PINNED_ROWS
+        assert server.requests == _report_requests(
             {
                 "accountId": "222",
                 "name": "report_standard_2026-07-10_2026-07-10",
@@ -214,15 +217,14 @@ class TestRequests:
                 },
             }
         )
-        assert discovery.builds == 1
 
     def test_reach_stats_runs_a_reach_report_and_stamps_the_day(self):
-        discovery = Discovery(*_report_answers("REPORT_AVAILABLE"))
+        server = FakeApi(*_report_answers("REPORT_AVAILABLE"))
 
-        rows = _asset(discovery, "reach_stats").data(context=_CONTEXT)
+        rows = _data(_asset(server, "reach_stats"))
 
         assert rows == [{**row, "date": _DAY} for row in _PINNED_ROWS]
-        assert discovery.requests == _report_requests(
+        assert server.requests == _report_requests(
             {
                 "accountId": "222",
                 "name": "report_reach_2026-07-10_2026-07-10",
@@ -234,33 +236,32 @@ class TestRequests:
                 },
             }
         )
-        assert discovery.builds == 1
 
     def test_a_failed_report_raises_and_its_definition_is_still_deleted(self):
-        discovery = Discovery(_json({"id": "1"}), _json({"id": "2"}), _json({"status": "FAILED"}), _DELETED)
+        server = FakeApi(_json({"id": "1"}), _json({"id": "2"}), _json({"status": "FAILED"}), _DELETED)
 
         with pytest.raises(RuntimeError, match=r"^Report 1 failed with status FAILED$"):
-            _asset(discovery, "campaigns_stats").data(context=_CONTEXT)
-        assert [request[:2] for request in discovery.requests[1:]] == [
-            ("POST", f"{_BASE}/userprofiles/111/reports/1/run?alt=json"),
-            ("GET", f"{_BASE}/userprofiles/111/reports/1/files/2?alt=json"),
-            ("DELETE", f"{_BASE}/userprofiles/111/reports/1?"),
+            _data(_asset(server, "campaigns_stats"))
+        assert [request[:2] for request in server.requests[1:]] == [
+            ("POST", f"{_BASE}/userprofiles/111/reports/1/run"),
+            ("GET", f"{_BASE}/userprofiles/111/reports/1/files/2"),
+            ("DELETE", f"{_BASE}/userprofiles/111/reports/1"),
         ]
 
     def test_a_failed_cleanup_is_logged_and_the_rows_are_kept(self, caplog: pytest.LogCaptureFixture):
         answers = _report_answers("REPORT_AVAILABLE")
-        answers[-1] = ({"status": "500"}, "")
-        discovery = Discovery(*answers)
+        answers[-1] = (500, b"")
+        server = FakeApi(*answers)
 
-        assert _asset(discovery, "campaigns_stats").data(context=_CONTEXT) == _PINNED_ROWS
-        assert "Failed to delete report 1: <HttpError 500" in caplog.text
+        assert _data(_asset(server, "campaigns_stats")) == _PINNED_ROWS
+        assert "Failed to delete report 1: Server error '500 Internal Server Error'" in caplog.text
 
-    def test_a_refused_report_raises_the_vendors_error_and_sends_nothing_more(self):
-        discovery = Discovery(({"status": "403"}, json.dumps({"error": {"code": 403, "message": "No access"}})))
+    def test_a_refused_report_raises_its_status_and_sends_nothing_more(self):
+        server = FakeApi((403, json.dumps({"error": {"code": 403, "message": "No access"}}).encode()))
 
-        with pytest.raises(HttpError, match="No access"):
-            _asset(discovery, "campaigns_stats").data(context=_CONTEXT)
-        assert len(discovery.requests) == 1
+        with pytest.raises(httpx2.HTTPStatusError):
+            _data(_asset(server, "campaigns_stats"))
+        assert len(server.requests) == 1
 
     def test_custom_audiences_pages_the_advertisers_remarketing_lists(self):
         audience = {
@@ -271,19 +272,18 @@ class TestRequests:
                 "listPopulationClauses": [{"terms": [{"operator": "NUM_EQUALS", "value": "1"}]}],
             },
         }
-        discovery = Discovery(
+        server = FakeApi(
             _json({"remarketingLists": [audience], "nextPageToken": "next"}),
             _json({"remarketingLists": [{"id": "2", "name": "Visitors"}]}),
         )
-        asset = _asset(discovery, "custom_audiences", advertiser_id="9")
+        asset = _asset(server, "custom_audiences", advertiser_id="9")
 
-        rows = asset.data(context=_CONTEXT)
+        rows = _data(asset)
 
-        assert discovery.requests == [
-            ("GET", f"{_BASE}/userprofiles/111/remarketingLists?advertiserId=9&alt=json", None),
-            ("GET", f"{_BASE}/userprofiles/111/remarketingLists?advertiserId=9&pageToken=next&alt=json", None),
+        assert server.requests == [
+            ("GET", f"{_BASE}/userprofiles/111/remarketingLists?advertiserId=9", None),
+            ("GET", f"{_BASE}/userprofiles/111/remarketingLists?advertiserId=9&pageToken=next", None),
         ]
-        assert discovery.builds == 1
         assert [(row["id"], row["date"]) for row in rows] == [("1", _DAY), ("2", _DAY)]
         written = TableData.from_data(asset.normalizer.normalize(rows)).reconcile(schemas.CustomAudiences)
         columns = [
@@ -311,19 +311,19 @@ class TestRequests:
         assert set(written["date"]) == {_DAY}
 
     def test_an_advertiser_without_remarketing_lists_has_no_audiences(self):
-        discovery = Discovery(_json({"kind": "dfareporting#remarketingListsListResponse"}))
+        server = FakeApi(_json({"kind": "dfareporting#remarketingListsListResponse"}))
 
-        assert _asset(discovery, "custom_audiences", advertiser_id="9").data(context=_CONTEXT) == []
-        assert len(discovery.requests) == 1
+        assert _data(_asset(server, "custom_audiences", advertiser_id="9")) == []
+        assert len(server.requests) == 1
 
     def test_custom_audiences_without_an_advertiser_raises_before_any_request(self):
-        discovery = Discovery()
+        server = FakeApi()
 
         with pytest.raises(
             ValueError, match=r"^The custom_audiences asset requires the source's advertiser_id to be set$"
         ):
-            _asset(discovery, "custom_audiences").data(context=_CONTEXT)
-        assert discovery.builds == 0
+            _data(_asset(server, "custom_audiences"))
+        assert server.requests == []
 
 
 class TestSpecRoundtrip:
