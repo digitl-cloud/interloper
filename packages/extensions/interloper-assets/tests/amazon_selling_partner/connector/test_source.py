@@ -39,7 +39,6 @@ DAY = dt.date(2026, 10, 1)
 API_URL = "https://sellingpartnerapi-eu.amazon.com"
 REPORT_URL = "https://documents.example.com/report"
 QUERY_URL = "https://documents.example.com/query"
-UNPATCHED_CLIENT = httpx2.AsyncClient
 
 
 def _source() -> Any:
@@ -82,7 +81,11 @@ class FakeSellingPartner:
         responses: dict[tuple[str, str], Any] = {
             ("POST", f"{API_URL}/reports/2021-06-30/reports"): {"reportId": "R1"},
             ("GET", f"{API_URL}/reports/2021-06-30/reports/R1"): {"processingStatus": "DONE", "reportDocumentId": "D1"},
-            ("GET", f"{API_URL}/reports/2021-06-30/documents/D1"): {"reportDocumentId": "D1", "url": REPORT_URL},
+            ("GET", f"{API_URL}/reports/2021-06-30/documents/D1"): {
+                "reportDocumentId": "D1",
+                "url": REPORT_URL,
+                "compressionAlgorithm": "GZIP",
+            },
             ("POST", f"{API_URL}/dataKiosk/2023-11-15/queries"): {"queryId": "Q1"},
             ("GET", f"{API_URL}/dataKiosk/2023-11-15/queries/Q1"): {
                 "processingStatus": "DONE",
@@ -105,23 +108,17 @@ class FakeSellingPartner:
         return [(request.method, str(request.url)) for request in self.requests]
 
 
-async def _run(
-    key: str, vendor: FakeSellingPartner, monkeypatch: pytest.MonkeyPatch, day: dt.date = DAY
-) -> list[dict[str, Any]]:
-    """Run one asset against the faked Amazon, the API through the connection's client and documents outside it.
+async def _run(key: str, vendor: FakeSellingPartner, day: dt.date = DAY) -> list[dict[str, Any]]:
+    """Run one asset against the faked Amazon, the API and the documents through the connection's client.
 
     Args:
         key: The asset's key.
         vendor: The faked Amazon, recording every request.
-        monkeypatch: Routes the document downloads to the fake.
         day: The partition the asset runs for.
 
     Returns:
         The asset's rows.
     """
-    monkeypatch.setattr(
-        httpx2, "AsyncClient", lambda **kwargs: UNPATCHED_CLIENT(transport=httpx2.MockTransport(vendor), **kwargs)
-    )
     connection = AmazonSellingPartnerConnection(location="EU", client_id="x", client_secret="x", refresh_token="x")
     connection.__dict__["client"] = il.AsyncRESTClient(
         API_URL, headers={"x-amz-access-token": "token"}, transport=httpx2.MockTransport(vendor)
@@ -206,7 +203,7 @@ class TestForecastingSnapshots:
         assert asset.partitioning is not None and asset.partitioning.column == "forecast_generation_date"
         assert asset.tags == ["Report"]
 
-    async def test_run_keeps_only_the_partitions_generation(self, monkeypatch: pytest.MonkeyPatch):
+    async def test_run_keeps_only_the_partitions_generation(self):
         rows = [
             {"asin": "A", "forecastGenerationDate": "2026-09-13", "startDate": "2026-09-13"},
             {"asin": "A", "forecastGenerationDate": "2026-09-13", "startDate": "2026-09-20"},
@@ -214,16 +211,16 @@ class TestForecastingSnapshots:
         ]
         vendor = FakeSellingPartner(report={"forecastByAsin": rows})
 
-        generation_day = await _run("vendor_forecasting_retail_stats", vendor, monkeypatch, dt.date(2026, 9, 13))
-        between_generations = await _run("vendor_forecasting_retail_stats", vendor, monkeypatch, dt.date(2026, 9, 14))
+        generation_day = await _run("vendor_forecasting_retail_stats", vendor, dt.date(2026, 9, 13))
+        between_generations = await _run("vendor_forecasting_retail_stats", vendor, dt.date(2026, 9, 14))
 
         assert [row["startDate"] for row in generation_day] == ["2026-09-13", "2026-09-20"]
         assert between_generations == []
 
-    async def test_asks_for_the_latest_generation_without_a_window(self, monkeypatch: pytest.MonkeyPatch):
+    async def test_asks_for_the_latest_generation_without_a_window(self):
         vendor = FakeSellingPartner(report={"forecastByAsin": []})
 
-        await _run("vendor_forecasting_retail_stats", vendor, monkeypatch)
+        await _run("vendor_forecasting_retail_stats", vendor)
 
         assert json.loads(vendor.requests[0].content) == {
             "reportType": "GET_VENDOR_FORECASTING_REPORT",
@@ -326,13 +323,13 @@ class TestReportRequests:
 
     @pytest.mark.parametrize(("key", "report_type", "options", "records"), DAILY_REPORTS)
     async def test_a_report_runs_one_job_for_its_day(
-        self, monkeypatch: pytest.MonkeyPatch, key: str, report_type: str, options: dict[str, str], records: str
+        self, key: str, report_type: str, options: dict[str, str], records: str
     ):
         rows = [{"asin": "B1", "startDate": "2026-10-01"}, {"asin": "B2", "startDate": "2026-10-01"}]
         document = {"reportSpecification": {"reportType": report_type}, records: rows, "aggregate": [{"asin": "X"}]}
         vendor = FakeSellingPartner(report=document)
 
-        assert await _run(key, vendor, monkeypatch) == rows
+        assert await _run(key, vendor) == rows
         assert vendor.calls == REPORT_CALLS
         body = json.loads(vendor.requests[0].content)
         assert body == {
@@ -347,11 +344,11 @@ class TestReportRequests:
 class TestQueryRequests:
     """The Data Kiosk assets run one GraphQL query for the partition's day and flatten its metric records."""
 
-    async def test_products_reads_the_identifiers_of_each_asin(self, monkeypatch: pytest.MonkeyPatch):
+    async def test_products_reads_the_identifiers_of_each_asin(self):
         metric = {"groupByKey": {"asin": "B1", "parentAsin": "P1", "ean": "E1", "upc": None, "isbn13": "I1"}}
         vendor = FakeSellingPartner(query={"metrics": [metric]})
 
-        rows = await _run("products", vendor, monkeypatch)
+        rows = await _run("products", vendor)
 
         assert rows == [
             {"asin": "B1", "parent_asin": "P1", "ean": "E1", "upc": None, "isbn_13": "I1", "date": DAY},
@@ -362,7 +359,7 @@ class TestQueryRequests:
         assert 'sourcingView(aggregateBy: DAY, startDate: "2026-10-01", endDate: "2026-10-01")' in query
         assert "groupByKey { asin parentAsin ean upc isbn13 }" in query
 
-    async def test_product_fulfillment_stats_flattens_the_sourcing_metrics(self, monkeypatch: pytest.MonkeyPatch):
+    async def test_product_fulfillment_stats_flattens_the_sourcing_metrics(self):
         metric = {
             "groupByKey": {"asin": "B1"},
             "metrics": {
@@ -382,7 +379,7 @@ class TestQueryRequests:
         document = {"analytics_vendorAnalytics_2024_09_30": {"sourcingView": {"metrics": [metric]}}}
         vendor = FakeSellingPartner(query=document)
 
-        rows = await _run("product_fulfillment_stats", vendor, monkeypatch)
+        rows = await _run("product_fulfillment_stats", vendor)
 
         assert rows == [
             {
@@ -405,7 +402,7 @@ class TestQueryRequests:
         assert 'sourcingView(aggregateBy: DAY, startDate: "2026-10-01", endDate: "2026-10-01")' in query
         assert "netReceived { units value { amount currencyCode } }" in query
 
-    async def test_geo_sales_stats_by_country_flattens_the_sales_and_costs(self, monkeypatch: pytest.MonkeyPatch):
+    async def test_geo_sales_stats_by_country_flattens_the_sales_and_costs(self):
         money = {"amount": 1.5, "currencyCode": "EUR"}
         metric = {
             "groupByKey": {"asin": "B1", "shipToCountryCode": "DE"},
@@ -424,7 +421,7 @@ class TestQueryRequests:
         }
         vendor = FakeSellingPartner(query={"metrics": [metric]})
 
-        rows = await _run("geo_sales_stats_by_country", vendor, monkeypatch)
+        rows = await _run("geo_sales_stats_by_country", vendor)
 
         assert rows == [
             {
