@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 _REPORTS = f"/reports/{constants.REPORT_API_VERSION}"
 _DATA_KIOSK = f"/dataKiosk/{constants.DATAKIOSK_API_VERSION}"
 _FINISHED = ("DONE", "CANCELLED", "FATAL")
+_TRANSIENT_STATUSES = frozenset({429, 500, 502, 503, 504})
 
 
 class AmazonSellingPartnerApi:
@@ -27,13 +28,15 @@ class AmazonSellingPartnerApi:
     Both are jobs: created by a POST, polled every ``POLL_INTERVAL`` seconds
     until Amazon reports them ``DONE``, ``CANCELLED`` or ``FATAL``, then read
     from a document Amazon serves at a signed URL outside the API, which is
-    fetched without the client's credentials. A report's document is gzipped
-    JSON, a query's plain JSON.
+    fetched without the client's credentials but within its timeout and
+    transient retries. A report's document is JSON, gzipped when Amazon names
+    its ``compressionAlgorithm``; a query's is plain JSON.
 
     Amazon refuses a request with an HTTP error status, raised as is, except
-    while polling: a poll that fails is polled again until the job's deadline.
-    No call is scoped by a header: what a job reads, its marketplaces
-    included, is named in its own specification, which the asset passes.
+    while polling: a poll that fails transiently is polled again until the
+    job's deadline. No call is scoped by a header: what a job reads, its
+    marketplaces included, is named in its own specification, which the asset
+    passes.
     """
 
     def __init__(self, client: il.AsyncRESTClient) -> None:
@@ -93,12 +96,15 @@ class AmazonSellingPartnerApi:
 
         response = await self.client.get(f"{_REPORTS}/documents/{document_id}")
         response.raise_for_status()
-        download = await self._download(response.json()["url"])
-        document = json.loads(gzip.decompress(download.content))
+        reference = response.json()
+        content = (await self._download(reference["url"])).content
+        if reference.get("compressionAlgorithm") == "GZIP":
+            content = gzip.decompress(content)
+        document = json.loads(content)
 
         if status != "DONE":
             details = document.get("errorDetails", "") if isinstance(document, dict) else ""
-            if "not yet available" in details:
+            if isinstance(details, str) and "not yet available" in details:
                 logger.warning(f"Report {report_id}: {details}")
                 return []
             raise RuntimeError(f"Report {report_id} failed: {details or status}")
@@ -139,7 +145,7 @@ class AmazonSellingPartnerApi:
         return self._find(download.json(), key)
 
     async def _wait(self, path: str, noun: str, job_id: str, timeout: float) -> dict[str, Any]:
-        """Poll a job until it is finished, polling again after an HTTP error.
+        """Poll a job until it is finished, polling again after a transient failure.
 
         Each poll depends on the previous status, so this is a sequential loop,
         one poll every ``POLL_INTERVAL`` seconds.
@@ -155,6 +161,7 @@ class AmazonSellingPartnerApi:
             ``CANCELLED`` or ``FATAL``.
 
         Raises:
+            HTTPError: If a poll fails for a reason that is not transient, such as a 403.
             RuntimeError: If the job is still unfinished, or its last poll failed, past the deadline.
         """
         loop = get_running_loop()
@@ -167,6 +174,8 @@ class AmazonSellingPartnerApi:
                 response.raise_for_status()
                 job = response.json()
             except httpx2.HTTPError as error:
+                if not self._transient(error):
+                    raise
                 logger.debug(f"Transient error polling {noun.lower()} {job_id}: {error}")
                 failure = error
             else:
@@ -177,11 +186,29 @@ class AmazonSellingPartnerApi:
             await sleep(constants.POLL_INTERVAL)
 
     @staticmethod
-    async def _download(url: str) -> httpx2.Response:
+    def _transient(error: httpx2.HTTPError) -> bool:
+        """Whether a failed poll may succeed if polled again.
+
+        A dropped connection, a throttled poll and a server error are
+        transient; any other refusal, such as a 403 or 404 for a job the
+        credentials cannot read, would be refused again.
+
+        Args:
+            error: What the poll raised.
+
+        Returns:
+            True for a transport error or a status in ``_TRANSIENT_STATUSES``.
+        """
+        if isinstance(error, httpx2.HTTPStatusError):
+            return error.response.status_code in _TRANSIENT_STATUSES
+        return isinstance(error, httpx2.TransportError)
+
+    async def _download(self, url: str) -> httpx2.Response:
         """Download a finished job's document from its signed URL.
 
-        The URL carries its own signature, so the document is fetched by a
-        client of its own, without the API's credentials, and without a timeout.
+        The URL carries its own signature, so the document is fetched without
+        the API's credentials, through the client for its timeout and its
+        repeats of a transient failure.
 
         Args:
             url: The document's signed URL.
@@ -189,9 +216,8 @@ class AmazonSellingPartnerApi:
         Returns:
             The document's response, its content read.
         """
-        async with httpx2.AsyncClient(timeout=None) as client:
-            response = await client.get(url)
-            response.raise_for_status()
+        response = await self.client.get(url, auth=None)
+        response.raise_for_status()
         return response
 
     @classmethod
