@@ -1963,22 +1963,44 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#interloper-extensions" class="md-nav__link">
+  <a href="#interloper-extension" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <code>interloper extensions</code>
+        <code>interloper extension</code>
       </span>
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="interloper extensions">
+    <nav class="md-nav" aria-label="interloper extension">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#interloper-extensions-check" class="md-nav__link">
+  <a href="#interloper-extension-init" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <code>interloper extensions check</code>
+        <code>interloper extension init</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper-extension-add" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>interloper extension add</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper-extension-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>interloper extension check</code>
       </span>
     </span>
   </a>
@@ -2740,9 +2762,60 @@ enabled.</p>
 </tr>
 </tbody>
 </table>
-<h2 id="interloper-extensions"><code>interloper extensions</code><a class="headerlink" href="#interloper-extensions" title="Permanent link">&para;</a></h2>
-<p>Inspect the installed packages' extension manifests (extension.yaml).</p>
-<h3 id="interloper-extensions-check"><code>interloper extensions check</code><a class="headerlink" href="#interloper-extensions-check" title="Permanent link">&para;</a></h3>
+<h2 id="interloper-extension"><code>interloper extension</code><a class="headerlink" href="#interloper-extension" title="Permanent link">&para;</a></h2>
+<p>Create, grow and check interloper extensions.</p>
+<h3 id="interloper-extension-init"><code>interloper extension init</code><a class="headerlink" href="#interloper-extension-init" title="Permanent link">&para;</a></h3>
+<p>Turn the uv project here into an extension that declares nothing yet.</p>
+<p>Run it in a project made with uv init --lib. It writes the package's extension.yaml with the extension's key,
+name and description and no section, names the package under the interloper.extensions entry point in
+pyproject.toml, adds interloper-core, and writes interloper.yaml, the local instance's configuration, with an
+encryption key of its own, gitignored. It refuses when the project is an extension already or when a file it
+would write exists. Add what the extension declares with interloper extension add.</p>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--key KEY</code></td>
+<td>the extension's key, snake_case (default: the package's name without an interloper prefix or suffix)</td>
+</tr>
+<tr>
+<td><code>--name NAME</code></td>
+<td>the extension's display name (default: the key, title-cased)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="interloper-extension-add"><code>interloper extension add</code><a class="headerlink" href="#interloper-extension-add" title="Permanent link">&para;</a></h3>
+<p>Add a source, a connection, settings, a command or routes to the extension here.</p>
+<p>Writes the part's files in the extension's package from a working template, declares the part in
+extension.yaml, keeping everything else the file holds, and adds the dependency the part needs. The name is
+snake_case and defaults to the extension's key; the part's class is its PascalCase form, so a source named
+shop is the class Shop with the catalog key shop. A settings section other than the key starts with the key
+and an underscore. It refuses, changing nothing, when a file it would write exists, when the manifest declares
+the name already, or when another installed package declares the settings section or command.</p>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>part</code></td>
+<td>what to add One of <code>source</code>, <code>connection</code>, <code>settings</code>, <code>command</code>, <code>routes</code>.</td>
+</tr>
+<tr>
+<td><code>name [optional]</code></td>
+<td>the part's name, snake_case (default: the extension's key)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="interloper-extension-check"><code>interloper extension check</code><a class="headerlink" href="#interloper-extension-check" title="Permanent link">&para;</a></h3>
 <p>Load every declared entry and name what fails or what nothing reads.</p>
 <p>Reads every installed package's extension.yaml and imports every entry it declares. Names each manifest,
 section or entry that cannot be read or imported, and each section no registry reads, which is usually a
