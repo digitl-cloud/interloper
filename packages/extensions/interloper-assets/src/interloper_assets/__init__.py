@@ -1,6 +1,6 @@
 """Pre-built source definitions: one connector per vendor, re-exported here."""
 
-from interloper_assets.adservice.connector.source import Adservice, AdserviceConnection
+from interloper_assets.adtraction.connector.source import Adtraction, AdtractionConnection
 from interloper_assets.adup.connector.source import Adup, AdupConnection
 from interloper_assets.amazon_ads.connection import AmazonAdsAPILocation, AmazonAdsConnection
 from interloper_assets.amazon_ads.connector.source import AmazonAds
@@ -45,8 +45,8 @@ from interloper_assets.tiktok_ads.star_schema.source import TiktokAdsStarSchema
 from interloper_assets.usercentrics.connector.source import Usercentrics, UsercentricsConnection
 
 __all__ = [
-    "Adservice",
-    "AdserviceConnection",
+    "Adtraction",
+    "AdtractionConnection",
     "Adup",
     "AdupConnection",
     "AmazonAds",

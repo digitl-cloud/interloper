@@ -48,7 +48,6 @@ EXCEPTIONS: dict[str, str] = {
     "FacebookAds.campaigns.stop_time": _LOCAL_SCHEDULE,
     "GoogleAnalytics4Export.events.event_date": _GA4_EXPORT,
     "GoogleAnalytics4Export.events.event_timestamp": _GA4_EXPORT,
-    "Adservice.conversions_stats_by_time_of_day.day": "the day of the week, not a date",
 }
 
 _SECTION = re.compile(r"^\s*(Args|Returns|Yields|Raises):\s*$", re.MULTILINE)
