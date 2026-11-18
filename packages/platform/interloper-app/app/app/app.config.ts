@@ -217,22 +217,10 @@ export default defineAppConfig({
         label: 'caption text-muted'
       }
     },
-    // Wizard step indicator: large circles, an accent glow and accent label on
-    // the active step, a tinted check once a step is completed.
+    // The wizard's step indicator keeps Nuxt UI's look; its step content sits a section's gap below it.
     stepper: {
       slots: {
-        trigger: 'group-data-[state=active]:shadow-lg group-data-[state=active]:shadow-primary/30',
-        title: 'text-sm text-muted group-data-[state=active]:font-semibold group-data-[state=active]:text-primary'
-      },
-      variants: {
-        color: {
-          primary: {
-            trigger: 'group-data-[state=completed]:bg-primary/10 group-data-[state=completed]:text-primary'
-          }
-        }
-      },
-      defaultVariants: {
-        size: 'lg'
+        root: 'gap-6'
       }
     },
     // Segmented control: the active pill takes the panel tone on a card-toned track
@@ -273,9 +261,11 @@ export default defineAppConfig({
         body: '-mx-4 -my-1 min-h-0 overflow-y-auto px-4 py-1'
       },
       compoundVariants: [
+        // Side drawers (wizards, edit forms) stack header, body and footer a section apart.
         {
           direction: ['left', 'right'],
           class: {
+            container: 'gap-6',
             content: 'w-xl'
           }
         }

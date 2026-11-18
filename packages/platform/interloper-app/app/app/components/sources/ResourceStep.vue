@@ -139,7 +139,7 @@ defineExpose({ formData })
 
     <!-- ── Select or create ─────────────────────────────────── -->
     <div v-else
-         class="flex flex-col gap-4">
+         class="flex flex-col gap-6">
         <!-- Header -->
         <div class="flex items-center justify-between gap-2">
             <p class="text-sm text-muted">

@@ -493,7 +493,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
         <template v-for="step in activeRelationSteps"
                   :key="step.name"
                   #[`relation-${step.name}`]>
-            <div class="flex flex-col gap-4">
+            <div class="flex flex-col gap-6">
                 <WizardTypeSummaryCard v-if="summaryCard"
                                        v-bind="summaryCard"
                                        @change="activeStep = 0" />

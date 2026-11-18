@@ -94,7 +94,7 @@ function destLabel(key: string) {
 </script>
 
 <template>
-    <div class="flex flex-col gap-4">
+    <div class="flex flex-col gap-6">
         <!-- Header -->
         <div class="flex items-center justify-between gap-2">
             <p class="text-sm text-muted">
