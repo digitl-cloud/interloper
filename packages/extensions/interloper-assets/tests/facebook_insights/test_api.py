@@ -111,6 +111,31 @@ class TestRows:
 
         assert FacebookInsightsApi.error_code(raised.value) == 100
 
+    async def test_a_next_link_is_followed_without_the_token_graph_copies_into_it(self):
+        next_link = f"{GRAPH}/me/accounts?access_token=graph-token&limit=100&after=c2"
+        requests: list[str] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(str(request.url))
+            if request.url.params.get("after") == "c2":
+                return httpx2.Response(200, json={"data": [{"id": "2"}]})
+            return httpx2.Response(200, json={"data": [{"id": "1"}], "paging": {"next": next_link}})
+
+        assert await _api(handler).rows("/me/accounts", limit=100) == [{"id": "1"}, {"id": "2"}]
+        assert requests[1] == f"{GRAPH}/me/accounts?limit=100&after=c2"
+
+    async def test_a_refusal_on_a_later_page_does_not_carry_the_token(self):
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            if request.url.params.get("after") == "c2":
+                return httpx2.Response(400, json={"error": {"message": "Invalid parameter", "code": 100}})
+            next_link = f"{GRAPH}/me/accounts?access_token=graph-token&after=c2"
+            return httpx2.Response(200, json={"data": [{"id": "1"}], "paging": {"next": next_link}})
+
+        with pytest.raises(httpx2.HTTPStatusError) as raised:
+            await _api(handler).rows("/me/accounts")
+
+        assert "graph-token" not in str(raised.value)
+
     async def test_an_http_error_raises(self):
         api = _api(lambda _: httpx2.Response(500, text="oops"))
 
