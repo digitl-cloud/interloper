@@ -1,0 +1,23 @@
+"""The $title connection."""
+
+from __future__ import annotations
+
+import interloper as il
+
+
+@il.connection(name="$title")
+class ${Class}Connection(il.Connection):
+    """Credentials for $title."""
+
+    token: str = il.SecretField(label="Token", description="$title API token")
+
+    def check(self) -> bool:
+        """Say whether the connection works, when it is tested in the app.
+
+        Replace the body with the cheapest authenticated call $title offers, so that the test proves the token
+        rather than its presence.
+
+        Returns:
+            Whether a token is set.
+        """
+        return bool(self.token)

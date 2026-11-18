@@ -1,4 +1,4 @@
-"""``interloper extensions check``: load everything the installed packages' manifests declare.
+"""``interloper extension check``: load everything the installed packages' manifests declare.
 
 Every entry of every section is imported, which also imports the module of
 each registry the entries register into, so the sections no registry claimed
@@ -9,13 +9,11 @@ section name most often.
 from __future__ import annotations
 
 import argparse
-from collections.abc import Mapping
-from typing import ClassVar
 
-from interloper.cli.command import Command
+from interloper.cli import Command
 
 
-class ExtensionsCheckCommand(Command):
+class CheckCommand(Command):
     """Load every declared entry and name what fails or what nothing reads.
 
     Reads every installed package's extension.yaml and imports every entry it declares. Names each manifest,
@@ -62,9 +60,3 @@ class ExtensionsCheckCommand(Command):
         print(f"Checked {len(entries)} entries in {len(MANIFESTS.sections())} sections: {verdict}.")
         if problems:
             raise SystemExit(1)
-
-
-class ExtensionsCommand(Command):
-    """Inspect the installed packages' extension manifests (extension.yaml)."""
-
-    commands: ClassVar[Mapping[str, type[Command]]] = {"check": ExtensionsCheckCommand}

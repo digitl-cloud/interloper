@@ -62,6 +62,12 @@ Combined (from repo root):
 - `make build-extensions`: build the SDK and every extension UI into its Python package's `static/`
 - `make setup` — `pre-commit install` + `uv sync --all-packages --all-extras`
 
+Extensions in their own repositories (`uv init --lib`, then `uv add --dev interloper-app`):
+
+- `uv run interloper extension init`: the bare extension (manifest, entry point, `interloper-core`, a gitignored `interloper.yaml`)
+- `uv run interloper extension add <source|connection|settings|command|routes> [name]`: one part, its files and its manifest entry
+- `uv run interloper extension check`: import every installed manifest's entries and name what fails or what nothing reads
+
 ## Local dev instance
 
 Stand up a running, seeded instance for trying out / verifying features. Both paths migrate the DB to head and seed the same minimal dataset via [dev/seed.py](dev/seed.py): a super-admin profile, one organisation (`Dev Org`), and the `demo` source with its `a → b,c,d → e` asset DAG. The seed is idempotent — re-running never duplicates.

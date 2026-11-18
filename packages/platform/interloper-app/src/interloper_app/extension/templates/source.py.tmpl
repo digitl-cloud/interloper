@@ -1,0 +1,17 @@
+"""The $title source."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import interloper as il
+
+
+@il.source(name="$title")
+class $Class(il.Source):
+    """$title data."""
+
+    @il.asset
+    def items(self) -> list[dict[str, Any]]:
+        """One row per $title item."""
+        return [{"id": 1, "name": "first"}, {"id": 2, "name": "second"}]

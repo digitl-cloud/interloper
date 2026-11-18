@@ -1,0 +1,19 @@
+"""``interloper $name``."""
+
+from __future__ import annotations
+
+import argparse
+
+from interloper.cli import Command
+
+
+class ${Class}Command(Command):
+    """Say hello from $title."""
+
+    def run(self, args: argparse.Namespace) -> None:
+        """Print one line.
+
+        Args:
+            args: The parsed command line; the command takes no arguments.
+        """
+        print("Hello from $title.")

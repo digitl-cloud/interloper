@@ -4,3 +4,4 @@ name: App
 description: "The web UI, and every role in one process."
 cli:
   app: interloper_app.cli:AppCommand
+  extension: interloper_app.extension:ExtensionCommand

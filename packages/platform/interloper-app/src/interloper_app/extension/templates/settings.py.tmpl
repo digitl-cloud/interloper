@@ -1,0 +1,21 @@
+"""The $name settings section."""
+
+from __future__ import annotations
+
+from typing import ClassVar
+
+from interloper.settings import Settings
+from pydantic import Field
+
+
+class ${Class}Settings(Settings):
+    """$title settings, from the $name block of interloper.yaml and the INTERLOPER_${NAME}_* variables.
+
+    Fields named in public show their values on the admin configuration page; the others show only whether
+    they are set.
+    """
+
+    public: ClassVar[frozenset[str]] = frozenset({"base_url"})
+
+    base_url: str = Field(default="https://api.example.com", description="$title API base URL.")
+    token: str = Field(default="", description="$title API token.")
