@@ -51,7 +51,7 @@ class TheTradeDeskConnection(il.Connection):
         """
         partners = await self.api.query("/partner/query")
         return [
-            {"partner_id": partner["PartnerId"], "name": partner.get("PartnerName", partner["PartnerId"])}
+            {"partner_id": partner["PartnerId"], "name": partner.get("PartnerName") or partner["PartnerId"]}
             for partner in partners
         ]
 

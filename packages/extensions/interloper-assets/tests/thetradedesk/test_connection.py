@@ -54,6 +54,13 @@ class TestPartners:
         assert (request.method, str(request.url)) == ("POST", f"{BASE_URL}/partner/query")
         assert json.loads(request.content) == {"PageStartIndex": 0, "PageSize": 100}
 
+    async def test_a_partner_with_a_null_name_is_labelled_by_its_id(self):
+        connection = _connection(
+            lambda _: httpx2.Response(200, json={"Result": [{"PartnerId": "p1", "PartnerName": None}]})
+        )
+
+        assert await connection.partners() == [{"partner_id": "p1", "name": "p1"}]
+
 
 class TestCheck:
     async def test_a_working_key_passes(self):

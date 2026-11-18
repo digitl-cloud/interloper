@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 class TheTradeDeskApi:
     """The Trade Desk's REST queries, GraphQL connections and MyReports reports.
 
-    The REST API refuses a request with an HTTP status. The GraphQL API
+    The REST API refuses a request with an HTTP status and a ``Message``,
+    which `_raise_refusal` raises. The GraphQL API
     answers a failed query with HTTP 200 and an ``errors`` list, so every page
     is read through `_listing`, which raises them. A MyReports report is a
     one-time schedule whose execution queues server-side: `report` creates
@@ -53,7 +54,7 @@ class TheTradeDeskApi:
         while True:
             page = {"PageStartIndex": len(rows), "PageSize": constants.QUERY_PAGE_SIZE}
             response = await self.client.post(path, json={**page, **filters})
-            response.raise_for_status()
+            self._raise_refusal(response)
             payload = response.json()
             results = payload.get("Result") or []
             rows.extend(results)
@@ -77,6 +78,10 @@ class TheTradeDeskApi:
 
         Returns:
             The nodes of every page, as the API returned them.
+
+        Raises:
+            RuntimeError: If a page says there is a next one but gives no cursor
+                to ask for it with: asking again without one would read the first page forever.
         """
         nodes: list[dict[str, Any]] = []
         after: str | None = None
@@ -93,7 +98,11 @@ class TheTradeDeskApi:
             page = listing.get("pageInfo") or {}
             if not page.get("hasNextPage"):
                 return nodes
-            after = page["endCursor"]
+            after = page.get("endCursor")
+            if not after:
+                raise RuntimeError(
+                    f"The Trade Desk said {'.'.join(path)} for {variables} has a next page but gave no cursor"
+                )
 
     async def advertiser_nodes(self, partner_id: str, query: str, field: str, **variables: Any) -> list[dict[str, Any]]:
         """Read a connection under every advertiser of a partner.
@@ -136,12 +145,17 @@ class TheTradeDeskApi:
 
         Returns:
             The delivered CSV's rows keyed by its header, every value the string delivered.
+
+        Raises:
+            RuntimeError: If the execution completes without a delivery to download.
         """
         schedule_id = await self._schedule(partner_id, template_id, day, params)
         logger.info(f"Report schedule id: {schedule_id} (template {template_id})")
         try:
             execution = await self._execution(partner_id, schedule_id)
-            deliveries = execution["ReportDeliveries"]
+            deliveries = execution.get("ReportDeliveries") or []
+            if not deliveries:
+                raise RuntimeError(f"Report schedule {schedule_id} completed without a delivery")
             if len(deliveries) > 1:
                 logger.warning(f"Schedule {schedule_id} has multiple deliveries; using the first")
             return await self._download(deliveries[0]["DownloadURL"])
@@ -176,7 +190,7 @@ class TheTradeDeskApi:
                 **params,
             },
         )
-        response.raise_for_status()
+        self._raise_refusal(response)
         return str(response.json()["ReportScheduleId"])
 
     async def _execution(self, partner_id: str, schedule_id: str) -> dict[str, Any]:
@@ -241,9 +255,37 @@ class TheTradeDeskApi:
         """
         try:
             response = await self.client.delete(f"/myreports/reportschedule/{schedule_id}")
-            response.raise_for_status()
+            self._raise_refusal(response)
         except Exception as error:  # noqa: BLE001 - cleanup only, the report's outcome is already decided
             logger.warning(f"Failed to delete report schedule {schedule_id}: {error}")
+
+    @staticmethod
+    def _raise_refusal(response: httpx2.Response) -> None:
+        """Raise a REST response's refusal, naming The Trade Desk's ``Message`` when it sends one.
+
+        Args:
+            response: A response from the REST API.
+
+        Raises:
+            httpx2.HTTPStatusError: If the response has an error status. Its message
+                names the request, the status and the ``Message`` of the body;
+                a body without one raises the status as httpx2 words it.
+        """
+        if response.is_success:
+            return
+        try:
+            body = response.json()
+        except ValueError:
+            body = None
+        message = body.get("Message") if isinstance(body, dict) else None
+        if message:
+            raise httpx2.HTTPStatusError(
+                f"The Trade Desk refused {response.request.method} {response.request.url.path} "
+                f"with HTTP {response.status_code}: {message}",
+                request=response.request,
+                response=response,
+            )
+        response.raise_for_status()
 
     @staticmethod
     def _listing(response: httpx2.Response, path: tuple[str, ...], variables: dict[str, Any]) -> dict[str, Any] | None:
