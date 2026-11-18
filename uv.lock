@@ -2484,6 +2484,7 @@ source = { editable = "packages/extensions/interloper-sql" }
 dependencies = [
     { name = "ibis-framework" },
     { name = "interloper-core" },
+    { name = "packaging" },
 ]
 
 [package.optional-dependencies]
@@ -2496,6 +2497,7 @@ postgres = [
 requires-dist = [
     { name = "ibis-framework", specifier = ">=12,<13" },
     { name = "interloper-core", editable = "packages/platform/interloper-core" },
+    { name = "packaging", specifier = ">=21.3" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.1" },
     { name = "sqlalchemy", marker = "extra == 'postgres'", specifier = ">=2.0" },
 ]
