@@ -1,13 +1,14 @@
-"""Tests for ``interloper.cli.commands.extensions``."""
+"""Tests for ``interloper_app.extension.check``."""
 
 from __future__ import annotations
 
 import argparse
 
 import pytest
-
-from interloper.cli.commands.extensions import ExtensionsCheckCommand, ExtensionsCommand
 from interloper.extension import Manifests
+
+from interloper_app.extension import ExtensionCommand
+from interloper_app.extension.check import CheckCommand
 
 
 @pytest.fixture
@@ -28,16 +29,16 @@ def manifests(monkeypatch: pytest.MonkeyPatch) -> Manifests:
 
 
 class TestCheck:
-    def test_the_check_is_a_subcommand_of_extensions(self):
+    def test_the_check_is_a_subcommand_of_extension(self):
         parser = argparse.ArgumentParser()
-        ExtensionsCommand().attach(parser.add_subparsers(dest="command"), "extensions")
+        ExtensionCommand().attach(parser.add_subparsers(dest="command"), "extension")
 
-        assert isinstance(parser.parse_args(["extensions", "check"]).handler.__self__, ExtensionsCheckCommand)
+        assert isinstance(parser.parse_args(["extension", "check"]).handler.__self__, CheckCommand)
 
     def test_a_clean_installation_passes(self, install, manifests, capsys):
         install("acme_ext", "manifest_version: 1\nkey: acme\nrunners:\n  ray: acme_ext:RAY\n", __init__="RAY = 1\n")
 
-        ExtensionsCheckCommand().run(argparse.Namespace())
+        CheckCommand().run(argparse.Namespace())
 
         assert capsys.readouterr().out == "Checked 1 entries in 1 sections: no problems.\n"
 
@@ -51,7 +52,7 @@ class TestCheck:
         )
 
         with pytest.raises(SystemExit) as exit_info:
-            ExtensionsCheckCommand().run(argparse.Namespace())
+            CheckCommand().run(argparse.Namespace())
 
         assert exit_info.value.code == 1
         lines = capsys.readouterr().out.splitlines()

@@ -7,6 +7,10 @@ present.
 
 ## The manifest
 
+In a project made with `uv init --lib`, with `interloper-app` installed, `uv run interloper
+extension init` writes both, the manifest declaring no section yet, and `uv run interloper
+extension add <part>` adds each part below, its code and its entry.
+
 A package names its import package under the `interloper.extensions` entry point, the one entry
 point interloper reads, and ships the manifest inside that package so it lands in the wheel:
 
@@ -74,10 +78,14 @@ needs it.
 Core declares its own kinds, jobs, hooks, runners, representation, providers, commands and
 settings in its own manifest, the same way.
 
+`interloper extension add source [name]` and `add connection [name]` write a source or a
+connection in `<name>/source.py` or `<name>/connection.py` and list it under `components`.
+
 ## Settings
 
 A `settings` entry names a subclass of `interloper.settings.Settings`, and the entry's name is
 the section's: its block of `interloper.yaml` and the prefix of its environment variables.
+`interloper extension add settings [name]` writes one in `settings/<name>.py` and declares it.
 
 ```yaml
 settings:
@@ -114,7 +122,8 @@ name (`config.image`) shows one key of a mapping field.
 ## Commands
 
 A `cli` entry names a subclass of `interloper.cli.Command`, and the entry's name is the
-command's:
+command's (`interloper extension add command [name]` writes one in `commands/<name>.py` and
+declares it):
 
 ```yaml
 cli:
@@ -161,7 +170,8 @@ class StorageCommand(Command):
 ## Routes
 
 A `routes` entry names a FastAPI `APIRouter`. Declared as a single import string, it is named
-by the extension's key, and the API mounts it under the organisation the request acts in:
+by the extension's key, and the API mounts it under the organisation the request acts in
+(`interloper extension add routes` writes `routes.py` with one route and declares it):
 
 ```yaml
 routes: acme_interloper.routes:router
@@ -371,12 +381,13 @@ section and entry, and recorded in `interloper.extension.MANIFESTS.failures`. Wh
 declare the same name in a section, the first one found wins and the other is skipped with a
 warning.
 
-`interloper extensions check` imports every entry of every installed manifest and names each
-manifest, section or entry that fails, and each section no registry reads, which is usually a
-misspelt section name. It exits non-zero when it names anything:
+`interloper extension check`, which `interloper-app` installs, imports every entry of every
+installed manifest and names each manifest, section or entry that fails, and each section no
+registry reads, which is usually a misspelt section name. It exits non-zero when it names
+anything:
 
 ```sh
-$ interloper extensions check
+$ interloper extension check
 package 'acme_interloper', section 'runner': no registry reads this section
 Checked 48 entries in 8 sections: 1 problem(s).
 ```
