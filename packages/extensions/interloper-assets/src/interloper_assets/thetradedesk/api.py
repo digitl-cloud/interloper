@@ -36,22 +36,29 @@ class TheTradeDeskApi:
         self.client = client
 
     async def query(self, path: str, **filters: Any) -> list[dict[str, Any]]:
-        """Read the first page of a REST query.
+        """Read every page of a REST query.
 
-        Only the first ``QUERY_PAGE_SIZE`` results are read: enough for a
-        query filtered down to a few rows, short for a longer listing.
+        Each page starts at the number of rows read so far, until the rows
+        reach the response's ``TotalFilteredCount`` or a page comes back
+        empty. A response without ``TotalFilteredCount`` is read as the only page.
 
         Args:
             path: The query endpoint, relative to the REST API's base URL, such as ``/partner/query``.
             **filters: The query's filters, sent in its JSON body beside the page window.
 
         Returns:
-            The page's ``Result`` rows; none when the response's ``Result`` is missing or null.
+            The ``Result`` rows of every page; none when the first ``Result`` is missing or null.
         """
-        page = {"PageStartIndex": 0, "PageSize": constants.QUERY_PAGE_SIZE}
-        response = await self.client.post(path, json={**page, **filters})
-        response.raise_for_status()
-        return response.json().get("Result") or []
+        rows: list[dict[str, Any]] = []
+        while True:
+            page = {"PageStartIndex": len(rows), "PageSize": constants.QUERY_PAGE_SIZE}
+            response = await self.client.post(path, json={**page, **filters})
+            response.raise_for_status()
+            payload = response.json()
+            results = payload.get("Result") or []
+            rows.extend(results)
+            if not results or len(rows) >= (payload.get("TotalFilteredCount") or 0):
+                return rows
 
     async def nodes(self, query: str, path: tuple[str, ...], **variables: Any) -> list[dict[str, Any]]:
         """Read every node of a GraphQL connection, page by page.
