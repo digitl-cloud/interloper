@@ -11,6 +11,8 @@ requires-python = ">=3.11"
 dependencies = [
     "ibis-framework>=12,<13",
     "interloper-core",
+    # ibis's SQL compilers package imports it on load but declares it only in backend extras
+    "packaging>=21.3",
 ]
 
 [project.optional-dependencies]
