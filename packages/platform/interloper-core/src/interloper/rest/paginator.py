@@ -301,7 +301,9 @@ class OffsetPaginator(RangePaginator):
 
     When the response carries a total record count (``total_path``) or a
     ``maximum_offset`` is set, the async client fans out the remaining offsets
-    concurrently; otherwise it walks sequentially until an empty page.
+    concurrently; otherwise it walks sequentially until an empty page. A page
+    holding the same records as the one before it means the endpoint ignores
+    the offset, which an empty-page walk would read forever, so it raises.
     """
 
     def __init__(
@@ -340,6 +342,7 @@ class OffsetPaginator(RangePaginator):
         self.data_selector = data_selector
         self._offset = base_offset
         self._has_next = True
+        self._previous: Any = None
 
     def init_request(self, request: httpx2.Request) -> None:
         """Reset state and set the first offset + limit params.
@@ -349,6 +352,7 @@ class OffsetPaginator(RangePaginator):
         """
         self._offset = self.base_offset
         self._has_next = True
+        self._previous = None
         self._with_param(request, self.limit_param, self.limit)
         self._with_param(request, self.offset_param, self.base_offset)
 
@@ -372,10 +376,21 @@ class OffsetPaginator(RangePaginator):
 
         Args:
             response: The response just received for the current page.
+
+        Raises:
+            RuntimeError: If the page holds the same records as the one before it.
         """
+        records = select(response, self.data_selector)
+        if records and records == self._previous:
+            previous_offset = self._offset - self.limit
+            raise RuntimeError(
+                f"The page at {self.offset_param}={self._offset} repeats the page at "
+                f"{self.offset_param}={previous_offset}: the endpoint does not page by {self.offset_param}"
+            )
+        self._previous = records
         last = self._last_offset(response)
         reached_last = last is not None and self._offset + self.limit >= last
-        empty = self.stop_on_empty and not select(response, self.data_selector)
+        empty = self.stop_on_empty and not records
         self._has_next = not (reached_last or empty)
 
     def update_request(self, request: httpx2.Request) -> None:
