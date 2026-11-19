@@ -117,6 +117,10 @@ FROM python:3.14-slim-trixie AS runtime
 
 RUN groupadd --system app && useradd --system --gid app --create-home app
 ENV PATH="/interloper/.venv/bin:$PATH"
+# glibc gives each thread its own malloc arena, up to eight per CPU, and keeps
+# what a request frees in the arena of the thread that served it; two arenas
+# keep a threaded server's resident memory near what it actually holds.
+ENV MALLOC_ARENA_MAX=2
 
 # ── Executing runtime: system libraries vendor drivers load ────
 # Only the roles that run assets (scheduler, core) open vendor connections;
