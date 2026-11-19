@@ -4,6 +4,7 @@ from functools import cached_property
 
 import httpx2
 import interloper as il
+from interloper.errors import ConnectionCheckError
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.amazon_selling_partner.api import AmazonSellingPartnerApi
@@ -193,9 +194,17 @@ class AmazonSellingPartnerConnection(il.Connection):
         Selling Partner call is open to every vendor and seller account, so the
         token exchange is the one proof every account can give.
 
+        Login with Amazon answers a refused exchange with a 400 naming its
+        OAuth ``error`` and an ``error_description`` (an expired or revoked
+        refresh token is ``invalid_grant``). Neither carries a credential, so
+        the check reports them as they are.
+
         Returns:
             True — an invalid client id/secret or refresh token raises out of the
             token exchange.
+
+        Raises:
+            ConnectionCheckError: If Login with Amazon refuses the exchange with a 400 that describes why.
         """
         async with httpx2.AsyncClient(timeout=30) as client:
             response = await client.post(
@@ -207,5 +216,13 @@ class AmazonSellingPartnerConnection(il.Connection):
                     "client_secret": self.client_secret,
                 },
             )
-            response.raise_for_status()
+        if response.status_code == 400:
+            try:
+                refusal = response.json()
+            except ValueError:
+                refusal = None
+            if isinstance(refusal, dict) and refusal.get("error_description"):
+                description = f"{refusal['error_description']} ({refusal.get('error')})"
+                raise ConnectionCheckError(f"Login with Amazon refused the token exchange: {description}")
+        response.raise_for_status()
         return True
