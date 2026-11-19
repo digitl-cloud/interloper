@@ -4,9 +4,11 @@ from typing import TYPE_CHECKING, Any
 
 import httpx2
 import interloper as il
+from interloper.errors import ConnectionCheckError
 from pydantic import model_validator
 from pydantic_settings import SettingsConfigDict
 
+from interloper_assets.google.errors import GoogleApiError
 from interloper_assets.google_ads.api import GoogleAdsApi
 from interloper_assets.google_ads.constants import API_VERSION
 
@@ -15,6 +17,7 @@ if TYPE_CHECKING:
 
 _TOKEN_URL = "https://oauth2.googleapis.com/token"
 _BASE_URL = f"https://googleads.googleapis.com/{API_VERSION}"
+_NAME_QUERY = "SELECT customer.id, customer.descriptive_name, customer.status FROM customer LIMIT 1"
 
 
 @il.connection(
@@ -96,14 +99,35 @@ class GoogleAdsConnection(il.RefreshTokenOAuthConnection):
         """Fetch Google Ads customer accounts accessible by this connection.
 
         Runs over the REST API rather than through ``api``: the lookup runs in
-        the API process, which carries no Google Ads SDK.
+        the API process, which carries no Google Ads SDK. A customer that
+        refuses to be named (suspended, cancelled) is offered under its id.
 
         Returns:
             The options for the field's dropdown.
 
+        Raises:
+            ConnectionCheckError: If Google refuses the token exchange or the
+                listing, lists no customer, or refuses to name every customer
+                it lists, carrying Google's reason, which names no credential.
+        """
+        try:
+            return await self._customers()
+        except GoogleApiError as error:
+            raise ConnectionCheckError(str(error)) from error
+
+    async def _customers(self) -> list[dict[str, str]]:
+        """List and name the accessible customers, raising Google's refusals.
+
+        Returns:
+            Each accessible customer's id and name, its id standing in for a name it refuses to give.
+
+        Raises:
+            ConnectionCheckError: If Google lists no customer these credentials can access.
         """
         async with httpx2.AsyncClient(timeout=30) as client:
-            token_response = await client.post(
+            token = await self._send(
+                client,
+                "POST",
                 _TOKEN_URL,
                 data={
                     "grant_type": "refresh_token",
@@ -112,59 +136,64 @@ class GoogleAdsConnection(il.RefreshTokenOAuthConnection):
                     "client_secret": self.client_secret,
                 },
             )
-            token_response.raise_for_status()
-            access_token = token_response.json()["access_token"]
-
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "developer-token": self.developer_token,
-            }
-
-            list_response = await client.get(
-                f"{_BASE_URL}/customers:listAccessibleCustomers",
-                headers=headers,
-            )
-            list_response.raise_for_status()
-            resource_names: list[str] = list_response.json().get("resourceNames", [])
+            headers = {"Authorization": f"Bearer {token['access_token']}", "developer-token": self.developer_token}
+            listing = await self._send(client, "GET", f"{_BASE_URL}/customers:listAccessibleCustomers", headers=headers)
+            resource_names: list[str] = listing.get("resourceNames") or []
+            if not resource_names:
+                raise ConnectionCheckError("Google Ads lists no customer these credentials can access")
 
             results: list[dict[str, str]] = []
+            refusals: list[GoogleApiError] = []
             for resource_name in resource_names:
                 customer_id = resource_name.split("/")[-1]
-                query = "SELECT customer.id, customer.descriptive_name, customer.status FROM customer LIMIT 1"
                 try:
-                    search_response = await client.post(
+                    batches = await self._send(
+                        client,
+                        "POST",
                         f"{_BASE_URL}/{resource_name}/googleAds:searchStream",
                         headers=headers,
-                        json={"query": query},
+                        json={"query": _NAME_QUERY},
                     )
-                    search_response.raise_for_status()
-                    batches = search_response.json()
-                    for batch in batches:
-                        for row in batch.get("results", []):
-                            customer = row.get("customer", {})
-                            name = customer.get("descriptiveName", customer_id)
-                            results.append(
-                                {
-                                    "customer_id": customer_id,
-                                    "name": name,
-                                }
-                            )
-                except httpx2.HTTPStatusError:
-                    # Some customers may not be queryable (suspended, etc.)
-                    results.append(
-                        {
-                            "customer_id": customer_id,
-                            "name": customer_id,
-                        }
-                    )
+                except GoogleApiError as refusal:
+                    refusals.append(refusal)
+                    results.append({"customer_id": customer_id, "name": customer_id})
+                    continue
+                for batch in batches:
+                    for row in batch.get("results", []):
+                        name = row.get("customer", {}).get("descriptiveName", customer_id)
+                        results.append({"customer_id": customer_id, "name": name})
 
+        # credentials every customer refuses can run no report, whatever the listing says
+        if len(refusals) == len(resource_names):
+            raise refusals[0]
         return results
+
+    @staticmethod
+    async def _send(client: httpx2.AsyncClient, method: str, url: str, **kwargs: Any) -> Any:
+        """Send one request of the lookup and read its answer.
+
+        A refusal raises as `GoogleApiError`, with Google's reason.
+
+        Args:
+            client: The client the lookup's requests share.
+            method: The HTTP method.
+            url: The request's URL.
+            **kwargs: The request's ``data``, ``json`` or ``headers``.
+
+        Returns:
+            The answer's JSON body.
+        """
+        response = await client.request(method, url, **kwargs)
+        if response.is_error:
+            refusal = GoogleApiError.from_response(response)
+            raise refusal
+        return response.json()
 
     async def check(self) -> bool:
         """Prove the credentials work by running the ``customers`` lookup.
 
         Returns:
-            True — any credential failure raises out of the lookup.
+            True — any credential failure raises out of the lookup, Google's refusal as a `ConnectionCheckError`.
         """
         await self.customers()
         return True

@@ -20,11 +20,19 @@ from urllib.parse import parse_qs
 import httpx2
 import pytest
 from google.ads.googleads.client import GoogleAdsClient
+from interloper.errors import ConnectionCheckError
 
 from interloper_assets.google_ads.connection import GoogleAdsConnection
 from interloper_assets.google_ads.constants import API_VERSION
 
 BASE_URL = f"https://googleads.googleapis.com/{API_VERSION}"
+
+
+def _refusal(status: int, name: str, code: dict[str, str], message: str) -> httpx2.Response:
+    failure = {"@type": f"type.googleapis.com/google.ads.googleads.{API_VERSION}.errors.GoogleAdsFailure"}
+    failure["errors"] = [{"errorCode": code, "message": message}]
+    error = {"code": status, "message": "The request was refused.", "status": name, "details": [failure]}
+    return httpx2.Response(status, json={"error": error})
 
 
 def _connection() -> GoogleAdsConnection:
@@ -130,14 +138,39 @@ class TestCustomers:
             "query": "SELECT customer.id, customer.descriptive_name, customer.status FROM customer LIMIT 1"
         }
 
-    async def test_no_accessible_customers(self, monkeypatch: Any):
+    @pytest.mark.parametrize("listing", [{}, {"resourceNames": []}])
+    async def test_credentials_reaching_no_customer_fail(self, monkeypatch: Any, listing: dict[str, Any]):
         def handler(request: httpx2.Request) -> httpx2.Response:
             if request.url.host == "oauth2.googleapis.com":
                 return httpx2.Response(200, json={"access_token": "access"})
-            return httpx2.Response(200, json={})
+            return httpx2.Response(200, json=listing)
 
         _serve(monkeypatch, handler)
-        assert await _connection().customers() == []
+        with pytest.raises(ConnectionCheckError, match="Google Ads lists no customer these credentials can access"):
+            await _connection().customers()
+
+    async def test_a_refused_listing_fails_with_googles_reason(self, monkeypatch: Any):
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            if request.url.host == "oauth2.googleapis.com":
+                return httpx2.Response(200, json={"access_token": "access"})
+            return _refusal(401, "UNAUTHENTICATED", {"authenticationError": "NOT_ADS_USER"}, "Not a valid Ads user.")
+
+        _serve(monkeypatch, handler)
+        with pytest.raises(ConnectionCheckError, match=r"UNAUTHENTICATED\): Not a valid Ads user\.$"):
+            await _connection().customers()
+
+    async def test_every_customer_refusing_its_name_fails_with_googles_reason(self, monkeypatch: Any):
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            if request.url.host == "oauth2.googleapis.com":
+                return httpx2.Response(200, json={"access_token": "access"})
+            if request.url.path.endswith("customers:listAccessibleCustomers"):
+                return httpx2.Response(200, json={"resourceNames": ["customers/111", "customers/222"]})
+            code = {"authorizationError": "DEVELOPER_TOKEN_NOT_APPROVED"}
+            return _refusal(403, "PERMISSION_DENIED", code, "Test accounts only.")
+
+        _serve(monkeypatch, handler)
+        with pytest.raises(ConnectionCheckError, match=r"PERMISSION_DENIED\): Test accounts only\.$"):
+            await _connection().check()
 
     async def test_check_runs_the_lookup(self, monkeypatch: Any):
         _serve(monkeypatch, self._handler([]))
@@ -152,7 +185,9 @@ class TestCustomers:
         assert len(await _connection().customers()) == 3
         assert await _connection().check() is True
 
-    async def test_check_raises_on_a_rejected_refresh_token(self, monkeypatch: Any):
-        _serve(monkeypatch, lambda request: httpx2.Response(400, json={"error": "invalid_grant"}))
-        with pytest.raises(httpx2.HTTPStatusError):
+    async def test_a_rejected_refresh_token_fails_with_googles_reason(self, monkeypatch: Any):
+        rejection = {"error": "invalid_grant", "error_description": "Token has been expired or revoked."}
+        _serve(monkeypatch, lambda request: httpx2.Response(400, json=rejection))
+
+        with pytest.raises(ConnectionCheckError, match=r"invalid_grant\): Token has been expired or revoked\.$"):
             await _connection().check()
