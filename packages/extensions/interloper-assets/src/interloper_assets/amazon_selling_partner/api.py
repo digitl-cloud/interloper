@@ -247,14 +247,19 @@ class AmazonSellingPartnerApi:
 
         The URL carries its own signature, so the document is fetched without
         the API's credentials, through the client for its timeout and its
-        repeats of a transient failure.
+        repeats of a transient failure, and a refusal is raised without the URL.
 
         Args:
             url: The document's signed URL.
 
         Returns:
             The document's response, its content read.
+
+        Raises:
+            HTTPStatusError: If the document's host refuses the download.
         """
         response = await self.client.get(url, auth=None)
-        response.raise_for_status()
+        if response.is_error:
+            message = f"Document download refused with HTTP {response.status_code}"
+            raise httpx2.HTTPStatusError(message, request=response.request, response=response)
         return response
