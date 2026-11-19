@@ -1,12 +1,12 @@
 from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
-import httpx2
 import interloper as il
 from pydantic import model_validator
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.facebook_ads import constants
+from interloper_assets.meta.api import GraphApi
 
 if TYPE_CHECKING:
     from interloper_assets.facebook_ads.api import FacebookGraphApi, FacebookMarketingApi
@@ -92,25 +92,19 @@ class FacebookAdsConnection(il.OAuthConnection):
     async def accounts(self) -> list[dict[str, str]]:
         """List the active ad accounts reachable by this connection.
 
-        Backs the source's ``account_id`` ``FetchField``. It reads the Graph
-        API over httpx2 rather than through ``api``, whose client is the
-        Facebook SDK, so that it runs in the API process, which omits the
-        heavy SDK extras.
-
-        The access token travels as the bearer, never in the URL, which a
-        refusal's error message and the HTTP client's request log both carry.
+        Backs the source's ``account_id`` ``FetchField``. It reads Graph
+        through `GraphApi` rather than ``api``, whose client is the Facebook
+        SDK, so that it runs in the API process, which omits the heavy SDK
+        extras: every page, rate limits waited out, the access token as the
+        bearer.
 
         Returns:
             The options for the field's dropdown.
 
         """
-        async with httpx2.AsyncClient(timeout=30, auth=il.HTTPBearerAuth(self.access_token)) as client:
-            response = await client.get(
-                f"{_GRAPH_URL}/me/adaccounts",
-                params={"fields": "account_id,name,account_status", "limit": "500"},
-            )
-            response.raise_for_status()
-            data = response.json().get("data", [])
+        async with il.AsyncRESTClient(_GRAPH_URL, auth=il.HTTPBearerAuth(self.access_token), timeout=30) as client:
+            fields = ["account_id", "name", "account_status"]
+            data = await GraphApi(client).rows("/me/adaccounts", fields=fields, limit=500)
 
         return [
             {
