@@ -2761,6 +2761,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#interloper.HeaderLinkPaginator.init_request" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;init_request
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#interloper.HeaderLinkPaginator.update_request" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2811,6 +2822,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#interloper.JSONLinkPaginator.init_request" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;init_request
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#interloper.JSONLinkPaginator.update_request" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2854,6 +2876,17 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;has_next
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper.JSONCursorPaginator.init_request" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;init_request
       </span>
     </span>
   </a>
@@ -6445,6 +6478,8 @@ the total can't be determined up front, <code>remaining_requests</code> returns
 
 
         <p>Follow the <code>Link</code> header's <code>rel=next</code> URL (RFC 5988). Sequential.</p>
+<p>A link to a page the walk already read ends it: reading that page again
+would follow the same links again, forever.</p>
 
         <p>Follow the Link header rel.</p>
 
@@ -6511,7 +6546,7 @@ the total can't be determined up front, <code>remaining_requests</code> returns
 
     <div class="doc doc-contents ">
 
-        <p>Whether the response carried a next link.</p>
+        <p>Whether the response linked a page not read yet.</p>
 
     </div>
 
@@ -6519,6 +6554,57 @@ the total can't be determined up front, <code>remaining_requests</code> returns
 
 
 
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.HeaderLinkPaginator.init_request" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">init_request</span>
+
+
+<a href="#interloper.HeaderLinkPaginator.init_request" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">init_request</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n"><span title="httpx2.Request">Request</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Forget an earlier walk's pages and count the first page as read.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>request</code>
+            </td>
+            <td>
+                  <code><span title="httpx2.Request">Request</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The initial request, left unchanged.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-function">
 
@@ -6584,7 +6670,7 @@ the total can't be determined up front, <code>remaining_requests</code> returns
 
     <div class="doc doc-contents ">
 
-        <p>Read the <code>rel=next</code> link from the response <code>Link</code> header.</p>
+        <p>Read the <code>rel=next</code> link from the response <code>Link</code> header, unless it names a page already read.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -6649,6 +6735,8 @@ the total can't be determined up front, <code>remaining_requests</code> returns
 
 
         <p>Follow a next-page URL found at a JSON path in the response. Sequential.</p>
+<p>A link to a page the walk already read ends it: reading that page again
+would follow the same links again, forever.</p>
 
         <p>Follow a next-page URL at a JSON path.</p>
 
@@ -6715,7 +6803,7 @@ the total can't be determined up front, <code>remaining_requests</code> returns
 
     <div class="doc doc-contents ">
 
-        <p>Whether the response carried a next URL.</p>
+        <p>Whether the response linked a page not read yet.</p>
 
     </div>
 
@@ -6723,6 +6811,57 @@ the total can't be determined up front, <code>remaining_requests</code> returns
 
 
 
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.JSONLinkPaginator.init_request" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">init_request</span>
+
+
+<a href="#interloper.JSONLinkPaginator.init_request" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">init_request</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n"><span title="httpx2.Request">Request</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Forget an earlier walk's pages and count the first page as read.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>request</code>
+            </td>
+            <td>
+                  <code><span title="httpx2.Request">Request</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The initial request, left unchanged.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-function">
 
@@ -6737,7 +6876,7 @@ the total can't be determined up front, <code>remaining_requests</code> returns
 
     <div class="doc doc-contents ">
 
-        <p>Point the request at the next URL (absolute or base-relative).</p>
+        <p>Point the request at the next URL.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -6788,7 +6927,8 @@ the total can't be determined up front, <code>remaining_requests</code> returns
 
     <div class="doc doc-contents ">
 
-        <p>Read the next-page URL from the response JSON.</p>
+        <p>Read the next-page URL from the response JSON, unless it names a page already read.</p>
+<p>The URL may be absolute or relative to the page that named it.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -6853,6 +6993,8 @@ the total can't be determined up front, <code>remaining_requests</code> returns
 
 
         <p>Carry a cursor value from the response JSON into the next request parameter. Sequential.</p>
+<p>A cursor the walk already sent ends it: sending it again would read the
+same pages again, forever.</p>
 
         <p>Carry a JSON cursor into the next request.</p>
 
@@ -6947,6 +7089,57 @@ the total can't be determined up front, <code>remaining_requests</code> returns
 <div class="doc doc-object doc-function">
 
 
+<h3 id="interloper.JSONCursorPaginator.init_request" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">init_request</span>
+
+
+<a href="#interloper.JSONCursorPaginator.init_request" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">init_request</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n"><span title="httpx2.Request">Request</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Forget an earlier walk's cursors and count a starting cursor the request carries as sent.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>request</code>
+            </td>
+            <td>
+                  <code><span title="httpx2.Request">Request</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The initial request, left unchanged.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="interloper.JSONCursorPaginator.update_request" class="doc doc-heading">
 <code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">update_request</span>
 
@@ -7008,7 +7201,7 @@ the total can't be determined up front, <code>remaining_requests</code> returns
 
     <div class="doc doc-contents ">
 
-        <p>Read the next cursor from the response JSON.</p>
+        <p>Read the next cursor from the response JSON, unless it was already sent.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
