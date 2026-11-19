@@ -63,8 +63,9 @@ class LinkedinOrganicConnection(il.RefreshTokenOAuthConnection):
         """List the organizations this connection administers.
 
         Backs the source's ``organization_id`` ``FetchField``. Reads the
-        ``ADMINISTRATOR`` organization ACLs and decorates each entry with the
-        organization entity to resolve its localized name.
+        approved ``ADMINISTRATOR`` access control entries, then names their
+        organizations in one batch lookup of administered organizations. An
+        organization LinkedIn does not name is listed by its id.
 
         Returns:
             The options for the field's dropdown.
@@ -74,35 +75,22 @@ class LinkedinOrganicConnection(il.RefreshTokenOAuthConnection):
                 no credential.
         """
         try:
-            elements = await self.api.rows(
-                "/organizationAcls",
-                q="roleAssignee",
-                role="ADMINISTRATOR",
-                state="APPROVED",
-                # Decorate the ACL with the organization entity so the localized
-                # name comes back in a single request.
-                projection="(elements*(organization~(id,localizedName)),paging)",
-                count=100,
+            acls = await self.api.rows(
+                "/organizationAcls", q="roleAssignee", role="ADMINISTRATOR", state="APPROVED", count=100
             )
+            # LinkedIn's samples name the organization URN either way
+            urns = [acl.get("organization") or acl.get("organizationTarget") for acl in acls]
+            organization_ids = [urn.rsplit(":", 1)[-1] for urn in urns if urn]
+            if not organization_ids:
+                return []
+            names = (await self.api.get("/organizations", ids=organization_ids))["results"]
         except LinkedinApiError as error:
             raise ConnectionCheckError(str(error)) from error
 
-        organizations: list[dict[str, str]] = []
-        for element in elements:
-            # ``organization`` is the URN (e.g. "urn:li:organization:12345");
-            # ``organization~`` is the decorated entity when the projection
-            # resolves.
-            urn = element.get("organization", "")
-            organization_id = urn.rsplit(":", 1)[-1] if urn else ""
-            if not organization_id:
-                continue
-
-            entity = element.get("organization~") or {}
-            name = entity.get("localizedName") or organization_id
-
-            organizations.append({"id": organization_id, "name": name})
-
-        return organizations
+        return [
+            {"id": organization_id, "name": names.get(organization_id, {}).get("localizedName") or organization_id}
+            for organization_id in organization_ids
+        ]
 
     async def check(self) -> bool:
         """Prove the credentials work by running the ``organizations`` lookup.

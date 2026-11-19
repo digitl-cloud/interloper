@@ -207,17 +207,6 @@ class TestRestliQuery:
             )
         ]
 
-    async def test_a_projection_is_sent_percent_encoded_like_any_value(self):
-        sent: list[str] = []
-
-        await _api(_recording(sent, lambda _: _page([]))).rows(
-            "/organizationAcls", projection="(elements*(organization~(id,localizedName)),paging)"
-        )
-
-        assert sent == [
-            f"{BASE_URL}/organizationAcls?projection=%28elements%2A%28organization~%28id%2ClocalizedName%29%29%2Cpaging%29"
-        ]
-
 
 class TestRows:
     async def test_every_page_is_read_through_its_next_link(self):
