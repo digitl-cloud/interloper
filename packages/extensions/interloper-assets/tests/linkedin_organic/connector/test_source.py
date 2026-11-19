@@ -12,7 +12,6 @@ and taxonomies follow ``paging.links``; both are pinned against a mock transport
 from __future__ import annotations
 
 import datetime as dt
-import re
 from typing import Any
 
 import httpx2
@@ -337,26 +336,24 @@ class TestRequests:
         assert [row["id"] for row in rows] == [1, 2]
         assert sent == [("GET", f"{BASE_URL}/seniorities"), ("GET", next_page)]
 
-    async def test_a_refusal_on_a_later_taxonomy_page_raises_with_its_url(self):
+    async def test_a_refusal_on_a_later_taxonomy_page_raises_linkedins_reason(self):
         def respond(request: httpx2.Request) -> httpx2.Response:
             if "start=" in str(request.url):
                 return httpx2.Response(403, json={"status": 403, "message": "Not enough permissions"})
             links = [{"rel": "next", "href": "/rest/functions?start=10&count=10"}]
             return httpx2.Response(200, json={"elements": [{"id": 1}], "paging": {"links": links}})
 
-        with pytest.raises(
-            httpx2.HTTPStatusError,
-            match=re.escape(f"Client error '403 Forbidden' for url '{BASE_URL}/functions?start=10&count=10'"),
-        ):
+        with pytest.raises(httpx2.HTTPStatusError) as raised:
             await _run(_faked_source(_recording([], respond)), "job_functions")
 
-    async def test_a_refused_statistics_request_raises_with_its_url(self):
+        assert str(raised.value) == "LinkedIn refused the request (HTTP 403): Not enough permissions"
+
+    async def test_a_refused_statistics_request_raises_linkedins_reason(self):
         handler = _recording(
             [], lambda _: httpx2.Response(401, json={"status": 401, "message": "Invalid access token"})
         )
 
-        with pytest.raises(
-            httpx2.HTTPStatusError,
-            match=re.escape(f"Client error '401 Unauthorized' for url '{ASSET_URLS['share_stats']}'"),
-        ):
+        with pytest.raises(httpx2.HTTPStatusError) as raised:
             await _run(_faked_source(handler), "share_stats")
+
+        assert str(raised.value) == "LinkedIn refused the request (HTTP 401): Invalid access token"

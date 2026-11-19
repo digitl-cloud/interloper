@@ -19,7 +19,7 @@ import httpx2
 import interloper as il
 import pytest
 
-from interloper_assets.linkedin.api import LinkedinApi
+from interloper_assets.linkedin.api import LinkedinApi, LinkedinApiError
 
 BASE_URL = "https://api.linkedin.com/rest"
 DAY = dt.date(2026, 9, 15)
@@ -96,11 +96,52 @@ class TestGet:
 
         assert str(requests[0].url) == "https://api.linkedin.com/rest/adAccounts/123"
 
-    async def test_an_http_error_raises_its_status(self):
-        api = _api(lambda _: httpx2.Response(401, json={"status": 401, "code": "REVOKED_ACCESS_TOKEN"}))
+    async def test_a_refusal_raises_linkedins_own_code_and_message_without_the_url(self):
+        refused = {
+            "status": 401,
+            "serviceErrorCode": 65601,
+            "code": "REVOKED_ACCESS_TOKEN",
+            "message": "The token used in the request has been revoked by the user",
+        }
+        api = _api(lambda _: httpx2.Response(401, json=refused))
 
-        with pytest.raises(httpx2.HTTPStatusError, match="401 Unauthorized"):
+        with pytest.raises(LinkedinApiError) as raised:
+            await api.get("/adAccounts/123", fields=["id"])
+
+        assert str(raised.value) == (
+            "LinkedIn refused the request (HTTP 401, REVOKED_ACCESS_TOKEN, service error 65601): "
+            "The token used in the request has been revoked by the user"
+        )
+        assert raised.value.code == "REVOKED_ACCESS_TOKEN"
+        assert raised.value.service_error_code == 65601
+
+    async def test_a_refusal_is_still_its_http_error_status(self):
+        api = _api(lambda _: httpx2.Response(403, json={"status": 403, "message": "Not enough permissions"}))
+
+        with pytest.raises(httpx2.HTTPStatusError) as raised:
             await api.get("/adAccounts/123")
+
+        assert raised.value.response.status_code == 403
+
+    async def test_a_refusal_with_only_a_service_error_names_it(self):
+        refused = {"message": "Empty oauth2_access_token", "serviceErrorCode": 401, "status": 401}
+
+        with pytest.raises(LinkedinApiError) as raised:
+            await _api(lambda _: httpx2.Response(401, json=refused)).get("/adAccounts/123")
+
+        assert (
+            str(raised.value) == "LinkedIn refused the request (HTTP 401, service error 401): Empty oauth2_access_token"
+        )
+        assert raised.value.code is None
+
+    @pytest.mark.parametrize("body", [{"text": "<html>denied</html>"}, {"json": ["not", "an", "error"]}])
+    async def test_an_http_error_without_a_linkedin_body_raises_its_status(self, body: dict[str, Any]):
+        with pytest.raises(LinkedinApiError) as raised:
+            await _api(lambda _: httpx2.Response(502, **body)).get("/adAccounts/123")
+
+        assert str(raised.value) == "LinkedIn refused the request (HTTP 502): Bad Gateway"
+        assert raised.value.code is None
+        assert raised.value.service_error_code is None
 
 
 class TestRestliQuery:
@@ -216,16 +257,13 @@ class TestRows:
                 return httpx2.Response(403, json={"status": 403, "message": "Not enough permissions"})
             return _page([{"id": 1}], next_href="/rest/functions?start=10&count=10")
 
-        with pytest.raises(
-            httpx2.HTTPStatusError,
-            match=re.escape(f"Client error '403 Forbidden' for url '{BASE_URL}/functions?start=10&count=10'"),
-        ):
+        with pytest.raises(LinkedinApiError, match=re.escape("(HTTP 403): Not enough permissions")):
             await _api(respond).rows("/functions")
 
     async def test_an_http_error_raises_before_the_body_is_read(self):
         api = _api(lambda _: httpx2.Response(401, text="<html>denied</html>"))
 
-        with pytest.raises(httpx2.HTTPStatusError, match="401 Unauthorized"):
+        with pytest.raises(LinkedinApiError, match=re.escape("(HTTP 401): Unauthorized")):
             await api.rows("/functions")
 
     async def test_an_empty_collection_reads_one_page(self):
@@ -286,7 +324,7 @@ class TestCursorRows:
                 return httpx2.Response(403, json={"status": 403, "code": "ACCESS_DENIED"})
             return httpx2.Response(200, json={"elements": [{"id": 1}], "metadata": {"nextPageToken": "2"}})
 
-        with pytest.raises(httpx2.HTTPStatusError, match="403 Forbidden"):
+        with pytest.raises(LinkedinApiError, match=re.escape("(HTTP 403, ACCESS_DENIED): Forbidden")):
             await _api(handler).cursor_rows("/adAccounts/123/adCampaigns", q="search")
 
     async def test_nothing_to_list_reads_one_page(self):
@@ -338,7 +376,7 @@ class TestOffsetRows:
                 return httpx2.Response(403, json={"status": 403, "code": "ACCESS_DENIED"})
             return httpx2.Response(200, json={"elements": [{"id": 1}]})
 
-        with pytest.raises(httpx2.HTTPStatusError, match="403 Forbidden"):
+        with pytest.raises(LinkedinApiError, match=re.escape("(HTTP 403, ACCESS_DENIED): Forbidden")):
             await _api(handler).offset_rows("/adAccounts", q="search")
 
     async def test_nothing_to_list_reads_one_page(self):

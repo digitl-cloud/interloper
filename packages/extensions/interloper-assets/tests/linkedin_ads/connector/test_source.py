@@ -255,8 +255,13 @@ class TestRequests:
         assert len(requests) == 1
 
     @pytest.mark.parametrize("key", REPORT_ASSETS + ENTITY_ASSETS)
-    async def test_a_refused_request_fails_the_asset(self, key: str):
-        source = _faked_source(lambda _: httpx2.Response(401, json={"status": 401, "code": "REVOKED_ACCESS_TOKEN"}))
+    async def test_a_refused_request_fails_the_asset_with_linkedins_reason(self, key: str):
+        refused = {"status": 401, "code": "REVOKED_ACCESS_TOKEN", "message": "The token has been revoked"}
+        source = _faked_source(lambda _: httpx2.Response(401, json=refused))
 
-        with pytest.raises(httpx2.HTTPStatusError, match="401 Unauthorized"):
+        with pytest.raises(httpx2.HTTPStatusError) as raised:
             await _run(source, key)
+
+        assert str(raised.value) == (
+            "LinkedIn refused the request (HTTP 401, REVOKED_ACCESS_TOKEN): The token has been revoked"
+        )

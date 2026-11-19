@@ -1,9 +1,10 @@
 from functools import cached_property
 
 import interloper as il
+from interloper.errors import ConnectionCheckError
 from pydantic_settings import SettingsConfigDict
 
-from interloper_assets.linkedin.api import LinkedinApi
+from interloper_assets.linkedin.api import LinkedinApi, LinkedinApiError
 from interloper_assets.linkedin_ads import constants
 
 
@@ -63,15 +64,22 @@ class LinkedinAdsConnection(il.RefreshTokenOAuthConnection):
 
         Returns:
             The options for the field's dropdown.
+
+        Raises:
+            ConnectionCheckError: If LinkedIn refuses the lookup, carrying LinkedIn's code and message, which name
+                no credential.
         """
-        accounts = await self.api.offset_rows("/adAccounts", q="search")
+        try:
+            accounts = await self.api.offset_rows("/adAccounts", q="search")
+        except LinkedinApiError as error:
+            raise ConnectionCheckError(str(error)) from error
         return [{"id": str(account["id"]), "name": account.get("name", str(account["id"]))} for account in accounts]
 
     async def check(self) -> bool:
         """Prove the credentials work by running the ``accounts`` lookup.
 
         Returns:
-            True — any credential failure raises out of the lookup.
+            True — any credential failure raises out of the lookup, LinkedIn's refusal as a `ConnectionCheckError`.
         """
         await self.accounts()
         return True

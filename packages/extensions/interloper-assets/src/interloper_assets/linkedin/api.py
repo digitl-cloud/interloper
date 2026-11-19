@@ -10,6 +10,62 @@ import httpx2
 import interloper as il
 
 
+class LinkedinApiError(httpx2.HTTPStatusError):
+    """LinkedIn refused a request, with its own code and message.
+
+    It is the HTTP error status LinkedIn answered, so whatever reads an
+    ``httpx2.HTTPStatusError`` reads it unchanged. Its message is LinkedIn's
+    reason rather than httpx's, which names the request URL.
+    """
+
+    def __init__(
+        self, message: str, *, code: str | None, service_error_code: int | None, response: httpx2.Response
+    ) -> None:
+        """Hold LinkedIn's codes beside the refused response.
+
+        Args:
+            message: What LinkedIn refused and why.
+            code: LinkedIn's ``code`` (``REVOKED_ACCESS_TOKEN``), or None when the body carries none.
+            service_error_code: LinkedIn's ``serviceErrorCode`` (``65601``), or None when the body carries none.
+            response: The refused response.
+        """
+        super().__init__(message, request=response.request, response=response)
+        self.code = code
+        self.service_error_code = service_error_code
+
+    @classmethod
+    def from_response(cls, response: httpx2.Response) -> LinkedinApiError:
+        """Read LinkedIn's refusal from an error response.
+
+        Args:
+            response: A response with an error status.
+
+        Returns:
+            The refusal, with LinkedIn's ``code``, ``serviceErrorCode`` and
+            ``message``, or the status's reason when the body is not LinkedIn's
+            error object.
+        """
+        try:
+            body = response.json()
+        except ValueError:
+            body = None
+        error = body if isinstance(body, dict) else {}
+        code = error.get("code")
+        service_error_code = error.get("serviceErrorCode")
+        status = [f"HTTP {response.status_code}"]
+        if code is not None:
+            status.append(code)
+        if service_error_code is not None:
+            status.append(f"service error {service_error_code}")
+        reason = error.get("message") or response.reason_phrase
+        return cls(
+            f"LinkedIn refused the request ({', '.join(status)}): {reason}",
+            code=code,
+            service_error_code=service_error_code,
+            response=response,
+        )
+
+
 class LinkedinApi:
     """The LinkedIn REST API as Rest.li 2.0 speaks it: its query, its pagings and its daily reports.
 
@@ -21,8 +77,9 @@ class LinkedinApi:
     A list response wraps its rows in ``elements``. A collection links its
     next page in ``paging.links`` (`rows`), a search finder names it by cursor
     (`cursor_rows`), and an older finder is stepped by ``start`` and
-    ``count`` (`offset_rows`). LinkedIn refuses a request with an HTTP error
-    status, raised as it comes.
+    ``count`` (`offset_rows`). Every request, each page included, goes
+    through `_read`, which raises LinkedIn's refusal as `LinkedinApiError`
+    with LinkedIn's code and message.
     """
 
     CURSOR_PAGE_SIZE: ClassVar[int] = 1000
@@ -47,9 +104,7 @@ class LinkedinApi:
         Returns:
             The response's body.
         """
-        response = await self.client.get(self._url(path, params))
-        response.raise_for_status()
-        return response.json()
+        return await self._read(self._url(path, params))
 
     async def rows(self, path: str, **params: Any) -> list[dict[str, Any]]:
         """Read every element of a collection, following its ``next`` links.
@@ -69,9 +124,7 @@ class LinkedinApi:
         rows: list[dict[str, Any]] = []
         url: str | httpx2.URL | None = self._url(path, params)
         while url is not None:
-            response = await self.client.get(url)
-            response.raise_for_status()
-            body = response.json()
+            body = await self._read(url)
             elements = self._elements(body)
             rows.extend(elements)
             url = self._next(body) if elements else None
@@ -160,6 +213,23 @@ class LinkedinApi:
             "timeRange": {"start": int(start.timestamp() * 1000), "end": int(end.timestamp() * 1000)},
         }
         return await self.rows(path, **params, timeIntervals=window)
+
+    async def _read(self, url: str | httpx2.URL) -> dict[str, Any]:
+        """Send one GET and return its body.
+
+        A response with an error status raises as `LinkedinApiError`.
+
+        Args:
+            url: The request's path with its Rest.li query, or a page's absolute ``next`` link.
+
+        Returns:
+            The response's body.
+        """
+        response = await self.client.get(url)
+        if response.is_error:
+            error = LinkedinApiError.from_response(response)
+            raise error
+        return response.json()
 
     @classmethod
     def _url(cls, path: str, params: dict[str, Any]) -> str:

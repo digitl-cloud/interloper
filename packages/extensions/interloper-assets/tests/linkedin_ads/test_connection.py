@@ -3,7 +3,7 @@
 The client speaks a pinned Marketing API version over Rest.li 2.0. The account
 dropdown pages the ``q=search`` finder by ``start``/``count`` until an empty
 page, and the connection check is that lookup: LinkedIn refuses a dead token
-with HTTP 401, which the check reports as rejected credentials.
+with HTTP 401 and its own code and message, which the check reports.
 """
 
 from __future__ import annotations
@@ -83,10 +83,13 @@ class TestCheck:
             ok=False, live=True, category="error", message="The connection check failed unexpectedly."
         )
 
-    async def test_a_refused_token_reports_rejected_credentials(self):
+    async def test_a_refused_token_reports_linkedins_reason(self):
         refused = {"status": 401, "serviceErrorCode": 65601, "code": "REVOKED_ACCESS_TOKEN", "message": "revoked"}
         connection = _connection(lambda _: httpx2.Response(401, json=refused))
 
         assert await connection.verify(timeout=5) == il.CheckResult(
-            ok=False, live=True, category="auth", message="The provider rejected the credentials."
+            ok=False,
+            live=True,
+            category="error",
+            message="LinkedIn refused the request (HTTP 401, REVOKED_ACCESS_TOKEN, service error 65601): revoked",
         )
