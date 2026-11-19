@@ -1,6 +1,7 @@
 """Tests for The Trade Desk connection.
 
-The API key travels in the ``TTD-Auth`` header. The partner lookup backs the
+The API key travels in the ``TTD-Auth`` header, to The Trade Desk's own hosts
+only, redirects included. The partner lookup backs the
 source's ``partner_id`` field and the connection check, and The Trade Desk
 refuses a bad key with HTTP 401, which the check reports as rejected
 credentials.
@@ -8,14 +9,20 @@ credentials.
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 from collections.abc import Callable
+from itertools import pairwise
 
 import httpx2
 import interloper as il
+import pytest
 
 from interloper_assets.thetradedesk.connection import TheTradeDeskConnection
 from interloper_assets.thetradedesk.constants import BASE_URL
+
+DELIVERY_URL = f"{BASE_URL}/myreports/delivery/report"
+STORAGE_URL = "https://storage.example/report.csv?signature=s"
 
 
 def _connection(handler: Callable[[httpx2.Request], httpx2.Response]) -> TheTradeDeskConnection:
@@ -36,6 +43,47 @@ class TestClient:
         assert client.headers["TTD-Auth"] == "api-key"
         assert str(client.base_url) == f"{BASE_URL}/"
         assert client.timeout == httpx2.Timeout(60)
+
+    @pytest.mark.parametrize(
+        "hops",
+        [
+            [("https://delivery.example/report", None), (STORAGE_URL, None)],
+            [("https://evilthetradedesk.com/report", None), (STORAGE_URL, None)],
+            [(DELIVERY_URL, "api-key"), (STORAGE_URL, None)],
+            [(DELIVERY_URL, "api-key"), ("https://files.thetradedesk.com/report.csv", "api-key")],
+        ],
+        ids=["foreign host", "lookalike domain", "own host to storage", "own host to own host"],
+    )
+    async def test_the_key_reaches_only_the_trade_desks_hosts_redirects_included(
+        self, hops: list[tuple[str, str | None]], monkeypatch: pytest.MonkeyPatch
+    ):
+        execution = {"ReportExecutionState": "Complete", "ReportDeliveries": [{"DownloadURL": hops[0][0]}]}
+        answers = {
+            f"{BASE_URL}/myreports/reportschedule": httpx2.Response(200, json={"ReportScheduleId": 42}),
+            f"{BASE_URL}/myreports/reportexecution/query/partners": httpx2.Response(200, json={"Result": [execution]}),
+            f"{BASE_URL}/myreports/reportschedule/42": httpx2.Response(200),
+        }
+        for (url, _), (target, _) in pairwise(hops):
+            answers[url] = httpx2.Response(302, headers={"Location": target})
+        answers[hops[-1][0]] = httpx2.Response(200, text="Date,Impressions\n2026-10-01,3\n")
+        requests: list[httpx2.Request] = []
+
+        async def answer(_: httpx2.AsyncHTTPTransport, request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            return answers[str(request.url)]
+
+        # only the network is replaced: the connection's real client, its hooks and its redirect handling all run
+        monkeypatch.setattr(httpx2.AsyncHTTPTransport, "handle_async_request", answer)
+
+        rows = await TheTradeDeskConnection(api_key="api-key").api.report("p", "168005", dt.date(2026, 10, 1))
+
+        assert rows == [{"Date": "2026-10-01", "Impressions": "3"}]
+        assert [(str(request.url), request.headers.get("TTD-Auth")) for request in requests] == [
+            (f"{BASE_URL}/myreports/reportschedule", "api-key"),
+            (f"{BASE_URL}/myreports/reportexecution/query/partners", "api-key"),
+            *hops,
+            (f"{BASE_URL}/myreports/reportschedule/42", "api-key"),
+        ]
 
 
 class TestPartners:

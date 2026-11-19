@@ -1,3 +1,4 @@
+DOMAIN = "thetradedesk.com"
 BASE_URL = "https://api.thetradedesk.com/v3"
 GRAPHQL_URL = "https://desk.thetradedesk.com/graphql"
 
