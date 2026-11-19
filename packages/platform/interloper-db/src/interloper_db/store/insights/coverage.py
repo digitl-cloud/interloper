@@ -26,10 +26,12 @@ from __future__ import annotations
 import datetime as dt
 from bisect import bisect_right
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import cached_property
+from itertools import groupby
+from operator import attrgetter
 from typing import NamedTuple
 from uuid import UUID
 
@@ -180,29 +182,45 @@ class AssetPartitions:
         cls,
         assets: list[Component],
         partitionings: Mapping[UUID, TimePartitionConfig],
-        results: list[PartitionResult],
-    ) -> list[AssetPartitions]:
-        """Give each asset its own results, each distinct partition key parsed once however many assets executed it.
+        results: Iterable[PartitionResult],
+    ) -> Iterator[AssetPartitions]:
+        """Give each asset its own results, one asset at a time, each distinct partition key parsed once.
+
+        The results come grouped by asset, as the store reads them, so only
+        one asset's are held at a time however much history was read: the
+        assets with results come in the order of their results, then the
+        assets without any, in the order of *assets*.
 
         Args:
             assets: The asset rows, their parents loaded.
             partitionings: Each partitioned asset's partitioning by id.
-            results: The results read, of these assets and any other.
+            results: The results read, of these assets and any other, grouped by asset.
 
-        Returns:
-            One entry per asset, in the order of *assets*.
+        Yields:
+            One entry per asset of *assets*.
+
+        Raises:
+            ValueError: If an asset's results come back after another asset's.
         """
-        by_asset: dict[UUID, list[tuple[Period, PartitionResult]]] = {asset.id: [] for asset in assets}
+        pending = {asset.id: asset for asset in assets}
+        read: set[UUID] = set()
         periods: dict[str, Period] = {}
-        for result in results:
-            owned = by_asset.get(result.asset_id)
-            if owned is None:
+        for asset_id, owned in groupby(results, key=attrgetter("asset_id")):
+            if asset_id in read:
+                raise ValueError(f"Partition results are not grouped by asset: {asset_id} comes back after another")
+            read.add(asset_id)
+            asset = pending.pop(asset_id, None)
+            if asset is None:
                 continue
-            period = periods.get(result.partition_key)
-            if period is None:
-                period = periods[result.partition_key] = Period.from_key(result.partition_key)
-            owned.append((period, result))
-        return [cls(asset, partitionings.get(asset.id), by_asset[asset.id]) for asset in assets]
+            bound = []
+            for result in owned:
+                period = periods.get(result.partition_key)
+                if period is None:
+                    period = periods[result.partition_key] = Period.from_key(result.partition_key)
+                bound.append((period, result))
+            yield cls(asset, partitionings.get(asset_id), bound)
+        for asset in pending.values():
+            yield cls(asset, partitionings.get(asset.id), [])
 
     @cached_property
     def _ordered(self) -> list[tuple[Period, PartitionResult]]:
@@ -481,8 +499,9 @@ class GroupCoverage:
     def from_components(
         cls,
         components: list[Component],
+        targeted: set[UUID],
         partitionings: Mapping[UUID, TimePartitionConfig],
-        results: list[PartitionResult],
+        results: Iterable[PartitionResult],
         attempted: Mapping[UUID, Period],
         *,
         since: dt.date,
@@ -491,12 +510,16 @@ class GroupCoverage:
     ) -> list[GroupCoverage]:
         """Roll each partitioned asset's days up by group, keeping only the groups with a day in the window.
 
+        Each asset's days are added onto its group's as its results are read,
+        so what is held is the groups' days and one asset's results.
+
         Args:
-            components: The organisation's source, asset and job rows, with
-                their outgoing relations loaded.
+            components: The organisation's source and asset rows, their parents loaded.
+            targeted: The components an enabled job targets.
             partitionings: Each partitioned asset's partitioning by id; an
                 asset absent from it (unpartitioned, drifted) is left out.
-            results: The results read for the window, from runs of any target.
+            results: The results read for the window, from runs of any
+                target, grouped by asset.
             attempted: The period each asset's attempted partitions span,
                 all-time; an asset absent from it was never attempted.
             since: First day of the window.
@@ -507,16 +530,9 @@ class GroupCoverage:
             The groups, by name then id, each with its days summed over its assets.
         """
         by_id = {component.id: component for component in components}
-        targeted = {
-            relation.dst_id
-            for job in components
-            if job.kind == "job" and job.enabled
-            for relation in job.out_relations
-            if relation.name == "targets"
-        }
         assets = [asset for asset in components if asset.kind == "asset" and asset.id in partitionings]
         groups: dict[UUID, Component] = {}
-        parts: dict[UUID, list[DayCoverage]] = defaultdict(list)
+        days: dict[UUID, DayCoverage] = {}
         for asset in AssetPartitions.from_results(assets, partitionings, results):
             group = by_id[asset.asset.parent_id] if asset.asset.parent_id else asset.asset
             scheduled = asset.asset.id in targeted or asset.asset.parent_id in targeted
@@ -525,9 +541,10 @@ class GroupCoverage:
                 continue
             first, last = max(span[0], since), min(span[1], until, now.date())
             if first <= last:
+                part = DayCoverage.from_asset(asset, first, last, now)
                 groups[group.id] = group
-                parts[group.id].append(DayCoverage.from_asset(asset, first, last, now))
-        coverages = [cls(groups[group_id], DayCoverage.from_parts(days)) for group_id, days in parts.items()]
+                days[group.id] = DayCoverage.from_parts([days[group.id], part]) if group.id in days else part
+        coverages = [cls(group, days[group_id]) for group_id, group in groups.items()]
         return sorted(
             coverages,
             key=lambda coverage: (coverage.component.name or coverage.component.key, str(coverage.component.id)),
@@ -649,7 +666,7 @@ class JobCoverage:
         keys: list[str],
         assets: list[Component],
         partitionings: Mapping[UUID, TimePartitionConfig],
-        results: list[PartitionResult],
+        results: Iterable[PartitionResult],
         *,
         now: dt.datetime,
     ) -> JobCoverage:
@@ -660,12 +677,17 @@ class JobCoverage:
             keys: Every key of the range, oldest first.
             assets: The job's target asset rows, their parents loaded.
             partitionings: The partitioning of the target assets that have one, by id.
-            results: The results of those assets overlapping the range, of any granularity.
+            results: The results of those assets overlapping the range, of any
+                granularity, grouped by asset.
             now: The reference instant, aware UTC.
 
         Returns:
             The coverage, assets in the order of *assets*.
         """
         periods = [(key, Period.from_key(key)) for key in keys]
-        partitions = AssetPartitions.from_results(assets, partitionings, results)
-        return cls(job_id, keys, [KeyCoverage.from_asset(asset, periods, now) for asset in partitions])
+        order = {asset.id: index for index, asset in enumerate(assets)}
+        coverages = [
+            KeyCoverage.from_asset(asset, periods, now)
+            for asset in AssetPartitions.from_results(assets, partitionings, results)
+        ]
+        return cls(job_id, keys, sorted(coverages, key=lambda coverage: order[coverage.asset_id]))

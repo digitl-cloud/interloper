@@ -883,36 +883,32 @@ class ComponentStore:
             )
         return granularities
 
-    def asset_partitionings(self, org_id: UUID) -> dict[UUID, il.TimePartitionConfig]:
-        """The partitioning of every partitioned asset row of an organisation.
+    def asset_partitionings(self, assets: Iterable[Component]) -> dict[UUID, il.TimePartitionConfig]:
+        """The partitioning of each partitioned asset among some asset rows.
 
         Partitioning lives on the catalog definition, never on the row, which
-        resolves by its qualified key. A row whose key does not resolve (a
-        drifted key, a disabled or missing source) is skipped, as is an
-        unpartitioned asset.
+        resolves by its qualified key, so the assets of one definition share
+        one partitioning. A row whose key does not resolve (a drifted key, a
+        disabled or missing source) is skipped, as is an unpartitioned asset.
 
         Args:
-            org_id: Organisation UUID.
+            assets: The asset rows, their parents loaded.
 
         Returns:
             Each time- or snapshot-partitioned asset's partitioning by row id; an asset
             partitioned another way has no coverage yet and is skipped.
         """
-        statement = (
-            select(Component)
-            .where(Component.org_id == org_id, Component.kind == "asset")
-            .options(selectinload(Component.parent))  # ty: ignore[invalid-argument-type]
-        )
-        with session_scope(self._engine) as session:
-            assets = {row.id: row.qualified_key for row in session.exec(statement).all()}
+        by_key: dict[str, il.TimePartitionConfig | None] = {}
         partitionings: dict[UUID, il.TimePartitionConfig] = {}
-        for asset_id, key in assets.items():
-            definition = self._catalog.get(key)
-            if not isinstance(definition, il.AssetDefinition) or (partitioning := definition.partitioning) is None:
-                continue
-            config = il.PartitionConfig.from_definition(partitioning)
-            if isinstance(config, il.TimePartitionConfig):
-                partitionings[asset_id] = config
+        for asset in assets:
+            key = asset.qualified_key
+            if key not in by_key:
+                definition = self._catalog.get(key)
+                partitioning = definition.partitioning if isinstance(definition, il.AssetDefinition) else None
+                config = il.PartitionConfig.from_definition(partitioning) if partitioning is not None else None
+                by_key[key] = config if isinstance(config, il.TimePartitionConfig) else None
+            if (config := by_key[key]) is not None:
+                partitionings[asset.id] = config
         return partitionings
 
     def target_assets(self, job: Component) -> builtins.list[Component]:
