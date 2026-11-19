@@ -3,13 +3,6 @@ AUTH_BASE_URL = "https://api.linkedin.com"
 LINKEDIN_VERSION = "202607"
 RESTLI_PROTOCOL_VERSION = "2.0.0"
 
-ACCOUNT_FIELDS = [
-    "id",
-    "name",
-    "currency",
-    "status",
-]
-
 CAMPAIGN_GROUP_FIELDS = [
     "id",
     "name",
