@@ -26,6 +26,7 @@ from interloper_assets.instagram_insights import constants
 from interloper_assets.instagram_insights.connection import InstagramInsightsConnection
 from interloper_assets.instagram_insights.connector import schemas
 from interloper_assets.instagram_insights.connector.source import InstagramInsights
+from interloper_assets.meta import api as graph
 
 REPORT_ASSETS = (
     "account_stats",
@@ -489,6 +490,19 @@ class TestPaging:
 
 class TestRefusals:
     """Graph refuses with an HTTP error status, which fails the asset."""
+
+    async def test_a_throttled_request_is_waited_out_then_repeated(self, monkeypatch: Any):
+        slept: list[float] = []
+
+        async def sleep(seconds: float) -> None:
+            slept.append(seconds)
+
+        monkeypatch.setattr(graph, "sleep", sleep)
+        throttled = httpx2.Response(403, json={"error": {"message": "Application request limit reached", "code": 4}})
+        replies = [throttled, httpx2.Response(200, json={"id": "1784", "username": "acme"})]
+        rows = await _run(_faked_source(lambda request: replies.pop(0)), "profiles")
+        assert rows == [{"id": "1784", "username": "acme", "date": DAY}]
+        assert slept == [60]
 
     async def test_a_refused_node_read_fails_the_asset(self):
         source = _faked_source(lambda request: httpx2.Response(400, json={"error": {"code": 100}}))

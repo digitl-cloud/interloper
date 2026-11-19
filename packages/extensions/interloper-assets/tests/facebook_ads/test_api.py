@@ -17,7 +17,8 @@ from facebook_business.exceptions import FacebookError, FacebookRequestError
 from requests.structures import CaseInsensitiveDict
 
 from interloper_assets.facebook_ads import api as graph
-from interloper_assets.facebook_ads.api import Attempts, FacebookGraphApi, FacebookMarketingApi
+from interloper_assets.facebook_ads.api import FacebookGraphApi, FacebookMarketingApi
+from interloper_assets.meta.api import Attempts
 
 REFUSAL = "Please reduce the amount of data you're asking for, then retry your request"
 GRAPH = "https://graph.facebook.com/v23.0/"

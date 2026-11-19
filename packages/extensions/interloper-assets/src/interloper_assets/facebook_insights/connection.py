@@ -6,7 +6,7 @@ import interloper as il
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.facebook_insights import constants
-from interloper_assets.facebook_insights.api import FacebookInsightsApi
+from interloper_assets.meta.api import GraphApi
 
 
 @il.connection(
@@ -42,16 +42,16 @@ class FacebookInsightsConnection(il.RefreshTokenOAuthConnection):
         return self._client(self.refresh_token)
 
     @cached_property
-    def api(self) -> FacebookInsightsApi:
+    def api(self) -> GraphApi:
         """The Graph API engine acting as the user, built on ``client``.
 
         Returns:
             The engine, cached per connection instance.
         """
-        return FacebookInsightsApi(self.client)
+        return GraphApi(self.client)
 
     @asynccontextmanager
-    async def page_api(self, page_id: str) -> AsyncGenerator[FacebookInsightsApi, None]:
+    async def page_api(self, page_id: str) -> AsyncGenerator[GraphApi, None]:
         """Open a Graph API engine acting as the Page.
 
         Page and post insights (and the Page's published posts and stories)
@@ -73,7 +73,7 @@ class FacebookInsightsConnection(il.RefreshTokenOAuthConnection):
         if not page_token:
             raise PermissionError(f"The connection's user cannot obtain a Page access token for page {page_id}")
         async with self._client(page_token) as client:
-            yield FacebookInsightsApi(client)
+            yield GraphApi(client)
 
     @il.fetch_field_provider
     async def pages(self) -> list[dict[str, str]]:

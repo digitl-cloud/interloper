@@ -4,7 +4,7 @@ import interloper as il
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.instagram_insights import constants
-from interloper_assets.instagram_insights.api import InstagramInsightsApi
+from interloper_assets.meta.api import GraphApi
 
 
 @il.connection(
@@ -43,13 +43,13 @@ class InstagramInsightsConnection(il.RefreshTokenOAuthConnection):
         )
 
     @cached_property
-    def api(self) -> InstagramInsightsApi:
-        """The Instagram Graph API engine every caller shares, built on ``client``.
+    def api(self) -> GraphApi:
+        """The Graph API engine every caller shares, built on ``client``.
 
         Returns:
             The engine, cached per connection instance.
         """
-        return InstagramInsightsApi(self.client)
+        return GraphApi(self.client)
 
     @il.fetch_field_provider
     async def accounts(self) -> list[dict[str, str]]:

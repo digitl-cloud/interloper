@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
 from datetime import date, timedelta
 from time import monotonic, sleep
 from typing import Any, ClassVar
@@ -13,55 +12,9 @@ import requests
 from facebook_business.api import FacebookAdsApi, FacebookResponse
 from facebook_business.exceptions import FacebookError, FacebookRequestError
 
+from interloper_assets.meta.api import Attempts
+
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class Attempts:
-    """What one request has spent waiting out throttling and repeating transient failures.
-
-    Throttling is waited out within a total budget, since Meta can lock an
-    account for up to an hour; a transient failure is repeated a few times
-    only, since one that persists is not transient.
-    """
-
-    THROTTLE_BUDGET: ClassVar[timedelta] = timedelta(hours=1)
-    FIRST_BACKOFF: ClassVar[timedelta] = timedelta(minutes=1)
-    LONGEST_WAIT: ClassVar[timedelta] = timedelta(minutes=10)
-    TRANSIENT_ATTEMPTS: ClassVar[int] = 5
-    TRANSIENT_BACKOFF: ClassVar[timedelta] = timedelta(seconds=5)
-
-    throttled: timedelta = field(default_factory=timedelta)
-    throttles: int = 0
-    failures: int = 0
-
-    def after_throttle(self, announced: timedelta) -> timedelta | None:
-        """The wait before repeating a throttled request, or None once the budget is spent.
-
-        Args:
-            announced: How long Meta said to wait; zero when it said nothing,
-                in which case the wait doubles from a minute on each throttle.
-
-        Returns:
-            The wait, at most ten minutes, or None when it would overrun the budget.
-        """
-        wait = min(announced or self.FIRST_BACKOFF * 2**self.throttles, self.LONGEST_WAIT)
-        if self.throttled + wait > self.THROTTLE_BUDGET:
-            return None
-        self.throttles += 1
-        self.throttled += wait
-        return wait
-
-    def after_failure(self) -> timedelta | None:
-        """The wait before repeating a transient failure, or None after the last attempt.
-
-        Returns:
-            The wait, doubling from five seconds, or None once the attempts are spent.
-        """
-        self.failures += 1
-        if self.failures >= self.TRANSIENT_ATTEMPTS:
-            return None
-        return self.TRANSIENT_BACKOFF * 2 ** (self.failures - 1)
 
 
 class FacebookGraphApi(FacebookAdsApi):
@@ -71,7 +24,7 @@ class FacebookGraphApi(FacebookAdsApi):
     insights job and its polling, goes through ``call``, so this is the one
     place that decides what a refusal means:
 
-    - **Throttled** (the rate-limit codes): wait as long as Meta says the
+    - **Throttled** (`Attempts.THROTTLE_CODES`): wait as long as Meta says the
       caller is locked out, else back off, and repeat, within a total budget.
     - **Transient** (``is_transient``, code 2, a 5xx, a dropped connection):
       repeat a few times after a short backoff.
@@ -89,7 +42,6 @@ class FacebookGraphApi(FacebookAdsApi):
     request while Meta still serves them all.
     """
 
-    THROTTLE_CODES: ClassVar[frozenset[int]] = frozenset({4, 17, 32, 613, *range(80000, 80015)})
     NETWORK_ERRORS: ClassVar[tuple[type[Exception], ...]] = (
         requests.exceptions.ConnectionError,
         requests.exceptions.ChunkedEncodingError,
@@ -145,8 +97,8 @@ class FacebookGraphApi(FacebookAdsApi):
                     if method == "GET" and not self._is_edge(path) and len(fields) > 1:
                         return self._read_halves(path, params, headers, url_override, api_version)
                     raise
-                if error.api_error_code() in self.THROTTLE_CODES:
-                    wait = attempts.after_throttle(self._announced_lockout(error.http_headers() or {}))
+                if error.api_error_code() in Attempts.THROTTLE_CODES:
+                    wait = attempts.after_throttle(Attempts.announced_lockout(error.http_headers() or {}))
                 elif self._is_transient(error):
                     wait = attempts.after_failure()
                 else:
@@ -155,7 +107,7 @@ class FacebookGraphApi(FacebookAdsApi):
                     raise
                 self._wait(wait, f"refused with code {error.api_error_code()}")
             else:
-                self._pace(self._announced_lockout(response.headers()))
+                self._pace(Attempts.announced_lockout(response.headers()))
                 return response
 
     def _shrinks_page(self, method: str, path: Any, params: dict[str, Any]) -> bool:
@@ -219,27 +171,6 @@ class FacebookGraphApi(FacebookAdsApi):
         """
         if lockout:
             self._wait(min(lockout, Attempts.LONGEST_WAIT), "announced a lockout")
-
-    @staticmethod
-    def _announced_lockout(headers: Any) -> timedelta:
-        """How long Meta says the caller is locked out, read from a response's or an error's headers.
-
-        ``x-business-use-case-usage`` holds one entry per rate-limit type
-        (ads management, insights...) per business object, each with the
-        minutes until access returns, zero while it is not locked out.
-
-        Args:
-            headers: The headers; names are case-insensitive.
-
-        Returns:
-            The longest announced lockout, zero when none is.
-        """
-        lockouts = [timedelta()]
-        if business := headers.get("x-business-use-case-usage"):
-            for limits in json.loads(business).values():
-                for limit in limits:
-                    lockouts.append(timedelta(minutes=float(limit.get("estimated_time_to_regain_access", 0))))
-        return max(lockouts)
 
     @staticmethod
     def _wait(duration: timedelta, reason: str) -> None:
