@@ -107,6 +107,31 @@ class TestSearch:
         assert all(str(request.url) == SEARCH_URL for request in requests)
         assert all(request.headers["login-customer-id"] == "111" for request in requests)
 
+    @pytest.mark.parametrize(
+        "pages",
+        [
+            [{"results": [{"campaign": {"id": "1"}}], "nextPageToken": "p2"}, {"results": [], "nextPageToken": "p2"}],
+            [
+                {"results": [{"campaign": {"id": "1"}}], "nextPageToken": "p2"},
+                {"results": [{"campaign": {"id": "2"}}], "nextPageToken": "p3"},
+                {"results": [], "nextPageToken": "p2"},
+            ],
+        ],
+        ids=["echoed", "cycling"],
+    )
+    async def test_a_token_already_sent_ends_the_walk(
+        self, pages: list[dict[str, Any]], caplog: pytest.LogCaptureFixture
+    ):
+        requests, handler = _recording(pages)
+
+        rows = await _api(handler).search("222", resource="campaign", fields=["campaign.id"])
+
+        assert rows == [row for page in pages for row in page["results"]]
+        assert len(requests) == len(pages)
+        assert [record.message for record in caplog.records if record.levelname == "WARNING"] == [
+            "/customers/222/searchAds360:search returned the page token p2 again; reading no further"
+        ]
+
     async def test_an_empty_token_ends_the_walk(self):
         requests, handler = _recording([{"results": [{"campaign": {"id": "1"}}], "nextPageToken": ""}])
 
