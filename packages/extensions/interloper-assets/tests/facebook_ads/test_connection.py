@@ -2,7 +2,8 @@
 
 The connection exposes the Graph API client as ``client`` and the Marketing
 API engine every asset reads through as ``api``, built on that client. Its
-account lookup reads Graph over plain HTTP, the access token as its bearer.
+account lookup reads Graph through the SDK-free ``GraphApi``, the access token
+as its bearer.
 """
 
 from __future__ import annotations
@@ -10,12 +11,15 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import httpx2
+import interloper as il
 import pytest
 
 from interloper_assets.facebook_ads.api import FacebookGraphApi, FacebookMarketingApi
 from interloper_assets.facebook_ads.connection import FacebookAdsConnection
+from interloper_assets.meta import api as graph
 
 TOKEN = "user-access-token"
+GRAPH = "https://graph.facebook.com/v23.0"
 
 
 def _connection() -> FacebookAdsConnection:
@@ -23,13 +27,11 @@ def _connection() -> FacebookAdsConnection:
 
 
 def _graph(monkeypatch: pytest.MonkeyPatch, handler: Callable[[httpx2.Request], httpx2.Response]) -> None:
-    real_client = httpx2.AsyncClient
+    class GraphClient(il.AsyncRESTClient):
+        def __init__(self, base_url: str, **kwargs):
+            super().__init__(base_url, transport=httpx2.MockTransport(handler), **kwargs)
 
-    class MockClient(real_client):
-        def __init__(self, **kwargs):
-            super().__init__(transport=httpx2.MockTransport(handler), **kwargs)
-
-    monkeypatch.setattr(httpx2, "AsyncClient", MockClient)
+    monkeypatch.setattr(il, "AsyncRESTClient", GraphClient)
 
 
 class TestApi:
@@ -67,3 +69,35 @@ class TestAccounts:
             await _connection().accounts()
 
         assert TOKEN not in str(raised.value)
+
+    async def test_reads_every_page_of_accounts(self, monkeypatch):
+        next_link = f"{GRAPH}/me/adaccounts?fields=account_id%2Cname%2Caccount_status&limit=500&after=c2"
+        requests: list[str] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(str(request.url))
+            if request.url.params.get("after") == "c2":
+                return httpx2.Response(200, json={"data": [{"account_id": "2", "name": "Beta", "account_status": 1}]})
+            first = [{"account_id": "1", "name": "Acme", "account_status": 1}]
+            return httpx2.Response(200, json={"data": first, "paging": {"next": next_link}})
+
+        _graph(monkeypatch, handler)
+
+        accounts = await _connection().accounts()
+
+        assert accounts == [{"account_id": "1", "name": "Acme"}, {"account_id": "2", "name": "Beta"}]
+        assert requests == [f"{GRAPH}/me/adaccounts?fields=account_id%2Cname%2Caccount_status&limit=500", next_link]
+
+    async def test_a_throttled_lookup_is_waited_out(self, monkeypatch):
+        slept: list[float] = []
+
+        async def sleep(seconds: float) -> None:
+            slept.append(seconds)
+
+        monkeypatch.setattr(graph, "sleep", sleep)
+        throttled = {"error": {"message": "User request limit reached", "code": 17}}
+        replies = [httpx2.Response(400, json=throttled), httpx2.Response(200, json={"data": []})]
+        _graph(monkeypatch, lambda _: replies.pop(0))
+
+        assert await _connection().accounts() == []
+        assert slept == [60]
