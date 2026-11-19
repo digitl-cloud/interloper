@@ -93,11 +93,14 @@ class TestCheck:
     async def test_a_working_token_passes(self):
         assert await _connection(lambda _: _acls([])).verify(timeout=5) == il.CheckResult(ok=True, live=True)
 
-    async def test_a_refused_lookup_fails_as_rejected_credentials(self):
+    async def test_a_refused_lookup_reports_linkedins_reason(self):
         refused = httpx2.Response(403, json={"status": 403, "message": "Not enough permissions"})
 
         result = await _connection(lambda _: refused).verify(timeout=5)
 
         assert result == il.CheckResult(
-            ok=False, live=True, category="auth", message="The provider rejected the credentials."
+            ok=False,
+            live=True,
+            category="error",
+            message="LinkedIn refused the request (HTTP 403): Not enough permissions",
         )

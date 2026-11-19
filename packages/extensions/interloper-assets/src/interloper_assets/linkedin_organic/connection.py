@@ -1,9 +1,10 @@
 from functools import cached_property
 
 import interloper as il
+from interloper.errors import ConnectionCheckError
 from pydantic_settings import SettingsConfigDict
 
-from interloper_assets.linkedin.api import LinkedinApi
+from interloper_assets.linkedin.api import LinkedinApi, LinkedinApiError
 from interloper_assets.linkedin_organic import constants
 
 
@@ -68,17 +69,23 @@ class LinkedinOrganicConnection(il.RefreshTokenOAuthConnection):
         Returns:
             The options for the field's dropdown.
 
+        Raises:
+            ConnectionCheckError: If LinkedIn refuses the lookup, carrying LinkedIn's code and message, which name
+                no credential.
         """
-        elements = await self.api.rows(
-            "/organizationAcls",
-            q="roleAssignee",
-            role="ADMINISTRATOR",
-            state="APPROVED",
-            # Decorate the ACL with the organization entity so the localized
-            # name comes back in a single request.
-            projection="(elements*(organization~(id,localizedName)),paging)",
-            count=100,
-        )
+        try:
+            elements = await self.api.rows(
+                "/organizationAcls",
+                q="roleAssignee",
+                role="ADMINISTRATOR",
+                state="APPROVED",
+                # Decorate the ACL with the organization entity so the localized
+                # name comes back in a single request.
+                projection="(elements*(organization~(id,localizedName)),paging)",
+                count=100,
+            )
+        except LinkedinApiError as error:
+            raise ConnectionCheckError(str(error)) from error
 
         organizations: list[dict[str, str]] = []
         for element in elements:
@@ -101,7 +108,7 @@ class LinkedinOrganicConnection(il.RefreshTokenOAuthConnection):
         """Prove the credentials work by running the ``organizations`` lookup.
 
         Returns:
-            True — any credential failure raises out of the lookup.
+            True — any credential failure raises out of the lookup, LinkedIn's refusal as a `ConnectionCheckError`.
         """
         await self.organizations()
         return True
