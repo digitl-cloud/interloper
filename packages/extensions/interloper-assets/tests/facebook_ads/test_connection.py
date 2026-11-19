@@ -13,6 +13,7 @@ from collections.abc import Callable
 import httpx2
 import interloper as il
 import pytest
+from interloper.errors import ConnectionCheckError
 
 from interloper_assets.facebook_ads.api import FacebookGraphApi, FacebookMarketingApi
 from interloper_assets.facebook_ads.connection import FacebookAdsConnection
@@ -61,13 +62,14 @@ class TestAccounts:
         assert "access_token" not in request.url.params
         assert TOKEN not in str(request.url)
 
-    async def test_a_refused_lookup_raises_without_the_token(self, monkeypatch):
+    async def test_a_refused_lookup_raises_graphs_reason_without_the_token(self, monkeypatch):
         refusal = {"error": {"message": "Error validating access token", "type": "OAuthException", "code": 190}}
         _graph(monkeypatch, lambda _: httpx2.Response(400, json=refusal))
 
-        with pytest.raises(httpx2.HTTPStatusError) as raised:
+        with pytest.raises(ConnectionCheckError) as raised:
             await _connection().accounts()
 
+        assert str(raised.value) == "Graph refused the request (HTTP 400, code 190): Error validating access token"
         assert TOKEN not in str(raised.value)
 
     async def test_reads_every_page_of_accounts(self, monkeypatch):

@@ -88,6 +88,46 @@ class Attempts:
         return max(lockouts)
 
 
+class GraphApiError(httpx2.HTTPStatusError):
+    """Graph refused a request, with its own code and reason.
+
+    It is the HTTP error status Graph answered, so whatever reads an
+    ``httpx2.HTTPStatusError`` reads it unchanged. Its message is Graph's
+    reason rather than httpx's, which names the request URL.
+    """
+
+    def __init__(self, message: str, *, code: int | None, response: httpx2.Response) -> None:
+        """Hold Graph's code beside the refused response.
+
+        Args:
+            message: What Graph refused and why.
+            code: Graph's ``error.code``, or None when the body carries none.
+            response: The refused response.
+        """
+        super().__init__(message, request=response.request, response=response)
+        self.code = code
+
+    @classmethod
+    def from_response(cls, response: httpx2.Response) -> GraphApiError:
+        """Read Graph's refusal from an error response.
+
+        Args:
+            response: A response with an error status.
+
+        Returns:
+            The refusal, with Graph's ``error.code`` and ``error.message``, or the status's reason when the body
+            is not Graph's error object.
+        """
+        try:
+            error = response.json()["error"]
+        except (ValueError, KeyError, TypeError):
+            error = {}
+        code = error.get("code")
+        status = f"HTTP {response.status_code}" if code is None else f"HTTP {response.status_code}, code {code}"
+        reason = error.get("message") or response.reason_phrase
+        return cls(f"Graph refused the request ({status}): {reason}", code=code, response=response)
+
+
 class GraphApi:
     """The Graph API over HTTP: its objects, its paged edges, its insights and its refusals.
 
@@ -95,11 +135,10 @@ class GraphApi:
     Facebook Ads reads it through the Facebook SDK, under the same `Attempts`.
 
     Every request, each page included, goes through `_read`: a throttled
-    refusal is waited out and repeated alone, any other refusal raises its
-    HTTP status as ``httpx2.HTTPStatusError``, and `error_code` reads Graph's
-    own code from its response. List parameters (``fields``, ``metric``,
-    ``breakdown``) travel comma-separated; every method joins them, so a
-    caller passes plain lists.
+    refusal is waited out and repeated alone, and any other refusal raises as
+    `GraphApiError`, with Graph's code and reason. List parameters
+    (``fields``, ``metric``, ``breakdown``) travel comma-separated; every
+    method joins them, so a caller passes plain lists.
     """
 
     def __init__(self, client: il.AsyncRESTClient) -> None:
@@ -166,23 +205,10 @@ class GraphApi:
         window = {"since": day.isoformat(), "until": (day + dt.timedelta(days=1)).isoformat()}
         return (await self.get(path, **params, **window))["data"]
 
-    @staticmethod
-    def error_code(response: httpx2.Response) -> int | None:
-        """Read Graph's own code from a refused request's response.
-
-        Args:
-            response: The response, such as an ``httpx2.HTTPStatusError``'s.
-
-        Returns:
-            The ``error.code`` of its body, or None when the body is not JSON or carries no code.
-        """
-        try:
-            return response.json().get("error", {}).get("code")
-        except ValueError:
-            return None
-
     async def _read(self, url: str | httpx2.URL, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Send one GET and return its body, waiting out Graph's throttling.
+
+        A refusal raises as `GraphApiError`, a throttle once its budget is spent.
 
         Args:
             url: A path relative to the versioned base URL, or an absolute next link.
@@ -194,14 +220,15 @@ class GraphApi:
         attempts = Attempts()
         while True:
             response = await self.client.get(url, params=params)
-            code = self.error_code(response) if response.is_error else None
+            if response.is_success:
+                return response.json()
+            error = GraphApiError.from_response(response)
             wait = None
-            if code in Attempts.THROTTLE_CODES:
+            if error.code in Attempts.THROTTLE_CODES:
                 wait = attempts.after_throttle(Attempts.announced_lockout(response.headers))
             if wait is None:
-                response.raise_for_status()
-                return response.json()
-            logger.warning(f"Graph refused with code {code}; waiting {wait}")
+                raise error
+            logger.warning(f"{error}; waiting {wait}")
             await sleep(wait.total_seconds())
 
     @staticmethod

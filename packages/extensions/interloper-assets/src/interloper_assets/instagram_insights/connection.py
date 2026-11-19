@@ -1,10 +1,11 @@
 from functools import cached_property
 
 import interloper as il
+from interloper.errors import ConnectionCheckError
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.instagram_insights import constants
-from interloper_assets.meta.api import GraphApi
+from interloper_assets.meta.api import GraphApi, GraphApiError
 
 
 @il.connection(
@@ -64,12 +65,17 @@ class InstagramInsightsConnection(il.RefreshTokenOAuthConnection):
         Returns:
             The options for the field's dropdown.
 
+        Raises:
+            ConnectionCheckError: If Graph refuses the lookup, carrying Graph's reason, which names no credential.
         """
-        pages = await self.api.rows(
-            "/me/accounts",
-            fields="instagram_business_account{id,username,name},name",
-            limit=100,
-        )
+        try:
+            pages = await self.api.rows(
+                "/me/accounts",
+                fields="instagram_business_account{id,username,name},name",
+                limit=100,
+            )
+        except GraphApiError as error:
+            raise ConnectionCheckError(str(error)) from error
 
         accounts: list[dict[str, str]] = []
         for page in pages:
@@ -84,7 +90,7 @@ class InstagramInsightsConnection(il.RefreshTokenOAuthConnection):
         """Prove the credentials work by running the ``accounts`` lookup.
 
         Returns:
-            True — any credential failure raises out of the lookup.
+            True — any credential failure raises out of the lookup, Graph's refusal as a `ConnectionCheckError`.
         """
         await self.accounts()
         return True

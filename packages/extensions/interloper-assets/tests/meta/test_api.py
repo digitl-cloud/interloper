@@ -18,7 +18,7 @@ import interloper as il
 import pytest
 
 from interloper_assets.meta import api as graph
-from interloper_assets.meta.api import Attempts, GraphApi
+from interloper_assets.meta.api import Attempts, GraphApi, GraphApiError
 
 GRAPH = "https://graph.facebook.com/v26.0"
 
@@ -75,20 +75,32 @@ class TestGet:
 
         assert list(requests[0].url.params.multi_items()) == [("fields", "id,name"), ("limit", "100")]
 
-    async def test_a_refusal_raises_its_error_status(self, sleeps):
+    async def test_a_refusal_raises_graphs_own_reason_without_the_url(self, sleeps):
         api = _api(_replies(_refused(400, 190, "Error validating access token")))
 
-        with pytest.raises(httpx2.HTTPStatusError, match="400 Bad Request") as raised:
+        with pytest.raises(GraphApiError) as raised:
             await api.get("/42", fields="access_token")
 
-        assert GraphApi.error_code(raised.value.response) == 190
+        assert str(raised.value) == "Graph refused the request (HTTP 400, code 190): Error validating access token"
+        assert raised.value.code == 190
         assert sleeps == []
 
-    async def test_an_http_error_raises(self):
+    async def test_a_refusal_is_still_its_http_error_status(self):
+        api = _api(_replies(_refused(403, 10, "Permission denied")))
+
+        with pytest.raises(httpx2.HTTPStatusError) as raised:
+            await api.get("/42")
+
+        assert raised.value.response.status_code == 403
+
+    async def test_an_http_error_without_a_graph_body_raises_its_status(self):
         api = _api(lambda _: httpx2.Response(404, text="<html>not found</html>"))
 
-        with pytest.raises(httpx2.HTTPStatusError, match="404 Not Found"):
+        with pytest.raises(GraphApiError) as raised:
             await api.get("/42")
+
+        assert str(raised.value) == "Graph refused the request (HTTP 404): Not Found"
+        assert raised.value.code is None
 
 
 class TestRows:
@@ -140,10 +152,10 @@ class TestRows:
             next_link = f"{GRAPH}/me/accounts?access_token=graph-token&after=c2"
             return httpx2.Response(200, json={"data": [{"id": "1"}], "paging": {"next": next_link}})
 
-        with pytest.raises(httpx2.HTTPStatusError, match="400 Bad Request") as raised:
+        with pytest.raises(GraphApiError) as raised:
             await _api(handler).rows("/me/accounts")
 
-        assert GraphApi.error_code(raised.value.response) == 100
+        assert raised.value.code == 100
         assert "graph-token" not in str(raised.value)
 
     async def test_an_empty_edge_reads_one_page(self):
@@ -235,10 +247,10 @@ class TestThrottling:
     async def test_a_throttle_without_a_hint_backs_off_until_the_budget_is_spent(self, sleeps):
         api = _api(_replies(*[_refused(400, 17, "User request limit reached")] * 20))
 
-        with pytest.raises(httpx2.HTTPStatusError) as raised:
+        with pytest.raises(GraphApiError) as raised:
             await api.get("/42")
 
-        assert GraphApi.error_code(raised.value.response) == 17
+        assert raised.value.code == 17
         assert sleeps[:5] == [60, 120, 240, 480, 600]
         assert sum(sleeps) <= Attempts.THROTTLE_BUDGET.total_seconds()
 
@@ -270,12 +282,20 @@ class TestThrottling:
         assert (sleeps, len(requests)) == ([], 1)
 
 
-class TestErrorCode:
-    def test_reads_graphs_own_code(self):
-        assert GraphApi.error_code(_refused(400, 100, "(#100) Invalid parameter")) == 100
+class TestGraphApiError:
+    def _response(self, response: httpx2.Response) -> httpx2.Response:
+        response.request = httpx2.Request("GET", f"{GRAPH}/42/insights")
+        return response
 
-    def test_a_body_that_is_not_json_has_no_code(self):
-        assert GraphApi.error_code(httpx2.Response(400, text="<html>bad</html>")) is None
+    def test_carries_graphs_code_and_message(self):
+        error = GraphApiError.from_response(self._response(_refused(400, 100, "(#100) Invalid parameter")))
+        assert error.code == 100
+        assert str(error) == "Graph refused the request (HTTP 400, code 100): (#100) Invalid parameter"
 
-    def test_a_body_without_an_error_object_has_no_code(self):
-        assert GraphApi.error_code(httpx2.Response(400, json={"message": "bad"})) is None
+    def test_a_body_that_is_not_json_gives_the_status_reason(self):
+        error = GraphApiError.from_response(self._response(httpx2.Response(502, text="<html>bad</html>")))
+        assert (error.code, str(error)) == (None, "Graph refused the request (HTTP 502): Bad Gateway")
+
+    def test_a_body_without_an_error_object_gives_the_status_reason(self):
+        error = GraphApiError.from_response(self._response(httpx2.Response(400, json={"message": "bad"})))
+        assert (error.code, str(error)) == (None, "Graph refused the request (HTTP 400): Bad Request")

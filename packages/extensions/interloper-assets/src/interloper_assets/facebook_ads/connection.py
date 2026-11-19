@@ -2,11 +2,12 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
 import interloper as il
+from interloper.errors import ConnectionCheckError
 from pydantic import model_validator
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.facebook_ads import constants
-from interloper_assets.meta.api import GraphApi
+from interloper_assets.meta.api import GraphApi, GraphApiError
 
 if TYPE_CHECKING:
     from interloper_assets.facebook_ads.api import FacebookGraphApi, FacebookMarketingApi
@@ -101,10 +102,15 @@ class FacebookAdsConnection(il.OAuthConnection):
         Returns:
             The options for the field's dropdown.
 
+        Raises:
+            ConnectionCheckError: If Graph refuses the lookup, carrying Graph's reason, which names no credential.
         """
         async with il.AsyncRESTClient(_GRAPH_URL, auth=il.HTTPBearerAuth(self.access_token), timeout=30) as client:
             fields = ["account_id", "name", "account_status"]
-            data = await GraphApi(client).rows("/me/adaccounts", fields=fields, limit=500)
+            try:
+                data = await GraphApi(client).rows("/me/adaccounts", fields=fields, limit=500)
+            except GraphApiError as error:
+                raise ConnectionCheckError(str(error)) from error
 
         return [
             {
@@ -119,7 +125,7 @@ class FacebookAdsConnection(il.OAuthConnection):
         """Prove the credentials work by running the ``accounts`` lookup.
 
         Returns:
-            True — any credential failure raises out of the lookup.
+            True — any credential failure raises out of the lookup, Graph's refusal as a `ConnectionCheckError`.
         """
         await self.accounts()
         return True
