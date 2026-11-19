@@ -33,7 +33,7 @@ class TestInit:
         assert uv == [("add", f"interloper-core>={version('interloper-core')}")]
         assert "interloper.yaml" in (acme / ".gitignore").read_text().splitlines()
         out = capsys.readouterr().out
-        assert "uv run interloper extension add <source|connection|settings|command|routes> [name]" in out
+        assert "uv run interloper extension add <source|connection|settings|command|routes|ui> [name]" in out
 
     def test_the_local_configuration_points_at_a_local_database_with_a_key_of_its_own(
         self, acme, library, tmp_path, uv, extension, monkeypatch

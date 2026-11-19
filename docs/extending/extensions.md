@@ -212,7 +212,9 @@ package declaring them must be installed in the API's image.
 
 A `ui` entry names a `UIBundle`: the output directory of the extension's build, whatever built
 it, shipped inside its package. The host imports the entry, an ES module, and adds the
-stylesheets beside it.
+stylesheets beside it. `interloper extension add ui` writes one built with the SDK below (one
+page reading a route, one sidebar entry, routes added first when there are none), and
+`interloper extension build` builds it into the wheel.
 
 ```yaml
 ui: acme_interloper.ui:UI
@@ -350,6 +352,12 @@ every page that shows an extension, so each is added to `host.ts` when an extens
 wheel carries whatever its `static/` holds, so the release runs `make build-extensions` before
 it builds the wheels, and the loaded api image builds the `packages/extensions` UIs into the
 packages it installs.
+
+That is how the repository's own extensions build, through the workspace and the Makefile. An
+extension in its own repository installs `@interloper/ui` from npm instead, and
+`uv run interloper extension build` runs npm in its `ui/`, type-checks and builds the UI, then
+builds the wheel and checks that it carries the bundle; `make check-extension` runs that whole
+path in a fresh project against the SDK packed as npm publishes it, as CI does.
 
 To work on a UI with hot reload, run its dev server beside the app's and name it in
 `INTERLOPER_UI_DEV` (`<key>=<entry URL>`, several separated by commas):

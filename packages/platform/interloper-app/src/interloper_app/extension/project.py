@@ -9,8 +9,11 @@ keeps ``pyproject.toml``, the lockfile and the environment in step.
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
+import tempfile
 import tomllib
+import zipfile
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from importlib.metadata import version
@@ -20,6 +23,7 @@ from typing import Any
 from interloper.extension import MANIFEST_FILE
 
 from interloper_app.extension.errors import ExtensionError
+from interloper_app.extension.manifest import ManifestFile
 
 ENTRY_POINT_GROUP = "interloper.extensions"
 _REQUIREMENT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
@@ -139,18 +143,21 @@ class Project:
         """Refuse files that exist, and a folder or module that would share an import name with one.
 
         Args:
-            paths: The files about to be written inside the import package.
+            paths: The files about to be written in the project.
 
         Raises:
-            ExtensionError: If a file exists, or the module beside a new
-                folder (``shop.py`` for ``shop/``) or the folder beside a new
-                module (``routes/`` for ``routes.py``) does.
+            ExtensionError: If a file exists, or, inside the import package,
+                the module beside a new folder (``shop.py`` for ``shop/``) or
+                the folder beside a new module (``routes/`` for ``routes.py``)
+                does.
         """
         paths = list(paths)
         existing = [path for path in paths if path.exists()]
         if existing:
             raise ExtensionError(f"{self.relative(existing)} exists already; move it away or pick another name")
         for path in paths:
+            if not path.is_relative_to(self.package_directory):
+                continue
             in_folder = path.parent != self.package_directory
             clash = path.parent.with_suffix(".py") if in_folder else path.with_suffix("")
             if clash.exists():
@@ -217,6 +224,87 @@ class Project:
         except (subprocess.CalledProcessError, OSError) as error:
             raise ExtensionError(f"uv add {requirement} failed; run it yourself to finish") from error
 
+    def read_manifest(self) -> ManifestFile:
+        """Read the extension's manifest.
+
+        Returns:
+            The manifest.
+
+        Raises:
+            ExtensionError: If the import package ships none, as when only
+                the entry point declares the extension.
+        """
+        if not self.manifest_path.is_file():
+            raise ExtensionError(f"{self.relative([self.manifest_path])} is missing: the extension has no manifest")
+        return ManifestFile.read(self.manifest_path)
+
+    # -- Build -----------------------------------------------------------------
+
+    def build_ui(self) -> None:
+        """Install the UI's dependencies, type-check it and build it into the package's ``static/``.
+
+        The dependencies install with ``npm ci`` when ``ui/package-lock.json``
+        pins them, ``npm install`` otherwise.
+
+        Raises:
+            ExtensionError: If ``ui/package.json`` is missing, or an npm step
+                fails or cannot run.
+        """
+        if not (self.root / "ui" / "package.json").is_file():
+            raise ExtensionError(f"{MANIFEST_FILE} declares ui, but ui/package.json is missing")
+        install = ("ci",) if (self.root / "ui" / "package-lock.json").is_file() else ("install",)
+        for args in (install, ("run", "typecheck"), ("run", "build")):
+            command = " ".join(("npm", *args))
+            try:
+                self._npm(*args)
+            except subprocess.CalledProcessError as error:
+                raise ExtensionError(f"{command} failed in ui/; fix what it printed above and build again") from error
+            except OSError as error:
+                raise ExtensionError(f"{command} could not run: the UI needs Node and npm on PATH") from error
+
+    def build(self, carrying: str | None = None) -> list[Path]:
+        """Build the sdist, and the wheel from it, and move them into ``dist/``.
+
+        ``uv build`` writes into a directory of its own first, so the files
+        taken are the ones this build wrote, whatever uv names them (a version
+        written ``0.2.0-rc.1`` gives a wheel named ``0.2.0rc1``) and wherever
+        the project sits (in a uv workspace, ``uv build`` would otherwise write
+        to the workspace's ``dist/``), and a refused wheel never reaches
+        ``dist/``.
+
+        Args:
+            carrying: A path the wheel must hold, or ``None`` for no check.
+
+        Returns:
+            The wheel and the sdist now in ``dist/``, each replacing a file of
+            the same name; the rest of uv's output (its ``.gitignore``) moves
+            along unlisted.
+
+        Raises:
+            ExtensionError: If ``uv build`` fails or cannot run, writes no
+                wheel, or writes one that lacks ``carrying``.
+        """
+        with tempfile.TemporaryDirectory(prefix="interloper-build-") as directory:
+            output = Path(directory)
+            try:
+                self._uv("build", "--out-dir", str(output))
+            except (subprocess.CalledProcessError, OSError) as error:
+                raise ExtensionError("uv build failed; fix what it printed above and build again") from error
+            artifacts = sorted(output.glob("*.whl")) + sorted(output.glob("*.tar.gz"))
+            if not artifacts or artifacts[0].suffix != ".whl":
+                raise ExtensionError("uv build wrote no wheel")
+            if carrying is not None:
+                with zipfile.ZipFile(artifacts[0]) as wheel:
+                    if carrying not in wheel.namelist():
+                        raise ExtensionError(
+                            f"{artifacts[0].name} lacks {carrying}: the UI's build did not reach the package"
+                        )
+            dist = self.root / "dist"
+            dist.mkdir(exist_ok=True)
+            for path in output.iterdir():
+                shutil.move(path, dist / path.name)
+            return [dist / path.name for path in artifacts]
+
     # -- Internals -------------------------------------------------------------
 
     @property
@@ -235,6 +323,14 @@ class Project:
             *args: uv's arguments.
         """
         subprocess.run(["uv", *args], cwd=self.root, check=True)
+
+    def _npm(self, *args: str) -> None:
+        """Run npm in the UI's folder, its output going to the terminal.
+
+        Args:
+            *args: npm's arguments.
+        """
+        subprocess.run(["npm", *args], cwd=self.root / "ui", check=True)
 
     @staticmethod
     def _read_toml(path: Path) -> dict[str, Any]:

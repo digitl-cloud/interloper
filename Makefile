@@ -55,6 +55,11 @@ check-sdk-package:
 	pnpm --filter @interloper/ui build
 	pnpm --filter @interloper/ui check:package
 
+# An extension created, grown, built and checked with `interloper extension`, in a fresh project.
+check-extension:
+	pnpm --filter @interloper/ui build
+	uv run --no-project python dev/check_extension.py
+
 
 # ###############
 # DOCKER
