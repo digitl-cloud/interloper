@@ -75,15 +75,13 @@ class LinkedinApi:
     from the plain values a caller passes, and sends it as part of the path.
 
     A list response wraps its rows in ``elements``. A collection links its
-    next page in ``paging.links`` (`rows`), a search finder names it by cursor
-    (`cursor_rows`), and an older finder is stepped by ``start`` and
-    ``count`` (`offset_rows`). Every request, each page included, goes
+    next page in ``paging.links`` (`rows`), and a search finder names it by
+    cursor (`cursor_rows`). Every request, each page included, goes
     through `_read`, which raises LinkedIn's refusal as `LinkedinApiError`
     with LinkedIn's code and message.
     """
 
     CURSOR_PAGE_SIZE: ClassVar[int] = 1000
-    OFFSET_PAGE_SIZE: ClassVar[int] = 100
 
     def __init__(self, client: il.AsyncRESTClient) -> None:
         """Build the engine on an authenticated client.
@@ -153,32 +151,6 @@ class LinkedinApi:
             if not token:
                 return rows
             query["pageToken"] = token
-
-    async def offset_rows(self, path: str, **params: Any) -> list[dict[str, Any]]:
-        """Read every row of a finder paged by ``start`` and ``count``.
-
-        The walk ends on the first empty page, so a page must carry its
-        ``elements``: one without fails rather than cutting the list short. It
-        also ends on a page identical to the one before, which is what an
-        endpoint that ignores ``start`` answers forever.
-
-        Args:
-            path: The endpoint, relative to the API's base URL, such as ``/adAccounts``.
-            **params: The query parameters as plain values, ``q`` naming the finder.
-
-        Returns:
-            The ``elements`` of every page, in page order.
-        """
-        rows: list[dict[str, Any]] = []
-        previous: list[dict[str, Any]] = []
-        start = 0
-        while True:
-            page = (await self.get(path, **params, count=self.OFFSET_PAGE_SIZE, start=start))["elements"]
-            if not page or page == previous:
-                return rows
-            rows.extend(page)
-            previous = page
-            start += self.OFFSET_PAGE_SIZE
 
     async def report(self, day: dt.date, **params: Any) -> list[dict[str, Any]]:
         """Read one day of the ad analytics report.

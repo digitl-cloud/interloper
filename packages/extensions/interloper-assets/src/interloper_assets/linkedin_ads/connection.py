@@ -70,7 +70,7 @@ class LinkedinAdsConnection(il.RefreshTokenOAuthConnection):
                 no credential.
         """
         try:
-            accounts = await self.api.offset_rows("/adAccounts", q="search")
+            accounts = await self.api.cursor_rows("/adAccounts", q="search")
         except LinkedinApiError as error:
             raise ConnectionCheckError(str(error)) from error
         return [{"id": str(account["id"]), "name": account.get("name", str(account["id"]))} for account in accounts]
