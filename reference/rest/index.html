@@ -5398,7 +5398,9 @@ send → <code>update_state</code> → (<code>has_next</code>?) → <code>update
         <p>Offset/limit pagination (<code>?offset=0&amp;limit=100</code>, <code>?offset=100&amp;limit=100</code>, …).</p>
 <p>When the response carries a total record count (<code>total_path</code>) or a
 <code>maximum_offset</code> is set, the async client fans out the remaining offsets
-concurrently; otherwise it walks sequentially until an empty page.</p>
+concurrently; otherwise it walks sequentially until an empty page. A page
+holding the same records as the one before it means the endpoint ignores
+the offset, which an empty-page walk would read forever, so it raises.</p>
 
         <p>Configure offset/limit pagination.</p>
 
@@ -5823,6 +5825,29 @@ when the API reports no total.</p>
             </td>
             <td>
                 <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="RuntimeError">RuntimeError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If the page holds the same records as the one before it.</p>
+              </div>
             </td>
           </tr>
       </tbody>
