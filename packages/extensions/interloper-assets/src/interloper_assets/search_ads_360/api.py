@@ -25,7 +25,8 @@ class SearchAds360Api:
 
     The endpoint is a POST whose paging token travels in the body, so the
     query-parameter paginators do not apply: `search` walks the pages itself,
-    until a page names no ``nextPageToken``. The POST only reads, so a page
+    until a page names no ``nextPageToken``, or names one already sent, which
+    would read the same pages again. The POST only reads, so a page
     that fails with a server error or a dropped connection is sent again,
     within the client's retry budget, as the client does for an idempotent
     method. A refusal raises as `GoogleApiError`, with Google's reason.
@@ -82,14 +83,20 @@ class SearchAds360Api:
         if conditions:
             query += f" WHERE {' AND '.join(conditions)}"
         headers = {"login-customer-id": login_customer_id} if login_customer_id else {}
+        path = f"/customers/{customer_id}/searchAds360:search"
         body = {"query": query}
         rows: list[dict[str, Any]] = []
+        sent: set[str] = set()
         while True:
-            page = await self._search_page(f"/customers/{customer_id}/searchAds360:search", body, headers)
+            page = await self._search_page(path, body, headers)
             rows.extend(page.get("results") or [])
             page_token = page.get("nextPageToken")
             if not page_token:
                 return rows
+            if page_token in sent:
+                logger.warning(f"{path} returned the page token {page_token} again; reading no further")
+                return rows
+            sent.add(page_token)
             body = {"query": query, "pageToken": page_token}
 
     async def report(
