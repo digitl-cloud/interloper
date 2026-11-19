@@ -2,9 +2,11 @@ import json
 from functools import cached_property
 
 import interloper as il
+from interloper.errors import ConnectionCheckError
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.google.auth import ServiceAccountAuth
+from interloper_assets.google.errors import GoogleApiError
 from interloper_assets.search_ads_360.api import SearchAds360Api
 from interloper_assets.search_ads_360.constants import BASE_URL, SCOPES
 
@@ -45,3 +47,21 @@ class SearchAds360Connection(il.Connection):
             The engine, cached per connection instance.
         """
         return SearchAds360Api(self.client)
+
+    async def check(self) -> bool:
+        """Prove the key works by listing the customers the service account can access.
+
+        Returns:
+            True when Search Ads 360 lists at least one customer for the service account.
+
+        Raises:
+            ConnectionCheckError: If Google refuses the lookup, carrying Google's
+                reason, or lists no customer the service account can access.
+        """
+        try:
+            accessible = await self.api.get("/customers:listAccessibleCustomers")
+        except GoogleApiError as error:
+            raise ConnectionCheckError(str(error)) from error
+        if not accessible.get("resourceNames"):
+            raise ConnectionCheckError("Search Ads 360 lists no customer this service account can access")
+        return True
