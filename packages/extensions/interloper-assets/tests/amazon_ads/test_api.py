@@ -267,6 +267,19 @@ class TestOffsetRows:
         assert _api(handler).offset_rows("123", "/sd/campaigns/extended") == []
         assert len(requests) == 1
 
+    def test_an_endpoint_ignoring_the_start_index_raises_instead_of_looping(self):
+        requests: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            if len(requests) > 3:
+                raise AssertionError("read past a repeated page")
+            return httpx2.Response(200, json=[{"campaignId": i} for i in range(100)])
+
+        with pytest.raises(RuntimeError, match="startIndex=100 repeats the page at startIndex=0"):
+            _api(handler).offset_rows("123", "/sd/campaigns/extended")
+        assert len(requests) == 2
+
     def test_a_refusal_on_a_later_page_raises(self):
         def handler(request: httpx2.Request) -> httpx2.Response:
             if request.url.params["startIndex"] != "0":

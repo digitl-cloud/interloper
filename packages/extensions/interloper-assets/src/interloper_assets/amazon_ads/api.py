@@ -102,7 +102,8 @@ class AmazonAdsApi:
         """Read every row of a list call that pages by ``startIndex``, until an empty page.
 
         Sponsored Display lists its entities by a GET answering a bare list of
-        at most ``count`` rows from ``startIndex`` on, with no total.
+        at most ``count`` rows from ``startIndex`` on, with no total. A page
+        repeating the one before it raises rather than being read forever.
 
         Args:
             profile_id: The profile whose entities are listed.

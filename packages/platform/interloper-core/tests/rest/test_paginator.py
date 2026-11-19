@@ -109,6 +109,23 @@ class TestOffsetAsync:
 # -- Cursor / link (sequential) ------------------------------------------------
 
 
+class TestOffsetIgnoredAsync:
+    async def test_an_endpoint_ignoring_the_offset_raises_instead_of_looping(self):
+        requests: list[httpx2.Request] = []
+
+        async def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            if len(requests) > 3:
+                raise AssertionError("read past a repeated page")
+            return httpx2.Response(200, json={"items": [{"o": 0}, {"o": 1}]})
+
+        paginator = OffsetPaginator(limit=2, data_selector="items")
+        async with AsyncRESTClient("https://t", transport=httpx2.MockTransport(handler)) as client:
+            with pytest.raises(RuntimeError, match=r"^The page at offset=2 repeats the page at offset=0"):
+                [page async for page in client.paginate("/x", paginator, data_selector="items")]
+        assert len(requests) == 2
+
+
 class TestJSONLinkAsync:
     async def test_follows_next_url(self):
         def handler(request: httpx2.Request) -> httpx2.Response:
@@ -245,6 +262,31 @@ class TestOffsetSync:
             pages = list(client.paginate("/x", paginator, data_selector="items"))
 
         assert [row["o"] for row in _flatten(pages)] == [0, 1, 2, 3]
+
+    @pytest.mark.parametrize("page_size", [2, 1], ids=["full page", "short page"])
+    def test_an_endpoint_ignoring_the_offset_raises_instead_of_looping(self, page_size: int):
+        requests: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            if len(requests) > 3:
+                raise AssertionError("read past a repeated page")
+            return httpx2.Response(200, json={"items": [{"o": i} for i in range(page_size)]})
+
+        client = RESTClient("https://t", transport=httpx2.MockTransport(handler))
+        paginator = OffsetPaginator(limit=2, offset_param="startIndex", data_selector="items")
+        with client, pytest.raises(RuntimeError, match=r"^The page at startIndex=2 repeats the page at startIndex=0"):
+            list(client.paginate("/x", paginator, data_selector="items"))
+        assert len(requests) == 2
+
+    def test_a_walk_restarted_on_the_same_paginator_does_not_see_a_repeat(self):
+        client = RESTClient("https://t", transport=httpx2.MockTransport(_offset_handler(None)))
+        paginator = OffsetPaginator(limit=2, data_selector="items")
+        with client:
+            first = _flatten(list(client.paginate("/x", paginator, data_selector="items")))
+            second = _flatten(list(client.paginate("/x", paginator, data_selector="items")))
+
+        assert first == second == [{"o": o} for o in range(6)]
 
     def test_remaining_requests_are_unknown_without_a_bound(self):
         # Nothing bounds the page set, so the async client cannot fan out.
