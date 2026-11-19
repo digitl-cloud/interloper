@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from uuid import uuid4
 
 import httpx2
@@ -315,6 +316,14 @@ class TestHandleError:
         assert excinfo.value.status_code == 500
         assert excinfo.value.detail == message
 
+    @pytest.mark.parametrize("error", [TimeoutError(), httpx2.ReadTimeout("timed out")])
+    def test_a_timeout_is_a_504(self, error: Exception) -> None:
+        with pytest.raises(HTTPException) as excinfo:
+            catalog_module.handle_error(error, "resolving x")
+
+        assert excinfo.value.status_code == 504
+        assert excinfo.value.detail == "The provider did not respond in time while resolving x."
+
     def test_anything_else_becomes_a_500(self) -> None:
         with pytest.raises(HTTPException) as excinfo:
             catalog_module.handle_error(RuntimeError("kaboom"), "resolving x")
@@ -371,6 +380,28 @@ class TestResolveEdgeCases:
 
         assert response.status_code == 500
         assert response.json()["detail"].startswith("Failed resolving ads_source.account_id")
+
+    def test_a_provider_that_does_not_answer_in_time_is_a_504(
+        self, source_catalog: il.Catalog, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # an engine waiting out a vendor's rate limit holds the lookup for minutes
+        @il.fetch_field_provider
+        async def accounts(self) -> list[dict[str, str]]:
+            await asyncio.sleep(1)
+            return [{"account_id": "111", "name": "Acme"}]
+
+        monkeypatch.setattr(AdsConnection, "accounts", accounts)
+        monkeypatch.setattr(catalog_module, "RESOLVE_TIMEOUT", 0.05, raising=False)
+
+        response = _client(source_catalog).post(
+            "/catalog/ads_source/resolve",
+            json={"field": "account_id", "deps": {"connection": CONNECTION_CONFIG}},
+        )
+
+        assert response.status_code == 504
+        assert response.json()["detail"] == (
+            "The provider did not respond in time while resolving ads_source.account_id."
+        )
 
     def test_a_relation_that_is_not_a_fetch_provider_is_a_403(
         self, source_catalog: il.Catalog, monkeypatch: pytest.MonkeyPatch
