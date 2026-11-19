@@ -325,7 +325,7 @@ class TestRequests:
                     "level": level,
                     "time_range": _encoded({"since": "2026-10-01", "until": "2026-10-01"}),
                     "breakdowns": _encoded(breakdowns),
-                    "action_breakdown": _encoded(["action_device", "action_type"]),
+                    "action_breakdowns": _encoded(["action_type"]),
                     "fields": _encoded(fields),
                 },
             ),

@@ -16,7 +16,7 @@ class TestActionsNormalizer:
                 "date_start": "2026-06-10",
                 "account_id": "123",
                 "ad_id": "456",
-                # link_click appears twice (action-device breakdown) -> summed.
+                # link_click listed twice -> summed into one column.
                 "actions": [
                     {"action_type": "link_click", "action_device": "mobile", "value": "5"},
                     {"action_type": "link_click", "action_device": "desktop", "value": "2"},
