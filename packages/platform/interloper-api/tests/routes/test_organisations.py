@@ -30,6 +30,7 @@ _OTHER_ORG_ID = uuid4()
 _USER_ID = uuid4()
 _SUPER_ADMIN_ID = uuid4()
 _NOW = dt.datetime(2026, 6, 1, tzinfo=dt.UTC)
+_PUBLIC_URL = "https://app.example.com"
 
 
 def _profile(
@@ -211,7 +212,7 @@ def settings() -> SimpleNamespace:
     Returns:
         The settings-shaped namespace.
     """
-    return SimpleNamespace(smtp=None)
+    return SimpleNamespace(smtp=None, server=SimpleNamespace(public_url=_PUBLIC_URL))
 
 
 @pytest.fixture
@@ -830,7 +831,20 @@ class TestInviteMember:
         assert to == "new@example.com"
         assert email.org_name == "Dev Org"
         assert email.inviter_name == "Ada"
-        assert email.invite_url.startswith("http://testserver/invite/token-")
+        assert email.invite_url.startswith(f"{_PUBLIC_URL}/invite/token-")
+
+    def test_the_invite_url_ignores_the_requests_host(
+        self, client: TestClient, mailer: list[tuple[InvitationEmail, str]]
+    ) -> None:
+        client.post(
+            f"/organisations/{_ORG_ID}/invitations",
+            json={"email": "new@example.com"},
+            headers={"Host": "attacker.example"},
+        )
+
+        [(email, _)] = mailer
+        assert email.invite_url.startswith(f"{_PUBLIC_URL}/invite/")
+        assert email.logo_url == f"{_PUBLIC_URL}/logo-email.png"
 
     def test_a_nameless_inviter_is_identified_by_email(
         self, app: FastAPI, client: TestClient, mailer: list[tuple[InvitationEmail, str]]
@@ -960,4 +974,17 @@ class TestResendInvitation:
         [(email, to)] = mailer
         [replacement] = store.invitation_rows
         assert to == "new@example.com"
-        assert email.invite_url == f"http://testserver/invite/token-{replacement.id}"
+        assert email.invite_url == f"{_PUBLIC_URL}/invite/token-{replacement.id}"
+
+    def test_the_new_invite_url_ignores_the_requests_host(
+        self, client: TestClient, store: FakeStore, mailer: list[tuple[InvitationEmail, str]]
+    ) -> None:
+        invitation_id = uuid4()
+        store.invitation_rows = [_invitation(invitation_id, email="new@example.com")]
+
+        client.post(
+            f"/organisations/{_ORG_ID}/invitations/{invitation_id}/resend", headers={"Host": "attacker.example"}
+        )
+
+        [(email, _)] = mailer
+        assert email.invite_url.startswith(f"{_PUBLIC_URL}/invite/")

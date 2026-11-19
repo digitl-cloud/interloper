@@ -484,6 +484,7 @@ def test_cannot_delete_own_account(store: FakeStore) -> None:
 
 
 _SMTP_ENABLED = SimpleNamespace(enabled=True)
+_PUBLIC_URL = "https://app.example.com"
 
 
 class TestUpdateUser:
@@ -520,7 +521,11 @@ class TestUpdateUser:
         me = store.add_profile("me@test", name="Me", is_super_admin=True)
         app = _app(store, is_super_admin=True)
         app.dependency_overrides[get_session_caller] = lambda: me
-        settings = SimpleNamespace(auth=SimpleNamespace(super_admin_emails=configured or []), smtp=smtp)
+        settings = SimpleNamespace(
+            auth=SimpleNamespace(super_admin_emails=configured or []),
+            smtp=smtp,
+            server=SimpleNamespace(public_url=_PUBLIC_URL),
+        )
         app.dependency_overrides[get_settings] = lambda: settings
         return TestClient(app), me
 
@@ -545,7 +550,20 @@ class TestUpdateUser:
         assert sorted(to for _, to in mailer) == ["me@test", "member@acme.test", "other@test"]
         email = mailer[0][0]
         assert (email.promoted_email, email.promoted_by) == ("member@acme.test", "Me")
-        assert email.admin_url == "http://testserver/admin/users"
+        assert email.admin_url == f"{_PUBLIC_URL}/admin/users"
+
+    def test_the_promotion_links_ignore_the_requests_host(
+        self, store: FakeStore, mailer: list[tuple[SuperAdminPromotionEmail, str]]
+    ) -> None:
+        client, _ = self._client(store)
+
+        client.patch(
+            f"/admin/users/{store.member.id}", json={"is_super_admin": True}, headers={"Host": "attacker.example"}
+        )
+
+        email = mailer[0][0]
+        assert email.admin_url == f"{_PUBLIC_URL}/admin/users"
+        assert email.logo_url == f"{_PUBLIC_URL}/logo-email.png"
 
     def test_promoting_a_super_admin_again_sends_nothing(
         self, store: FakeStore, mailer: list[tuple[SuperAdminPromotionEmail, str]]

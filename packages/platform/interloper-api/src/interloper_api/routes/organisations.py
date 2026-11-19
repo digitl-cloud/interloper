@@ -15,7 +15,7 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Response
 from interloper_db import Organisation, OrganisationQuery, Page, PageQuery, Role
 from interloper_db.models import UserOrganisation
 from pydantic import BaseModel
@@ -341,7 +341,6 @@ def list_invitations(
 @org_router.post("/invitations", status_code=201)
 def create_invitation(
     body: InvitationCreateRequest,
-    request: Request,
     user: CurrentUserDep,
     scope: AdminDep,
     store: StoreDep,
@@ -354,11 +353,11 @@ def create_invitation(
 
     Args:
         body: The address to invite and the role granted on acceptance.
-        request: The incoming request, whose base URL the invite link is built on.
         user: The authenticated caller, the inviter.
         scope: The organisation the path names, the caller an admin there.
         store: The database store.
-        settings: The settings, whose ``smtp`` is the mailer.
+        settings: The settings, whose ``smtp`` is the mailer and ``server``
+            the public URL the invite link is built on.
 
     Returns:
         The created invitation.
@@ -366,7 +365,7 @@ def create_invitation(
     organisation = scope.organisation
     invitation = store.invitations.create(organisation.id, email=body.email.strip(), role=body.role, invited_by=user.id)
     InvitationEmail.from_invitation(
-        invitation, org_name=organisation.name, inviter=user, base_url=str(request.base_url)
+        invitation, org_name=organisation.name, inviter=user, base_url=settings.server.public_url
     ).deliver(settings.smtp, invitation.email)
     return InvitationResponse.model_validate(invitation, from_attributes=True)
 
@@ -395,7 +394,6 @@ def delete_invitation(
 @org_router.post("/invitations/{invitation_id}/resend", status_code=201)
 def resend_invitation(
     invitation_id: UUID,
-    request: Request,
     user: CurrentUserDep,
     scope: AdminDep,
     store: StoreDep,
@@ -408,11 +406,11 @@ def resend_invitation(
 
     Args:
         invitation_id: The invitation to reissue.
-        request: The incoming request, whose base URL the invite link is built on.
         user: The authenticated caller, the inviter.
         scope: The organisation the path names, the caller an admin there.
         store: The database store.
-        settings: The settings, whose ``smtp`` is the mailer.
+        settings: The settings, whose ``smtp`` is the mailer and ``server``
+            the public URL the invite link is built on.
 
     Returns:
         The reissued invitation.
@@ -420,6 +418,6 @@ def resend_invitation(
     organisation = scope.organisation
     invitation = store.invitations.reissue(invitation_id, org_id=organisation.id, invited_by=user.id)
     InvitationEmail.from_invitation(
-        invitation, org_name=organisation.name, inviter=user, base_url=str(request.base_url)
+        invitation, org_name=organisation.name, inviter=user, base_url=settings.server.public_url
     ).deliver(settings.smtp, invitation.email)
     return InvitationResponse.model_validate(invitation, from_attributes=True)

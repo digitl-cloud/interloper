@@ -20,7 +20,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from authlib.oauth2.rfc7591 import InvalidRedirectURIError
-from fastapi import APIRouter, HTTPException, Query, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Response
 from interloper.catalog import Catalog
 from interloper.extension import MANIFESTS, Extension, ExtensionFailure
 from interloper.settings import SETTINGS, Settings
@@ -692,7 +692,6 @@ def update_user(
     user: SuperAdminDep,
     store: StoreDep,
     settings: SettingsDep,
-    request: Request,
 ) -> AdminUserResponse:
     """Grant or revoke a user's super-admin access.
 
@@ -706,9 +705,8 @@ def update_user(
         body: Whether the profile is a super-admin.
         user: The calling super-admin, resolved from the session.
         store: The database store backing the request.
-        settings: The settings, read for the configured super-admin emails and
-            the mailer.
-        request: The incoming request, whose base URL the email links back to.
+        settings: The settings, read for the configured super-admin emails,
+            the mailer, and the public URL the email links back to.
 
     Returns:
         The updated user.
@@ -729,7 +727,7 @@ def update_user(
     promoted = body.is_super_admin and not target.is_super_admin
     updated = store.profiles.set_super_admin(user_id, value=body.is_super_admin)
     if promoted:
-        email = SuperAdminPromotionEmail.from_promotion(updated, promoted_by=user, base_url=str(request.base_url))
+        email = SuperAdminPromotionEmail.from_promotion(updated, promoted_by=user, base_url=settings.server.public_url)
         for recipient in store.profiles.list(ProfileQuery(super_admin=True, limit=None)).items:
             email.deliver(settings.smtp, recipient.email)
     return AdminUserResponse.from_profile(updated)
