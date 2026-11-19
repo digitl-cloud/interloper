@@ -4,7 +4,9 @@ Ad analytics rows carry their day as a nested ``dateRange`` of ``{year, month,
 day}`` objects; ``LinkedinAdsStatsNormalizer`` turns both bounds into dates so
 the report partitions on the vendor's own ``date_range_start``. Entities come
 back undated and carry epoch-millisecond ``runSchedule`` instants, which the
-source normalizer's epoch option converts to UTC datetimes. What each asset
+source normalizer's epoch option converts to UTC datetimes; the ad account
+carries its ``changeAuditStamps`` one level deeper, so its own normalizer
+flattens two levels before converting them. What each asset
 sends through the connection's API engine is pinned here against a mock
 transport.
 """
@@ -68,6 +70,28 @@ async def _run(source: Any, key: str) -> list[dict[str, Any]]:
     return await asset.data(context=context)
 
 
+# LinkedIn's documented ad account, as /adAccounts/{id} answers without a projection
+ACCOUNT_ROW = {
+    "test": False,
+    "changeAuditStamps": {
+        "created": {"actor": "urn:li:person:fGcyYDdglZ", "time": 1449768717000},
+        "lastModified": {"actor": "urn:li:unknown:0", "time": 1477941718075},
+    },
+    "currency": "USD",
+    "id": 123456,
+    "name": "Company A",
+    "notifiedOnCampaignOptimization": True,
+    "notifiedOnCreativeApproval": True,
+    "notifiedOnCreativeRejection": True,
+    "notifiedOnEndOfCampaign": True,
+    "notifiedOnNewFeaturesEnabled": False,
+    "reference": "urn:li:organization:2414183",
+    "servingStatuses": ["RUNNABLE"],
+    "status": "ACTIVE",
+    "type": "BUSINESS",
+    "version": {"versionTag": "10"},
+}
+
 ANALYTICS_ROW = {
     "pivotValues": ["urn:li:share:7001", "urn:li:sponsoredCampaign:42"],
     "dateRange": {"start": {"year": 2026, "month": 9, "day": 15}, "end": {"year": 2026, "month": 9, "day": 15}},
@@ -100,8 +124,18 @@ class TestSourceNormalizer:
     def test_report_uses_the_stats_normalizer(self):
         assert isinstance(_asset(_source(), "ads_stats").normalizer, LinkedinAdsStatsNormalizer)
 
-    def test_entities_use_the_source_normalizer(self):
-        for key in ENTITY_ASSETS:
+    def test_ad_accounts_flatten_their_audit_stamps_into_typed_instants(self):
+        normalizer = _asset(_source(), "ad_accounts").normalizer
+        assert type(normalizer) is DataFrameNormalizer
+        assert normalizer.flatten_max_level == 2
+        assert normalizer.epoch_columns == [
+            "change_audit_stamps_created_time",
+            "change_audit_stamps_last_modified_time",
+        ]
+        assert normalizer.epoch_unit == "ms"
+
+    def test_campaign_entities_use_the_source_normalizer(self):
+        for key in ("campaign_groups", "campaigns"):
             normalizer = _asset(_source(), key).normalizer
             assert type(normalizer) is DataFrameNormalizer, key
             assert normalizer.flatten_max_level == 1, key
@@ -136,6 +170,27 @@ class TestSpecRoundtripAndReconcile:
         assert int(row["approximate_member_reach"]) == 120
         assert float(row["average_dwell_time"]) == 2.4
         assert "date" not in reconciled.columns
+
+    def test_account_row_reconciles_whole_with_typed_audit_stamps(self):
+        child = self._child("ad_accounts")
+        normalized = child.normalizer.normalize([{**ACCOUNT_ROW, "date": DAY}])
+        assert set(normalized.columns) <= set(schemas.AdAccounts.model_fields)
+        row = TableData.from_data(normalized).reconcile(schemas.AdAccounts).iloc[0]
+        assert row["id"] == "123456"
+        assert row["type"] == "BUSINESS"
+        assert row["reference"] == "urn:li:organization:2414183"
+        assert row["serving_statuses"] == '["RUNNABLE"]'
+        assert not row["test"]
+        assert row["notified_on_campaign_optimization"]
+        assert not row["notified_on_new_features_enabled"]
+        assert row["version_version_tag"] == "10"
+        assert row["change_audit_stamps_created_actor"] == "urn:li:person:fGcyYDdglZ"
+        assert row["change_audit_stamps_created_time"] == dt.datetime(2015, 12, 10, 17, 31, 57, tzinfo=dt.UTC)
+        assert row["change_audit_stamps_last_modified_actor"] == "urn:li:unknown:0"
+        assert row["change_audit_stamps_last_modified_time"] == dt.datetime(
+            2016, 10, 31, 19, 21, 58, 75000, tzinfo=dt.UTC
+        )
+        assert row["date"] == DAY
 
     def test_campaign_row_reconciles_with_flattened_budget_and_schedule(self):
         child = self._child("campaigns")
@@ -197,20 +252,19 @@ class TestRequests:
 
         assert rows == []
 
-    async def test_ad_accounts_read_the_sources_account_in_one_request(self):
+    async def test_ad_accounts_read_the_whole_account_in_one_request(self):
         requests: list[httpx2.Request] = []
 
         def handler(request: httpx2.Request) -> httpx2.Response:
             requests.append(request)
-            return httpx2.Response(200, json={"id": 123, "name": "Acme", "currency": "EUR", "status": "ACTIVE"})
+            return httpx2.Response(200, json=ACCOUNT_ROW)
 
         rows = await _run(_faked_source(handler), "ad_accounts")
 
-        assert rows == [{"id": 123, "name": "Acme", "currency": "EUR", "status": "ACTIVE", "date": DAY}]
+        assert rows == [{**ACCOUNT_ROW, "date": DAY}]
         (request,) = requests
         assert request.method == "GET"
-        assert request.url.path == "/rest/adAccounts/123"
-        assert _params(request) == {"fields": "id,name,currency,status"}
+        assert str(request.url) == "https://api.linkedin.com/rest/adAccounts/123"
 
     @pytest.mark.parametrize(
         ("key", "resource", "fields"),

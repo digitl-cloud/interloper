@@ -51,10 +51,20 @@ class LinkedinAds(il.Source):
             fields=["pivotValues", "dateRange", *constants.ANALYTICS_FIELDS],
         )
 
-    @il.asset(schema=AdAccounts, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
+    @il.asset(
+        schema=AdAccounts,
+        partitioning=il.SnapshotPartitionConfig(column="date"),
+        tags=["Entity"],
+        normalizer=DataFrameNormalizer(
+            flatten_max_level=2,
+            # LinkedIn sends changeAuditStamps instants as milliseconds since the epoch
+            epoch_columns=["change_audit_stamps_created_time", "change_audit_stamps_last_modified_time"],
+            epoch_unit="ms",
+        ),
+    )
     async def ad_accounts(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-        """The ad account with its name, currency and status."""
-        account = await self.connection.api.get(f"/adAccounts/{self.account_id}", fields=constants.ACCOUNT_FIELDS)
+        """The ad account with its name, currency, status, type, serving statuses and notification settings."""
+        account = await self.connection.api.get(f"/adAccounts/{self.account_id}")
         return [{**account, "date": context.partition_date}]
 
     @il.asset(schema=CampaignGroups, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
