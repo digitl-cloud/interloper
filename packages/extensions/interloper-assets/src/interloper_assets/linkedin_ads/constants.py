@@ -3,25 +3,6 @@ AUTH_BASE_URL = "https://api.linkedin.com"
 LINKEDIN_VERSION = "202607"
 RESTLI_PROTOCOL_VERSION = "2.0.0"
 
-CAMPAIGN_GROUP_FIELDS = [
-    "id",
-    "name",
-    "status",
-    "runSchedule",
-]
-
-CAMPAIGN_FIELDS = [
-    "id",
-    "name",
-    "type",
-    "status",
-    "objectiveType",
-    "dailyBudget",
-    "runSchedule",
-    "costType",
-    "campaignGroup",
-]
-
 ANALYTICS_FIELDS = [
     # Core Performance & Cost
     "costInLocalCurrency",

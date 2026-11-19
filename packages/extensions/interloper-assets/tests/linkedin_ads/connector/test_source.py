@@ -3,10 +3,9 @@
 Ad analytics rows carry their day as a nested ``dateRange`` of ``{year, month,
 day}`` objects; ``LinkedinAdsStatsNormalizer`` turns both bounds into dates so
 the report partitions on the vendor's own ``date_range_start``. Entities come
-back undated and carry epoch-millisecond ``runSchedule`` instants, which the
-source normalizer's epoch option converts to UTC datetimes; the ad account
-carries its ``changeAuditStamps`` one level deeper, so its own normalizer
-flattens two levels before converting them. What each asset
+back undated and whole, with epoch-millisecond ``runSchedule`` and
+``changeAuditStamps`` instants two levels deep, which the source normalizer
+flattens and converts to UTC datetimes. What each asset
 sends through the connection's API engine is pinned here against a mock
 transport.
 """
@@ -104,16 +103,72 @@ ANALYTICS_ROW = {
     "approximateMemberReach": 120,
 }
 
-CAMPAIGN_ROW = {
-    "id": 42,
-    "name": "Autumn launch",
-    "type": "SPONSORED_UPDATES",
-    "status": "ACTIVE",
+# A campaign group and a campaign as the search finders answer without a projection
+CAMPAIGN_GROUP_ROW = {
+    "account": "urn:li:sponsoredAccount:123",
+    "allowedCampaignTypes": ["SPONSORED_UPDATES", "TEXT_AD"],
+    "backfilled": False,
+    "budgetOptimization": {"bidStrategy": "MAXIMUM_DELIVERY", "budgetOptimizationStrategy": "DYNAMIC"},
+    "changeAuditStamps": {
+        "created": {"actor": "urn:li:person:324_kGGaLE", "time": 1490074934000},
+        "lastModified": {"actor": "urn:li:unknown:0", "time": 1757894400000},
+    },
+    "id": 7,
+    "name": "Autumn group",
     "objectiveType": "WEBSITE_VISIT",
-    "dailyBudget": {"amount": "18", "currencyCode": "EUR"},
-    "runSchedule": {"start": 1757894400000, "end": 1760486400000},
-    "costType": "CPM",
+    "runSchedule": {"start": 1757894400000},
+    "servingStatuses": ["RUNNABLE"],
+    "status": "ACTIVE",
+    "test": False,
+    "totalBudget": {"amount": "60000.00", "currencyCode": "EUR"},
+}
+
+CAMPAIGN_ROW = {
+    "account": "urn:li:sponsoredAccount:123",
+    "associatedEntity": "urn:li:organization:2414183",
+    "audienceExpansionEnabled": False,
     "campaignGroup": "urn:li:sponsoredCampaignGroup:7",
+    "changeAuditStamps": {
+        "created": {"actor": "urn:li:person:324_kGGaLE", "time": 1490074934000},
+        "lastModified": {"actor": "urn:li:unknown:0", "time": 1757894400000},
+    },
+    "connectedTelevisionOnly": False,
+    "costType": "CPM",
+    "creativeSelection": "OPTIMIZED",
+    "dailyBudget": {"amount": "18", "currencyCode": "EUR"},
+    "format": "SINGLE_VIDEO",
+    "id": 42,
+    "locale": {"country": "DE", "language": "de"},
+    "name": "Autumn launch",
+    "objectiveType": "WEBSITE_VISIT",
+    "offsiteDeliveryEnabled": True,
+    "offsitePreferences": {
+        "iabCategories": {"include": ["urn:li:iabCategory:2"], "exclude": ["urn:li:iabCategory:1"]},
+        "publisherRestrictionFiles": {"include": ["urn:li:adPublisherRestrictionFile:8"], "exclude": []},
+    },
+    "optimizationPreference": {
+        "frequencyOptimizationPreference": {
+            "frequency": 10,
+            "optimizationType": "MAX_FREQUENCY",
+            "timeSpan": {"duration": 7, "unit": "DAY"},
+        }
+    },
+    "optimizationTargetType": "MAX_REACH",
+    "pacingStrategy": "LIFETIME",
+    "politicalIntent": "NOT_POLITICAL",
+    "runSchedule": {"start": 1757894400000, "end": 1760486400000},
+    "servingStatuses": ["RUNNABLE"],
+    "status": "ACTIVE",
+    "storyDeliveryEnabled": False,
+    "targetingCriteria": {
+        "include": {"and": [{"or": {"urn:li:adTargetingFacet:locations": ["urn:li:geo:101282230"]}}]},
+        "exclude": {"or": {"urn:li:adTargetingFacet:employers": ["urn:li:organization:1"]}},
+    },
+    "test": False,
+    "totalBudget": {"amount": "5000", "currencyCode": "EUR"},
+    "type": "SPONSORED_UPDATES",
+    "unitCost": {"amount": "15", "currencyCode": "EUR"},
+    "version": {"versionTag": "3"},
 }
 
 
@@ -124,22 +179,17 @@ class TestSourceNormalizer:
     def test_report_uses_the_stats_normalizer(self):
         assert isinstance(_asset(_source(), "ads_stats").normalizer, LinkedinAdsStatsNormalizer)
 
-    def test_ad_accounts_flatten_their_audit_stamps_into_typed_instants(self):
-        normalizer = _asset(_source(), "ad_accounts").normalizer
-        assert type(normalizer) is DataFrameNormalizer
-        assert normalizer.flatten_max_level == 2
-        assert normalizer.epoch_columns == [
-            "change_audit_stamps_created_time",
-            "change_audit_stamps_last_modified_time",
-        ]
-        assert normalizer.epoch_unit == "ms"
-
-    def test_campaign_entities_use_the_source_normalizer(self):
-        for key in ("campaign_groups", "campaigns"):
+    def test_entities_use_the_source_normalizer(self):
+        for key in ENTITY_ASSETS:
             normalizer = _asset(_source(), key).normalizer
             assert type(normalizer) is DataFrameNormalizer, key
-            assert normalizer.flatten_max_level == 1, key
-            assert normalizer.epoch_columns == ["run_schedule_start", "run_schedule_end"], key
+            assert normalizer.flatten_max_level == 2, key
+            assert normalizer.epoch_columns == [
+                "run_schedule_start",
+                "run_schedule_end",
+                "change_audit_stamps_created_time",
+                "change_audit_stamps_last_modified_time",
+            ], key
             assert normalizer.epoch_unit == "ms", key
 
 
@@ -192,15 +242,50 @@ class TestSpecRoundtripAndReconcile:
         )
         assert row["date"] == DAY
 
-    def test_campaign_row_reconciles_with_flattened_budget_and_schedule(self):
+    def test_campaign_row_reconciles_whole(self):
         child = self._child("campaigns")
         normalized = child.normalizer.normalize([{**CAMPAIGN_ROW, "date": DAY}])
+        assert set(normalized.columns) <= set(schemas.Campaigns.model_fields)
         row = TableData.from_data(normalized).reconcile(schemas.Campaigns).iloc[0]
-        assert int(row["id"]) == 42
+        assert row["id"] == "42"
         assert float(row["daily_budget_amount"]) == 18.0
         assert row["daily_budget_currency_code"] == "EUR"
+        assert float(row["total_budget_amount"]) == 5000.0
+        assert float(row["unit_cost_amount"]) == 15.0
         assert row["run_schedule_start"] == dt.datetime(2025, 9, 15, tzinfo=dt.UTC)
         assert row["campaign_group"] == "urn:li:sponsoredCampaignGroup:7"
+        assert row["account"] == "urn:li:sponsoredAccount:123"
+        assert row["locale_country"] == "DE"
+        assert row["targeting_criteria_include_and"] == (
+            '[{"or": {"urn:li:adTargetingFacet:locations": ["urn:li:geo:101282230"]}}]'
+        )
+        assert (
+            row["targeting_criteria_exclude_or"] == '{"urn:li:adTargetingFacet:employers": ["urn:li:organization:1"]}'
+        )
+        assert row["offsite_preferences_iab_categories_exclude"] == '["urn:li:iabCategory:1"]'
+        assert int(row["optimization_preference_frequency_optimization_preference_frequency"]) == 10
+        assert row["optimization_preference_frequency_optimization_preference_time_span"] == (
+            '{"duration": 7, "unit": "DAY"}'
+        )
+        assert row["serving_statuses"] == '["RUNNABLE"]'
+        assert row["version_version_tag"] == "3"
+        assert row["change_audit_stamps_last_modified_time"] == dt.datetime(2025, 9, 15, tzinfo=dt.UTC)
+        assert row["date"] == DAY
+
+    def test_campaign_group_row_reconciles_whole(self):
+        child = self._child("campaign_groups")
+        normalized = child.normalizer.normalize([{**CAMPAIGN_GROUP_ROW, "date": DAY}])
+        assert set(normalized.columns) <= set(schemas.CampaignGroups.model_fields)
+        row = TableData.from_data(normalized).reconcile(schemas.CampaignGroups).iloc[0]
+        assert row["id"] == "7"
+        assert row["account"] == "urn:li:sponsoredAccount:123"
+        assert row["allowed_campaign_types"] == '["SPONSORED_UPDATES", "TEXT_AD"]'
+        assert row["budget_optimization_budget_optimization_strategy"] == "DYNAMIC"
+        assert float(row["total_budget_amount"]) == 60000.0
+        assert row["total_budget_currency_code"] == "EUR"
+        assert row["run_schedule_start"] == dt.datetime(2025, 9, 15, tzinfo=dt.UTC)
+        assert row["change_audit_stamps_created_actor"] == "urn:li:person:324_kGGaLE"
+        assert row["change_audit_stamps_created_time"] == dt.datetime(2017, 3, 21, 5, 42, 14, tzinfo=dt.UTC)
         assert row["date"] == DAY
 
     def test_open_ended_schedule_leaves_the_end_empty(self):
@@ -267,17 +352,9 @@ class TestRequests:
         assert str(request.url) == "https://api.linkedin.com/rest/adAccounts/123"
 
     @pytest.mark.parametrize(
-        ("key", "resource", "fields"),
-        [
-            (
-                "campaigns",
-                "adCampaigns",
-                "id,name,type,status,objectiveType,dailyBudget,runSchedule,costType,campaignGroup",
-            ),
-            ("campaign_groups", "adCampaignGroups", "id,name,status,runSchedule"),
-        ],
+        ("key", "resource"), [("campaigns", "adCampaigns"), ("campaign_groups", "adCampaignGroups")]
     )
-    async def test_an_entity_search_follows_the_page_token(self, key: str, resource: str, fields: str):
+    async def test_an_entity_search_reads_every_page_without_a_projection(self, key: str, resource: str):
         requests: list[httpx2.Request] = []
         pages = {
             None: {"elements": [{"id": 1}], "metadata": {"nextPageToken": "tok/1"}},
@@ -293,8 +370,8 @@ class TestRequests:
         assert rows == [{"id": 1, "date": DAY}, {"id": 2, "date": DAY}]
         assert [request.method for request in requests] == ["GET", "GET"]
         assert [request.url.path for request in requests] == [f"/rest/adAccounts/123/{resource}"] * 2
-        assert _params(requests[0]) == {"q": "search", "pageSize": "1000", "fields": fields}
-        assert _params(requests[1]) == {"q": "search", "pageSize": "1000", "fields": fields, "pageToken": "tok%2F1"}
+        assert _params(requests[0]) == {"q": "search", "pageSize": "1000"}
+        assert _params(requests[1]) == {"q": "search", "pageSize": "1000", "pageToken": "tok%2F1"}
 
     async def test_an_entity_search_without_page_token_reads_one_page(self):
         requests: list[httpx2.Request] = []

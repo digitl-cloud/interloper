@@ -13,9 +13,14 @@ from interloper_assets.linkedin_ads.connector.schemas import AdAccounts, AdsStat
 @il.source(
     tags=["Advertising"],
     normalizer=DataFrameNormalizer(
-        flatten_max_level=1,
-        # LinkedIn sends runSchedule instants as milliseconds since the epoch
-        epoch_columns=["run_schedule_start", "run_schedule_end"],
+        flatten_max_level=2,
+        # LinkedIn sends runSchedule and changeAuditStamps instants as milliseconds since the epoch
+        epoch_columns=[
+            "run_schedule_start",
+            "run_schedule_end",
+            "change_audit_stamps_created_time",
+            "change_audit_stamps_last_modified_time",
+        ],
         epoch_unit="ms",
     ),
     icon="devicon:linkedin",
@@ -51,17 +56,7 @@ class LinkedinAds(il.Source):
             fields=["pivotValues", "dateRange", *constants.ANALYTICS_FIELDS],
         )
 
-    @il.asset(
-        schema=AdAccounts,
-        partitioning=il.SnapshotPartitionConfig(column="date"),
-        tags=["Entity"],
-        normalizer=DataFrameNormalizer(
-            flatten_max_level=2,
-            # LinkedIn sends changeAuditStamps instants as milliseconds since the epoch
-            epoch_columns=["change_audit_stamps_created_time", "change_audit_stamps_last_modified_time"],
-            epoch_unit="ms",
-        ),
-    )
+    @il.asset(schema=AdAccounts, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
     async def ad_accounts(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """The ad account with its name, currency, status, type, serving statuses and notification settings."""
         account = await self.connection.api.get(f"/adAccounts/{self.account_id}")
@@ -69,16 +64,12 @@ class LinkedinAds(il.Source):
 
     @il.asset(schema=CampaignGroups, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
     async def campaign_groups(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-        """All campaign groups of the ad account with their status and run schedule."""
-        rows = await self.connection.api.cursor_rows(
-            f"/adAccounts/{self.account_id}/adCampaignGroups", q="search", fields=constants.CAMPAIGN_GROUP_FIELDS
-        )
+        """All campaign groups of the ad account, in every status, with their objective, budget and run schedule."""
+        rows = await self.connection.api.cursor_rows(f"/adAccounts/{self.account_id}/adCampaignGroups", q="search")
         return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(schema=Campaigns, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
     async def campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-        """All campaigns of the ad account with their type, objective, budget and run schedule."""
-        rows = await self.connection.api.cursor_rows(
-            f"/adAccounts/{self.account_id}/adCampaigns", q="search", fields=constants.CAMPAIGN_FIELDS
-        )
+        """All campaigns of the ad account, in every status, with their budgets, bidding, targeting and run schedule."""
+        rows = await self.connection.api.cursor_rows(f"/adAccounts/{self.account_id}/adCampaigns", q="search")
         return [{**row, "date": context.partition_date} for row in rows]
