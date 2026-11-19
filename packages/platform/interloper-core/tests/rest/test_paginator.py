@@ -332,3 +332,93 @@ class TestCursor:
 
         assert _flatten(pages) == [{"c": 1}]
         assert paginator.has_next is False
+
+    @pytest.mark.parametrize(
+        ("params", "cursors", "read"),
+        [
+            ({}, {"first": "c1", "c1": "c1"}, ["first", "c1"]),
+            ({}, {"first": "c1", "c1": "c2", "c2": "c1"}, ["first", "c1", "c2"]),
+            ({"cursor": "c0"}, {"c0": "c0"}, ["c0"]),
+        ],
+        ids=["unchanged", "cycle", "starting cursor"],
+    )
+    def test_a_cursor_already_sent_ends_the_walk(
+        self, params: dict[str, str], cursors: dict[str, str], read: list[str], caplog: pytest.LogCaptureFixture
+    ):
+        requests: list[str] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            cursor = request.url.params.get("cursor", "first")
+            requests.append(cursor)
+            if len(requests) > 4:
+                raise AssertionError("read past a repeated cursor")
+            return httpx2.Response(200, json={"items": [cursor], "next": cursors[cursor]})
+
+        client = RESTClient("https://t", transport=httpx2.MockTransport(handler))
+        paginator = JSONCursorPaginator(cursor_path="next", cursor_param="cursor")
+        with client:
+            pages = list(client.paginate("/x", paginator, params=params, data_selector="items"))
+
+        assert _flatten(pages) == requests == read
+        assert paginator.has_next is False
+        assert f"/x returned the cursor {cursors[read[-1]]!r} again; reading no further" in caplog.text
+
+    def test_a_walk_restarted_on_the_same_paginator_does_not_see_a_repeat(self):
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            cursor = request.url.params.get("cursor")
+            return httpx2.Response(200, json={"items": [cursor], "next": None if cursor else "c1"})
+
+        client = RESTClient("https://t", transport=httpx2.MockTransport(handler))
+        paginator = JSONCursorPaginator(cursor_path="next", cursor_param="cursor")
+        with client:
+            first = _flatten(list(client.paginate("/x", paginator, data_selector="items")))
+            second = _flatten(list(client.paginate("/x", paginator, data_selector="items")))
+
+        assert first == second == [None, "c1"]
+
+
+# -- Link paginators -----------------------------------------------------------
+
+
+class TestLinkRepeats:
+    """A next link to a page already read ends the walk instead of reading it again."""
+
+    @pytest.mark.parametrize(
+        "link",
+        ["https://t/x?c={c}", "/x?c={c}", "?c={c}"],
+        ids=["absolute", "root-relative", "query-relative"],
+    )
+    async def test_a_json_link_to_a_page_already_read_ends_the_walk(self, link: str, caplog: pytest.LogCaptureFixture):
+        requests: list[str] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(str(request.url))
+            if len(requests) > 3:
+                raise AssertionError("read past a repeated link")
+            c = int(request.url.params["c"])
+            return httpx2.Response(200, json={"items": [c], "paging": {"next": link.format(c=(c + 1) % 2)}})
+
+        paginator = JSONLinkPaginator(next_url_path="paging.next")
+        async with AsyncRESTClient("https://t", transport=httpx2.MockTransport(handler)) as client:
+            pages = [p async for p in client.paginate("/x", paginator, params={"c": "0"}, data_selector="items")]
+
+        assert _flatten(pages) == [0, 1]
+        assert requests == ["https://t/x?c=0", "https://t/x?c=1"]
+        assert "/x links to a page already read; reading no further" in caplog.text
+
+    async def test_a_link_header_to_the_same_page_ends_the_walk(self, caplog: pytest.LogCaptureFixture):
+        requests: list[str] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(str(request.url))
+            if len(requests) > 3:
+                raise AssertionError("read past a repeated link")
+            n = min(int(request.url.params.get("n", "0")) + 1, 2)
+            return httpx2.Response(200, json={"items": [n]}, headers={"Link": f'<https://t/x?n={n}>; rel="next"'})
+
+        paginator = HeaderLinkPaginator()
+        async with AsyncRESTClient("https://t", transport=httpx2.MockTransport(handler)) as client:
+            [p async for p in client.paginate("/x", paginator, data_selector="items")]
+
+        assert requests == ["https://t/x", "https://t/x?n=1", "https://t/x?n=2"]
+        assert "/x links to a page already read; reading no further" in caplog.text

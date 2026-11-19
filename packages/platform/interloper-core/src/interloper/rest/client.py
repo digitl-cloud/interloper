@@ -137,6 +137,24 @@ class RESTClient(httpx2.Client):
             time.sleep(wait)
             attempt += 1
 
+    def _refresh_cookies(self, request: httpx2.Request, headers: dict[str, str] | None) -> None:
+        """Give a page request the cookies the client holds now.
+
+        httpx sets a request's cookies when it builds it, and a walk reuses its
+        first request for every page, so a cookie an earlier page set, such as
+        a load balancer's affinity cookie, would not go with the pages after
+        it. A Cookie header the caller set wins over the client's cookies, as it
+        does when httpx builds a request.
+
+        Args:
+            request: The page request about to be sent, updated in place.
+            headers: The headers the caller gave the walk.
+        """
+        if "Cookie" in self.headers or "Cookie" in httpx2.Headers(headers):
+            return
+        request.headers.pop("Cookie", None)
+        self.cookies.set_cookie_header(request)
+
     def paginate(
         self,
         path: str,
@@ -171,6 +189,7 @@ class RESTClient(httpx2.Client):
         paginator.update_state(response)
         while paginator.has_next:
             paginator.update_request(request)
+            self._refresh_cookies(request, headers)
             response = self.send(request)
             response.raise_for_status()
             yield select(response, data_selector)
@@ -251,6 +270,24 @@ class AsyncRESTClient(httpx2.AsyncClient):
             await asyncio.sleep(wait)
             attempt += 1
 
+    def _refresh_cookies(self, request: httpx2.Request, headers: dict[str, str] | None) -> None:
+        """Give a page request the cookies the client holds now.
+
+        httpx sets a request's cookies when it builds it, and a walk reuses its
+        first request for every page, so a cookie an earlier page set, such as
+        a load balancer's affinity cookie, would not go with the pages after
+        it. A Cookie header the caller set wins over the client's cookies, as it
+        does when httpx builds a request.
+
+        Args:
+            request: The page request about to be sent, updated in place.
+            headers: The headers the caller gave the walk.
+        """
+        if "Cookie" in self.headers or "Cookie" in httpx2.Headers(headers):
+            return
+        request.headers.pop("Cookie", None)
+        self.cookies.set_cookie_header(request)
+
     async def _send_checked(self, request: httpx2.Request) -> httpx2.Response:
         """Send a request and raise on a non-success status.
 
@@ -296,6 +333,7 @@ class AsyncRESTClient(httpx2.AsyncClient):
         paginator.init_request(request)
         first = await self._send_checked(request)
         yield select(first, data_selector)
+        self._refresh_cookies(request, headers)
 
         # Fast path: known page set → fetch the rest concurrently.
         if isinstance(paginator, RangePaginator):
@@ -310,6 +348,7 @@ class AsyncRESTClient(httpx2.AsyncClient):
         paginator.update_state(first)
         while paginator.has_next:
             paginator.update_request(request)
+            self._refresh_cookies(request, headers)
             response = await self._send_checked(request)
             yield select(response, data_selector)
             paginator.update_state(response)
