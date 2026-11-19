@@ -1997,6 +1997,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#interloper-extension-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>interloper extension build</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#interloper-extension-check" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2790,13 +2801,15 @@ would write exists. Add what the extension declares with interloper extension ad
 </tbody>
 </table>
 <h3 id="interloper-extension-add"><code>interloper extension add</code><a class="headerlink" href="#interloper-extension-add" title="Permanent link">&para;</a></h3>
-<p>Add a source, a connection, settings, a command or routes to the extension here.</p>
-<p>Writes the part's files in the extension's package from a working template, declares the part in
-extension.yaml, keeping everything else the file holds, and adds the dependency the part needs. The name is
-snake_case and defaults to the extension's key; the part's class is its PascalCase form, so a source named
-shop is the class Shop with the catalog key shop. A settings section other than the key starts with the key
-and an underscore. It refuses, changing nothing, when a file it would write exists, when the manifest declares
-the name already, or when another installed package declares the settings section or command.</p>
+<p>Add a source, a connection, settings, a command, routes or a UI to the extension here.</p>
+<p>Writes the part's files from a working template, declares the part in extension.yaml, keeping everything else
+the file holds, and adds the dependency the part needs. The name is snake_case and defaults to the extension's
+key; the part's class is its PascalCase form, so a source named shop is the class Shop with the catalog key
+shop. A settings section other than the key starts with the key and an underscore. A UI is one page and one
+sidebar entry in ui/, built with @interloper/ui and npm; it adds routes first when the extension has none, and
+loads once interloper extension build has built it. It refuses, changing nothing, when a file it would write
+exists, when the manifest declares the name already, or when another installed package declares the settings
+section or command.</p>
 <table>
 <thead>
 <tr>
@@ -2807,7 +2820,7 @@ the name already, or when another installed package declares the settings sectio
 <tbody>
 <tr>
 <td><code>part</code></td>
-<td>what to add One of <code>source</code>, <code>connection</code>, <code>settings</code>, <code>command</code>, <code>routes</code>.</td>
+<td>what to add One of <code>source</code>, <code>connection</code>, <code>settings</code>, <code>command</code>, <code>routes</code>, <code>ui</code>.</td>
 </tr>
 <tr>
 <td><code>name [optional]</code></td>
@@ -2815,6 +2828,12 @@ the name already, or when another installed package declares the settings sectio
 </tr>
 </tbody>
 </table>
+<h3 id="interloper-extension-build"><code>interloper extension build</code><a class="headerlink" href="#interloper-extension-build" title="Permanent link">&para;</a></h3>
+<p>Build the extension here: its UI, then its sdist and wheel in dist/.</p>
+<p>With a UI, it installs the UI's dependencies with npm (npm ci when ui/package-lock.json pins them), type-checks
+the UI and builds it into the package's static/, then checks that the wheel carries the build. Without one, it
+needs no Node. Either way uv build writes the sdist, and the wheel built from it, into dist/, replacing the
+files of the same name; a wheel that fails the check never reaches dist/.</p>
 <h3 id="interloper-extension-check"><code>interloper extension check</code><a class="headerlink" href="#interloper-extension-check" title="Permanent link">&para;</a></h3>
 <p>Load every declared entry and name what fails or what nothing reads.</p>
 <p>Reads every installed package's extension.yaml and imports every entry it declares. Names each manifest,

@@ -2788,7 +2788,9 @@ package declaring them must be installed in the API's image.</p>
 <h2 id="ui">UI<a class="headerlink" href="#ui" title="Permanent link">&para;</a></h2>
 <p>A <code>ui</code> entry names a <code>UIBundle</code>: the output directory of the extension's build, whatever built
 it, shipped inside its package. The host imports the entry, an ES module, and adds the
-stylesheets beside it.</p>
+stylesheets beside it. <code>interloper extension add ui</code> writes one built with the SDK below (one
+page reading a route, one sidebar entry, routes added first when there are none), and
+<code>interloper extension build</code> builds it into the wheel.</p>
 <div class="language-yaml highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nt">ui</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme_interloper.ui:UI</span>
 </span></code></pre></div>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># acme_interloper/ui.py</span>
@@ -2917,6 +2919,11 @@ every page that shows an extension, so each is added to <code>host.ts</code> whe
 wheel carries whatever its <code>static/</code> holds, so the release runs <code>make build-extensions</code> before
 it builds the wheels, and the loaded api image builds the <code>packages/extensions</code> UIs into the
 packages it installs.</p>
+<p>That is how the repository's own extensions build, through the workspace and the Makefile. An
+extension in its own repository installs <code>@interloper/ui</code> from npm instead, and
+<code>uv run interloper extension build</code> runs npm in its <code>ui/</code>, type-checks and builds the UI, then
+builds the wheel and checks that it carries the bundle; <code>make check-extension</code> runs that whole
+path in a fresh project against the SDK packed as npm publishes it, as CI does.</p>
 <p>To work on a UI with hot reload, run its dev server beside the app's and name it in
 <code>INTERLOPER_UI_DEV</code> (<code>&lt;key&gt;=&lt;entry URL&gt;</code>, several separated by commas):</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>pnpm<span class="w"> </span>--filter<span class="w"> </span>@interloper/example<span class="w"> </span>dev<span class="w">       </span><span class="c1"># http://localhost:5173</span>
