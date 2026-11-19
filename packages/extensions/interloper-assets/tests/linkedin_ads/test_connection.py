@@ -1,8 +1,8 @@
 """Tests for the LinkedIn Ads connection.
 
 The client speaks a pinned Marketing API version over Rest.li 2.0. The account
-dropdown pages the ``q=search`` finder by ``start``/``count`` until an empty
-page, and the connection check is that lookup: LinkedIn refuses a dead token
+dropdown pages the ``q=search`` finder by cursor until a page names no next
+one, and the connection check is that lookup: LinkedIn refuses a dead token
 with HTTP 401 and its own code and message, which the check reports.
 """
 
@@ -17,9 +17,8 @@ from interloper_assets.linkedin_ads import constants
 from interloper_assets.linkedin_ads.connection import LinkedinAdsConnection
 
 ACCOUNT_PAGES = {
-    "0": [{"id": 1, "name": "Alpha"}, {"id": 2}],
-    "100": [{"id": 3, "name": "Gamma"}],
-    "200": [],
+    None: {"elements": [{"id": 1, "name": "Alpha"}, {"id": 2}], "metadata": {"nextPageToken": "page-2"}},
+    "page-2": {"elements": [{"id": 3, "name": "Gamma"}], "metadata": {}},
 }
 
 
@@ -30,7 +29,7 @@ def _connection(handler: Callable[[httpx2.Request], httpx2.Response]) -> Linkedi
 
 
 def _accounts(request: httpx2.Request) -> httpx2.Response:
-    return httpx2.Response(200, json={"elements": ACCOUNT_PAGES[request.url.params["start"]]})
+    return httpx2.Response(200, json=ACCOUNT_PAGES[request.url.params.get("pageToken")])
 
 
 class TestClient:
@@ -66,9 +65,8 @@ class TestAccounts:
             {"id": "3", "name": "Gamma"},
         ]
         assert sent == [
-            "GET /rest/adAccounts?q=search&count=100&start=0",
-            "GET /rest/adAccounts?q=search&count=100&start=100",
-            "GET /rest/adAccounts?q=search&count=100&start=200",
+            "GET /rest/adAccounts?q=search&pageSize=1000",
+            "GET /rest/adAccounts?q=search&pageSize=1000&pageToken=page-2",
         ]
 
 
@@ -76,12 +74,11 @@ class TestCheck:
     async def test_a_working_token_passes(self):
         assert await _connection(_accounts).verify(timeout=5) == il.CheckResult(ok=True, live=True)
 
-    async def test_an_account_list_without_elements_fails_the_check(self):
-        connection = _connection(lambda _: httpx2.Response(200, json={}))
+    async def test_a_token_that_sees_no_account_passes(self):
+        connection = _connection(lambda _: httpx2.Response(200, json={"elements": [], "metadata": {}}))
 
-        assert await connection.verify(timeout=5) == il.CheckResult(
-            ok=False, live=True, category="error", message="The connection check failed unexpectedly."
-        )
+        assert await connection.accounts() == []
+        assert await connection.verify(timeout=5) == il.CheckResult(ok=True, live=True)
 
     async def test_a_refused_token_reports_linkedins_reason(self):
         refused = {"status": 401, "serviceErrorCode": 65601, "code": "REVOKED_ACCESS_TOKEN", "message": "revoked"}

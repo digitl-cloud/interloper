@@ -2,9 +2,9 @@
 
 LinkedIn reads its query in Rest.li 2.0 syntax, which an ordinary query
 encoder breaks, wraps every list in ``elements``, pages a collection by the
-``next`` link in ``paging.links``, a search finder by a ``nextPageToken``
-cursor and an older finder by ``start``/``count``, and refuses a request with
-an HTTP error status. These tests pin each against a mock transport.
+``next`` link in ``paging.links`` and a search finder by a ``nextPageToken``
+cursor, and refuses a request with an HTTP error status. These tests pin each
+against a mock transport.
 """
 
 from __future__ import annotations
@@ -339,66 +339,6 @@ class TestCursorRows:
 
         assert await _api(handler).cursor_rows("/adAccounts/123/adCampaigns", q="search") == [{"id": 1}]
         assert len(requests) == 1
-
-
-class TestOffsetRows:
-    async def test_every_page_is_read_until_an_empty_one(self):
-        sent: list[str] = []
-        pages = {"0": [{"id": 1}, {"id": 2}], "100": [{"id": 3}], "200": []}
-
-        def handler(request: httpx2.Request) -> httpx2.Response:
-            sent.append(f"{request.url.path}?{request.url.query.decode()}")
-            return httpx2.Response(200, json={"elements": pages[request.url.params["start"]]})
-
-        rows = await _api(handler).offset_rows("/adAccounts", q="search")
-
-        assert rows == [{"id": 1}, {"id": 2}, {"id": 3}]
-        assert sent == [
-            "/rest/adAccounts?q=search&count=100&start=0",
-            "/rest/adAccounts?q=search&count=100&start=100",
-            "/rest/adAccounts?q=search&count=100&start=200",
-        ]
-
-    async def test_a_refusal_on_a_later_page_raises(self):
-        def handler(request: httpx2.Request) -> httpx2.Response:
-            if request.url.params["start"] != "0":
-                return httpx2.Response(403, json={"status": 403, "code": "ACCESS_DENIED"})
-            return httpx2.Response(200, json={"elements": [{"id": 1}]})
-
-        with pytest.raises(LinkedinApiError, match=re.escape("(HTTP 403, ACCESS_DENIED): Forbidden")):
-            await _api(handler).offset_rows("/adAccounts", q="search")
-
-    async def test_nothing_to_list_reads_one_page(self):
-        requests: list[httpx2.Request] = []
-
-        def handler(request: httpx2.Request) -> httpx2.Response:
-            requests.append(request)
-            return httpx2.Response(200, json={"paging": {"start": 0, "count": 100, "total": 0}, "elements": []})
-
-        assert await _api(handler).offset_rows("/adAccounts", q="search") == []
-        assert len(requests) == 1
-
-    async def test_a_page_without_elements_fails_rather_than_ending_the_list(self):
-        def handler(request: httpx2.Request) -> httpx2.Response:
-            if request.url.params["start"] == "0":
-                return httpx2.Response(200, json={"elements": [{"id": 1}]})
-            return httpx2.Response(200, json={"paging": {"start": 100, "count": 100}})
-
-        with pytest.raises(KeyError, match="elements"):
-            await _api(handler).offset_rows("/adAccounts", q="search")
-
-    async def test_an_endpoint_that_ignores_the_offset_is_read_as_one_page(self):
-        requests: list[httpx2.Request] = []
-
-        def handler(request: httpx2.Request) -> httpx2.Response:
-            requests.append(request)
-            # an endpoint that ignores ``start`` answers the same page forever; end a runaway walk
-            if len(requests) > 3:
-                return httpx2.Response(200, json={"elements": []})
-            return httpx2.Response(200, json={"elements": [{"id": 1}, {"id": 2}]})
-
-        assert await _api(handler).offset_rows("/adAccounts", q="search") == [{"id": 1}, {"id": 2}]
-        assert len(requests) == 2
 
 
 class TestReport:
