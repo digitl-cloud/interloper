@@ -9,6 +9,9 @@ REPORT_CREATE_DEADLINE = dt.timedelta(hours=1)
 REPORT_WAIT_DEADLINE = dt.timedelta(hours=2)
 REPORT_DOWNLOAD_DEADLINE = dt.timedelta(minutes=10)
 
+# seconds a report download may wait to connect or between two reads before it is downloaded again
+REPORT_DOWNLOAD_TIMEOUT = 60.0
+
 # -- PRODUCTS ------------------------------------------------------------------
 
 PRODUCTS_CAMPAIGN_METRICS = [

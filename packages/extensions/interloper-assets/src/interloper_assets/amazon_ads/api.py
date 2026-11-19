@@ -234,7 +234,8 @@ class AmazonAdsApi:
 
         The file lives outside the API and its URL carries its own signature,
         so it is fetched without the client's credentials, and a refusal is
-        raised without the URL.
+        raised without the URL. A read that stalls past
+        ``REPORT_DOWNLOAD_TIMEOUT`` fails and is downloaded again.
 
         Args:
             url: The signed URL of the report's file.
@@ -248,7 +249,7 @@ class AmazonAdsApi:
         for attempt in self._retrying(stop=tc.stop_after_delay(constants.REPORT_DOWNLOAD_DEADLINE)):
             with attempt:
                 logger.info(f"Downloading report (attempt {attempt.retry_state.attempt_number})")
-                response = httpx2.get(url, timeout=None)
+                response = httpx2.get(url, timeout=constants.REPORT_DOWNLOAD_TIMEOUT)
                 if response.is_error:
                     message = f"Report download refused with HTTP {response.status_code}"
                     raise httpx2.HTTPStatusError(message, request=response.request, response=response)

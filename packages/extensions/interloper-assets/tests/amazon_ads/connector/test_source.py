@@ -723,7 +723,7 @@ class TestReports:
         )
         assert (status.method, status.url.path, status.url.query) == ("GET", "/reporting/reports/r-1", b"")
         assert _headers(status) == report_headers
-        assert downloads == [(REPORT_URL, {"timeout": None})]
+        assert downloads == [(REPORT_URL, {"timeout": 60.0})]
 
 
 class TestTelevisionReports:
