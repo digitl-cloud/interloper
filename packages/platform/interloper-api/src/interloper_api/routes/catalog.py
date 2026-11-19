@@ -9,6 +9,7 @@ read the catalog and whose editors run it.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, NoReturn
 
@@ -77,9 +78,10 @@ def handle_error(error: Exception, context: str) -> NoReturn:
 
     Raises:
         HTTPException: Always — *error* re-raised as-is when it already is
-            one, otherwise the status mapped from it, or 500 by default. A
-            `ConnectionCheckError` keeps its curated message as the detail;
-            any other error's own message never reaches the response.
+            one, otherwise the status mapped from it (504 for a timeout), or
+            500 by default. A `ConnectionCheckError` keeps its curated message
+            as the detail; any other error's own message never reaches the
+            response.
     """
     logger.error("Error %s: %s", context, error)
 
@@ -90,6 +92,9 @@ def handle_error(error: Exception, context: str) -> NoReturn:
         if status == 404:
             raise HTTPException(status_code=404, detail=f"Resource not found while {context}.")
 
+    if isinstance(error, (TimeoutError, httpx2.TimeoutException)):
+        raise HTTPException(status_code=504, detail=f"The provider did not respond in time while {context}.")
+
     if isinstance(error, HTTPException):
         raise error
 
@@ -97,6 +102,10 @@ def handle_error(error: Exception, context: str) -> NoReturn:
         raise HTTPException(status_code=500, detail=str(error))
 
     raise HTTPException(status_code=500, detail=f"Failed {context}.")
+
+
+# Upper bound on a provider's options lookup: a dropdown must never hang on a dead or throttled provider.
+RESOLVE_TIMEOUT = 30.0
 
 
 class ResolveRequest(BaseModel):
@@ -127,7 +136,9 @@ async def resolve_fetch_field(
     from the credentials the form already holds, and the
     ``@fetch_field_provider`` method ``<method>`` is called on it. That
     marker is the allowlist: only methods opted in that way may be invoked,
-    so the browser cannot call arbitrary attributes.
+    so the browser cannot call arbitrary attributes. The provider gets
+    ``RESOLVE_TIMEOUT`` seconds, the bound the toolkit puts on the same
+    lookup; one that does not answer in time is a 504.
 
     Args:
         key: The catalog key of the component whose field is resolved.
@@ -188,7 +199,7 @@ async def resolve_fetch_field(
     assert fn is not None  # narrowed by the is_fetch_field_provider guard above
 
     try:
-        result = await invoke(fn)
+        result = await asyncio.wait_for(invoke(fn), timeout=RESOLVE_TIMEOUT)
     except Exception as exception:  # noqa: BLE001 — every provider failure is mapped to a response
         handle_error(exception, f"resolving {key}.{body.field}")
     return list(result or [])
