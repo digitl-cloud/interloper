@@ -9,7 +9,9 @@ from interloper_assets.facebook_ads.connector.normalizer import FacebookActionsN
 
 # Shared insights breakdowns for the ad/campaign/video reports.
 _PLATFORM_BREAKDOWNS = ["publisher_platform", "platform_position", "impression_device"]
-_ACTION_BREAKDOWNS = ["action_device", "action_type"]
+# by action type alone: the normalizer pivots each type into one column, and per-device rates and unique counts
+# cannot be summed into one
+_ACTION_BREAKDOWNS = ["action_type"]
 
 # entity lists read live objects, Graph's default, in pages of 100 rather than 25: deleted ones cannot be asked for
 # (error 100/1815001), and archived ones, nearly spendless, would multiply a rate-limited snapshot several times over;
@@ -55,7 +57,7 @@ class FacebookAds(il.Source):
             fields=constants.CAMPAIGNS_FIELDS,
             level="campaign",
             breakdowns=_PLATFORM_BREAKDOWNS,
-            action_breakdown=_ACTION_BREAKDOWNS,
+            action_breakdowns=_ACTION_BREAKDOWNS,
         )
 
     @il.asset(
@@ -71,7 +73,7 @@ class FacebookAds(il.Source):
             fields=constants.ADS_INSIGHT_FIELDS,
             level="ad",
             breakdowns=_PLATFORM_BREAKDOWNS,
-            action_breakdown=_ACTION_BREAKDOWNS,
+            action_breakdowns=_ACTION_BREAKDOWNS,
         )
 
     @il.asset(
@@ -87,7 +89,7 @@ class FacebookAds(il.Source):
             fields=constants.GENDER_AGE_FIELDS,
             level="ad",
             breakdowns=["gender", "age"],
-            action_breakdown=_ACTION_BREAKDOWNS,
+            action_breakdowns=_ACTION_BREAKDOWNS,
         )
 
     @il.asset(
@@ -103,7 +105,7 @@ class FacebookAds(il.Source):
             fields=constants.GEO_FIELDS,
             level="ad",
             breakdowns=["country", "region"],
-            action_breakdown=_ACTION_BREAKDOWNS,
+            action_breakdowns=_ACTION_BREAKDOWNS,
         )
 
     @il.asset(
@@ -119,7 +121,7 @@ class FacebookAds(il.Source):
             fields=constants.VIDEOS_FIELDS,
             level="ad",
             breakdowns=_PLATFORM_BREAKDOWNS,
-            action_breakdown=_ACTION_BREAKDOWNS,
+            action_breakdowns=_ACTION_BREAKDOWNS,
         )
 
     @il.asset(

@@ -47,8 +47,8 @@ def _sanitize(name: str) -> str:
 def _pivot_cell(column: str, cell: Any) -> dict[str, float]:
     """Pivot a list of ``{action_type, value}`` into ``{column_actiontype: value}``.
 
-    Values are summed across the action-device breakdown so each action type
-    yields a single column, mirroring the reference reporter.
+    An action type listed more than once is summed, so each yields a single
+    column.
 
     Args:
         column: The insight column the cell belongs to, which prefixes each key.
@@ -76,10 +76,10 @@ class FacebookActionsNormalizer(DataFrameNormalizer):
     """Pivot Facebook insight action-lists into per-action-type columns.
 
     Each ``actions``/``action_values``/… cell is a list of ``{action_type,
-    value}``; pivot it into one ``<column>_<action_type>`` column (summed across
-    the action-device breakdown), sanitize the names, coerce custom-conversion
-    columns to float, then defer to the base ``DataFrameNormalizer`` to flatten
-    nested entity dicts (``creative``) and snake-case the rest.
+    value}``; pivot it into one ``<column>_<action_type>`` column, sanitize the
+    names, coerce custom-conversion columns to float, then defer to the base
+    ``DataFrameNormalizer`` to flatten nested entity dicts (``creative``) and
+    snake-case the rest.
     """
 
     def normalize(self, data: Any) -> pd.DataFrame:
