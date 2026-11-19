@@ -140,3 +140,12 @@ class TestRequire:
         project._uv("add", "interloper-api>=1")
 
         assert calls == [(["uv", "add", "interloper-api>=1"], {"cwd": project.root, "check": True})]
+
+    def test_npm_runs_in_the_ui_folder_and_fails_loudly(self, library, monkeypatch):
+        calls = []
+        monkeypatch.setattr(subprocess, "run", lambda command, **options: calls.append((command, options)))
+        project = Project.from_directory(library())
+
+        project._npm("run", "build")
+
+        assert calls == [(["npm", "run", "build"], {"cwd": project.root / "ui", "check": True})]

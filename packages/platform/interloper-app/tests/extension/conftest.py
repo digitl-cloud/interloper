@@ -1,8 +1,10 @@
-"""Fixtures for the ``interloper extension`` commands: a library project, uv recorded, the CLI run."""
+"""Fixtures for the ``interloper extension`` commands: a library project, uv and npm recorded, the CLI run."""
 
 from __future__ import annotations
 
 import argparse
+import tomllib
+import zipfile
 from collections.abc import Callable
 from pathlib import Path
 
@@ -70,6 +72,11 @@ def uv(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ...]]:
 
     ``uv add`` is played as far as ``pyproject.toml``: the requirement joins
     ``[project].dependencies``, so a later ``require`` sees it as uv's would.
+    ``uv build`` writes a wheel holding the import package as it is, an
+    empty sdist and the ``.gitignore`` uv adds to its output, where
+    ``--out-dir`` says (``dist/`` otherwise), their names carrying the
+    version normalized as uv normalizes it (``0.2.0-rc.1`` gives
+    ``0.2.0rc1``).
 
     Args:
         monkeypatch: Restores ``Project._uv`` afterwards.
@@ -84,8 +91,63 @@ def uv(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ...]]:
         if args[0] == "add":
             pyproject = project.root / "pyproject.toml"
             pyproject.write_text(pyproject.read_text().replace("dependencies = [", f'dependencies = ["{args[1]}", ', 1))
+        if args[0] == "build":
+            dist = Path(args[args.index("--out-dir") + 1]) if "--out-dir" in args else project.root / "dist"
+            dist.mkdir(parents=True, exist_ok=True)
+            declared = tomllib.loads((project.root / "pyproject.toml").read_text())["project"]["version"]
+            name = f"{project.package}-{declared.replace('-rc.', 'rc')}"
+            with zipfile.ZipFile(dist / f"{name}-py3-none-any.whl", "w") as wheel:
+                for path in sorted(project.package_directory.rglob("*")):
+                    if path.is_file():
+                        wheel.write(path, f"{project.package}/{path.relative_to(project.package_directory)}")
+            (dist / f"{name}.tar.gz").write_bytes(b"")
+            (dist / ".gitignore").write_text("*\n")
 
     monkeypatch.setattr(Project, "_uv", run)
+    return calls
+
+
+@pytest.fixture
+def extension_project(acme: Path, uv: list[tuple[str, ...]], extension: Callable[..., None]) -> Path:
+    """The ``acme-interloper`` project once ``init`` ran, uv recorded.
+
+    Args:
+        acme: The project, the working directory.
+        uv: Records uv's commands; cleared of the ones ``init`` ran.
+        extension: Runs ``interloper extension``.
+
+    Returns:
+        The project's directory.
+    """
+    extension("init")
+    uv.clear()
+    return acme
+
+
+@pytest.fixture
+def npm(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ...]]:
+    """Record the npm commands a build runs instead of running them.
+
+    ``npm run build`` writes what a Vite build of the UI writes into the
+    package's ``static/``: an entry module and the Vite manifest naming it.
+
+    Args:
+        monkeypatch: Restores ``Project._npm`` afterwards.
+
+    Returns:
+        The argument tuples, in the order they were run.
+    """
+    calls: list[tuple[str, ...]] = []
+
+    def run(project: Project, *args: str) -> None:
+        calls.append(args)
+        if args == ("run", "build"):
+            static = project.package_directory / "static"
+            (static / ".vite").mkdir(parents=True, exist_ok=True)
+            (static / ".vite" / "manifest.json").write_text('{"src/index.ts": {"file": "index.js", "isEntry": true}}')
+            (static / "index.js").write_text("export default {}\n")
+
+    monkeypatch.setattr(Project, "_npm", run)
     return calls
 
 

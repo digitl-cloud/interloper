@@ -1,0 +1,7 @@
+"""The $title extension's UI, which ``uv run interloper extension build`` writes into ``static/``."""
+
+from pathlib import Path
+
+from interloper_api import UIBundle
+
+UI = UIBundle.from_vite(Path(__file__).parent / "static")

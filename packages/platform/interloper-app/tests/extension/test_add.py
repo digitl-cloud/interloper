@@ -18,23 +18,6 @@ PACKAGE = Path("src/acme_interloper")
 
 
 @pytest.fixture
-def extension_project(acme, uv, extension) -> Path:
-    """The ``acme-interloper`` project once ``init`` ran, uv recorded.
-
-    Args:
-        acme: The project, the working directory.
-        uv: Records uv's commands.
-        extension: Runs ``interloper extension``.
-
-    Returns:
-        The project's directory.
-    """
-    extension("init")
-    uv.clear()
-    return acme
-
-
-@pytest.fixture
 def importable(extension_project, monkeypatch) -> Iterator[Path]:
     """Put the project's ``src/`` on the import path, and forget its modules afterwards.
 
@@ -170,6 +153,9 @@ class TestNames:
             (("source", "tiktok_2024"), "the name 'tiktok_2024' gives the class Tiktok2024, keyed tiktok2024"),
             (("source", "acme_"), "the name 'acme_' gives the class Acme, keyed acme"),
             (("connection", "a_b"), "the name 'a_b' gives the class ABConnection, keyed ab_connection"),
+            (("source", "static"), "the name 'static' is where the extension's UI lives"),
+            (("connection", "ui"), "the name 'ui' is where the extension's UI lives"),
+            (("ui", "other"), "ui take the extension's key, acme"),
         ],
     )
     def test_a_name_that_would_break_the_catalog_or_the_cli_is_refused(
@@ -194,6 +180,79 @@ class TestNames:
 
         assert "src/acme_interloper/shop.py exists" in capsys.readouterr().err
         assert tree(extension_project) == before
+
+
+UI_FILES = [
+    "ui/package.json",
+    "ui/vite.config.ts",
+    "ui/tsconfig.json",
+    "ui/src/index.ts",
+    "ui/src/main.css",
+    "ui/src/pages/Greeting.vue",
+]
+
+
+class TestUI:
+    def test_add_ui_writes_the_ui_and_its_routes(self, extension_project, uv, extension, capsys):
+        extension("add", "ui")
+
+        for file in [PACKAGE / "ui.py", PACKAGE / "routes.py", *UI_FILES]:
+            assert (extension_project / file).is_file(), file
+        manifest = (extension_project / PACKAGE / "extension.yaml").read_text()
+        assert manifest.endswith("routes: acme_interloper.routes:router\nui: acme_interloper.ui:UI\n")
+        ignored = (extension_project / ".gitignore").read_text().splitlines()
+        assert {"src/acme_interloper/static/", "ui/node_modules/"} <= set(ignored)
+        assert uv == [("add", f"interloper-api>={version('interloper-api')}")]
+        assert "outDir: '../src/acme_interloper/static'" in (extension_project / "ui/vite.config.ts").read_text()
+        out = capsys.readouterr().out
+        assert "routes declares acme_interloper.routes:router" in out
+        assert "ui declares acme_interloper.ui:UI" in out
+        assert "Build it with uv run interloper extension build" in out
+
+    def test_add_ui_keeps_routes_the_extension_has(self, extension_project, extension):
+        extension("add", "routes")
+        routes = (extension_project / PACKAGE / "routes.py").read_bytes()
+
+        extension("add", "ui")
+
+        assert (extension_project / PACKAGE / "routes.py").read_bytes() == routes
+        assert _manifest(extension_project)["routes"] == "acme_interloper.routes:router"
+        assert _manifest(extension_project)["ui"] == "acme_interloper.ui:UI"
+
+    def test_add_ui_refuses_a_ui_folder_that_exists(self, extension_project, uv, extension, tree, capsys):
+        (extension_project / "ui").mkdir()
+        (extension_project / "ui" / "package.json").write_text("{}\n")
+        before = tree(extension_project)
+
+        with pytest.raises(SystemExit) as exit_info:
+            extension("add", "ui")
+
+        assert exit_info.value.code == 1
+        assert "ui/package.json exists already" in capsys.readouterr().err
+        assert tree(extension_project) == before
+        assert uv == []
+
+    def test_add_ui_refuses_a_static_folder_its_build_would_empty(self, extension_project, uv, extension, tree, capsys):
+        (extension_project / PACKAGE / "static").mkdir()
+        (extension_project / PACKAGE / "static" / "logo.svg").write_text("<svg/>\n")
+        before = tree(extension_project)
+
+        with pytest.raises(SystemExit) as exit_info:
+            extension("add", "ui")
+
+        assert exit_info.value.code == 1
+        assert "src/acme_interloper/static exists, and every build of the UI empties it" in capsys.readouterr().err
+        assert tree(extension_project) == before
+        assert uv == []
+
+    def test_add_ui_twice_is_refused(self, extension_project, extension, capsys):
+        extension("add", "ui")
+
+        with pytest.raises(SystemExit) as exit_info:
+            extension("add", "ui")
+
+        assert exit_info.value.code == 1
+        assert "extension.yaml already declares ui" in capsys.readouterr().err
 
 
 class TestRefusals:

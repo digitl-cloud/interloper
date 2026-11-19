@@ -60,12 +60,14 @@ Combined (from repo root):
 - `make check-python` / `make check-typescript` — individual halves
 - `make build-app` — build the SPA and stage it inside the Python package
 - `make build-extensions`: build the SDK and every extension UI into its Python package's `static/`
+- `make check-sdk-package` / `make check-extension`: the SDK as npm installs it, and an extension created, built and checked with `interloper extension` in a fresh project against the packed SDK (both need the network; CI runs both)
 - `make setup` — `pre-commit install` + `uv sync --all-packages --all-extras`
 
 Extensions in their own repositories (`uv init --lib`, then `uv add --dev interloper-app`):
 
 - `uv run interloper extension init`: the bare extension (manifest, entry point, `interloper-core`, a gitignored `interloper.yaml`)
-- `uv run interloper extension add <source|connection|settings|command|routes> [name]`: one part, its files and its manifest entry
+- `uv run interloper extension add <source|connection|settings|command|routes|ui> [name]`: one part, its files and its manifest entry (`ui` needs Node)
+- `uv run interloper extension build`: the UI with npm when there is one, then the sdist and wheel in `dist/`
 - `uv run interloper extension check`: import every installed manifest's entries and name what fails or what nothing reads
 
 ## Local dev instance

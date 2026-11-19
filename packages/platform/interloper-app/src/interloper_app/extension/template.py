@@ -10,11 +10,12 @@ def render(template: str, /, **values: str) -> str:
     """Render one template.
 
     Args:
-        template: The template's file name under ``templates/``.
+        template: The template's path under ``templates/``, its folders
+            separated by ``/``.
         **values: The values its ``$placeholders`` take, ``name`` among them.
 
     Returns:
         The rendered text.
     """
-    source = files("interloper_app.extension").joinpath("templates", template).read_text(encoding="utf-8")
+    source = files("interloper_app.extension").joinpath("templates", *template.split("/")).read_text(encoding="utf-8")
     return Template(source).substitute(values)
