@@ -10,7 +10,9 @@ exchanging the refresh token.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
+from typing import Any
 from urllib.parse import parse_qs
 
 import httpx2
@@ -173,11 +175,46 @@ class TestCheck:
         }
         assert request.extensions["timeout"] == {"connect": 30, "read": 30, "write": 30, "pool": 30}
 
-    async def test_a_refused_refresh_token_fails_the_check(self, monkeypatch: pytest.MonkeyPatch):
-        _serve(monkeypatch, lambda _: httpx2.Response(400, json={"error": "invalid_grant"}))
+    async def test_a_refused_refresh_token_fails_the_check_with_amazons_reason(self, monkeypatch: pytest.MonkeyPatch):
+        refusal = {
+            "error_description": "The request has an invalid grant parameter : refresh_token",
+            "error": "invalid_grant",
+        }
+        _serve(monkeypatch, lambda _: httpx2.Response(400, json=refusal))
+
+        result = await _connection().verify(timeout=5)
+
+        assert result == il.CheckResult(
+            ok=False,
+            live=True,
+            category="error",
+            message=(
+                "Login with Amazon refused the token exchange: "
+                "The request has an invalid grant parameter : refresh_token (invalid_grant)"
+            ),
+        )
+
+    @pytest.mark.parametrize(
+        "body", [{"error": "invalid_grant"}, {}, "not json"], ids=["no description", "empty", "text"]
+    )
+    async def test_a_refusal_naming_no_reason_fails_the_check_with_its_status(
+        self, monkeypatch: pytest.MonkeyPatch, body: Any
+    ):
+        content = body.encode() if isinstance(body, str) else json.dumps(body).encode()
+        _serve(monkeypatch, lambda _: httpx2.Response(400, content=content))
 
         result = await _connection().verify(timeout=5)
 
         assert result == il.CheckResult(
             ok=False, live=True, category="error", message="The provider responded with HTTP 400."
+        )
+
+    async def test_refused_client_credentials_fail_the_check_as_rejected(self, monkeypatch: pytest.MonkeyPatch):
+        refusal = {"error_description": "Client authentication failed", "error": "invalid_client"}
+        _serve(monkeypatch, lambda _: httpx2.Response(401, json=refusal))
+
+        result = await _connection().verify(timeout=5)
+
+        assert result == il.CheckResult(
+            ok=False, live=True, category="auth", message="The provider rejected the credentials."
         )
