@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime as dt
 from collections.abc import Iterator
+from itertools import groupby
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -228,10 +229,21 @@ class TestPartitionResults:
         for key in [*inside, "2026-06-30", "2026-06", "2025", "2026-08-01T00", "eu"]:
             _execution(_run(job, partition_key=key), asset, "success")
 
-        rows = store.insights._partition_results(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 31)))
+        rows = list(store.insights._partition_results(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 31))))
 
         assert sorted(row.partition_key for row in rows) == sorted(inside)
         assert all(row.asset_id == asset and row.succeeded for row in rows)
+
+    def test_an_assets_rows_come_back_together(self, store: Store) -> None:
+        job, first, second = uuid4(), uuid4(), uuid4()
+        for day in ("2026-07-01", "2026-07-02", "2026-07-03"):
+            run = _run(job, partition_key=day)
+            _execution(run, first, "success")
+            _execution(run, second, "success")
+
+        rows = store.insights._partition_results(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 3)))
+
+        assert [asset_id for asset_id, _ in groupby(row.asset_id for row in rows)] == sorted([first, second])
 
     def test_runs_of_every_target_fold_into_one_result_per_asset_and_partition(self, store: Store) -> None:
         asset = uuid4()
@@ -264,7 +276,7 @@ class TestPartitionResults:
         _execution(_run(uuid4()), asset, "success")
         _execution(_run(uuid4(), partition_key="2026-07-01", org_id=uuid4()), asset, "success")
 
-        assert store.insights._partition_results(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 1))) == []
+        assert list(store.insights._partition_results(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 1)))) == []
 
 
 class TestAttemptedSpans:

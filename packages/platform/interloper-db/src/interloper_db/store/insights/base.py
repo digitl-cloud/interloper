@@ -11,7 +11,7 @@ to land.
 from __future__ import annotations
 
 import datetime as dt
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from typing import Any
 from uuid import UUID
 
@@ -21,12 +21,14 @@ from interloper.job import CronJob
 from interloper.partitioning import TimeGranularity, TimePartition
 from sqlalchemy import Engine, String, case, cast
 from sqlalchemy import select as sa_select
+from sqlalchemy.orm import selectinload
 from sqlmodel import col, func, select
 
 from interloper_db.errors import NotFoundError
 from interloper_db.models import (
     ACTIVE_BACKFILL_STATUSES,
     Component,
+    ComponentRelation,
     Event,
     Execution,
     Invitation,
@@ -38,7 +40,7 @@ from interloper_db.models import (
 )
 from interloper_db.session import session_scope
 from interloper_db.store.backfills import BackfillQuery, BackfillStore
-from interloper_db.store.components import ComponentQuery, ComponentStore
+from interloper_db.store.components import ComponentStore
 from interloper_db.store.executions import ExecutionQuery, ExecutionStore
 from interloper_db.store.insights.coverage import GroupCoverage, JobCoverage, PartitionResult, Period
 from interloper_db.store.insights.failures import GROUP_KEYS, ErrorGroup, ErrorGroups, ErrorRow
@@ -107,7 +109,7 @@ class InsightStore:
             The organisation's health.
         """
         day_ago = now - dt.timedelta(hours=24)
-        components = self._components.list(org_id, ComponentQuery(roots_only=False, limit=None)).items
+        components = self._rows(org_id)
         statuses = [(component, self._components.read(component).status) for component in components]
         job_rows = [component for component in components if component.kind == "job"]
         jobs = self._job_health(org_id, job_rows, now)
@@ -247,11 +249,12 @@ class InsightStore:
         Returns:
             The groups with a day in the window, by name.
         """
-        query = ComponentQuery(kind=["source", "asset", "job"], roots_only=False, limit=None)
+        components = self._rows(org_id, kinds=["source", "asset"])
         window = partition_keys_overlapping(col(Execution.partition_key), since, min(until, now.date()))
         return GroupCoverage.from_components(
-            self._components.list(org_id, query).items,
-            self._components.asset_partitionings(org_id),
+            components,
+            self._targeted(org_id),
+            self._components.asset_partitionings(component for component in components if component.kind == "asset"),
             self._partition_results(org_id, [window]),
             self._attempted_spans(org_id),
             since=since,
@@ -291,7 +294,7 @@ class InsightStore:
         overlapping = partition_keys_overlapping(col(Execution.partition_key), first_day, last_day)
         results = self._partition_results(org_id, [overlapping], asset_ids=[asset.id for asset in assets])
         return JobCoverage.from_results(
-            job.id, keys, assets, self._components.asset_partitionings(org_id), results, now=now
+            job.id, keys, assets, self._components.asset_partitionings(assets), results, now=now
         )
 
     def feed(self, org_id: UUID, query: PageQuery) -> Page[ActivityEntry]:
@@ -509,14 +512,60 @@ class InsightStore:
                 rows.append(ErrorRow(run.component_id, run.id, None, "run_failed", run.error or "", 1, ended, ended))
         return rows
 
+    def _rows(self, org_id: UUID, *, kinds: Sequence[str] | None = None) -> list[Component]:
+        """An organisation's component rows, oldest first, with their parents and no other relation.
+
+        The insights read every row of an organisation, and the relations the
+        listings load alongside (children, outgoing relations and their
+        targets) would more than double what each row holds. The parent stays:
+        an asset's qualified key, and so its status and partitioning, and its
+        inherited history start read it.
+
+        Args:
+            org_id: Organisation UUID.
+            kinds: Keep these kinds; ``None`` keeps every kind.
+
+        Returns:
+            The rows, safe to read detached as far as their parents.
+        """
+        statement = (
+            select(Component)
+            .where(Component.org_id == org_id)
+            .options(selectinload(Component.parent))  # ty: ignore[invalid-argument-type]
+            .order_by(col(Component.created_at), col(Component.id))
+        )
+        if kinds is not None:
+            statement = statement.where(col(Component.kind).in_(kinds))
+        with session_scope(self._engine) as session:
+            return list(session.exec(statement).all())
+
+    def _targeted(self, org_id: UUID) -> set[UUID]:
+        """The components an enabled job of an organisation targets.
+
+        Args:
+            org_id: Organisation UUID.
+
+        Returns:
+            The targets' ids: sources and assets, as the jobs name them.
+        """
+        statement = (
+            select(Component, ComponentRelation.dst_id)
+            .join(ComponentRelation, col(ComponentRelation.src_id) == col(Component.id))
+            .where(Component.org_id == org_id, Component.kind == "job", ComponentRelation.name == "targets")
+        )
+        with session_scope(self._engine) as session:
+            return {target for job, target in session.exec(statement).all() if job.enabled}
+
     def _partition_results(
         self, org_id: UUID, keys: Sequence[Any], *, asset_ids: Sequence[UUID] | None = None
-    ) -> list[PartitionResult]:
-        """Per asset and time partition, whether any execution of it succeeded or failed.
+    ) -> Iterator[PartitionResult]:
+        """Per asset and time partition, whether any execution of it succeeded or failed, grouped by asset.
 
         Runs of every target count: the partition key is the one stamped on
         each execution, which its operation named (a snapshot's observed
-        period), else its run's.
+        period), else its run's. The rows stream in batches from the
+        database, in asset order, so a consumer holding one asset's at a
+        time never holds the whole history read.
 
         Args:
             org_id: Organisation UUID.
@@ -524,11 +573,12 @@ class InsightStore:
                 partitions to read.
             asset_ids: Keep these assets; ``None`` keeps every asset.
 
-        Returns:
-            One row per asset and selected partition key that executed at least once.
+        Yields:
+            One row per asset and selected partition key that executed at
+            least once, an asset's rows consecutive.
         """
         key = col(Execution.partition_key)
-        filters = [col(Execution.org_id) == org_id, *keys]
+        filters = [col(Execution.org_id) == org_id, key.is_not(None), *keys]
         if asset_ids is not None:
             filters.append(col(Execution.component_id).in_(asset_ids))
         # Cast for a portable max(): Postgres has no max(uuid), and UUID() parses both its dashed text and SQLite's hex.
@@ -539,20 +589,20 @@ class InsightStore:
             select(asset, key, func.max(case((col(Execution.status) == "success", 1), else_=0)), failed_run)
             .where(*filters)
             .group_by(col(Execution.component_id), key)
+            .order_by(col(Execution.component_id))
+            .execution_options(yield_per=10_000)
         )
         parsed: dict[str, UUID] = {}
         with session_scope(self._engine) as session:
-            return [
-                PartitionResult(
+            for asset_text, partition_key, succeeded, failed in session.exec(statement):
+                assert partition_key is not None, "the query keeps keyed executions only"
+                yield PartitionResult(
                     parsed.get(asset_text) or parsed.setdefault(asset_text, UUID(asset_text)),
                     partition_key,
                     succeeded=bool(succeeded),
                     failed=failed is not None,
                     failed_run_id=UUID(failed) if failed else None,
                 )
-                for asset_text, partition_key, succeeded, failed in session.exec(statement).all()
-                if partition_key is not None
-            ]
 
     def _attempted_spans(self, org_id: UUID) -> dict[UUID, Period]:
         """The period each asset's attempted partitions span, all-time, from its first to its last.

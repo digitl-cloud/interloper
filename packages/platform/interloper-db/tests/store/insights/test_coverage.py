@@ -6,6 +6,7 @@ import datetime as dt
 from uuid import UUID, uuid4
 
 import interloper as il
+import pytest
 
 from interloper_db.models import Component
 from interloper_db.store.insights.coverage import (
@@ -125,7 +126,7 @@ def _calendar(
     attempted = {asset.id: Period.enclosing([Period.from_key(key) for key in keys])} if keys else {}
     bound = [result._replace(asset_id=asset.id) for result in results]
     groups = GroupCoverage.from_components(
-        [asset], {asset.id: partitioning}, bound, attempted, since=since, until=until, now=now
+        [asset], set(), {asset.id: partitioning}, bound, attempted, since=since, until=until, now=now
     )
     return groups[0].days if groups else None
 
@@ -245,6 +246,38 @@ class TestSnapshotVerdict:
 
         assert partitions.verdict(Period.from_key("2026-07-15"), _NOW) == (Verdict.MISSED, None)
         assert partitions.verdict(Period.from_key("2026-08-01"), _NOW) is None
+
+
+class TestAssetPartitions:
+    """Results grouped by asset, handed out one asset at a time."""
+
+    def test_each_asset_gets_its_own_results_and_one_without_any_gets_none(self):
+        orders, refunds, idle = _asset("orders"), _asset("refunds"), _asset("idle")
+        results = [
+            _result(refunds.id, "2026-08-10", "success"),
+            _result(orders.id, "2026-08-10", "failed"),
+            _result(orders.id, "2026-08-11", "success"),
+            _result(uuid4(), "2026-08-10", "success"),
+        ]
+
+        partitions = AssetPartitions.from_results([orders, refunds, idle], {}, results)
+
+        assert [(p.asset.key, [r.partition_key for _, r in p.results]) for p in partitions] == [
+            ("refunds", ["2026-08-10"]),
+            ("orders", ["2026-08-10", "2026-08-11"]),
+            ("idle", []),
+        ]
+
+    def test_results_not_grouped_by_asset_are_refused(self):
+        orders, refunds = _asset("orders"), _asset("refunds")
+        results = [
+            _result(orders.id, "2026-08-10", "success"),
+            _result(refunds.id, "2026-08-10", "success"),
+            _result(orders.id, "2026-08-11", "success"),
+        ]
+
+        with pytest.raises(ValueError, match="not grouped by asset"):
+            list(AssetPartitions.from_results([orders, refunds], {}, results))
 
 
 class TestJobCoverage:
@@ -435,6 +468,7 @@ class TestGroupCoverage:
 
         [group] = GroupCoverage.from_components(
             [source, first, second],
+            set(),
             {first.id: dated, second.id: dated},
             results,
             attempted,

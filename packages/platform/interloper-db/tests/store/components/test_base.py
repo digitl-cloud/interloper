@@ -1338,6 +1338,18 @@ class HourlySource(il.Source):
         return []
 
 
+def _assets(store: Store) -> list[Component]:
+    """The organisation's asset rows, their parents loaded.
+
+    Args:
+        store: The store holding them.
+
+    Returns:
+        The rows.
+    """
+    return store.components.list(_ORG, ComponentQuery(kind=["asset"], roots_only=False, limit=None)).items
+
+
 class TestAssetPartitionings:
     """Every partitioned asset row resolves its catalog partitioning."""
 
@@ -1347,10 +1359,9 @@ class TestAssetPartitionings:
         monthly = store.components.create(_ORG, kind="source", key="demo_monthly_source")
         hourly = store.components.create(_ORG, kind="source", key="hourly_source")
         standalone = store.components.create(_ORG, kind="asset", key="demo_asset")
-        store.components.create(uuid4(), kind="source", key="demo_source")
 
         day = il.TimePartitionConfig(column="date")
-        assert store.components.asset_partitionings(_ORG) == {
+        assert store.components.asset_partitionings(_assets(store)) == {
             **{child.id: day for child in daily.children},
             monthly.children[0].id: il.TimePartitionConfig(column="date", granularity=TimeGranularity.MONTH),
             next(child for child in hourly.children if child.key == "clicks").id: il.TimePartitionConfig(
@@ -1367,7 +1378,18 @@ class TestAssetPartitionings:
             session.add(Component(org_id=_ORG, kind="asset", key="demo_asset", parent_id=daily.id))
             session.commit()
 
-        assert set(store.components.asset_partitionings(_ORG)) == {child.id for child in daily.children}
+        assert set(store.components.asset_partitionings(_assets(store))) == {child.id for child in daily.children}
+
+    def test_the_assets_of_one_definition_share_one_partitioning(self, component_db: Engine) -> None:
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        first = store.components.create(_ORG, kind="source", key="demo_source", config={"dataset": "first"})
+        second = store.components.create(_ORG, kind="source", key="demo_source", config={"dataset": "second"})
+
+        partitionings = store.components.asset_partitionings(_assets(store))
+
+        first_a = next(child.id for child in first.children if child.key == "a")
+        second_a = next(child.id for child in second.children if child.key == "a")
+        assert partitionings[first_a] is partitionings[second_a]
 
 
 class TestLockDue:
