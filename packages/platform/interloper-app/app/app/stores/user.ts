@@ -42,8 +42,9 @@ export const useUserStore = defineStore('user', () => {
 
     async function signOut() {
         await apiFetch('/auth/logout', { method: 'POST' })
-        user.value = null
-        return navigateTo('/login')
+        // A full page load: clearing the user under the organisation's pages would run them without an
+        // organisation until the login page loads, and the next person must start from empty stores.
+        window.location.assign('/login')
     }
 
     function findProfile(): User | null {
