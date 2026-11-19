@@ -26,6 +26,7 @@ from interloper_pandas import DataFrameNormalizer
 from interloper_assets.facebook_insights import constants
 from interloper_assets.facebook_insights.connection import FacebookInsightsConnection
 from interloper_assets.facebook_insights.connector.source import FacebookInsights, _insight_values
+from interloper_assets.meta import api as graph
 
 ASSETS = ("page_stats", "posts_stats")
 DAY = dt.date(2026, 9, 15)
@@ -518,6 +519,11 @@ class TestPostsStats:
         ],
     )
     async def test_any_other_breakdown_failure_raises(self, monkeypatch: Any, failure: httpx2.Response):
+        async def no_wait(seconds: float) -> None:
+            pass
+
+        # a throttle that never lifts is raised once its budget is spent
+        monkeypatch.setattr(graph, "sleep", no_wait)
         handler = self._handler([], fail_breakdown="is_from_ads", failure=failure)
         with pytest.raises(httpx2.HTTPStatusError):
             await _run(_faked_source(monkeypatch, handler), "posts_stats")

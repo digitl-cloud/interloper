@@ -55,7 +55,7 @@ A normalizer class lives in its source folder's `normalizer.py`, with the helper
 
 ## 5. A vendor's API has one engine
 
-Every request a source sends goes through its container's `api.py`: one class, `<Vendor>Api`, holding how the vendor's API works, so no asset or connection repeats it.
+Every request a source sends goes through one engine: a class named after the API it speaks (`TiktokAdsApi`, `GraphApi`), holding how that API works, so no asset or connection repeats it. A container keeps its engine in its `api.py`. Containers that call the same API share one engine in their vendor's folder instead and have no `api.py` of their own: Facebook Insights and Instagram Insights both read Meta's Graph API through `meta/api.py`.
 
 - **Its methods are the vendor's mechanisms, never its resources.** One response, a paged list, a report over a window of days, a report job: TikTok's are `get`, `rows` and `report`. A request's parameters are written in the asset that sends it, and so is its path unless the mechanism lives on a single endpoint (TikTok's integrated report), so a new asset never changes the engine; only a new mechanism does.
 - **It owns the transport, the normalizer owns the row.** The engine sends, pages, unwraps the vendor's envelope, encodes parameters the way the vendor wants them, runs and polls report jobs, decompresses, throttles and raises the vendor's refusals. It returns records as the vendor sends them; reshaping a record (nested metrics, pivots, casing) stays with the normalizer (rule 4).
