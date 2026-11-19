@@ -1,3 +1,4 @@
+import datetime as dt
 from typing import Any
 
 import interloper as il
@@ -246,11 +247,17 @@ class AmazonSellingPartner(il.Source):
         tags=["Entity"],
     )
     async def products(self, context: il.ExecutionContext) -> list[_Record]:
-        """Product identifier lookup (ASIN, parent ASIN, EAN, UPC, ISBN)."""
+        """Product identifier lookup (ASIN, parent ASIN, EAN, UPC, ISBN).
+
+        Lists the ASINs with activity three days before the snapshot day, the
+        latest day Amazon has ready whatever hour the snapshot is taken.
+        """
         date = context.partition_date
+        # Amazon has a day's vendor analytics ready 34 hours after it ends, at 10 AM local time two days later
+        day = date - dt.timedelta(days=3)
         query = f"""{{
           {constants.DATAKIOSK_SCHEMA} {{
-            sourcingView(aggregateBy: DAY, startDate: "{date:%Y-%m-%d}", endDate: "{date:%Y-%m-%d}") {{
+            sourcingView(aggregateBy: DAY, startDate: "{day:%Y-%m-%d}", endDate: "{day:%Y-%m-%d}") {{
               marketplaceId
               metrics {{
                 groupByKey {{ asin parentAsin ean upc isbn13 }}

@@ -390,7 +390,7 @@ class TestQueryRequests:
         assert vendor.calls == QUERY_CALLS
         query = json.loads(vendor.requests[0].content)["query"]
         assert "analytics_vendorAnalytics_2024_09_30" in query
-        assert 'sourcingView(aggregateBy: DAY, startDate: "2026-10-01", endDate: "2026-10-01")' in query
+        assert 'sourcingView(aggregateBy: DAY, startDate: "2026-09-28", endDate: "2026-09-28")' in query
         assert "groupByKey { asin parentAsin ean upc isbn13 }" in query
 
     async def test_product_fulfillment_stats_flattens_the_sourcing_metrics(self):
