@@ -176,17 +176,17 @@ class TestRequests:
         assert rows == [
             {
                 "Date": "2026/07/10",
-                "Advertiser ID": 9,
-                "Active View: Viewable Impressions": 90,
-                "Active View: % Viewable Impressions": 85.5,
-                "Impressions": 100,
+                "Advertiser ID": "9",
+                "Active View: Viewable Impressions": "90",
+                "Active View: % Viewable Impressions": "85.5",
+                "Impressions": "100",
             },
             {
                 "Date": "2026/07/10",
-                "Advertiser ID": 9,
-                "Active View: Viewable Impressions": 180,
-                "Active View: % Viewable Impressions": 72.1,
-                "Impressions": 200,
+                "Advertiser ID": "9",
+                "Active View: Viewable Impressions": "180",
+                "Active View: % Viewable Impressions": "72.1",
+                "Impressions": "200",
             },
         ]
 

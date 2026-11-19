@@ -91,7 +91,7 @@ class DisplayVideo360Api:
                 ``metrics`` and ``options``.
 
         Returns:
-            The report's rows, keyed by the CSV's column headers.
+            The report's rows, keyed by the CSV's column headers, every value the file's text.
         """
         query_id = (await self._bid_manager("POST", "/queries", json=self._query(day, title, params)))["queryId"]
         logger.info(f"Query id: {query_id} ({title})")
@@ -206,19 +206,22 @@ class DisplayVideo360Api:
         The footer (totals, then the query's metadata) starts at the first
         line whose leading field is empty. A report without data carries a
         "No data returned by the reporting service." row instead of rows.
+        Every column is read as text: a guessed dtype reads an id column
+        holding one ``-`` as floats (``123.0``, and digits lost above 2^53).
+        The schema's conformer casts the metrics.
 
         Args:
             text: The report file, decoded.
 
         Returns:
-            The rows, keyed by column header, a ``-`` read as missing.
+            The rows, keyed by column header, every value the file's text, a ``-`` read as missing.
         """
         lines = []
         for line in text.split("\n"):
             if line.startswith(","):
                 break
             lines.append(line)
-        df = pd.read_csv(StringIO("\n".join(lines)), na_values=["-"], on_bad_lines="skip")
+        df = pd.read_csv(StringIO("\n".join(lines)), dtype=str, na_values=["-"], on_bad_lines="skip")
         if df.empty:
             return []
         first = df.iloc[:, 0].astype("string")

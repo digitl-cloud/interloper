@@ -213,8 +213,8 @@ class TestReport:
         assert records[0] == {
             "Date": "2026-10-01",
             "Campaign": "Campaign A",
-            "Impressions": 100,
-            "Active View: % Viewable Impressions": 85.5,
+            "Impressions": "100",
+            "Active View: % Viewable Impressions": "85.5",
         }
         assert records[1]["Campaign"] == "Campaign B"
         assert math.isnan(records[1]["Active View: % Viewable Impressions"])
@@ -354,3 +354,21 @@ class TestReport:
         )
 
         assert [record["Campaign"] for record in records] == ["Campaign A", "Campaign B"]
+
+    async def test_ids_keep_their_digits_beside_the_blank_cells_of_the_totals(self):
+        file = b"""Report Name,x
+
+Report Fields
+Date,Advertiser ID,Campaign ID,Impressions
+2026-10-01,123,9007199254740993,100
+Grand Total:,,,100
+"""
+        server = FakeApi(*_report_answers("REPORT_AVAILABLE", file=file))
+
+        records = await CampaignManager360Api(server.client).report(
+            "111", _DAY, account_id="222", report_type="STANDARD", dimensions=["date"], metrics=["impressions"]
+        )
+
+        assert records == [
+            {"Date": "2026-10-01", "Advertiser ID": "123", "Campaign ID": "9007199254740993", "Impressions": "100"}
+        ]
