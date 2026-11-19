@@ -1,6 +1,12 @@
 """REST client with pagination and authentication support."""
 
-from interloper.rest.auth import HTTPBearerAuth, OAuth2Auth, OAuth2ClientCredentialsAuth, OAuth2RefreshTokenAuth
+from interloper.rest.auth import (
+    HTTPBearerAuth,
+    OAuth2Auth,
+    OAuth2ClientCredentialsAuth,
+    OAuth2RefreshTokenAuth,
+    OAuth2TokenError,
+)
 from interloper.rest.client import AsyncRESTClient, RESTClient
 from interloper.rest.paginator import (
     BasePaginator,
@@ -23,6 +29,7 @@ __all__ = [
     "OAuth2Auth",
     "OAuth2ClientCredentialsAuth",
     "OAuth2RefreshTokenAuth",
+    "OAuth2TokenError",
     "OffsetPaginator",
     "PageNumberPaginator",
     "RESTClient",

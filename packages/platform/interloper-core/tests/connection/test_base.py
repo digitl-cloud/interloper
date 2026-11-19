@@ -13,6 +13,7 @@ from interloper.errors import ConnectionCheckError
 from interloper.oauth import OAuthConfig
 from interloper.operation import OperationContext
 from interloper.resource import InputField, SecretField
+from interloper.rest import OAuth2TokenError
 from interloper.utils import invoke
 
 
@@ -463,6 +464,27 @@ class TestCheckResultFromFailure:
 
         assert response.category == "auth"
         assert response.message == "The provider rejected the credentials."
+
+    @staticmethod
+    def _token_refusal(status: int, body: dict) -> OAuth2TokenError:
+        request = httpx2.Request("POST", "https://provider.example.com/oauth2/token")
+        return OAuth2TokenError.from_response(httpx2.Response(status, json=body, request=request))
+
+    def test_a_refused_token_request_reports_the_providers_reason_as_auth(self) -> None:
+        refusal = {"error": "invalid_grant", "error_description": "The refresh token was revoked."}
+
+        response = CheckResult.from_failure(self._token_refusal(400, refusal))
+
+        assert response.category == "auth"
+        assert response.message == (
+            "The provider refused the access token request (HTTP 400, invalid_grant): The refresh token was revoked."
+        )
+
+    def test_a_token_endpoint_failing_on_its_side_is_a_provider_error(self) -> None:
+        response = CheckResult.from_failure(self._token_refusal(503, {}))
+
+        assert response.category == "error"
+        assert response.message == "The provider responded with HTTP 503."
 
     def test_another_provider_status_is_reported_verbatim(self) -> None:
         response = CheckResult.from_failure(self._status_error(503))

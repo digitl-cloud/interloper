@@ -15,6 +15,7 @@ from interloper.errors import ConnectionCheckError, format_exception
 from interloper.oauth import PROVIDERS, OAuthAppCredentials, OAuthConfig
 from interloper.operation import Operation, OperationContext, OperationResult
 from interloper.resource import InputField, Resource, ResourceDefinition, SecretField
+from interloper.rest.auth import OAuth2TokenError
 from interloper.retry import RetryPolicy
 from interloper.utils.concurrency import invoke
 
@@ -96,6 +97,8 @@ class CheckResult(BaseModel):
         """
         if isinstance(error, ConnectionCheckError):
             return cls(ok=False, live=True, category="error", message=str(error))
+        if isinstance(error, OAuth2TokenError) and error.response.is_client_error:
+            return cls(ok=False, live=True, category="auth", message=str(error))
         if isinstance(error, httpx2.HTTPStatusError):
             if error.response.status_code in (401, 403):
                 return cls(ok=False, live=True, category="auth", message="The provider rejected the credentials.")
@@ -168,8 +171,9 @@ class Connection(Resource, Operation):
 
         Returns ``True`` when the connection works, ``False`` when it
         provably doesn't. Exceptions are also failures: ``httpx2`` errors are
-        categorised by the caller (401/403 → bad credentials, timeouts →
-        network); raise `ConnectionCheckError` to
+        categorised by the caller (401/403 → bad credentials, a refused
+        access token request → bad credentials with the provider's reason,
+        timeouts → network); raise `ConnectionCheckError` to
         surface a curated message instead.
         """
         raise NotImplementedError

@@ -41,6 +41,54 @@ class HTTPBearerAuth(httpx2.Auth):
         yield request
 
 
+class OAuth2TokenError(httpx2.HTTPStatusError):
+    """The provider refused an access token request, with its OAuth ``error`` and ``error_description``.
+
+    A token endpoint answers a refusal with an ``error`` code (``invalid_grant``
+    for an expired or revoked refresh token, ``invalid_client`` for a wrong
+    client secret) and, often, an ``error_description`` (RFC 6749, section
+    5.2). Neither names a credential. It is still the HTTP error status the
+    endpoint answered, so whatever reads an ``httpx2.HTTPStatusError`` reads it
+    unchanged; its message is the provider's reason rather than httpx's, which
+    names the token endpoint.
+    """
+
+    def __init__(self, message: str, *, error: str | None, response: httpx2.Response) -> None:
+        """Hold the provider's OAuth error code beside the refused response.
+
+        Args:
+            message: What the provider refused and why.
+            error: The OAuth ``error`` code, or None when the body carries none.
+            response: The refused token response.
+        """
+        super().__init__(message, request=response.request, response=response)
+        self.error = error
+
+    @classmethod
+    def from_response(cls, response: httpx2.Response) -> OAuth2TokenError:
+        """Read the provider's refusal from a token endpoint's error response.
+
+        Args:
+            response: A token response with an error status.
+
+        Returns:
+            The refusal, with the OAuth ``error`` and ``error_description``, or the
+            status's reason when the body is not an OAuth error.
+        """
+        try:
+            body = response.json()
+        except ValueError:
+            body = None
+        refusal = body if isinstance(body, dict) else {}
+        error = refusal.get("error") if isinstance(refusal.get("error"), str) else None
+        description = refusal.get("error_description")
+        status = f"HTTP {response.status_code}" if error is None else f"HTTP {response.status_code}, {error}"
+        reason = description if isinstance(description, str) and description else response.reason_phrase
+        return cls(
+            f"The provider refused the access token request ({status}): {reason}", error=error, response=response
+        )
+
+
 class OAuth2Auth(httpx2.Auth):
     """OAuth2 authentication with automatic token acquisition and 401 refresh.
 
@@ -138,11 +186,15 @@ class OAuth2Auth(httpx2.Auth):
     def _store_token(self, response: httpx2.Response) -> None:
         """Persist the access/refresh tokens from a token-endpoint response.
 
+        A refused request raises as `OAuth2TokenError`, with the provider's reason.
+
         Args:
             response: The token-endpoint response, whose JSON body carries
                 ``access_token`` and optionally a rotated ``refresh_token``.
         """
-        response.raise_for_status()
+        if response.is_error:
+            error = OAuth2TokenError.from_response(response)
+            raise error
         token_data = response.json()
         self._access_token = token_data["access_token"]
         self._refresh_token = token_data.get("refresh_token", self._refresh_token)
