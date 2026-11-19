@@ -1,10 +1,11 @@
 from functools import cached_property
 
+import httpx2
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.thetradedesk.api import TheTradeDeskApi
-from interloper_assets.thetradedesk.constants import BASE_URL
+from interloper_assets.thetradedesk.constants import BASE_URL, DOMAIN
 
 
 @il.connection(
@@ -23,6 +24,10 @@ class TheTradeDeskConnection(il.Connection):
     def client(self) -> il.AsyncRESTClient:
         """The Trade Desk API client every caller shares.
 
+        A report's delivery may live on another host, such as a pre-signed
+        storage URL, so the key is withheld from every request outside The
+        Trade Desk's domain.
+
         Returns:
             The client authenticated by the ``TTD-Auth`` header, cached per connection instance.
         """
@@ -30,7 +35,23 @@ class TheTradeDeskConnection(il.Connection):
             BASE_URL,
             headers={"TTD-Auth": self.api_key},
             timeout=60,
+            event_hooks={"request": [self._withhold_key]},
         )
+
+    @staticmethod
+    async def _withhold_key(request: httpx2.Request) -> None:
+        """Remove the API key from a request outside The Trade Desk's domain.
+
+        httpx2 copies every header but ``Authorization`` onto a redirect and
+        runs an auth flow on the first hop only, so the key is dropped by a
+        request hook, which runs before every hop.
+
+        Args:
+            request: The request about to be sent, a redirect's included.
+        """
+        host = request.url.host
+        if host != DOMAIN and not host.endswith(f".{DOMAIN}"):
+            request.headers.pop("TTD-Auth", None)
 
     @cached_property
     def api(self) -> TheTradeDeskApi:
