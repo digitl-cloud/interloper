@@ -218,6 +218,28 @@ class AmazonSellingPartner(il.Source):
 
     # --- Vendor Analytics: Data Kiosk (GraphQL) -------------------------------
 
+    def _marketplace_metrics(self, views: list[_Record]) -> list[_Record]:
+        """Keep the metric records of the source's marketplace from a ``sourcingView`` query's records.
+
+        The view takes no marketplace argument and answers one record per
+        marketplace the vendor sells in, so each query selects the record's
+        ``marketplaceId`` and only the source's own are kept, as the report
+        assets name it in their ``marketplaceIds``. Used by ``products``,
+        ``product_fulfillment_stats`` and ``geo_sales_stats_by_country``.
+
+        Args:
+            views: The query's records, one view per marketplace, each with its ``marketplaceId`` and ``metrics``.
+
+        Returns:
+            The ``metrics`` of every view of the source's marketplace, in the order Amazon wrote them.
+        """
+        return [
+            metric
+            for view in views
+            if view.get("marketplaceId") == self.marketplace
+            for metric in view.get("metrics") or []
+        ]
+
     @il.asset(
         schema=schemas.Products,
         partitioning=il.SnapshotPartitionConfig(column="date"),
@@ -229,13 +251,15 @@ class AmazonSellingPartner(il.Source):
         query = f"""{{
           {constants.DATAKIOSK_SCHEMA} {{
             sourcingView(aggregateBy: DAY, startDate: "{date:%Y-%m-%d}", endDate: "{date:%Y-%m-%d}") {{
+              marketplaceId
               metrics {{
                 groupByKey {{ asin parentAsin ean upc isbn13 }}
               }}
             }}
           }}
         }}"""
-        metrics = await self.connection.api.query(key="metrics", query=query)
+        views = await self.connection.api.query(query=query)
+        metrics = self._marketplace_metrics(views)
         return [
             {
                 **_scalars(
@@ -263,6 +287,7 @@ class AmazonSellingPartner(il.Source):
         query = f"""{{
           {constants.DATAKIOSK_SCHEMA} {{
             sourcingView(aggregateBy: DAY, startDate: "{date:%Y-%m-%d}", endDate: "{date:%Y-%m-%d}") {{
+              marketplaceId
               metrics {{
                 groupByKey {{ asin }}
                 metrics {{
@@ -282,7 +307,8 @@ class AmazonSellingPartner(il.Source):
             }}
           }}
         }}"""
-        metrics = await self.connection.api.query(key="metrics", query=query)
+        views = await self.connection.api.query(query=query)
+        metrics = self._marketplace_metrics(views)
         rows: list[_Record] = []
         for m in metrics:
             metric = _nested(m, "metrics")
@@ -318,6 +344,7 @@ class AmazonSellingPartner(il.Source):
         query = f"""{{
           {constants.DATAKIOSK_SCHEMA} {{
             sourcingView(aggregateBy: DAY, startDate: "{date:%Y-%m-%d}", endDate: "{date:%Y-%m-%d}") {{
+              marketplaceId
               metrics {{
                 groupByKey {{ asin shipToCountryCode }}
                 metrics {{
@@ -334,7 +361,8 @@ class AmazonSellingPartner(il.Source):
             }}
           }}
         }}"""
-        metrics = await self.connection.api.query(key="metrics", query=query)
+        views = await self.connection.api.query(query=query)
+        metrics = self._marketplace_metrics(views)
         rows: list[_Record] = []
         for m in metrics:
             metric = _nested(m, "metrics")
