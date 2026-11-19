@@ -17,14 +17,31 @@ import httpx2
 import interloper as il
 import pytest
 
+from interloper_assets.google.errors import GoogleApiError
 from interloper_assets.search_ads_360.api import SearchAds360Api
 from interloper_assets.search_ads_360.constants import BASE_URL
 
 SEARCH_URL = "https://searchads360.googleapis.com/v0/customers/222/searchAds360:search"
 
 
-def _api(handler: Callable[[httpx2.Request], httpx2.Response]) -> SearchAds360Api:
-    return SearchAds360Api(il.AsyncRESTClient(BASE_URL, transport=httpx2.MockTransport(handler)))
+def _api(handler: Callable[[httpx2.Request], httpx2.Response], retry: il.RetryPolicy | None = None) -> SearchAds360Api:
+    return SearchAds360Api(il.AsyncRESTClient(BASE_URL, transport=httpx2.MockTransport(handler), retry=retry))
+
+
+def _answering(
+    answers: list[httpx2.Response | httpx2.TransportError],
+) -> tuple[list[httpx2.Request], Callable[[httpx2.Request], httpx2.Response]]:
+    requests: list[httpx2.Request] = []
+    remaining = list(answers)
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        answer = remaining.pop(0)
+        if isinstance(answer, httpx2.TransportError):
+            raise answer
+        return answer
+
+    return requests, handler
 
 
 def _recording(pages: list[dict[str, Any]]) -> tuple[list[httpx2.Request], Callable[[httpx2.Request], httpx2.Response]]:
@@ -104,11 +121,13 @@ class TestSearch:
         assert await _api(handler).search("222", resource="campaign", fields=["campaign.id"]) == []
         assert len(requests) == 1
 
-    async def test_a_refusal_raises_the_http_error(self):
-        api = _api(lambda _: httpx2.Response(403, json={"error": {"code": 403, "status": "PERMISSION_DENIED"}}))
+    async def test_a_refusal_raises_googles_reason(self):
+        refusal = {"code": 403, "message": "The caller does not have permission", "status": "PERMISSION_DENIED"}
+        requests, handler = _answering([httpx2.Response(403, json={"error": refusal})])
 
-        with pytest.raises(httpx2.HTTPStatusError, match="403 Forbidden"):
-            await api.search("222", resource="campaign", fields=["campaign.id"])
+        with pytest.raises(GoogleApiError, match=r"HTTP 403, PERMISSION_DENIED\): The caller does not have permission"):
+            await _api(handler).search("222", resource="campaign", fields=["campaign.id"])
+        assert len(requests) == 1
 
     async def test_a_refusal_on_a_later_page_raises(self):
         def handler(request: httpx2.Request) -> httpx2.Response:
@@ -116,8 +135,77 @@ class TestSearch:
                 return httpx2.Response(429, json={"error": {"code": 429, "status": "RESOURCE_EXHAUSTED"}})
             return httpx2.Response(200, json={"results": [{"campaign": {"id": "1"}}], "nextPageToken": "p2"})
 
-        with pytest.raises(httpx2.HTTPStatusError, match="429 Too Many Requests"):
+        with pytest.raises(GoogleApiError, match="HTTP 429, RESOURCE_EXHAUSTED"):
             await _api(handler).search("222", resource="campaign", fields=["campaign.id"])
+
+    @pytest.mark.parametrize("status", [500, 502, 503, 504])
+    async def test_a_server_error_repeats_the_same_page(self, status: int):
+        requests, handler = _answering(
+            [
+                httpx2.Response(200, json={"results": [{"campaign": {"id": "1"}}], "nextPageToken": "p2"}),
+                httpx2.Response(status, json={"error": {"code": status, "status": "UNAVAILABLE"}}),
+                httpx2.Response(200, json={"results": [{"campaign": {"id": "2"}}]}),
+            ]
+        )
+
+        rows = await _api(handler).search("222", resource="campaign", fields=["campaign.id"])
+
+        assert rows == [{"campaign": {"id": "1"}}, {"campaign": {"id": "2"}}]
+        assert [json.loads(request.content).get("pageToken") for request in requests] == [None, "p2", "p2"]
+
+    async def test_a_dropped_connection_repeats_the_request(self):
+        found = httpx2.Response(200, json={"results": [{"campaign": {"id": "1"}}]})
+        requests, handler = _answering([httpx2.ConnectError("connection reset"), found])
+
+        rows = await _api(handler).search("222", resource="campaign", fields=["campaign.id"])
+
+        assert rows == [{"campaign": {"id": "1"}}]
+        assert len(requests) == 2
+
+    async def test_a_server_error_raises_once_the_clients_budget_is_spent(self):
+        requests, handler = _answering(
+            [httpx2.Response(503, json={"error": {"code": 503, "status": "UNAVAILABLE"}}) for _ in range(3)]
+        )
+        api = _api(handler, retry=il.RetryPolicy(max_attempts=3, delay=0, jitter=0))
+
+        with pytest.raises(GoogleApiError, match="HTTP 503, UNAVAILABLE"):
+            await api.search("222", resource="campaign", fields=["campaign.id"])
+        assert len(requests) == 3
+
+    async def test_a_connection_dropped_on_every_attempt_raises(self):
+        requests, handler = _answering([httpx2.ConnectError("connection reset")] * 2)
+        api = _api(handler, retry=il.RetryPolicy(max_attempts=2, delay=0, jitter=0))
+
+        with pytest.raises(httpx2.ConnectError):
+            await api.search("222", resource="campaign", fields=["campaign.id"])
+        assert len(requests) == 2
+
+    async def test_a_client_error_is_not_repeated(self):
+        refusal = {"error": {"code": 400, "status": "INVALID_ARGUMENT"}}
+        requests, handler = _answering([httpx2.Response(400, json=refusal)])
+
+        with pytest.raises(GoogleApiError, match="HTTP 400, INVALID_ARGUMENT"):
+            await _api(handler).search("222", resource="campaign", fields=["campaign.id"])
+        assert len(requests) == 1
+
+
+class TestGet:
+    async def test_reads_the_one_response_of_an_endpoint(self):
+        requests, handler = _answering([httpx2.Response(200, json={"resourceNames": ["customers/111"]})])
+
+        response = await _api(handler).get("/customers:listAccessibleCustomers")
+
+        assert response == {"resourceNames": ["customers/111"]}
+        (request,) = requests
+        assert request.method == "GET"
+        assert str(request.url) == f"{BASE_URL}/customers:listAccessibleCustomers"
+
+    async def test_a_refusal_raises_googles_reason(self):
+        refusal = {"error": {"code": 401, "message": "Request had invalid credentials.", "status": "UNAUTHENTICATED"}}
+        _, handler = _answering([httpx2.Response(401, json=refusal)])
+
+        with pytest.raises(GoogleApiError, match=r"HTTP 401, UNAUTHENTICATED\): Request had invalid credentials."):
+            await _api(handler).get("/customers:listAccessibleCustomers")
 
 
 class TestReport:

@@ -176,7 +176,7 @@ class TestSearch:
 
     def test_a_refused_query_raises_the_http_error(self, monkeypatch: Any):
         refusal = httpx2.Response(400, json={"error": {"code": 400, "status": "INVALID_ARGUMENT"}})
-        with pytest.raises(httpx2.HTTPStatusError, match="400 Bad Request"):
+        with pytest.raises(httpx2.HTTPStatusError, match=r"HTTP 400, INVALID_ARGUMENT\): Bad Request"):
             self._run(monkeypatch, "campaigns_stats", [refusal])
 
 
