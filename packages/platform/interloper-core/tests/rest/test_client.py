@@ -6,6 +6,7 @@ import httpx2
 import pytest
 
 from interloper.rest.client import AsyncRESTClient, RESTClient, TransientRetry
+from interloper.rest.paginator import JSONCursorPaginator, PageNumberPaginator
 from interloper.retry import RetryPolicy
 
 POLICY = RetryPolicy(max_attempts=3, delay=5, jitter=0)
@@ -110,6 +111,69 @@ class TestRetries:
             with pytest.raises(httpx2.ConnectError):
                 await client.post("/query", json={})
         assert calls == [1]
+
+
+class TestPaginateCookies:
+    """A walk sends each page with the cookies the pages before it set, as a load balancer pinning pages needs."""
+
+    @staticmethod
+    def _cursor_walk(sent: dict[str, str | None]) -> httpx2.MockTransport:
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            cursor = request.url.params.get("cursor", "first")
+            sent[cursor] = request.headers.get("Cookie")
+            following = {"first": "c1", "c1": "c2"}.get(cursor)
+            headers = {"Set-Cookie": f"affinity={cursor}; Path=/"} if following else {}
+            return httpx2.Response(200, json={"items": [cursor], "next": following}, headers=headers)
+
+        return httpx2.MockTransport(handler)
+
+    def test_the_sync_walk_sends_the_cookie_the_last_page_set(self):
+        sent: dict[str, str | None] = {}
+        paginator = JSONCursorPaginator(cursor_path="next", cursor_param="cursor")
+        with RESTClient("https://api.test", transport=self._cursor_walk(sent)) as client:
+            list(client.paginate("/x", paginator, data_selector="items"))
+
+        assert sent == {"first": None, "c1": "affinity=first", "c2": "affinity=c1"}
+
+    async def test_the_async_walk_sends_the_cookie_the_last_page_set(self):
+        sent: dict[str, str | None] = {}
+        paginator = JSONCursorPaginator(cursor_path="next", cursor_param="cursor")
+        async with AsyncRESTClient("https://api.test", transport=self._cursor_walk(sent)) as client:
+            [page async for page in client.paginate("/x", paginator, data_selector="items")]
+
+        assert sent == {"first": None, "c1": "affinity=first", "c2": "affinity=c1"}
+
+    async def test_concurrent_pages_send_the_cookie_the_first_page_set(self):
+        sent: dict[str, str | None] = {}
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            page = request.url.params["page"]
+            sent[page] = request.headers.get("Cookie")
+            headers = {"Set-Cookie": "affinity=a; Path=/"} if page == "1" else {}
+            return httpx2.Response(200, json={"total_pages": 3, "items": [page]}, headers=headers)
+
+        paginator = PageNumberPaginator(total_path="total_pages")
+        async with AsyncRESTClient("https://api.test", transport=httpx2.MockTransport(handler)) as client:
+            [page async for page in client.paginate("/x", paginator, data_selector="items")]
+
+        assert sent == {"1": None, "2": "affinity=a", "3": "affinity=a"}
+
+    def test_a_cookie_header_the_caller_set_goes_with_every_page(self):
+        sent: dict[str, str | None] = {}
+        paginator = JSONCursorPaginator(cursor_path="next", cursor_param="cursor")
+        with RESTClient("https://api.test", transport=self._cursor_walk(sent)) as client:
+            list(client.paginate("/x", paginator, headers={"Cookie": "session=s"}, data_selector="items"))
+
+        assert sent == {"first": "session=s", "c1": "session=s", "c2": "session=s"}
+
+    async def test_a_cookie_header_the_client_carries_goes_with_every_page(self):
+        sent: dict[str, str | None] = {}
+        paginator = JSONCursorPaginator(cursor_path="next", cursor_param="cursor")
+        transport = self._cursor_walk(sent)
+        async with AsyncRESTClient("https://api.test", headers={"Cookie": "session=s"}, transport=transport) as client:
+            [page async for page in client.paginate("/x", paginator, data_selector="items")]
+
+        assert sent == {"first": "session=s", "c1": "session=s", "c2": "session=s"}
 
 
 class TestAsyncRESTClient:

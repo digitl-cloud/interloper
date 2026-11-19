@@ -14,11 +14,14 @@ on the sync client; concurrency is an opt-in capability, not a requirement.
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any
 
 import httpx2
+
+logger = logging.getLogger(__name__)
 
 # -- Data selection ------------------------------------------------------------
 
@@ -427,7 +430,11 @@ class OffsetPaginator(RangePaginator):
 
 
 class HeaderLinkPaginator(BasePaginator):
-    """Follow the ``Link`` header's ``rel=next`` URL (RFC 5988). Sequential."""
+    """Follow the ``Link`` header's ``rel=next`` URL (RFC 5988). Sequential.
+
+    A link to a page the walk already read ends it: reading that page again
+    would follow the same links again, forever.
+    """
 
     def __init__(self, *, rel: str = "next") -> None:
         """Follow the Link header rel.
@@ -437,15 +444,29 @@ class HeaderLinkPaginator(BasePaginator):
         """
         self.rel = rel
         self._next_url: httpx2.URL | None = None
+        self._read: set[httpx2.URL] = set()
+
+    def init_request(self, request: httpx2.Request) -> None:
+        """Forget an earlier walk's pages and count the first page as read.
+
+        Args:
+            request: The initial request, left unchanged.
+        """
+        self._next_url = None
+        self._read = {request.url}
 
     def update_state(self, response: httpx2.Response) -> None:
-        """Read the ``rel=next`` link from the response ``Link`` header.
+        """Read the ``rel=next`` link from the response ``Link`` header, unless it names a page already read.
 
         Args:
             response: The response just received for the current page.
         """
         link = response.links.get(self.rel)
-        self._next_url = httpx2.URL(link["url"]) if link else None
+        next_url = httpx2.URL(link["url"]) if link else None
+        if next_url in self._read:
+            logger.warning(f"{response.request.url.path} links to a page already read; reading no further")
+            next_url = None
+        self._next_url = next_url
 
     def update_request(self, request: httpx2.Request) -> None:
         """Point the request at the next link URL.
@@ -455,15 +476,20 @@ class HeaderLinkPaginator(BasePaginator):
         """
         assert self._next_url is not None
         request.url = self._next_url
+        self._read.add(request.url)
 
     @property
     def has_next(self) -> bool:
-        """Whether the response carried a next link."""
+        """Whether the response linked a page not read yet."""
         return self._next_url is not None
 
 
 class JSONLinkPaginator(BasePaginator):
-    """Follow a next-page URL found at a JSON path in the response. Sequential."""
+    """Follow a next-page URL found at a JSON path in the response. Sequential.
+
+    A link to a page the walk already read ends it: reading that page again
+    would follow the same links again, forever.
+    """
 
     def __init__(self, *, next_url_path: str) -> None:
         """Follow a next-page URL at a JSON path.
@@ -472,33 +498,55 @@ class JSONLinkPaginator(BasePaginator):
             next_url_path: Dotted JSON path to the next-page URL in each response.
         """
         self.next_url_path = next_url_path
-        self._next_url: str | None = None
+        self._next_url: httpx2.URL | None = None
+        self._read: set[httpx2.URL] = set()
+
+    def init_request(self, request: httpx2.Request) -> None:
+        """Forget an earlier walk's pages and count the first page as read.
+
+        Args:
+            request: The initial request, left unchanged.
+        """
+        self._next_url = None
+        self._read = {request.url}
 
     def update_state(self, response: httpx2.Response) -> None:
-        """Read the next-page URL from the response JSON.
+        """Read the next-page URL from the response JSON, unless it names a page already read.
+
+        The URL may be absolute or relative to the page that named it.
 
         Args:
             response: The response just received for the current page.
         """
-        self._next_url = _extract(response.json(), self.next_url_path, None)
+        link = _extract(response.json(), self.next_url_path, None)
+        next_url = response.request.url.join(link) if link else None
+        if next_url in self._read:
+            logger.warning(f"{response.request.url.path} links to a page already read; reading no further")
+            next_url = None
+        self._next_url = next_url
 
     def update_request(self, request: httpx2.Request) -> None:
-        """Point the request at the next URL (absolute or base-relative).
+        """Point the request at the next URL.
 
         Args:
             request: The request to advance, mutated in place.
         """
         assert self._next_url is not None
-        request.url = request.url.join(self._next_url)
+        request.url = self._next_url
+        self._read.add(request.url)
 
     @property
     def has_next(self) -> bool:
-        """Whether the response carried a next URL."""
-        return bool(self._next_url)
+        """Whether the response linked a page not read yet."""
+        return self._next_url is not None
 
 
 class JSONCursorPaginator(BasePaginator):
-    """Carry a cursor value from the response JSON into the next request parameter. Sequential."""
+    """Carry a cursor value from the response JSON into the next request parameter. Sequential.
+
+    A cursor the walk already sent ends it: sending it again would read the
+    same pages again, forever.
+    """
 
     def __init__(self, *, cursor_path: str, cursor_param: str) -> None:
         """Carry a JSON cursor into the next request.
@@ -510,14 +558,29 @@ class JSONCursorPaginator(BasePaginator):
         self.cursor_path = cursor_path
         self.cursor_param = cursor_param
         self._cursor: Any = None
+        self._sent: set[str] = set()
+
+    def init_request(self, request: httpx2.Request) -> None:
+        """Forget an earlier walk's cursors and count a starting cursor the request carries as sent.
+
+        Args:
+            request: The initial request, left unchanged.
+        """
+        self._cursor = None
+        self._sent = set(request.url.params.get_list(self.cursor_param))
 
     def update_state(self, response: httpx2.Response) -> None:
-        """Read the next cursor from the response JSON.
+        """Read the next cursor from the response JSON, unless it was already sent.
 
         Args:
             response: The response just received for the current page.
         """
-        self._cursor = _extract(response.json(), self.cursor_path, None)
+        cursor = _extract(response.json(), self.cursor_path, None)
+        if cursor and str(cursor) in self._sent:
+            path = response.request.url.path
+            logger.warning(f"{path} returned the {self.cursor_param} {cursor!r} again; reading no further")
+            cursor = None
+        self._cursor = cursor
 
     def update_request(self, request: httpx2.Request) -> None:
         """Set the cursor query parameter for the next page.
@@ -527,6 +590,7 @@ class JSONCursorPaginator(BasePaginator):
         """
         assert self._cursor is not None
         self._with_param(request, self.cursor_param, self._cursor)
+        self._sent.add(str(self._cursor))
 
     @property
     def has_next(self) -> bool:
