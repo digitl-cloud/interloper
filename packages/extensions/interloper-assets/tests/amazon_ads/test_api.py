@@ -381,7 +381,7 @@ class TestReport:
         assert (status.method, status.url.path, status.url.query) == ("GET", "/reporting/reports/r-1", b"")
         report_headers = {"amazon-advertising-api-scope": "123", "content-type": REPORT_MEDIA_TYPE, "accept": "*/*"}
         assert _headers(create) == _headers(status) == report_headers
-        assert downloads.calls == [(REPORT_URL, {"timeout": None})]
+        assert downloads.calls == [(REPORT_URL, {"timeout": 60.0})]
         assert sleeps == []
 
     def test_polls_with_a_doubling_wait_up_to_a_minute_until_the_job_completes(
