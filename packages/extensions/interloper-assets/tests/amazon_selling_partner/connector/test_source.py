@@ -10,7 +10,7 @@ These tests pin the whole chain: live instance → spec JSON → reconstructed
 child asset → normalize + validate a camelCase report row. They also pin what
 each asset sends and returns against a faked Amazon: a report job (create,
 poll, read the document's signed URL, download it gzipped), and a Data Kiosk
-query (the same steps, the document plain JSON).
+query (the same steps, the document JSON Lines).
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from __future__ import annotations
 import datetime as dt
 import gzip
 import json
+import re
 from typing import Any
 
 import httpx2
@@ -35,6 +36,7 @@ from interloper_assets.amazon_selling_partner.connector.source import AmazonSell
 
 _ASSET_KEY = "vendor_inventory_retail_manufacturing_stats"
 MARKETPLACE = "A1PA6795UKMFR9"
+OTHER_MARKETPLACE = "A13V1IB3VIYZZH"
 DAY = dt.date(2026, 10, 1)
 API_URL = "https://sellingpartnerapi-eu.amazon.com"
 REPORT_URL = "https://documents.example.com/report"
@@ -53,16 +55,17 @@ class FakeSellingPartner:
     """Amazon's side of a report job and a Data Kiosk query, recording every request.
 
     Each job is done at its first poll; its document sits at a signed URL
-    outside the API, gzipped for a report and plain JSON for a query. How a job
-    that fails or waits is read is the engine's, pinned in ``test_api.py``.
+    outside the API, gzipped for a report and JSON Lines for a query. How a
+    job that fails, waits or pages is read is the engine's, pinned in
+    ``test_api.py``.
     """
 
-    def __init__(self, report: Any = None, query: Any = None) -> None:
+    def __init__(self, report: Any = None, query: list[dict[str, Any]] | None = None) -> None:
         """Serve the given documents.
 
         Args:
             report: The report job's document, gzipped on download.
-            query: The Data Kiosk query's document, served as plain JSON.
+            query: The Data Kiosk query's records, one view per marketplace, served as JSON Lines.
         """
         self.report = report
         self.query = query
@@ -92,10 +95,11 @@ class FakeSellingPartner:
                 "dataDocumentId": "DD1",
             },
             ("GET", f"{API_URL}/dataKiosk/2023-11-15/documents/DD1"): {"documentId": "DD1", "documentUrl": QUERY_URL},
-            ("GET", QUERY_URL): self.query,
         }
         if (request.method, str(request.url)) == ("GET", REPORT_URL):
             return httpx2.Response(200, content=gzip.compress(json.dumps(self.report).encode()))
+        if (request.method, str(request.url)) == ("GET", QUERY_URL):
+            return httpx2.Response(200, content="".join(json.dumps(view) + "\n" for view in self.query or []).encode())
         return httpx2.Response(200, json=responses[(request.method, str(request.url))])
 
     @property
@@ -342,11 +346,41 @@ class TestReportRequests:
 
 
 class TestQueryRequests:
-    """The Data Kiosk assets run one GraphQL query for the partition's day and flatten its metric records."""
+    """The Data Kiosk assets run one GraphQL query for the partition's day and flatten its metric records.
+
+    The vendor analytics views take no marketplace argument and answer one
+    view per marketplace the vendor sells in, so each asset selects the
+    view's ``marketplaceId`` and keeps the source's own marketplace.
+    """
+
+    @pytest.mark.parametrize("key", ["products", "product_fulfillment_stats", "geo_sales_stats_by_country"])
+    async def test_keeps_the_sources_marketplace_only(self, key: str):
+        vendor = FakeSellingPartner(
+            query=[
+                {"marketplaceId": OTHER_MARKETPLACE, "metrics": [{"groupByKey": {"asin": "B-other"}}]},
+                {
+                    "marketplaceId": MARKETPLACE,
+                    "metrics": [{"groupByKey": {"asin": "B1"}}, {"groupByKey": {"asin": "B2"}}],
+                },
+                {"marketplaceId": MARKETPLACE, "metrics": [{"groupByKey": {"asin": "B3"}}]},
+            ]
+        )
+
+        rows = await _run(key, vendor)
+
+        assert [row["asin"] for row in rows] == ["B1", "B2", "B3"]
+        assert list(json.loads(vendor.requests[0].content)) == ["query"]
+        query = json.loads(vendor.requests[0].content)["query"]
+        assert re.search(r"sourcingView\([^)]*\) \{\s*marketplaceId\s*metrics \{", query)
+
+    async def test_a_view_without_metrics_writes_no_rows(self):
+        vendor = FakeSellingPartner(query=[{"marketplaceId": MARKETPLACE, "metrics": None}])
+
+        assert await _run("products", vendor) == []
 
     async def test_products_reads_the_identifiers_of_each_asin(self):
         metric = {"groupByKey": {"asin": "B1", "parentAsin": "P1", "ean": "E1", "upc": None, "isbn13": "I1"}}
-        vendor = FakeSellingPartner(query={"metrics": [metric]})
+        vendor = FakeSellingPartner(query=[{"marketplaceId": MARKETPLACE, "metrics": [metric]}])
 
         rows = await _run("products", vendor)
 
@@ -376,8 +410,7 @@ class TestQueryRequests:
                 },
             },
         }
-        document = {"analytics_vendorAnalytics_2024_09_30": {"sourcingView": {"metrics": [metric]}}}
-        vendor = FakeSellingPartner(query=document)
+        vendor = FakeSellingPartner(query=[{"marketplaceId": MARKETPLACE, "metrics": [metric]}])
 
         rows = await _run("product_fulfillment_stats", vendor)
 
@@ -419,7 +452,7 @@ class TestQueryRequests:
                 },
             },
         }
-        vendor = FakeSellingPartner(query={"metrics": [metric]})
+        vendor = FakeSellingPartner(query=[{"marketplaceId": MARKETPLACE, "metrics": [metric]}])
 
         rows = await _run("geo_sales_stats_by_country", vendor)
 

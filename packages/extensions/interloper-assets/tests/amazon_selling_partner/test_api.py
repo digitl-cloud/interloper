@@ -415,43 +415,193 @@ class TestReport:
         assert vendor.calls == REPORT_CALLS[: REPORT_CALLS.index(refused) + 1]
 
 
+class FakeKiosk:
+    """Data Kiosk's side of a paged query, recording every request.
+
+    Each page is a query of its own: the first created from the GraphQL query
+    alone, each next one from the query and the previous page's ``nextToken``.
+    ``pages`` holds each page's records, served as JSON Lines, ``status`` is
+    every query's, ``error`` the error document a failed query names, and
+    ``next_tokens`` the token a page returns instead of the next page's.
+    """
+
+    def __init__(self, *pages: list[dict[str, Any]]) -> None:
+        """Serve the given pages, every query done at its first poll.
+
+        Args:
+            *pages: Each page's records, in order.
+        """
+        self.pages = list(pages)
+        self.status = "DONE"
+        self.error: Any = None
+        self.next_tokens: dict[int, str] = {}
+        self.requests: list[httpx2.Request] = []
+
+    def __call__(self, request: httpx2.Request) -> httpx2.Response:
+        """Answer a request as Data Kiosk would, at the API or at a document's signed URL.
+
+        Args:
+            request: The request sent.
+
+        Returns:
+            Data Kiosk's answer.
+
+        Raises:
+            AssertionError: If a query is created past the last page, which would never end.
+        """
+        self.requests.append(request)
+        url = str(request.url)
+        if (request.method, url) == ("POST", f"{DATA_KIOSK}/queries"):
+            if len(self.bodies) > len(self.pages):
+                raise AssertionError("read past the last page")
+            token = json.loads(request.content).get("paginationToken")
+            return httpx2.Response(202, json={"queryId": token.replace("T", "Q") if token else "Q1"})
+        if url.startswith(f"{DATA_KIOSK}/queries/Q"):
+            return httpx2.Response(200, json=self._query(int(url.rsplit("Q", 1)[1])))
+        if url.startswith(f"{DATA_KIOSK}/documents/"):
+            document_id = url.rsplit("/", 1)[1]
+            return httpx2.Response(
+                200, json={"documentId": document_id, "documentUrl": f"{DOCUMENT_URL}/{document_id}"}
+            )
+        document_id = url.rsplit("/", 1)[1]
+        if document_id == "E1":
+            return httpx2.Response(200, json=self.error)
+        records = self.pages[int(document_id.removeprefix("D")) - 1]
+        return httpx2.Response(200, content="".join(json.dumps(record) + "\n" for record in records).encode())
+
+    @property
+    def bodies(self) -> list[dict[str, Any]]:
+        """List the bodies of the queries created.
+
+        Returns:
+            Each ``createQuery`` body, in the order sent.
+        """
+        return [json.loads(request.content) for request in self.requests if request.method == "POST"]
+
+    def _query(self, page: int) -> dict[str, Any]:
+        """Describe the query of one page as a poll reads it.
+
+        Args:
+            page: The page's number, from 1.
+
+        Returns:
+            The query: its status, its data or error document, and the next page's token unless it is the last.
+        """
+        query: dict[str, Any] = {"queryId": f"Q{page}", "processingStatus": self.status}
+        if self.status == "DONE" and self.pages[page - 1]:
+            query["dataDocumentId"] = f"D{page}"
+        if self.error is not None:
+            query["errorDocumentId"] = "E1"
+        if page in self.next_tokens:
+            query["pagination"] = {"nextToken": self.next_tokens[page]}
+        elif page < len(self.pages):
+            query["pagination"] = {"nextToken": f"T{page + 1}"}
+        return query
+
+
+def _kiosk(fake: FakeKiosk) -> AmazonSellingPartnerApi:
+    """Build the engine on a client served by a Data Kiosk fake.
+
+    Args:
+        fake: The fake answering every request.
+
+    Returns:
+        The engine.
+    """
+    client = il.AsyncRESTClient(API_URL, auth=AccessToken(), transport=httpx2.MockTransport(fake), timeout=60)
+    return AmazonSellingPartnerApi(client)
+
+
+SOURCING = "{ sourcingView }"
+
+
 class TestQuery:
-    async def test_runs_a_query_and_reads_the_named_list(self, vendor: FakeJob):
-        rows = [{"groupByKey": {"asin": "B1"}}]
-        vendor.document = {"metrics": rows}
+    async def test_runs_a_query_and_reads_every_record_of_its_json_lines(self, clock: Clock):
+        records = [
+            {"startDate": "2026-10-01", "marketplaceId": "A1PA6795UKMFR9", "metrics": [{"groupByKey": {"asin": "B1"}}]},
+            {"startDate": "2026-10-01", "marketplaceId": "A13V1IB3VIYZZH", "metrics": [{"groupByKey": {"asin": "B2"}}]},
+        ]
+        fake = FakeKiosk(records)
 
-        assert await _api(vendor).query(key="metrics", query="{ sourcingView }") == rows
-        assert vendor.calls == QUERY_CALLS
-        assert json.loads(vendor.requests[0].content) == {"query": "{ sourcingView }"}
+        assert await _kiosk(fake).query(query=SOURCING) == records
+        assert [(request.method, str(request.url)) for request in fake.requests] == [
+            ("POST", f"{DATA_KIOSK}/queries"),
+            ("GET", f"{DATA_KIOSK}/queries/Q1"),
+            ("GET", f"{DATA_KIOSK}/documents/D1"),
+            ("GET", f"{DOCUMENT_URL}/D1"),
+        ]
+        assert fake.bodies == [{"query": SOURCING}]
 
-    async def test_the_list_is_found_nested_in_the_queried_view(self, vendor: FakeJob):
-        rows = [{"groupByKey": {"asin": "B1"}}]
-        vendor.document = {
-            "schema": {"other": {"metrics": "not a list"}, "empty": {"metrics": []}, "view": {"metrics": rows}}
-        }
+    async def test_follows_each_page_through_a_query_of_its_own(self, clock: Clock):
+        fake = FakeKiosk([{"page": 1}, {"page": 1}], [{"page": 2}], [{"page": 3}])
 
-        assert await _api(vendor).query(key="metrics", query="{ sourcingView }") == rows
+        assert await _kiosk(fake).query(query=SOURCING) == [{"page": 1}, {"page": 1}, {"page": 2}, {"page": 3}]
+        assert fake.bodies == [
+            {"query": SOURCING},
+            {"query": SOURCING, "paginationToken": "T2"},
+            {"query": SOURCING, "paginationToken": "T3"},
+        ]
 
-    @pytest.mark.parametrize("document", [{"errors": []}, ["not", "an", "object"], {"metrics": None}])
-    async def test_a_document_without_the_list_reads_no_rows(self, vendor: FakeJob, document: Any):
-        vendor.document = document
+    async def test_a_page_returning_a_token_already_sent_is_the_last(self, clock: Clock):
+        fake = FakeKiosk([{"page": 1}], [{"page": 2}], [{"page": 3}])
+        fake.next_tokens = {2: "T2"}
 
-        assert await _api(vendor).query(key="metrics", query="{ sourcingView }") == []
+        assert await _kiosk(fake).query(query=SOURCING) == [{"page": 1}, {"page": 2}]
+        assert [body.get("paginationToken") for body in fake.bodies] == [None, "T2"]
 
-    async def test_the_document_is_plain_json_downloaded_without_the_api_credentials(self, vendor: FakeJob):
+    async def test_a_page_without_a_document_reads_no_records_and_paging_goes_on(self, clock: Clock):
+        fake = FakeKiosk([], [{"page": 2}])
+
+        assert await _kiosk(fake).query(query=SOURCING) == [{"page": 2}]
+
+    async def test_a_query_without_a_document_reads_no_records(self, clock: Clock):
+        fake = FakeKiosk([])
+
+        assert await _kiosk(fake).query(query=SOURCING) == []
+        assert [request.method for request in fake.requests] == ["POST", "GET"]
+
+    async def test_blank_lines_are_not_records(self, clock: Clock):
+        fake = FakeKiosk([{"page": 1}])
+        serve = fake.__call__
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            if str(request.url) == f"{DOCUMENT_URL}/D1":
+                fake.requests.append(request)
+                return httpx2.Response(200, content=b'{"page": 1}\n\n{"page": 1}')
+            return serve(request)
+
+        client = il.AsyncRESTClient(API_URL, auth=AccessToken(), transport=httpx2.MockTransport(handler))
+        assert await AmazonSellingPartnerApi(client).query(query=SOURCING) == [{"page": 1}, {"page": 1}]
+
+    async def test_a_failed_query_raises_its_error_document(self, clock: Clock):
+        fake = FakeKiosk([])
+        fake.status = "FATAL"
+        fake.error = {"errorMessage": "Field 'sourcingView' is not available to this account"}
+
+        with pytest.raises(
+            RuntimeError,
+            match=r"^Query Q1 failed with status FATAL: Field 'sourcingView' is not available to this account$",
+        ):
+            await _kiosk(fake).query(query=SOURCING)
+        assert str(fake.requests[-1].url) == f"{DOCUMENT_URL}/E1"
+        assert "x-amz-access-token" not in fake.requests[-1].headers
+
+    async def test_an_error_document_without_a_message_is_raised_whole(self, clock: Clock):
+        fake = FakeKiosk([])
+        fake.status = "FATAL"
+        fake.error = {"errors": [{"code": "InvalidInput"}]}
+
+        with pytest.raises(RuntimeError, match=r"^Query Q1 failed with status FATAL: \{'errors': "):
+            await _kiosk(fake).query(query=SOURCING)
+
+    async def test_the_document_is_downloaded_without_the_api_credentials(self, vendor: FakeJob):
         vendor.document = {"metrics": []}
 
-        await _api(vendor).query(key="metrics", query="{ sourcingView }")
+        await _api(vendor).query(query=SOURCING)
 
         download = vendor.requests[-1]
         assert "x-amz-access-token" not in download.headers
         assert download.extensions["timeout"] == {"connect": 60, "read": 60, "write": 60, "pool": 60}
-
-    async def test_a_query_without_a_document_reads_no_rows(self, vendor: FakeJob):
-        vendor.has_document = False
-
-        assert await _api(vendor).query(key="metrics", query="{ sourcingView }") == []
-        assert vendor.calls == QUERY_CALLS[:2]
 
     async def test_a_query_in_progress_or_failing_transiently_is_polled_again_a_minute_later(
         self, vendor: FakeJob, clock: Clock
@@ -459,7 +609,7 @@ class TestQuery:
         vendor.document = {"metrics": [{"asin": "B1"}]}
         vendor.polls = ["IN_QUEUE", 503, "DONE"]
 
-        assert await _api(vendor).query(key="metrics", query="{ sourcingView }") == [{"asin": "B1"}]
+        assert await _api(vendor).query(query=SOURCING) == [{"metrics": [{"asin": "B1"}]}]
         assert vendor.calls.count(("GET", f"{DATA_KIOSK}/queries/Q1")) == 3
         assert clock.waits == [60.0, 60.0]
 
@@ -467,22 +617,22 @@ class TestQuery:
         vendor.polls = [403]
 
         with pytest.raises(httpx2.HTTPStatusError, match="403"):
-            await _api(vendor).query(key="metrics", query="{ sourcingView }")
+            await _api(vendor).query(query=SOURCING)
         assert clock.waits == []
 
     @pytest.mark.parametrize("status", ["CANCELLED", "FATAL"])
-    async def test_a_failed_query_raises_its_status(self, vendor: FakeJob, status: str):
+    async def test_a_failed_query_without_an_error_document_raises_its_status(self, vendor: FakeJob, status: str):
         vendor.polls = [status]
 
         with pytest.raises(RuntimeError, match=f"^Query Q1 failed with status {status}$"):
-            await _api(vendor).query(key="metrics", query="{ sourcingView }")
+            await _api(vendor).query(query=SOURCING)
         assert vendor.calls == QUERY_CALLS[:2]
 
     async def test_a_query_unfinished_after_an_hour_raises(self, vendor: FakeJob, clock: Clock):
         vendor.polls = ["IN_PROGRESS"]
 
         with pytest.raises(RuntimeError, match=r"^Query Q1 did not complete within 3600s$"):
-            await _api(vendor).query(key="metrics", query="{ sourcingView }")
+            await _api(vendor).query(query=SOURCING)
         assert clock.waits == [60.0] * 60
 
     @pytest.mark.parametrize("refused", QUERY_CALLS[:1] + QUERY_CALLS[2:])
@@ -491,5 +641,5 @@ class TestQuery:
         vendor.responses[refused] = httpx2.Response(400, json={"errors": [{"code": "InvalidInput"}]})
 
         with pytest.raises(httpx2.HTTPStatusError):
-            await _api(vendor).query(key="metrics", query="{ sourcingView }")
+            await _api(vendor).query(query=SOURCING)
         assert vendor.calls == QUERY_CALLS[: QUERY_CALLS.index(refused) + 1]

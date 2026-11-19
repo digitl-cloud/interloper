@@ -30,7 +30,7 @@ class AmazonSellingPartnerApi:
     from a document Amazon serves at a signed URL outside the API, which is
     fetched without the client's credentials but within its timeout and
     transient retries. A report's document is JSON, gzipped when Amazon names
-    its ``compressionAlgorithm``; a query's is plain JSON.
+    its ``compressionAlgorithm``; a query's is JSON Lines, one record per line.
 
     Amazon refuses a request with an HTTP error status, raised as is, except
     while polling: a poll that fails transiently is polled again until the
@@ -110,39 +110,78 @@ class AmazonSellingPartnerApi:
             raise RuntimeError(f"Report {report_id} failed: {details or status}")
         return document.get(key, []) if document else []
 
-    async def query(self, *, key: str, **specification: Any) -> list[dict[str, Any]]:
-        """Run a Data Kiosk query and read one list of its document.
+    async def query(self, **specification: Any) -> list[dict[str, Any]]:
+        """Run a Data Kiosk query and read every record of every page of its result.
+
+        Amazon writes a result as JSON Lines, one record per line, and splits a
+        large one into pages: each next page is a query of its own, created from
+        the same specification and the previous page's ``nextToken``. A token
+        already sent ends the paging, as it would read the same pages again.
 
         Args:
-            key: The document's list the rows are read from, such as ``metrics``;
-                it is found at the document's top level or nested in the queried view.
-            **specification: The query in Amazon's names: its GraphQL ``query``.
+            **specification: The query in Amazon's names: its GraphQL ``query``;
+                each next page's ``paginationToken`` is added.
 
         Returns:
-            The list's records as Amazon wrote them, or none when the query
-            produced no document or the document has no such list.
+            Every record as Amazon wrote it, page after page; none when no page has a document.
 
         Raises:
-            RuntimeError: If the query is unfinished after ``QUERY_TIMEOUT`` seconds,
-                or is cancelled or fails.
+            RuntimeError: If a page's query is unfinished after ``QUERY_TIMEOUT`` seconds,
+                or is cancelled or fails, with its error document's message when it names one.
         """
-        response = await self.client.post(f"{_DATA_KIOSK}/queries", json=specification)
-        response.raise_for_status()
-        query_id = response.json()["queryId"]
-        logger.info(f"Query id: {query_id}")
+        records: list[dict[str, Any]] = []
+        page = specification
+        sent: set[str] = set()
+        while True:
+            response = await self.client.post(f"{_DATA_KIOSK}/queries", json=page)
+            response.raise_for_status()
+            query_id = response.json()["queryId"]
+            logger.info(f"Query id: {query_id}")
 
-        job = await self._wait(f"{_DATA_KIOSK}/queries/{query_id}", "Query", query_id, constants.QUERY_TIMEOUT)
-        status = job["processingStatus"]
-        if status != "DONE":
-            raise RuntimeError(f"Query {query_id} failed with status {status}")
-        document_id = job.get("dataDocumentId")
-        if not document_id:
-            return []
+            job = await self._wait(f"{_DATA_KIOSK}/queries/{query_id}", "Query", query_id, constants.QUERY_TIMEOUT)
+            status = job["processingStatus"]
+            if status != "DONE":
+                message = f"Query {query_id} failed with status {status}"
+                if job.get("errorDocumentId"):
+                    message = f"{message}: {await self._error(job['errorDocumentId'])}"
+                raise RuntimeError(message)
+            if job.get("dataDocumentId"):
+                download = await self._document(job["dataDocumentId"])
+                records.extend(json.loads(line) for line in download.content.splitlines() if line.strip())
 
+            token = job.get("pagination", {}).get("nextToken")
+            if not token:
+                return records
+            if token in sent:
+                logger.warning(f"Query {query_id} returned the page token {token} again; reading no further")
+                return records
+            sent.add(token)
+            page = {**specification, "paginationToken": token}
+
+    async def _document(self, document_id: str) -> httpx2.Response:
+        """Download a Data Kiosk document, its data or its error, by its id.
+
+        Args:
+            document_id: The document's id, a query's ``dataDocumentId`` or ``errorDocumentId``.
+
+        Returns:
+            The document's response, its content read and decompressed as its ``Content-Encoding`` says.
+        """
         response = await self.client.get(f"{_DATA_KIOSK}/documents/{document_id}")
         response.raise_for_status()
-        download = await self._download(response.json()["documentUrl"])
-        return self._find(download.json(), key)
+        return await self._download(response.json()["documentUrl"])
+
+    async def _error(self, document_id: str) -> Any:
+        """Read why a query failed from its error document.
+
+        Args:
+            document_id: The failed query's ``errorDocumentId``.
+
+        Returns:
+            The document's ``errorMessage``, or the whole document when it names none.
+        """
+        error = (await self._document(document_id)).json()
+        return error.get("errorMessage", error) if isinstance(error, dict) else error
 
     async def _wait(self, path: str, noun: str, job_id: str, timeout: float) -> dict[str, Any]:
         """Poll a job until it is finished, polling again after a transient failure.
@@ -219,29 +258,3 @@ class AmazonSellingPartnerApi:
         response = await self.client.get(url, auth=None)
         response.raise_for_status()
         return response
-
-    @classmethod
-    def _find(cls, document: Any, key: str) -> list[dict[str, Any]]:
-        """Find the list a query document holds under ``key``.
-
-        The list sits at the document's top level or nested in the object of
-        the queried schema and view, so the search descends through nested
-        objects, never into lists.
-
-        Args:
-            document: The query's document as Amazon wrote it.
-            key: The name of the list.
-
-        Returns:
-            The first non-empty list found under ``key``, or none.
-        """
-        if not isinstance(document, dict):
-            return []
-        if isinstance(document.get(key), list):
-            return document[key]
-        for value in document.values():
-            if isinstance(value, dict):
-                found = cls._find(value, key)
-                if found:
-                    return found
-        return []
