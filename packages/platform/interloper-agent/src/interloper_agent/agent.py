@@ -1,16 +1,19 @@
-"""The assistant: one pydantic-ai agent over the toolkit."""
+"""The assistant: one pydantic-ai agent over the toolkit.
+
+A provider's SDK is imported only when a model of that provider is built,
+inside :func:`capabilities` and :func:`model_settings`: the agent lives in
+the api process, where the SDKs of the providers it does not talk to would
+be the largest imports it carries. Building happens once at startup, so the
+configured provider's SDK is in place before any request thread runs a turn.
+"""
 
 from __future__ import annotations
 
 import datetime
 
-from google.genai.types import ThinkingLevel
 from interloper_toolkit import ToolkitContext
 from pydantic_ai import Agent, DeferredToolRequests, UsageLimits
 from pydantic_ai.capabilities import AbstractCapability, ProcessHistory
-from pydantic_ai.models.anthropic import AnthropicCompaction, AnthropicModelSettings
-from pydantic_ai.models.google import GoogleModelSettings
-from pydantic_ai.models.openai import OpenAICompaction
 from pydantic_ai.settings import ModelSettings
 
 from interloper_agent.history import COMPACTION_THRESHOLD, elide_tool_returns, summarise
@@ -90,8 +93,12 @@ def capabilities(model: str) -> list[AbstractCapability[ToolkitContext]]:
     provider, _, _ = model.partition(":")
     built: list[AbstractCapability[ToolkitContext]] = [ProcessHistory(elide_tool_returns)]
     if provider == "anthropic":
+        from pydantic_ai.models.anthropic import AnthropicCompaction
+
         built.append(AnthropicCompaction(token_threshold=COMPACTION_THRESHOLD))
     elif provider in ("openai", "openai-responses"):
+        from pydantic_ai.models.openai import OpenAICompaction
+
         built.append(OpenAICompaction())
     else:
         built.append(ProcessHistory(summarise))
@@ -115,6 +122,9 @@ def model_settings(model: str) -> ModelSettings | None:
     """
     provider, _, name = model.partition(":")
     if provider in ("google", "google-cloud"):
+        from google.genai.types import ThinkingLevel
+        from pydantic_ai.models.google import GoogleModelSettings
+
         # Gemini 2.5 rejects a thinking level; it only takes a token budget.
         if name.startswith("gemini-3"):
             return GoogleModelSettings(
@@ -122,5 +132,7 @@ def model_settings(model: str) -> ModelSettings | None:
             )
         return GoogleModelSettings(google_thinking_config={"include_thoughts": True})
     if provider == "anthropic":
+        from pydantic_ai.models.anthropic import AnthropicModelSettings
+
         return AnthropicModelSettings(anthropic_thinking={"type": "adaptive"})
     return None

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import datetime
+import subprocess
+import sys
 
 import pytest
 from interloper_toolkit import ToolkitContext
@@ -41,6 +43,19 @@ class TestBuildAgent:
         assert "Interloper Assistant" in first.instructions
         assert f"Current date and time: {datetime.datetime.now(datetime.UTC):%Y-%m-%d}" in first.instructions
         assert result.output == "hello"
+
+    def test_building_loads_only_the_named_providers_sdk(self):
+        # A fresh interpreter: this module imports both other SDKs itself.
+        probe = (
+            "import sys\n"
+            "from interloper_agent import build_agent\n"
+            "build_agent('google:gemini-3.8-flash')\n"
+            "print(sorted(name for name in ('anthropic', 'openai', 'google.genai') if name in sys.modules))\n"
+        )
+
+        completed = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, check=True)
+
+        assert completed.stdout.strip() == "['google.genai']"
 
     def test_the_instructions_tell_the_thread_block_is_quoted_data(self):
         rule = (
