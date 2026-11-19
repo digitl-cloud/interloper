@@ -1,8 +1,8 @@
 """Tests for the LinkedIn Organic connection.
 
 The organization dropdown lists the organizations the member administers,
-named by decorating each access control entry with its organization, and the
-connection check runs that lookup.
+read from their access control entries and named by one batch lookup of those
+organizations, and the connection check runs that lookup.
 """
 
 from __future__ import annotations
@@ -16,10 +16,7 @@ import interloper as il
 from interloper_assets.linkedin_organic.connection import LinkedinOrganicConnection
 from interloper_assets.linkedin_organic.constants import BASE_URL
 
-LOOKUP_URL = (
-    f"{BASE_URL}/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED"
-    "&projection=%28elements%2A%28organization~%28id%2ClocalizedName%29%29%2Cpaging%29&count=100"
-)
+LOOKUP_URL = f"{BASE_URL}/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED&count=100"
 
 
 def _connection(handler: Callable[[httpx2.Request], httpx2.Response]) -> LinkedinOrganicConnection:
@@ -56,42 +53,89 @@ class TestClient:
         assert connection.api.client is connection.client
 
 
+def _names(results: dict[str, Any], errors: dict[str, Any] | None = None) -> httpx2.Response:
+    statuses = {**dict.fromkeys(results, 200), **dict.fromkeys(errors or {}, 403)}
+    return httpx2.Response(200, json={"results": results, "statuses": statuses, "errors": errors or {}})
+
+
 class TestOrganizations:
     async def test_lists_the_administered_organizations_by_their_localized_name(self):
         sent: list[str] = []
-        elements = [
-            {"organization": "urn:li:organization:1", "organization~": {"id": 1, "localizedName": "Alpha"}},
-            {"organization": "urn:li:organization:2"},
-            {"role": "ADMINISTRATOR"},
+        acls = [
+            {"role": "ADMINISTRATOR", "state": "APPROVED", "organization": "urn:li:organization:1"},
+            {"role": "ADMINISTRATOR", "state": "APPROVED", "organizationTarget": "urn:li:organization:2"},
+            {"role": "ADMINISTRATOR", "state": "APPROVED"},
         ]
+        names = {"1": {"id": 1, "localizedName": "Alpha"}, "2": {"id": 2, "localizedName": "Beta"}}
 
-        organizations = await _connection(_recording(sent, lambda _: _acls(elements))).organizations()
+        def respond(request: httpx2.Request) -> httpx2.Response:
+            return _names(names) if request.url.path == "/rest/organizations" else _acls(acls)
+
+        organizations = await _connection(_recording(sent, respond)).organizations()
+
+        assert organizations == [{"id": "1", "name": "Alpha"}, {"id": "2", "name": "Beta"}]
+        assert sent == [LOOKUP_URL, f"{BASE_URL}/organizations?ids=List(1,2)"]
+
+    async def test_an_organization_linkedin_does_not_name_is_listed_by_its_id(self):
+        acls = [{"organization": "urn:li:organization:1"}, {"organization": "urn:li:organization:2"}]
+        refused = {
+            "2": {"status": 403, "message": "Viewer don't have permission to the ADMIN_ONLY VisibilityReduction"}
+        }
+
+        def respond(request: httpx2.Request) -> httpx2.Response:
+            if request.url.path == "/rest/organizations":
+                return _names({"1": {"id": 1, "localizedName": "Alpha"}}, errors=refused)
+            return _acls(acls)
+
+        organizations = await _connection(respond).organizations()
 
         assert organizations == [{"id": "1", "name": "Alpha"}, {"id": "2", "name": "2"}]
-        assert sent == [LOOKUP_URL]
 
     async def test_follows_the_next_link(self):
         sent: list[str] = []
-        next_href = (
-            "/rest/organizationAcls?count=100"
-            "&projection=%28elements%2A%28organization~%28id%2ClocalizedName%29%29%2Cpaging%29"
-            "&q=roleAssignee&role=ADMINISTRATOR&start=100&state=APPROVED"
-        )
+        next_href = "/rest/organizationAcls?count=100&q=roleAssignee&role=ADMINISTRATOR&start=100&state=APPROVED"
 
         def respond(request: httpx2.Request) -> httpx2.Response:
+            if request.url.path == "/rest/organizations":
+                return _names({"1": {"localizedName": "Alpha"}, "2": {"localizedName": "Beta"}})
             if "start=100" in str(request.url):
                 return _acls([{"organization": "urn:li:organization:2"}])
             return _acls([{"organization": "urn:li:organization:1"}], next_href=next_href)
 
         organizations = await _connection(_recording(sent, respond)).organizations()
 
-        assert organizations == [{"id": "1", "name": "1"}, {"id": "2", "name": "2"}]
-        assert sent == [LOOKUP_URL, f"https://api.linkedin.com{next_href}"]
+        assert organizations == [{"id": "1", "name": "Alpha"}, {"id": "2", "name": "Beta"}]
+        assert sent == [
+            LOOKUP_URL,
+            f"https://api.linkedin.com{next_href}",
+            f"{BASE_URL}/organizations?ids=List(1,2)",
+        ]
+
+    async def test_no_administered_organization_asks_for_no_names(self):
+        sent: list[str] = []
+
+        assert await _connection(_recording(sent, lambda _: _acls([]))).organizations() == []
+        assert sent == [LOOKUP_URL]
 
 
 class TestCheck:
     async def test_a_working_token_passes(self):
         assert await _connection(lambda _: _acls([])).verify(timeout=5) == il.CheckResult(ok=True, live=True)
+
+    async def test_a_refused_name_lookup_reports_linkedins_reason(self):
+        def respond(request: httpx2.Request) -> httpx2.Response:
+            if request.url.path == "/rest/organizations":
+                return httpx2.Response(403, json={"status": 403, "message": "Not enough permissions"})
+            return _acls([{"organization": "urn:li:organization:1"}])
+
+        result = await _connection(respond).verify(timeout=5)
+
+        assert result == il.CheckResult(
+            ok=False,
+            live=True,
+            category="error",
+            message="LinkedIn refused the request (HTTP 403): Not enough permissions",
+        )
 
     async def test_a_refused_lookup_reports_linkedins_reason(self):
         refused = httpx2.Response(403, json={"status": 403, "message": "Not enough permissions"})
