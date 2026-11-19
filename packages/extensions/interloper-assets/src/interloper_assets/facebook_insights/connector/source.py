@@ -3,14 +3,13 @@ import logging
 from collections.abc import Iterator
 from typing import Any
 
-import httpx2
 import interloper as il
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.facebook_insights import constants
 from interloper_assets.facebook_insights.connection import FacebookInsightsConnection
 from interloper_assets.facebook_insights.connector.schemas import PageStats, PostsStats
-from interloper_assets.meta.api import GraphApi
+from interloper_assets.meta.api import GraphApi, GraphApiError
 
 logger = logging.getLogger(__name__)
 
@@ -90,10 +89,9 @@ class FacebookInsights(il.Source):
                 return await api.rows(
                     f"/{post_id}/insights", metric="post_media_view", breakdown=breakdown, period="lifetime"
                 )
-            except httpx2.HTTPStatusError as error:
+            except GraphApiError as error:
                 # (#100) is Graph rejecting the breakdown for this kind of post; anything else is real
-                code = api.error_code(error.response)
-                if error.response.status_code != 400 or code != constants.UNSUPPORTED_BREAKDOWN_ERROR_CODE:
+                if error.response.status_code != 400 or error.code != constants.UNSUPPORTED_BREAKDOWN_ERROR_CODE:
                     raise
                 logger.warning("post_media_view breakdown %s is unsupported for post %s: %s", breakdown, post_id, error)
                 return []

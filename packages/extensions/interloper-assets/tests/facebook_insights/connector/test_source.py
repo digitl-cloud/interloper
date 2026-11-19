@@ -27,6 +27,7 @@ from interloper_assets.facebook_insights import constants
 from interloper_assets.facebook_insights.connection import FacebookInsightsConnection
 from interloper_assets.facebook_insights.connector.source import FacebookInsights, _insight_values
 from interloper_assets.meta import api as graph
+from interloper_assets.meta.api import GraphApiError
 
 ASSETS = ("page_stats", "posts_stats")
 DAY = dt.date(2026, 9, 15)
@@ -326,7 +327,8 @@ class TestPageStats:
         refusal = {"error": {"message": "(#100) The value must be a valid insights metric", "code": 100}}
         source = _faked_source(monkeypatch, lambda request: httpx2.Response(400, json=refusal))
 
-        with pytest.raises(httpx2.HTTPStatusError, match="400 Bad Request"):
+        reason = r"\(HTTP 400, code 100\): \(#100\) The value must be a valid insights metric"
+        with pytest.raises(GraphApiError, match=reason):
             await _run(source, "page_stats")
 
     def test_row_reconciles_with_flattened_dict_metrics(self):

@@ -14,6 +14,7 @@ from collections.abc import Callable
 import httpx2
 import interloper as il
 import pytest
+from interloper.errors import ConnectionCheckError
 
 from interloper_assets.facebook_insights.connection import FacebookInsightsConnection
 
@@ -63,10 +64,20 @@ class TestPages:
     async def test_check_runs_the_lookup(self):
         assert await _connection(lambda request: httpx2.Response(200, json={"data": []})).check() is True
 
-    async def test_check_raises_on_a_rejected_token(self):
-        connection = _connection(lambda request: httpx2.Response(401, json={"error": {"code": 190}}))
-        with pytest.raises(httpx2.HTTPStatusError):
+    async def test_a_rejected_token_fails_the_check_with_graphs_reason(self):
+        expired = {
+            "message": "Error validating access token: Session has expired",
+            "type": "OAuthException",
+            "code": 190,
+        }
+        connection = _connection(lambda request: httpx2.Response(400, json={"error": expired}))
+
+        with pytest.raises(ConnectionCheckError) as raised:
             await connection.check()
+
+        assert str(raised.value) == (
+            "Graph refused the request (HTTP 400, code 190): Error validating access token: Session has expired"
+        )
 
 
 class TestPageApi:
