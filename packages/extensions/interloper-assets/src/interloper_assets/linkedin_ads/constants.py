@@ -3,10 +3,6 @@ AUTH_BASE_URL = "https://api.linkedin.com"
 LINKEDIN_VERSION = "202607"
 RESTLI_PROTOCOL_VERSION = "2.0.0"
 
-# Rows per page: the maximum of the cursor-paged finders, and the count of the start/count-paged ones.
-CURSOR_PAGE_SIZE = 1000
-OFFSET_PAGE_SIZE = 100
-
 ACCOUNT_FIELDS = [
     "id",
     "name",
