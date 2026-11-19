@@ -197,9 +197,24 @@ class TestReport:
 
         rows = await self._report(google)
 
-        assert rows[1] == {"Date": "2026/07/10", "Advertiser ID": 9, "Impressions": 200, "Revenue": 1.5}
-        assert rows[0]["Impressions"] == 100
+        assert rows[1] == {"Date": "2026/07/10", "Advertiser ID": "9", "Impressions": "200", "Revenue": "1.5"}
+        assert rows[0]["Impressions"] == "100"
         assert pd.isna(rows[0]["Revenue"])
+
+    async def test_an_id_beside_a_dash_keeps_its_digits(self, google, download, clock: FakeClock):
+        download.text = (
+            "Date,Line Item ID,CM360 Placement ID,Impressions\n"
+            "2026/07/10,9007199254740993,-,100\n"
+            "2026/07/10,8,123,200\n"
+            ",,,300\n"
+        )
+        google.serve(_QUERY, _RUN, _report("DONE"))
+
+        rows = await self._report(google)
+
+        assert [row["Line Item ID"] for row in rows] == ["9007199254740993", "8"]
+        assert rows[1]["CM360 Placement ID"] == "123"
+        assert pd.isna(rows[0]["CM360 Placement ID"])
 
     @pytest.mark.parametrize(
         "text",

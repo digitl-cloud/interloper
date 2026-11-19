@@ -103,7 +103,8 @@ class CampaignManager360Api:
             **criteria: Any further criteria, under the vendor's names, such as ``dimensionFilters``.
 
         Returns:
-            The file's rows under its human-readable headers, without its trailing totals; ``-`` reads as missing.
+            The file's rows under its human-readable headers, without its trailing totals; every value is the
+            file's text, and ``-`` reads as missing.
         """
         window = {"startDate": day.isoformat(), "endDate": day.isoformat()}
         definition = {
@@ -182,17 +183,20 @@ class CampaignManager360Api:
 
         The file opens with a metadata preamble ending at a ``Report Fields``
         line, then the CSV proper, closed by a ``Grand Total:`` summary row.
+        Every column is read as text: the totals row leaves the id columns
+        blank, so a guessed dtype would read them as floats (``123.0``, and
+        digits lost above 2^53). The schema's conformer casts the metrics.
 
         Args:
             file: The downloaded report file, rewound.
 
         Returns:
-            The rows under the file's headers; ``-`` reads as missing.
+            The rows under the file's headers, every value the file's text; ``-`` reads as missing.
         """
         for line in file:
             if b"Report Fields" in line:
                 break
-        df = pd.read_csv(file, na_values=["-"])
+        df = pd.read_csv(file, dtype=str, na_values=["-"])
         if df.empty:
             return []
         totals = df[df.iloc[:, 0].astype("string").str.contains("Grand Total:", na=False)].index

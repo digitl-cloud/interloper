@@ -67,8 +67,8 @@ Date,Campaign,Impressions,Clicks
 Grand Total:,,300,15
 """
 _PINNED_ROWS = [
-    {"Date": "2026-07-10", "Campaign": "Campaign A", "Impressions": 100, "Clicks": 5},
-    {"Date": "2026-07-10", "Campaign": "Campaign B", "Impressions": 200, "Clicks": 10},
+    {"Date": "2026-07-10", "Campaign": "Campaign A", "Impressions": "100", "Clicks": "5"},
+    {"Date": "2026-07-10", "Campaign": "Campaign B", "Impressions": "200", "Clicks": "10"},
 ]
 
 _Answer = tuple[int, bytes]
@@ -168,6 +168,7 @@ class TestHeaderNormalization:
         df = table.reconcile(schemas.CampaignsStats)
         TableData.from_data(df).reconcile(schemas.CampaignsStats, strict=True)  # must not raise
         record = df.to_dict("records")[0]
+        assert record["advertiser_id"] == "123"
         assert record["active_view_pct_viewable_impressions"] == 85.5
         assert record["active_view_viewable_impressions"] == 90
 
