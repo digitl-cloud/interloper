@@ -31,10 +31,10 @@ class AmazonAdsApi:
     which every method raises as is.
 
     A report is a job: created, polled until it completes or fails, then
-    downloaded as gzipped JSON from a signed URL outside the API. Creating
-    and downloading repeat a transient failure until their deadline
-    (``REPORT_*_DEADLINE``) and raise any other at once; the signed URL is a
-    credential, so it is neither logged nor named in an error.
+    downloaded as gzipped JSON from a signed URL outside the API. Each phase
+    repeats a transient failure until its deadline (``REPORT_*_DEADLINE``)
+    and raises any other at once; the signed URL is a credential, so it is
+    neither logged nor named in an error.
     """
 
     def __init__(self, client: il.RESTClient) -> None:
@@ -178,7 +178,7 @@ class AmazonAdsApi:
         return report_id
 
     def _await_report(self, profile_id: str, report_id: str) -> str:
-        """Poll a report job until it completes or fails, polling again after an HTTP error.
+        """Poll a report job until it completes or fails, polling again after a transient failure.
 
         Args:
             profile_id: The profile reported on.
@@ -192,7 +192,7 @@ class AmazonAdsApi:
         """
         polling = self._retrying(
             stop=tc.stop_after_delay(constants.REPORT_WAIT_DEADLINE),
-            retry=tc.retry_if_result(self._pending) | tc.retry_if_exception_type(httpx2.HTTPError),
+            retry=tc.retry_if_result(self._pending) | tc.retry_if_exception(self._transient),
         )
         report = polling(self._poll_report, profile_id, report_id)
         if report["status"] == "FAILED":

@@ -34,7 +34,11 @@ DAY = dt.date(2026, 10, 1)
 
 
 def _api(handler: Callable[[httpx2.Request], httpx2.Response], *, auth: httpx2.Auth | None = None) -> AmazonAdsApi:
-    return AmazonAdsApi(il.RESTClient(API_URL, auth=auth, transport=httpx2.MockTransport(handler)))
+    # the client repeats nothing itself, so each test sees the engine's own repeats
+    client = il.RESTClient(
+        API_URL, auth=auth, transport=httpx2.MockTransport(handler), retry=il.RetryPolicy(max_attempts=1)
+    )
+    return AmazonAdsApi(client)
 
 
 def _headers(request: httpx2.Request) -> dict[str, str | None]:
@@ -468,7 +472,7 @@ class TestReport:
             _report(_api(ReportServer(["PENDING"])))
         assert downloads.calls == []
 
-    def test_a_poll_refused_past_its_deadline_raises_the_refusal(
+    def test_a_poll_failing_past_its_deadline_raises_the_failure(
         self, monkeypatch: pytest.MonkeyPatch, downloads: Downloads, sleeps: list[float]
     ):
         monkeypatch.setattr(constants, "REPORT_WAIT_DEADLINE", dt.timedelta(0))
@@ -476,9 +480,9 @@ class TestReport:
         def handler(request: httpx2.Request) -> httpx2.Response:
             if request.method == "POST":
                 return httpx2.Response(200, json={"reportId": "r-1"})
-            return httpx2.Response(403, json={"code": "403"})
+            return httpx2.Response(503, json={"code": "503"})
 
-        with pytest.raises(httpx2.HTTPStatusError, match="403"):
+        with pytest.raises(httpx2.HTTPStatusError, match="503"):
             _report(_api(handler))
 
     def test_a_download_failing_past_its_deadline_raises_the_failure(
@@ -491,19 +495,43 @@ class TestReport:
             _report(_api(ReportServer(["COMPLETED"])))
         assert len(downloads.calls) == 1
 
-    def test_a_refused_poll_is_polled_again(self, downloads: Downloads, sleeps: list[float]):
+    @pytest.mark.parametrize(
+        "failure",
+        [httpx2.Response(429), httpx2.Response(503), httpx2.ConnectError("connection refused")],
+        ids=str,
+    )
+    def test_a_poll_failing_transiently_is_polled_again(
+        self, failure: httpx2.Response | httpx2.TransportError, downloads: Downloads, sleeps: list[float]
+    ):
         server = ReportServer(["COMPLETED"])
-        refusals = iter([httpx2.Response(403, json={"code": "403"})])
+        failures = iter([failure])
 
         def handler(request: httpx2.Request) -> httpx2.Response:
             if request.method == "GET":
-                refusal = next(refusals, None)
-                if refusal is not None:
-                    return refusal
+                answer = next(failures, None)
+                if isinstance(answer, httpx2.TransportError):
+                    raise answer
+                if answer is not None:
+                    return answer
             return server(request)
 
         assert _report(_api(handler)) == []
         assert sleeps == [10]
+
+    @pytest.mark.parametrize("status", [400, 403, 404])
+    def test_a_poll_refused_for_good_raises_at_once(self, status: int, downloads: Downloads, sleeps: list[float]):
+        server = ReportServer(["COMPLETED"])
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            if request.method == "GET":
+                return httpx2.Response(status, json={"code": str(status)})
+            return server(request)
+
+        with pytest.raises(httpx2.HTTPStatusError, match=str(status)):
+            _report(_api(handler))
+        assert [request.method for request in server.requests] == ["POST"]
+        assert sleeps == []
+        assert downloads.calls == []
 
     @pytest.mark.parametrize(
         "failure", [httpx2.Response(503), httpx2.Response(500), httpx2.ReadTimeout("timed out")], ids=str
