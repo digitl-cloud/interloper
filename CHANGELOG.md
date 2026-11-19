@@ -2,6 +2,241 @@
 
 <!-- version list -->
 
+## v0.138.0 (2026-11-19)
+
+### Bug Fixes
+
+- **api**: Bound fetch-field lookups like connection checks
+  ([`b46373a`](https://github.com/digitl-cloud/interloper/commit/b46373ac277a8a13b9177c4f87671b161119f67b))
+
+- **api**: Build invitation and promotion links from the public URL
+  ([`b8a1fcc`](https://github.com/digitl-cloud/interloper/commit/b8a1fccf21af4d15994f414b08205aa9dd207451))
+
+- **app**: Drawers no longer crop the rings of what scrolls in them
+  ([`ab0dfd9`](https://github.com/digitl-cloud/interloper/commit/ab0dfd95efabc63a135a06469863fce742b20659))
+
+- **app**: Give the wizard room and the stepper Nuxt UI's own look
+  ([`bcc143c`](https://github.com/digitl-cloud/interloper/commit/bcc143cd7bb6b4a482c217febd55f7bd2e06ab13))
+
+- **app**: Publish the interloper-app wheel with the web app built in
+  ([`4aa04a3`](https://github.com/digitl-cloud/interloper/commit/4aa04a324f951586625fc077acc20a1c7c82da8c))
+
+- **assets**: Ask Data Kiosk for a day Amazon has ready in Selling Partner products
+  ([`207162e`](https://github.com/digitl-cloud/interloper/commit/207162ef5f7e4eb55d9e02dd1999f145f594f1f4))
+
+- **assets**: Bound Amazon Ads report downloads with a read timeout
+  ([`0347395`](https://github.com/digitl-cloud/interloper/commit/034739590f6d10486a23255024537b16da9b70de))
+
+- **assets**: Decode Amazon Selling Partner reports by their compression and bound downloads
+  ([`76e05d6`](https://github.com/digitl-cloud/interloper/commit/76e05d68a35962ef4b383972218e90e06c7e9895))
+
+- **assets**: Fail Amazon Ads report jobs fast and stop logging their signed URL
+  ([`069c4ad`](https://github.com/digitl-cloud/interloper/commit/069c4ad6bf5cf6744e9b884890197576b9200587))
+
+- **assets**: Fail clearly on malformed The Trade Desk answers
+  ([`8c2d55a`](https://github.com/digitl-cloud/interloper/commit/8c2d55ae82c6e46246f79c2cfe366e044d9be9c6))
+
+- **assets**: Follow Graph's next links without the access token
+  ([`7d37639`](https://github.com/digitl-cloud/interloper/commit/7d37639aa8e61d1e3afe35da5149d34145266779))
+
+- **assets**: Import Bing Ads reporting through its package
+  ([`eb57280`](https://github.com/digitl-cloud/interloper/commit/eb572805de5779718aaf0c4106f859f94a87296e))
+
+- **assets**: Keep the signed URL out of a refused Selling Partner download's error
+  ([`42331b9`](https://github.com/digitl-cloud/interloper/commit/42331b99d46186de3b489bf8b7381512ae62960b))
+
+- **assets**: Keep The Trade Desk API key on The Trade Desk's hosts
+  ([`5fdd5ba`](https://github.com/digitl-cloud/interloper/commit/5fdd5baedee52679bc8668e2edcd531bc53d4962))
+
+- **assets**: Name LinkedIn organizations without decoration
+  ([`7653b4e`](https://github.com/digitl-cloud/interloper/commit/7653b4e091fc8a3a1fd857ee62ab2ff1555556be))
+
+- **assets**: Raise a Facebook Ads page too heavy at one row
+  ([`eeacdb2`](https://github.com/digitl-cloud/interloper/commit/eeacdb27ef19909029d69a24047a6331b66d63ee))
+
+- **assets**: Raise an Amazon Ads report poll refused for good at once
+  ([`358356d`](https://github.com/digitl-cloud/interloper/commit/358356d6322dd3bd9e6efdc0144148f3941cae52))
+
+- **assets**: Raise Graph's own reason, and show it in the Meta checks
+  ([`1e21af2`](https://github.com/digitl-cloud/interloper/commit/1e21af29a342e3519d64ca205ff1f190222c2599))
+
+- **assets**: Raise LinkedIn's own reason, and show it in the LinkedIn checks
+  ([`98d157f`](https://github.com/digitl-cloud/interloper/commit/98d157fc43cc6b96f3a3cfb61aeeb2136ae29139))
+
+- **assets**: Read every Data Kiosk record and page, scoped to the source's marketplace
+  ([`be7f306`](https://github.com/digitl-cloud/interloper/commit/be7f306cfa9eb353cfe3e842155a4eef4435c40c))
+
+- **assets**: Read every Facebook Ads account through the Graph engine
+  ([`e4b49cb`](https://github.com/digitl-cloud/interloper/commit/e4b49cbf3131807084eaa32b04b5fbb1d4d85614))
+
+- **assets**: Read every page of The Trade Desk's REST queries
+  ([`1293189`](https://github.com/digitl-cloud/interloper/commit/12931892a1461f79756bf952639cf77fba16173e))
+
+- **assets**: Read Google's service-account APIs over plain HTTP
+  ([`d5d7563`](https://github.com/digitl-cloud/interloper/commit/d5d756368c92fa518b83706211e3e9ac443f89d8))
+
+- **assets**: Read one day of Graph insights as one response
+  ([`095cea0`](https://github.com/digitl-cloud/interloper/commit/095cea008ca8b2ccaebc0647f57542189a384be7))
+
+- **assets**: Read the whole LinkedIn ad account
+  ([`6e9663b`](https://github.com/digitl-cloud/interloper/commit/6e9663b87e51eed24ab7034f5fa9df426db0f4d5))
+
+- **assets**: Send Facebook Ads reports' action_breakdowns by action type
+  ([`766c4cb`](https://github.com/digitl-cloud/interloper/commit/766c4cbbe229046f21841c4d7b65e9b0919a849d))
+
+- **assets**: Send the Facebook Ads account lookup's token as its bearer
+  ([`8c01619`](https://github.com/digitl-cloud/interloper/commit/8c01619bd97a496ad95be2b2ee376cdb075d1bf6))
+
+- **assets**: Show Login with Amazon's reason when the Selling Partner check is refused
+  ([`6b4f432`](https://github.com/digitl-cloud/interloper/commit/6b4f432970942b06d04bc3cc43219400f18db495))
+
+- **assets**: Stop Amazon Ads list paging on a repeated token
+  ([`88e98a0`](https://github.com/digitl-cloud/interloper/commit/88e98a0651b27e337bb065063b643c74c4f03894))
+
+- **assets**: Wait out Graph rate limits in one shared Graph engine
+  ([`8fe8056`](https://github.com/digitl-cloud/interloper/commit/8fe8056db9bf234be4b9ff66d741eb6adc9527b4))
+
+- **core**: Raise when an offset-paged endpoint repeats a page
+  ([`c71d83b`](https://github.com/digitl-cloud/interloper/commit/c71d83bb35abb722d70594eb0d3567c407e8f307))
+
+- **core**: Stop paging on a repeated cursor and resend cookies to later pages
+  ([`4160dd9`](https://github.com/digitl-cloud/interloper/commit/4160dd9a2d096041155cf43288aad4410b7f9df3))
+
+- **sql**: Declare packaging, which ibis imports without requiring it
+  ([`7678056`](https://github.com/digitl-cloud/interloper/commit/7678056c8daf67773e07419af3e18473489d6d29))
+
+### Build System
+
+- Build extension UIs into their packages, images and wheels
+  ([`11d4dad`](https://github.com/digitl-cloud/interloper/commit/11d4dad2e9b4330fea1a0da3f155ac73aa1562fd))
+
+- Stop exporting the repo-root .env to every make recipe
+  ([`18a7497`](https://github.com/digitl-cloud/interloper/commit/18a74979d06bf37f8fa536271f314106ae064b6b))
+
+### Chores
+
+- **api**: Drop the unused google-auth dependency
+  ([`8662853`](https://github.com/digitl-cloud/interloper/commit/866285345de960df7303e621655572754a47fa6e))
+
+### Features
+
+- **api**: Ask before linking a new sign-in method, and let people remove them
+  ([`e8a69bf`](https://github.com/digitl-cloud/interloper/commit/e8a69bf5ef3dc113dd316ea4745eff11d59e175e))
+
+- **api**: Sign in with Microsoft work and school accounts
+  ([`827e177`](https://github.com/digitl-cloud/interloper/commit/827e1772afdc6483b1bd4dc986a1c0b5934bff43))
+
+- **app**: Add the @interloper/ui SDK for building extension UIs
+  ([`d4c947e`](https://github.com/digitl-cloud/interloper/commit/d4c947e4d7fc0ca9bbce56e11b3df1d55b166130))
+
+- **app**: Build extension UIs with interloper extension add ui and build
+  ([`488cbcd`](https://github.com/digitl-cloud/interloper/commit/488cbcd169b621ab18a6887da604f7f0bbf160a7))
+
+- **app**: Create and grow extensions with interloper extension init and add
+  ([`ce69982`](https://github.com/digitl-cloud/interloper/commit/ce699823ef1663d44813828986e3a65267a6bb4f))
+
+- **app**: Publish the @interloper/ui SDK on npm
+  ([`d396384`](https://github.com/digitl-cloud/interloper/commit/d396384fd7f2317b1e71993fe70c0904a334d231))
+
+- **app**: Toolbars, filters and panes work at phone width
+  ([`d6c2f70`](https://github.com/digitl-cloud/interloper/commit/d6c2f7060bc5ed9c3b87c6ae902d11e7f613d89f))
+
+- **assets**: Replace the Adservice source with Adtraction
+  ([`5edc0d1`](https://github.com/digitl-cloud/interloper/commit/5edc0d1c3ded84d9569f6ea336caf94431bbc4ca))
+
+- **core**: Spell %, $, € and £ as words in normalized column names
+  ([`e03e5ba`](https://github.com/digitl-cloud/interloper/commit/e03e5ba9bcd7f77c3a17397be32eb99e047e81a5))
+
+### Refactoring
+
+- **api**: Drop the authorization server's old /api/auth/oauth paths
+  ([`11dfc9c`](https://github.com/digitl-cloud/interloper/commit/11dfc9c841ac817d5afa55f75e7328da4e0014bc))
+
+- **assets**: Drop the LinkedIn Organic normalizer subclass
+  ([`f62eade`](https://github.com/digitl-cloud/interloper/commit/f62eade9f014b33fd7a3a25fa90421db0059fd87))
+
+- **assets**: Give normalizers their own module
+  ([`00ed346`](https://github.com/digitl-cloud/interloper/commit/00ed3462b77815a6bec7b8ce94ee20e714697465))
+
+- **assets**: Read Adservice through one API engine
+  ([`334d50e`](https://github.com/digitl-cloud/interloper/commit/334d50ea0f75c32e2fc322105305d0b7b5081c3c))
+
+- **assets**: Read AdUp through one API engine
+  ([`4aad8bc`](https://github.com/digitl-cloud/interloper/commit/4aad8bcfe905a5f4c3995bf2e91ea7e18f9e7f49))
+
+- **assets**: Read Amazon Ads through one API engine
+  ([`7a2f2ab`](https://github.com/digitl-cloud/interloper/commit/7a2f2abaf1b4b93f599f231b5c686fd1adf7f9d4))
+
+- **assets**: Read Amazon Selling Partner through one API engine
+  ([`b5ff3ed`](https://github.com/digitl-cloud/interloper/commit/b5ff3ed016db5b39d0268c0ea83f3650ee341ba8))
+
+- **assets**: Read Awin through one API engine
+  ([`35ed8c0`](https://github.com/digitl-cloud/interloper/commit/35ed8c0f7cfb0208bea277bd7d7f3b0509cd107a))
+
+- **assets**: Read Bing Ads through one API engine
+  ([`4253afe`](https://github.com/digitl-cloud/interloper/commit/4253afead06d03e71a475d2e82b444c2f4c13dd8))
+
+- **assets**: Read Brandwatch through one API engine
+  ([`ef2b0ed`](https://github.com/digitl-cloud/interloper/commit/ef2b0ed9bd49d5aabf1a3a1ce87fa5a88bf20ed5))
+
+- **assets**: Read Campaign Manager 360 through one API engine
+  ([`ca2360a`](https://github.com/digitl-cloud/interloper/commit/ca2360a757adf752dfa9bd3ad09ca4c7bdae9b63))
+
+- **assets**: Read Criteo through one API engine
+  ([`a4e2027`](https://github.com/digitl-cloud/interloper/commit/a4e2027fd7aba014ee6c9767047129906c8398bf))
+
+- **assets**: Read Display & Video 360 through one API engine
+  ([`58e0429`](https://github.com/digitl-cloud/interloper/commit/58e0429e21f94322538feb0da0f62673f93c4533))
+
+- **assets**: Read Facebook Ads through one API engine
+  ([`2e8d63a`](https://github.com/digitl-cloud/interloper/commit/2e8d63a02ce1726a056bca8e167558568d8cc7fb))
+
+- **assets**: Read Facebook Insights through one API engine
+  ([`12bc1ff`](https://github.com/digitl-cloud/interloper/commit/12bc1ff432c6e42844bd92678370ed33b8b11557))
+
+- **assets**: Read Google Ads through one API engine
+  ([`ca5a3c6`](https://github.com/digitl-cloud/interloper/commit/ca5a3c6cee0319495662d3d14f1364e22567f6a9))
+
+- **assets**: Read Impact through one API engine
+  ([`d151299`](https://github.com/digitl-cloud/interloper/commit/d15129936c11106fa690ce8e03d393cfe12fea2c))
+
+- **assets**: Read Instagram Insights through one API engine
+  ([`83bfe2f`](https://github.com/digitl-cloud/interloper/commit/83bfe2f16c2adef6825e11581b0cfa068a313c1c))
+
+- **assets**: Read LinkedIn Ads and LinkedIn Organic through one LinkedIn engine
+  ([`083ff55`](https://github.com/digitl-cloud/interloper/commit/083ff5548d5463f543be8f6f83a18ab6ea46f82c))
+
+- **assets**: Read LinkedIn Ads through one API engine
+  ([`ac5d39a`](https://github.com/digitl-cloud/interloper/commit/ac5d39a89e94bfb618e40b2303d708443475bb01))
+
+- **assets**: Read LinkedIn Organic through one API engine
+  ([`c18b549`](https://github.com/digitl-cloud/interloper/commit/c18b549308456fd08a1a0b715270038c6a3526fc))
+
+- **assets**: Read Pinterest Ads through one API engine
+  ([`9d03cd7`](https://github.com/digitl-cloud/interloper/commit/9d03cd788b4e0709ff4c2b72447c7ce1c6ceb419))
+
+- **assets**: Read Search Ads 360 through one API engine
+  ([`4c729a4`](https://github.com/digitl-cloud/interloper/commit/4c729a4ffdda9353c0404f6462521b9a5fd36de1))
+
+- **assets**: Read Search Console through one API engine
+  ([`bebc12e`](https://github.com/digitl-cloud/interloper/commit/bebc12ee8d523443b408a9064fcb43ffab3dfbdc))
+
+- **assets**: Read Snapchat Ads through one API engine
+  ([`c640650`](https://github.com/digitl-cloud/interloper/commit/c640650b00e9a31ec0baf99646c4274d33b8ce9f))
+
+- **assets**: Read Teads through one API engine
+  ([`3253576`](https://github.com/digitl-cloud/interloper/commit/3253576eed60d19b88c5eb48340e456708d6f899))
+
+- **assets**: Read The Trade Desk through one API engine
+  ([`1dc747b`](https://github.com/digitl-cloud/interloper/commit/1dc747be46283807bbfd4422c9ae676ad67958b9))
+
+- **assets**: Read TikTok Ads through one API engine
+  ([`d2ea0cb`](https://github.com/digitl-cloud/interloper/commit/d2ea0cb5438dca1df0562d5069fd1e2c6cae3aee))
+
+- **assets**: Read Usercentrics through one API engine
+  ([`26cb817`](https://github.com/digitl-cloud/interloper/commit/26cb817ad71e636960e56e00ea50a4c617aab0cd))
+
+
 ## v0.137.0 (2026-11-16)
 
 ### Features
