@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import httpx2
+import pytest
 
-from interloper.rest.auth import HTTPBearerAuth, OAuth2ClientCredentialsAuth, OAuth2RefreshTokenAuth
+from interloper.rest.auth import HTTPBearerAuth, OAuth2ClientCredentialsAuth, OAuth2RefreshTokenAuth, OAuth2TokenError
 from interloper.rest.client import AsyncRESTClient, RESTClient
 
 
@@ -105,3 +106,71 @@ class TestOAuth2AsyncClient:
             auth.clear_token()
             await client.get("/data")  # now must re-acquire
         assert [r.url.path for r in seen] == ["/data", "/oauth2/token", "/data"]
+
+
+def _refusing_token_endpoint(token_response: httpx2.Response):
+    """A transport whose token endpoint answers *token_response* and whose API 401s a stale bearer.
+
+    Returns:
+        The handler.
+    """
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path == "/oauth2/token":
+            return token_response
+        return httpx2.Response(401, json={"error": "expired"})
+
+    return handler
+
+
+INVALID_GRANT = {
+    "error": "invalid_grant",
+    "error_description": "The provided authorization grant or refresh token is invalid, expired or revoked.",
+}
+
+
+class TestRefusedTokenRequest:
+    async def test_raises_the_providers_error_and_description_without_a_credential(self):
+        auth = OAuth2RefreshTokenAuth("https://api.test", "cid", "client-secret", refresh_token="rt-secret")
+        handler = _refusing_token_endpoint(httpx2.Response(400, json=INVALID_GRANT))
+        client = AsyncRESTClient("https://api.test", auth=auth, transport=httpx2.MockTransport(handler))
+
+        with pytest.raises(OAuth2TokenError) as raised:
+            async with client:
+                await client.get("/data")
+
+        assert str(raised.value) == (
+            "The provider refused the access token request (HTTP 400, invalid_grant): "
+            "The provided authorization grant or refresh token is invalid, expired or revoked."
+        )
+        assert raised.value.error == "invalid_grant"
+        assert raised.value.response.status_code == 400
+        assert "rt-secret" not in str(raised.value)
+        assert "client-secret" not in str(raised.value)
+
+    async def test_is_still_the_http_error_status(self):
+        auth = OAuth2ClientCredentialsAuth("https://api.test", "cid", "secret", access_token="stale")
+        handler = _refusing_token_endpoint(httpx2.Response(401, json={"error": "invalid_client"}))
+        client = AsyncRESTClient("https://api.test", auth=auth, transport=httpx2.MockTransport(handler))
+
+        with pytest.raises(httpx2.HTTPStatusError) as raised:
+            async with client:
+                await client.get("/data")
+
+        assert (
+            str(raised.value)
+            == "The provider refused the access token request (HTTP 401, invalid_client): Unauthorized"
+        )
+        assert raised.value.response.status_code == 401
+
+    @pytest.mark.parametrize("body", [{"text": "<html>bad gateway</html>"}, {"json": {"error": {"code": 5}}}])
+    def test_a_body_that_is_not_an_oauth_error_gives_the_status(self, body: dict):
+        auth = OAuth2RefreshTokenAuth("https://api.test", "cid", "secret", refresh_token="rt-0")
+        handler = _refusing_token_endpoint(httpx2.Response(502, **body))
+        client = RESTClient("https://api.test", auth=auth, transport=httpx2.MockTransport(handler))
+
+        with pytest.raises(OAuth2TokenError) as raised, client:
+            client.get("/data")
+
+        assert str(raised.value) == "The provider refused the access token request (HTTP 502): Bad Gateway"
+        assert raised.value.error is None

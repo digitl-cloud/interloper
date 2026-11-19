@@ -88,11 +88,14 @@ class TestCheck:
     async def test_working_credentials_pass(self):
         assert await _connection(_amazon([])).verify(timeout=5) == il.CheckResult(ok=True, live=True)
 
-    async def test_a_refused_refresh_token_fails(self):
+    async def test_a_refused_refresh_token_reports_the_providers_reason(self):
         result = await _connection(_amazon([], token=400)).verify(timeout=5)
 
         assert result == il.CheckResult(
-            ok=False, live=True, category="error", message="The provider responded with HTTP 400."
+            ok=False,
+            live=True,
+            category="auth",
+            message="The provider refused the access token request (HTTP 400, invalid): Bad Request",
         )
 
     async def test_a_refused_profile_listing_reports_the_credentials(self):
