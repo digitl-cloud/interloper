@@ -60,7 +60,7 @@ class LinkedinAds(il.Source):
     @il.asset(schema=CampaignGroups, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
     async def campaign_groups(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """All campaign groups of the ad account with their status and run schedule."""
-        rows = await self.connection.api.rows(
+        rows = await self.connection.api.cursor_rows(
             f"/adAccounts/{self.account_id}/adCampaignGroups", q="search", fields=constants.CAMPAIGN_GROUP_FIELDS
         )
         return [{**row, "date": context.partition_date} for row in rows]
@@ -68,7 +68,7 @@ class LinkedinAds(il.Source):
     @il.asset(schema=Campaigns, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
     async def campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """All campaigns of the ad account with their type, objective, budget and run schedule."""
-        rows = await self.connection.api.rows(
+        rows = await self.connection.api.cursor_rows(
             f"/adAccounts/{self.account_id}/adCampaigns", q="search", fields=constants.CAMPAIGN_FIELDS
         )
         return [{**row, "date": context.partition_date} for row in rows]

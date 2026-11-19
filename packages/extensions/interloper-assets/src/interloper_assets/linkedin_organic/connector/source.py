@@ -65,7 +65,7 @@ class LinkedinOrganic(il.Source):
     @il.asset(schema=PageStats, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
     async def page_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Daily views of the organization page per tab and device, and custom button clicks."""
-        rows = await self.connection.api.report(
+        rows = await self.connection.api.statistics(
             "/organizationPageStatistics",
             context.partition_date,
             q="organization",
@@ -76,7 +76,7 @@ class LinkedinOrganic(il.Source):
     @il.asset(schema=ShareStats, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
     async def share_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Daily organic impressions, clicks, likes, comments, shares and engagement over all the page's posts."""
-        rows = await self.connection.api.report(
+        rows = await self.connection.api.statistics(
             "/organizationalEntityShareStatistics",
             context.partition_date,
             q="organizationalEntity",

@@ -3,8 +3,8 @@ from functools import cached_property
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
+from interloper_assets.linkedin.api import LinkedinApi
 from interloper_assets.linkedin_organic import constants
-from interloper_assets.linkedin_organic.api import LinkedinOrganicApi
 
 
 @il.connection(
@@ -49,13 +49,13 @@ class LinkedinOrganicConnection(il.RefreshTokenOAuthConnection):
         return client
 
     @cached_property
-    def api(self) -> LinkedinOrganicApi:
+    def api(self) -> LinkedinApi:
         """The LinkedIn REST API engine every caller shares, built on ``client``.
 
         Returns:
             The engine, cached per connection instance.
         """
-        return LinkedinOrganicApi(self.client)
+        return LinkedinApi(self.client)
 
     @il.fetch_field_provider
     async def organizations(self) -> list[dict[str, str]]:
