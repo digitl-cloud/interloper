@@ -13,7 +13,7 @@ from __future__ import annotations
 import datetime as dt
 import gzip
 import json
-from collections.abc import Generator
+from collections.abc import Awaitable, Callable, Generator
 from typing import Any
 
 import httpx2
@@ -313,6 +313,20 @@ class TestReport:
 
         with pytest.raises(httpx2.HTTPStatusError, match="503"):
             await _api(vendor, attempts=2).report(key="trafficByAsin", **TRAFFIC)
+
+    @pytest.mark.parametrize(
+        "run",
+        [lambda api: api.report(key="trafficByAsin", **TRAFFIC), lambda api: api.query(query="{ sourcingView }")],
+        ids=["report", "query"],
+    )
+    async def test_a_refused_download_does_not_name_the_signed_url(
+        self, vendor: FakeJob, run: Callable[[AmazonSellingPartnerApi], Awaitable[Any]]
+    ):
+        vendor.failed_downloads = [403]
+
+        with pytest.raises(httpx2.HTTPStatusError, match="403") as raised:
+            await run(_api(vendor))
+        assert "documents.example.com" not in str(raised.value)
 
     @pytest.mark.parametrize("document", [{"reportSpecification": {}}, {}, [], None])
     async def test_a_document_without_the_list_reads_no_rows(self, vendor: FakeJob, document: Any):
