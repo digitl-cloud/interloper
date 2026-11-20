@@ -18,12 +18,14 @@ from interloper.rest.paginator import (
     RangePaginator,
     SinglePagePaginator,
 )
+from interloper.rest.retry import HttpRetryPolicy
 
 __all__ = [
     "AsyncRESTClient",
     "BasePaginator",
     "HTTPBearerAuth",
     "HeaderLinkPaginator",
+    "HttpRetryPolicy",
     "JSONCursorPaginator",
     "JSONLinkPaginator",
     "OAuth2Auth",
