@@ -2255,6 +2255,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#interloper.HttpRetryPolicy" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-class"></code>&nbsp;HttpRetryPolicy
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="HttpRetryPolicy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#interloper.HttpRetryPolicy.model_config" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;model_config
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper.HttpRetryPolicy.retryable" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;retryable
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper.HttpRetryPolicy.wait" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;wait
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#interloper.HTTPBearerAuth" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -3173,7 +3223,7 @@
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">timeout</span><span class="p">:</span> <span class="n"><span title="float">float</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mf">300.0</span><span class="p">,</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">headers</span><span class="p">:</span> <span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="str">str</span></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">params</span><span class="p">:</span> <span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="str">str</span></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">retry</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;RetryPolicy&lt;/span&gt; (&lt;code&gt;interloper.retry.base.RetryPolicy&lt;/code&gt;)" href="../jobs/#interloper.RetryPolicy">RetryPolicy</a></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">retry</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;HttpRetryPolicy&lt;/span&gt; (&lt;code&gt;interloper.rest.retry.HttpRetryPolicy&lt;/code&gt;)" href="./#interloper.HttpRetryPolicy">HttpRetryPolicy</a></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">,</span>
 </span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="p">)</span>
 </span></code></pre></div>
@@ -3184,7 +3234,7 @@
 
 
 
-        <p>A REST client that extends httpx2.Client with pagination support and transient retries.</p>
+        <p>A REST client that extends httpx2.Client with pagination support and opt-in retries.</p>
 
         <p>Initialize the REST client.</p>
 
@@ -3286,12 +3336,12 @@ waits forever.</p>
                 <code>retry</code>
             </td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;RetryPolicy&lt;/span&gt; (&lt;code&gt;interloper.retry.base.RetryPolicy&lt;/code&gt;)" href="../jobs/#interloper.RetryPolicy">RetryPolicy</a> | None</code>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;HttpRetryPolicy&lt;/span&gt; (&lt;code&gt;interloper.rest.retry.HttpRetryPolicy&lt;/code&gt;)" href="./#interloper.HttpRetryPolicy">HttpRetryPolicy</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>The budget for repeating throttled and transient failures (see
-<code>TransientRetry</code>); <code>None</code> for its default of 5 attempts.</p>
+                <p>The policy a failed request is sent again under (see
+<code>HttpRetryPolicy</code>); <code>None</code> sends each request once.</p>
               </div>
             </td>
             <td>
@@ -3499,7 +3549,7 @@ response per <code>paginator</code>. (The async client additionally fans out
 
     <div class="doc doc-contents ">
 
-        <p>Send a request, repeating it while it fails for a transient reason.</p>
+        <p>Send a request, repeating it while it fails in a way the client's policy repeats.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -3598,7 +3648,7 @@ response per <code>paginator</code>. (The async client additionally fans out
             <td>
               <div class="doc-md-description">
                 <p>When the connection fails and the request is not
-repeated: not idempotent, or the budget is spent.</p>
+repeated: no policy, a failure it does not repeat, or a spent budget.</p>
               </div>
             </td>
           </tr>
@@ -3633,7 +3683,7 @@ repeated: not idempotent, or the budget is spent.</p>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">timeout</span><span class="p">:</span> <span class="n"><span title="float">float</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mf">300.0</span><span class="p">,</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">headers</span><span class="p">:</span> <span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="str">str</span></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">params</span><span class="p">:</span> <span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="str">str</span></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">retry</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;RetryPolicy&lt;/span&gt; (&lt;code&gt;interloper.retry.base.RetryPolicy&lt;/code&gt;)" href="../jobs/#interloper.RetryPolicy">RetryPolicy</a></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">retry</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;HttpRetryPolicy&lt;/span&gt; (&lt;code&gt;interloper.rest.retry.HttpRetryPolicy&lt;/code&gt;)" href="./#interloper.HttpRetryPolicy">HttpRetryPolicy</a></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">,</span>
 </span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="p">)</span>
 </span></code></pre></div>
@@ -3750,12 +3800,12 @@ waits forever.</p>
                 <code>retry</code>
             </td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;RetryPolicy&lt;/span&gt; (&lt;code&gt;interloper.retry.base.RetryPolicy&lt;/code&gt;)" href="../jobs/#interloper.RetryPolicy">RetryPolicy</a> | None</code>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;HttpRetryPolicy&lt;/span&gt; (&lt;code&gt;interloper.rest.retry.HttpRetryPolicy&lt;/code&gt;)" href="./#interloper.HttpRetryPolicy">HttpRetryPolicy</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>The budget for repeating throttled and transient failures (see
-<code>TransientRetry</code>); <code>None</code> for its default of 5 attempts.</p>
+                <p>The policy a failed request is sent again under (see
+<code>HttpRetryPolicy</code>); <code>None</code> sends each request once.</p>
               </div>
             </td>
             <td>
@@ -3981,7 +4031,7 @@ unknown total — it walks sequentially like the sync client.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Send a request, repeating it while it fails for a transient reason.</p>
+        <p>Send a request, repeating it while it fails in a way the client's policy repeats.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -4080,7 +4130,314 @@ unknown total — it walks sequentially like the sync client.</p>
             <td>
               <div class="doc-md-description">
                 <p>When the connection fails and the request is not
-repeated: not idempotent, or the budget is spent.</p>
+repeated: no policy, a failure it does not repeat, or a spent budget.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="interloper.HttpRetryPolicy" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>            <span class="doc doc-object-name doc-class-name">HttpRetryPolicy</span>
+
+
+<a href="#interloper.HttpRetryPolicy" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code>interloper.retry.base.RetryPolicy</code></p>
+
+
+
+        <p>When a REST client sends a failed request again, and how long it waits first.</p>
+<p>A client repeats requests only under the policy it is built with; without
+one it sends each request once. The numbers are a <code>RetryPolicy</code>'s, at
+request scale. Which failures are worth another attempt follows HTTP: a
+throttled request was refused before it did anything, so it is repeated
+whatever its method, after the server's <code>Retry-After</code> when it gives one in
+seconds. A server error or a dropped connection may have left the request
+half done, so only a request whose method is idempotent is repeated. A
+platform that signals a passing failure some other way overrides
+<code>retryable</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="interloper.HttpRetryPolicy.model_config" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">model_config</span>
+
+
+<a href="#interloper.HttpRetryPolicy.model_config" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">model_config</span> <span class="o">=</span> <span class="p">{}</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>dict() -&gt; new empty dictionary
+dict(mapping) -&gt; new dictionary initialized from a mapping object's
+    (key, value) pairs
+dict(iterable) -&gt; new dictionary initialized as if via:
+    d = {}
+    for k, v in iterable:
+        d[k] = v
+dict(**kwargs) -&gt; new dictionary initialized with the name=value pairs
+    in the keyword argument list.  For example:  dict(one=1, two=2)</p>
+
+    </div>
+
+</div>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.HttpRetryPolicy.retryable" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">retryable</span>
+
+
+<a href="#interloper.HttpRetryPolicy.retryable" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">retryable</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">request</span><span class="p">:</span> <span class="n"><span title="httpx2.Request">Request</span></span><span class="p">,</span> <span class="n">response</span><span class="p">:</span> <span class="n"><span title="httpx2.Response">Response</span></span> <span class="o">|</span> <span class="kc">None</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="bool">bool</span></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Whether a failed request is worth sending again.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>request</code>
+            </td>
+            <td>
+                  <code><span title="httpx2.Request">Request</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The request sent.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>response</code>
+            </td>
+            <td>
+                  <code><span title="httpx2.Response">Response</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The server's answer, or None when the connection failed.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>True for a throttle, or for a server error or dropped connection on an idempotent method.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.HttpRetryPolicy.wait" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">wait</span>
+
+
+<a href="#interloper.HttpRetryPolicy.wait" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">wait</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">request</span><span class="p">:</span> <span class="n"><span title="httpx2.Request">Request</span></span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">attempt</span><span class="p">:</span> <span class="n"><span title="int">int</span></span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">response</span><span class="p">:</span> <span class="n"><span title="httpx2.Response">Response</span></span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="float">float</span></span> <span class="o">|</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The seconds to wait before sending a request again, or None when it is not sent again.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>request</code>
+            </td>
+            <td>
+                  <code><span title="httpx2.Request">Request</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The request sent.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>attempt</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The attempt about to be made, the first repeat being 2.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>response</code>
+            </td>
+            <td>
+                  <code><span title="httpx2.Response">Response</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The server's answer, or None when the connection failed.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="float">float</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The server's <code>Retry-After</code> for a throttle that gives one, capped at</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="float">float</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>max_delay</code>, else the policy's delay; None for a failure not worth</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="float">float</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>repeating, or once the budget is spent.</p>
               </div>
             </td>
           </tr>
