@@ -1,4 +1,4 @@
-BASE_URL = "https://api.falcon.io/measure/v2/insights"
+BASE_URL = "https://api.falcon.io/measure/v2"
 MAX_METRICS_PER_REQUEST = 20
 
 # Insights requests queue server-side; poll every few seconds, for up to 10 minutes.

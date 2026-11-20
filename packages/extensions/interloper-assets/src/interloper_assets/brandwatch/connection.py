@@ -27,12 +27,9 @@ class BrandwatchConnection(il.Connection):
         Returns:
             The authenticated client, cached per connection instance.
         """
-        # Falcon.io authenticates the Measure API with the key as a query
-        # parameter applied to every request. NOTE: the parameter name
-        # (`param_key`) is carried over unverified from the reference connector
-        # and may need to be `apikey` — confirm against a live key.
+        # Brandwatch's API reference authenticates every request by an `apikey` query parameter, never a header.
         return il.AsyncRESTClient(
-            constants.BASE_URL, params={"param_key": self.api_key}, timeout=60, retry=il.HttpRetryPolicy()
+            constants.BASE_URL, params={"apikey": self.api_key}, timeout=60, retry=il.HttpRetryPolicy()
         )
 
     @cached_property
@@ -43,3 +40,12 @@ class BrandwatchConnection(il.Connection):
             The engine, cached per connection instance.
         """
         return BrandwatchApi(self.client)
+
+    async def check(self) -> bool:
+        """Prove the key works by reading the channel metrics' metadata.
+
+        Returns:
+            True; a refused key raises out of the read.
+        """
+        await self.api.get("/metrics/channel")
+        return True

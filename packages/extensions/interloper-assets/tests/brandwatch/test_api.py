@@ -73,6 +73,30 @@ def _ready_job(pages: dict[str, httpx2.Response]) -> Callable[[httpx2.Request], 
     return handler
 
 
+class TestGet:
+    async def test_returns_the_body_of_one_response(self):
+        requests: list[httpx2.Request] = []
+        metrics = {"data": [{"id": "channel/fans/day", "level": "CHANNEL", "networks": ["FACEBOOK"]}]}
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            return httpx2.Response(200, json=metrics)
+
+        assert await _api(handler).get("/metrics/channel", networks="facebook") == metrics
+        (request,) = requests
+        assert (request.method, str(request.url)) == (
+            "GET",
+            "https://api.falcon.io/measure/v2/metrics/channel?networks=facebook",
+        )
+
+    async def test_a_refusal_raises_its_http_error(self):
+        def handler(_: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(401, json={"fault": {"faultstring": "Invalid ApiKey"}})
+
+        with pytest.raises(httpx2.HTTPStatusError, match="401"):
+            await _api(handler).get("/metrics/channel")
+
+
 class TestReport:
     async def test_requests_the_day_then_polls_and_reads_every_page(self):
         requests: list[httpx2.Request] = []
@@ -87,7 +111,7 @@ class TestReport:
             return answer(request)
 
         insights = await _api(handler).report(
-            "/channel", DAY, ["channel/fans/day", "channel/likes/day"], channelIds=["chan-1"]
+            "/insights/channel", DAY, ["channel/fans/day", "channel/likes/day"], channelIds=["chan-1"]
         )
 
         assert insights == {"channel/fans/day": [_point(10)], "channel/likes/day": [_point(3)]}
@@ -112,7 +136,7 @@ class TestReport:
             "2": _page({"channel/fans/day": [_point(2, "2026-10-02")]}),
         }
 
-        insights = await _api(_ready_job(pages)).report("/channel", DAY, ["channel/fans/day"])
+        insights = await _api(_ready_job(pages)).report("/insights/channel", DAY, ["channel/fans/day"])
 
         assert insights == {"channel/fans/day": [_point(1, "2026-10-01"), _point(2, "2026-10-02")]}
 
@@ -130,7 +154,7 @@ class TestReport:
             return _page({metric_id: [_point(metric_id)] for metric_id in batch})
 
         metric_ids = ["channel/fans/day", "channel/likes/day", "channel/reach/day"]
-        insights = await _api(handler).report("/channel", DAY, metric_ids, channelIds=["chan-1"])
+        insights = await _api(handler).report("/insights/channel", DAY, metric_ids, channelIds=["chan-1"])
 
         assert [body["metricIds"] for body in bodies] == [metric_ids[:2], metric_ids[2:]]
         assert {body["channelIds"][0] for body in bodies} == {"chan-1"}
@@ -147,7 +171,7 @@ class TestReport:
                 return httpx2.Response(200, json={"status": "READY"})
             return httpx2.Response(200, json={"data": {"insights": {"channel/fans/day": [_point(1)]}}})
 
-        insights = await _api(handler).report("/channel", DAY, ["channel/fans/day"])
+        insights = await _api(handler).report("/insights/channel", DAY, ["channel/fans/day"])
 
         assert insights == {"channel/fans/day": [_point(1)]}
         assert [request.url.params.get("page") for request in requests] == [None, None, "1"]
@@ -155,12 +179,14 @@ class TestReport:
     async def test_no_insights_is_an_empty_result(self):
         pages = {"1": httpx2.Response(200, json={"data": {"insights": None, "paging": None}})}
 
-        assert await _api(_ready_job(pages)).report("/channel", DAY, ["channel/fans/day"]) == {}
+        assert await _api(_ready_job(pages)).report("/insights/channel", DAY, ["channel/fans/day"]) == {}
 
     async def test_a_metric_without_points_is_kept_empty(self):
         pages = {"1": _page({"channel/fans/day": None})}
 
-        assert await _api(_ready_job(pages)).report("/channel", DAY, ["channel/fans/day"]) == {"channel/fans/day": []}
+        assert await _api(_ready_job(pages)).report("/insights/channel", DAY, ["channel/fans/day"]) == {
+            "channel/fans/day": []
+        }
 
     async def test_a_request_in_progress_is_polled_until_ready(self, monkeypatch: pytest.MonkeyPatch):
         sleeps: list[float] = []
@@ -180,7 +206,9 @@ class TestReport:
             polls.append(request)
             return httpx2.Response(200, json=next(statuses))
 
-        assert await _api(handler).report("/channel", DAY, ["channel/fans/day"]) == {"channel/fans/day": [_point(1)]}
+        assert await _api(handler).report("/insights/channel", DAY, ["channel/fans/day"]) == {
+            "channel/fans/day": [_point(1)]
+        }
         assert len(polls) == 3
         assert sleeps == [constants.POLL_INTERVAL] * 2
 
@@ -191,7 +219,7 @@ class TestReport:
             return httpx2.Response(200, json={"status": "FAILED"})
 
         with pytest.raises(RuntimeError, match=r"^Insights request request-1 failed with status FAILED$"):
-            await _api(handler).report("/channel", DAY, ["channel/fans/day"])
+            await _api(handler).report("/insights/channel", DAY, ["channel/fans/day"])
 
     async def test_a_request_not_ready_in_time_raises(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(constants, "POLL_TIMEOUT", 0)
@@ -204,7 +232,7 @@ class TestReport:
             return httpx2.Response(200, json={"status": "IN_PROGRESS"})
 
         with pytest.raises(RuntimeError, match=r"^Insights request request-1 not ready within 0s$"):
-            await _api(handler).report("/channel", DAY, ["channel/fans/day"])
+            await _api(handler).report("/insights/channel", DAY, ["channel/fans/day"])
         assert len(polls) == 1
 
     async def test_a_refused_request_raises_its_http_error(self):
@@ -215,7 +243,7 @@ class TestReport:
             return httpx2.Response(401, json={"message": "Invalid API key"})
 
         with pytest.raises(httpx2.HTTPStatusError, match="401"):
-            await _api(handler).report("/channel", DAY, ["channel/fans/day"])
+            await _api(handler).report("/insights/channel", DAY, ["channel/fans/day"])
         assert len(requests) == 1
 
     async def test_a_refused_poll_raises_its_http_error(self):
@@ -225,10 +253,10 @@ class TestReport:
             return httpx2.Response(404, json={"message": "Unknown request"})
 
         with pytest.raises(httpx2.HTTPStatusError, match="404"):
-            await _api(handler).report("/channel", DAY, ["channel/fans/day"])
+            await _api(handler).report("/insights/channel", DAY, ["channel/fans/day"])
 
     async def test_a_refused_page_raises_its_http_error(self):
         pages = {"1": _page({"channel/fans/day": [_point(1)]}, next_page=2), "2": httpx2.Response(403)}
 
         with pytest.raises(httpx2.HTTPStatusError, match="403"):
-            await _api(_ready_job(pages)).report("/channel", DAY, ["channel/fans/day"])
+            await _api(_ready_job(pages)).report("/insights/channel", DAY, ["channel/fans/day"])

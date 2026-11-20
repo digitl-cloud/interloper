@@ -80,7 +80,7 @@ class Brandwatch(il.Source):
     async def facebook_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Facebook channel performance metrics per day."""
         insights = await self.connection.api.report(
-            "/channel", context.partition_date, constants.FACEBOOK_METRICS, channelIds=[self.channel_id]
+            "/insights/channel", context.partition_date, constants.FACEBOOK_METRICS, channelIds=[self.channel_id]
         )
         return _reshape(insights, self.channel_id, context.partition_date)
 
@@ -92,7 +92,7 @@ class Brandwatch(il.Source):
     async def instagram_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """Instagram channel performance metrics per day."""
         insights = await self.connection.api.report(
-            "/channel", context.partition_date, constants.INSTAGRAM_METRICS, channelIds=[self.channel_id]
+            "/insights/channel", context.partition_date, constants.INSTAGRAM_METRICS, channelIds=[self.channel_id]
         )
         return _reshape(insights, self.channel_id, context.partition_date)
 
@@ -104,7 +104,7 @@ class Brandwatch(il.Source):
     async def linkedin_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """LinkedIn channel performance metrics per day."""
         insights = await self.connection.api.report(
-            "/channel", context.partition_date, constants.LINKEDIN_METRICS, channelIds=[self.channel_id]
+            "/insights/channel", context.partition_date, constants.LINKEDIN_METRICS, channelIds=[self.channel_id]
         )
         return _reshape(insights, self.channel_id, context.partition_date)
 
@@ -116,7 +116,7 @@ class Brandwatch(il.Source):
     async def twitter_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """X (Twitter) channel performance metrics per day."""
         insights = await self.connection.api.report(
-            "/channel", context.partition_date, constants.TWITTER_METRICS, channelIds=[self.channel_id]
+            "/insights/channel", context.partition_date, constants.TWITTER_METRICS, channelIds=[self.channel_id]
         )
         return _reshape(insights, self.channel_id, context.partition_date)
 
@@ -128,6 +128,6 @@ class Brandwatch(il.Source):
     async def youtube_stats(self, context: il.ExecutionContext) -> list[_Record]:
         """YouTube channel performance metrics per day."""
         insights = await self.connection.api.report(
-            "/channel", context.partition_date, constants.YOUTUBE_METRICS, channelIds=[self.channel_id]
+            "/insights/channel", context.partition_date, constants.YOUTUBE_METRICS, channelIds=[self.channel_id]
         )
         return _reshape(insights, self.channel_id, context.partition_date)
