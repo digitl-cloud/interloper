@@ -206,7 +206,6 @@ onMounted(loadData)
                         <USelect v-model="orgFilter"
                                  :items="orgOptions"
                                  value-key="value"
-                                 :icon="appConfig.icons.organisation"
                                  class="w-full sm:w-52" />
                     </FilterBarField>
                 </template>

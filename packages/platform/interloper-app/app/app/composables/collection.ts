@@ -7,7 +7,7 @@ import type { GraphNodeState } from '~/types/graph'
 import type { AssetDefinition, Maturity, SourceDefinition } from '~/types/catalog'
 import { kindsOf, keysOf, resourceRelations } from '~/types/catalog'
 import type { AssetWarning } from '~/composables/warnings'
-import type { SourceDriftStatus } from '~/composables/drift'
+import type { DriftBadge, SourceDriftStatus } from '~/composables/drift'
 import { rollupState } from '~/composables/nodeStatus'
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -17,7 +17,7 @@ export interface LastRun {
     status: string
     at: string
     runId: string
-    share?: string
+    /** Says what the status covers when it is not the whole source ("Failed: 2 of 5 assets"). */
     note?: string
 }
 
@@ -75,7 +75,7 @@ interface UseCollectionRowsOptions {
 
 export function useCollectionRows(options: UseCollectionRowsOptions) {
     const catalogStore = useCatalogStore()
-    const { sourceDrift } = useDrift()
+    const { sourceDrift, statusBadge } = useDrift()
     const { icons } = useAppConfig()
 
     /** Look up an asset definition by qualified key ("source_key.asset_key"). */
@@ -210,7 +210,6 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
             status: state,
             at,
             runId: newest.run_id,
-            share: `${carrying.length}/${total}`,
             note: `${statusMeta(state).label}: ${carrying.length} of ${total} assets`,
         }
     }
@@ -363,12 +362,28 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
         return map
     })
 
-    /** Display info for each type group (the catalog key sources are grouped under) present in the collection. */
+    /**
+     * Display info for each type group (the catalog key sources are grouped
+     * under) present in the collection. A group carries its sources' warnings
+     * and drift, each named after its source, so a collapsed group still shows
+     * what needs attention inside it.
+     */
     const typeInfoByKey = computed(() => {
         const sourceStates = new Map<string, GraphNodeState[]>()
+        const warningsByKey = new Map<string, AssetWarning[]>()
+        const driftByKey = new Map<string, { message: string, color: DriftBadge['color'] }[]>()
         for (const source of options.sources.value) {
             const groupKey = catalogStore.groupOf(source.key)
             sourceStates.set(groupKey, [...(sourceStates.get(groupKey) ?? []), sourceState(source)])
+            const info = sourceInfoById.value.get(source.id)
+            if (!info) continue
+            const named = info.warnings.map(w => ({ ...w, message: `${info.name}: ${w.message}` }))
+            warningsByKey.set(groupKey, [...(warningsByKey.get(groupKey) ?? []), ...named])
+            // Disabled is intentional and stays quiet; only what needs fixing rises.
+            const badge = statusBadge(info.drift)
+            if (badge && badge.color !== 'neutral') {
+                driftByKey.set(groupKey, [...(driftByKey.get(groupKey) ?? []), { message: `${info.name}: ${badge.label}`, color: badge.color }])
+            }
         }
 
         const map = new Map<string, {
@@ -378,6 +393,8 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
             sourceCount: number
             state: GraphNodeState
             note: string | null
+            warnings: AssetWarning[]
+            drift: { message: string, color: DriftBadge['color'] }[]
         }>()
         for (const [groupKey, states] of sourceStates) {
             const state = rollupState(states)
@@ -389,6 +406,8 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
                 sourceCount: states.length,
                 state,
                 note: state === 'pending' ? null : `${statusMeta(state).label}: ${carrying} of ${states.length} ${states.length === 1 ? 'source' : 'sources'}`,
+                warnings: warningsByKey.get(groupKey) ?? [],
+                drift: driftByKey.get(groupKey) ?? [],
             })
         }
         return map

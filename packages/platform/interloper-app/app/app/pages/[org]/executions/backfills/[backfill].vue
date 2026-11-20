@@ -8,6 +8,7 @@ import type { Backfill } from '~/types/backfill'
 const PAGE_SIZE = 50
 
 const StatusBadge = resolveComponent('StatusBadge')
+const RelativeTime = resolveComponent('RelativeTime')
 
 const route = useRoute()
 const backfillId = route.params.backfill!.toString()
@@ -131,12 +132,18 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
     {
         accessorKey: 'created_at',
         header: 'Created',
-        cell: ({ row }) => h('span', { class: 'text-muted tabular-nums' }, formatDate(row.getValue<string>('created_at')) || '—'),
+        cell: ({ row }) => {
+            const value = row.getValue<string | null>('created_at')
+            return value ? h(RelativeTime, { value, class: 'text-muted' }) : emptyCell()
+        },
     },
     {
         accessorKey: 'started_at',
         header: 'Started',
-        cell: ({ row }) => h('span', { class: 'text-muted tabular-nums' }, formatDate(row.getValue<string>('started_at')) || '—'),
+        cell: ({ row }) => {
+            const value = row.getValue<string | null>('started_at')
+            return value ? h(RelativeTime, { value, class: 'text-muted' }) : emptyCell()
+        },
     },
     {
         id: 'elapsed',

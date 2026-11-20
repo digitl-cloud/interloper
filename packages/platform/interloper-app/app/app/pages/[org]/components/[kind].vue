@@ -9,7 +9,8 @@ definePageMeta({
     validate: route => RESOURCE_KINDS.map(kindSlug).includes(route.params.kind as string),
 })
 
-const UBadge = resolveComponent('UBadge')
+const StatusBadge = resolveComponent('StatusBadge')
+const LastRunBadge = resolveComponent('LastRunBadge')
 const UTooltip = resolveComponent('UTooltip')
 
 const route = useRoute()
@@ -86,18 +87,18 @@ function autoRenewColumn(): TableColumn<ComponentRecord> {
             if (!catalogStore.catalog[row.original.key]?.renewable) return h('span', { class: 'text-dimmed' }, '—')
             if (row.original.status === 'unreadable') {
                 return h(UTooltip, { text: 'The stored config could not be read' }, () =>
-                    h(UBadge, { color: 'warning', icon: appConfig.ui.icons.warning }, () => 'Unknown'))
+                    h(StatusBadge, { color: 'warning', label: 'Unknown' }))
             }
             const enabled = row.original.config?.auto_renew !== false
-            return h(UBadge, {
-                color: enabled ? 'success' : 'neutral',
-                icon: enabled ? appConfig.icons.refresh : undefined,
-            }, () => enabled ? 'On' : 'Off')
+            return h(StatusBadge, { color: enabled ? 'success' : 'neutral', label: enabled ? 'On' : 'Off' })
         },
     }
 }
 
-/** Connection renewal state reads as one badge, like the collection's Last run. */
+/**
+ * Connection renewal state reads as one badge, like a job's Last run: the
+ * last success, or the failure that followed it with its error on hover.
+ */
 function lastRenewedColumn(): TableColumn<ComponentRecord> {
     return {
         id: 'last_renewed_at',
@@ -105,13 +106,16 @@ function lastRenewedColumn(): TableColumn<ComponentRecord> {
         accessorFn: (row: ComponentRecord) => row.state?.last_renewed_at ?? '',
         cell: ({ row }) => {
             const state = row.original.state ?? {}
-            if (state.last_renewal_error) {
-                return h(UTooltip, { text: state.last_renewal_error }, () =>
-                    h(UBadge, { color: 'error', icon: appConfig.ui.icons.error }, () => 'Failed'))
-            }
-            if (!state.last_renewed_at) return h('span', { class: 'text-dimmed' }, '—')
-            return h(UBadge, { color: 'success', icon: appConfig.ui.icons.success }, () =>
-                h('span', { class: 'tabular-nums' }, relativeTime(new Date(state.last_renewed_at))))
+            const failed = !!state.last_renewal_error
+            const at = failed ? state.last_run_at : state.last_renewed_at
+            if (!at) return emptyCell()
+            return h(LastRunBadge, {
+                status: failed ? 'failed' : 'success',
+                at,
+                runId: state.last_run_id,
+                target: row.original,
+                note: failed ? state.last_renewal_error : undefined,
+            })
         },
     }
 }

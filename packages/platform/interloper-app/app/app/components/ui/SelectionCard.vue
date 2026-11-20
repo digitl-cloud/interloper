@@ -1,8 +1,10 @@
 <script setup lang="ts">
 /**
- * Wizard "pick an option" tile: the card tone on the drawer's panel, ringed and
- * tinted in the accent colour when selected. Clicking anywhere on it emits
- * `select`.
+ * Wizard "pick an option" tile: the card tone on the drawer's panel, marked
+ * in the accent colour when selected. A tile of a grid (`vertical`) is one
+ * choice among many and takes a strong ring; a row, usually beside its own
+ * checkbox, takes only a faint tint and a thin ring, so a list with many rows
+ * picked stays calm. Clicking anywhere on it emits `select`.
  *
  * Given a `label`, it lays the tile out itself, so every picker reads the
  * same: a row of the `#leading` slot (a checkbox), the icon, the label over its
@@ -32,7 +34,7 @@ const emit = defineEmits<{ select: [] }>()
                :type="as === 'button' ? 'button' : undefined"
                class="cursor-pointer rounded-lg text-left transition"
                :class="selected
-                   ? 'bg-primary/10 ring-2 ring-primary'
+                   ? (orientation === 'vertical' ? 'bg-primary/10 ring-2 ring-primary' : 'bg-primary/5 ring ring-primary/40')
                    : 'bg-muted ring ring-default hover:ring-primary/50'"
                @click="emit('select')">
         <div v-if="props.label && props.orientation === 'vertical'"

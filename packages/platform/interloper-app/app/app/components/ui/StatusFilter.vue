@@ -6,8 +6,6 @@ const ALL = '__all__'
 
 const status = defineModel<string | null>({ required: true })
 
-const appConfig = useAppConfig()
-
 const props = defineProps<{
     statuses: string[]
 }>()
@@ -19,10 +17,12 @@ const items = computed(() => [
 </script>
 
 <template>
-    <USelect :model-value="status ?? ALL"
-             :items="items"
-             value-key="value"
-             :icon="appConfig.icons.status"
-             class="w-40"
-             @update:model-value="status = $event === ALL ? null : $event" />
+    <FilterBarField label="Status"
+                    :inline-label="false">
+        <USelect :model-value="status ?? ALL"
+                 :items="items"
+                 value-key="value"
+                 class="w-full sm:w-40"
+                 @update:model-value="status = $event === ALL ? null : $event" />
+    </FilterBarField>
 </template>

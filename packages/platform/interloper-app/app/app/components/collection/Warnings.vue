@@ -1,12 +1,13 @@
 <script setup lang="ts">
 /**
- * An asset's configuration warnings as a list, one row each: the content of
- * the warning tooltips on the graph's cards and in the collection table.
+ * Warnings as a list, one row each: the content of the warning tooltips on
+ * the graph's cards and in the collection table, from an asset's
+ * configuration up to what a whole source type holds.
  */
 import type { AssetWarning } from '~/composables/warnings'
 
 defineProps<{
-    warnings: AssetWarning[]
+    warnings: Pick<AssetWarning, 'message'>[]
 }>()
 
 const appConfig = useAppConfig()

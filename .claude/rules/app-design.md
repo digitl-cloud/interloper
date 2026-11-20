@@ -129,7 +129,7 @@ Buttons, badges and empty states size their own icons.
 - modals: Nuxt UI's widths
 
 **Phones** (below `sm`). Every page reads at 390px wide; layout comes from the shared pieces, never from page-level breakpoint hacks:
-- toolbars are `FilterBar`: one row of the search, a Filters button counting the active filters, and the actions as icon buttons (their labels stay for screen readers); the filters open in a bottom sheet with Reset;
+- toolbars are `FilterBar`, on every list, grid or picker a user narrows (a wizard's included): one row of the search, a Filters button counting the active filters, and the actions as icon buttons (their labels stay for screen readers); the filters open in a bottom sheet with Reset;
 - sub-page tabs, and any pill control left inline, scroll sideways when too wide (the theme);
 - tables scroll inside their card;
 - a splitter's side pane (`useSlidingPane`) opens over the whole splitter as a detail view, with a visible way back; a pixel-sized rail starts folded, under its own saved layout;
@@ -145,12 +145,14 @@ Buttons, badges and empty states size their own icons.
   - A concept has one icon, and an icon means one concept.
   - A concept used in two places goes in the map; never write its literal twice.
 - **Spinner:** `appConfig.ui.icons.loading` with `animate-spin`, or a component's `loading` prop.
+- **Where icons go.** Where they carry meaning: the sidebar, buttons, empty states, brand marks, and an entity reference's kind. Not in page tabs, filter selects, status words or table cells that already say it in words.
 
 ## 6. Status
 
 One table, `utils/status.ts`. `statusMeta(status)` gives the label, colour, icon and whether the status is still executing, for every run, backfill and execution status. Everything derives from it:
-- `StatusBadge`: a soft UBadge that spins while executing
-- `StatusDot`
+- `StatusBadge`: a dot and a word. The normal outcomes (success, and the quiet states) read muted; failed, running and canceled take their colour, so the eye lands on what needs it. One still executing pulses. It takes `status` for a run, backfill or execution, or `color` and `label` for any other state (a renewal, a sync check, a hook's enabled flag).
+- `StatusDot`, where a word does not fit
+- `LastRunBadge`, where a status qualifies a time
 - progress segments
 - timeline and chart colours
 - legends
@@ -166,7 +168,17 @@ One table, `utils/status.ts`. `statusMeta(status)` gives the label, colour, icon
 
 Graph node states (`idle`, `attention`, `paused`, ...) map onto the same colours in `composables/nodeStatus.ts`.
 
-## 7. Components by job
+## 7. Quiet by default
+
+Show the one fact a row, tile or line exists for; the rest waits for hover, a tooltip or the detail view.
+- **Colour only for what is not normal.** A run that succeeded is muted text; a failure is red. A last run is the exception: its time is the fact, and its badge's colour says how it went (`LastRunBadge`).
+- **No zero counts, no line that restates its neighbour.** A tile is a label, a number and one line; a run's status chips list only the outcomes that occurred; a summary drops its zero parts.
+- **Text, not chips.** Tags and counts in a table are text (`text-muted`, `text-dimmed`). Badges are kept for what is an object or an identifier: an entity reference (`EntityBadge`), a component's discriminator, a count beside a title, and the few marks that must stand out (maturity).
+- **Legends on full pages only.** A summary card's bars name their segments in a tooltip; the page it links to keeps the legend.
+- **Lists say when, not what time.** A time in a list is relative, the exact one on hover (`RelativeTime`); a time to the second or millisecond keeps the extra precision for hover.
+- **One navigation.** The sidebar names each hub once; its views are the tabs on its pages.
+
+## 8. Components by job
 
 | Job | Use |
 |---|---|
@@ -174,15 +186,22 @@ Graph node states (`idle`, `attention`, `paused`, ...) map onto the same colours
 | Where an action goes | With the card it acts on: a list's create action in `DataTable` `#actions`, a canvas's in its toolbar's `#actions` (CollectionTable, GraphToolbar), a card's in its `CardHeader`. A page with no data repeats its create action in its `UEmpty`. |
 | Section header above a card | `UPageCard variant="naked" orientation="horizontal"`: title, description, actions in its default slot |
 | Toolbar above a list or canvas | `FilterBar`: search in `#search`, filters in its default slot, the card's actions in `#actions`, and `active` / `@reset` for the filters' count and reset (`DataTable` forwards them as `active-filters` / `@reset-filters`). Every action has an icon: on a phone it is all that shows. No `ms-auto` or margin hacks between groups. |
-| Labelled filter | `FilterBarField label="Status"` around a bare `<UTabs v-model :items>`: the field sets the tabs' look, compact pills inline and a full-width list in the phone's sheet. |
+| Labelled filter | `FilterBarField label="Status"` around a bare `<UTabs v-model :items>`: the field sets the tabs' look, compact pills inline and a full-width list in the phone's sheet. A select that names its choice ("All types") takes `:inline-label="false"` and `w-full sm:w-40`; the shared `KindFilter`, `TypeFilter`, `StatusFilter` and `EnabledFilter` carry their field. In a `CardHeader` the fields stay inline. |
 | Header inside a card | `CardHeader` in the `UCard #header` |
 | Section label | `caption text-muted` on the label; `USeparator label` and navigation `type: 'label'` items take it from the theme |
 | Container | `UCard` (the card tone) |
 | Settings and key/value rows | `UFormField orientation="horizontal"` rows separated by `USeparator`, inside a `UCard`; a read-only value is the field's content |
 | List of records | `DataTable`. A raw `UTable` only inside a card that is not a list page (detail sub-tables, overview cards). |
-| Status | `StatusBadge`; `StatusDot` where a badge does not fit |
-| Entity reference | `EntityBadge` (outline neutral). Outline is reserved for it. |
-| Tags, counts, kinds, ids beside a name | `UBadge color="neutral"` (soft by theme), `size="sm"` beside text |
+| Status | `StatusBadge` (a dot and a word); `StatusDot` where a word does not fit |
+| Entity reference | `EntityBadge` (outline neutral, with the kind's icon). Outline is reserved for it. |
+| Tags, counts, kinds in a row | Text: tags and counts `text-muted`, a kind or a count beside a name `text-dimmed` |
+| Discriminator beside a name | `UBadge color="neutral" size="sm"` with `slashed-zero` (`nameColumn` does it for component tables) |
+| Count beside a title | `UBadge color="neutral" size="sm"`, the number alone; in a tree's group row (the collection's types and sources) its noun rides a tooltip ("4 sources") |
+| A run's outcome at a time (a Last run, a Last renewed, an asset's latest materialization) | `LastRunBadge`: a soft badge in the status colour with its icon and the relative time, always a link to the run; the tooltip names the outcome, or a note in its place, and the exact time |
+| Warnings in a tree | A group row shows what its children hold: the same warning icon in the same column, its tooltip listing each child's warnings under the child's name, so a collapsed group still says something inside needs attention |
+| Time in a list | `RelativeTime` ("2d ago", "in 14h"), the exact time on hover; `dateColumn` and the state columns use it |
+| Sortable column | `withSortableHeaders`: the sorted column shows its arrow, the others on hover or focus |
+| Table footer | `TableFooter`: "21–40 of 119 runs" with previous and next arrows once the rows outrun a page, "3 of 12 selected" while rows are selected, and nothing for a list that fits one page |
 | Maturity | `MaturityBadge` |
 | Empty: no data on a page | `UEmpty variant="outline"` with `actions` |
 | Empty: inside a card or panel | `UEmpty variant="naked" size="sm"` |
@@ -197,12 +216,13 @@ Graph node states (`idle`, `attention`, `paused`, ...) map onto the same colours
 | Destructive action | `color="error"`: solid in the confirm dialog, `variant="soft"` elsewhere |
 | Inline text action | `variant="link"` |
 | Button size | the theme default for toolbar, table-toolbar and overlay actions; `size="sm"` for actions beside a card title (`CardHeader`) and in rows |
-| Sub-pages of a hub | `PageTabs`: `UNavigationMenu variant="pill"` in the toolbar, themed in app.config to the same segmented look as the pill `UTabs` (real links, so pages open in new tabs and prefetch) |
+| Sub-pages of a hub | `PageTabs`: `UNavigationMenu variant="pill"` in the toolbar, labels without icons, themed in app.config to the same segmented look as the pill `UTabs` (real links, so pages open in new tabs and prefetch). The sidebar links the hub once, with no expandable sub-items. |
 | Views inside a card | `UTabs variant="pill" size="xs" :content="false"` |
 | Form | `UForm` + `UFormField` (`label`, `description`, `required`, `error`) for every field; no hand-built labels or error text. Vertical in modals and drawers, horizontal in settings. Inputs are `w-full` in vertical forms. |
 | Confirm | `useConfirm()` (ConfirmModal) |
 | Short form | `UModal`; footer right-aligned by the theme: Cancel (neutral outline), then the primary button |
 | Multi-step or long form | right `UDrawer` (`WizardDrawer`), with its `close` prop; the steps in a `UStepper` with Nuxt UI's own look |
+| Pick an option | `SelectionCard`: a grid tile takes a strong ring when selected; a row (usually with its checkbox) a faint tint and a thin ring |
 | Secret shown once | `CopyField` in an overlay with `:dismissible="false"` until it is closed with its button |
 | Meter | `UProgress`; a split bar is `UProgressGroup` with segments from the status table |
 | Avatar | `UAvatar` with initials; no colour palette |
@@ -211,7 +231,7 @@ Graph node states (`idle`, `attention`, `paused`, ...) map onto the same colours
 | Chart | ECharts with `useChartTheme()` (family, sizes and colours resolved from the tokens) |
 | Toast | success: `{ title: 'Source created', color: 'success' }`; errors through `errorToast` |
 
-## 8. Copy
+## 9. Copy
 
 - **Sentence case** for every label, title, button, menu item, column header and toast: "New source", "Create destination", "Exit admin".
 - **British spelling**, as the codebase: "Organisation". Route paths keep their slugs.
@@ -222,11 +242,11 @@ Graph node states (`idle`, `attention`, `paused`, ...) map onto the same colours
   - "Run now" runs; "Retry" re-runs or reloads.
 - **Dates and numbers** go through `utils/time.ts` only, which honours the display time zone:
   - absolute: `formatDate` / `formatDay` / `formatDayTime`
-  - relative: `relativeTime` ("2h ago")
+  - relative: `relativeTime` ("2h ago"), in a list through `RelativeTime`
   - durations: `formatElapsed`
 - **Ids:** `shortId()` everywhere a UUID is shown; the full id goes in a tooltip or a copy action.
 
-## 9. Bespoke areas
+## 10. Bespoke areas
 
 **The graph** (`components/graph/`) and **the agent panel** (`components/agent/`) keep their own layouts, but follow every rule above:
 - type, spacing and radius scales

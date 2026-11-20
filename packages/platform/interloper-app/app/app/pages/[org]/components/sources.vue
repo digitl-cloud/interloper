@@ -86,8 +86,7 @@ const columns: TableColumn<ComponentRecord>[] = [
         id: 'assets',
         header: 'Assets',
         accessorFn: (row: ComponentRecord) => row.children.length,
-        cell: ({ row }) => h('span', { class: 'text-muted tabular-nums' },
-            `${row.original.children.length} asset${row.original.children.length !== 1 ? 's' : ''}`),
+        cell: ({ row }) => h('span', { class: 'text-muted tabular-nums' }, row.original.children.length),
     },
     {
         id: 'destinations',

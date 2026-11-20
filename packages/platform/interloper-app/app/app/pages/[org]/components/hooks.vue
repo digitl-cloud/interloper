@@ -4,7 +4,7 @@ import type { TableColumn } from '@nuxt/ui'
 import type { ComponentRecord, RelationRef } from '~/types/component'
 import { hookEnabled, hookEvents, relationRefs } from '~/types/component'
 
-const UBadge = resolveComponent('UBadge')
+const StatusBadge = resolveComponent('StatusBadge')
 const EntityBadge = resolveComponent('EntityBadge')
 
 const componentsStore = useComponentsStore()
@@ -39,12 +39,7 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
         id: 'events',
         header: 'Events',
         accessorFn: (row: ComponentRecord) => hookEvents(row).join(', '),
-        cell: ({ row }) => h('div', { class: 'flex flex-wrap gap-1' }, hookEvents(row.original).map(event =>
-            h(UBadge, {
-                key: event,
-                color: 'neutral',
-            }, () => event),
-        )),
+        cell: ({ row }) => h('span', { class: 'text-muted' }, hookEvents(row.original).join(', ')),
     },
     {
         id: 'watches',
@@ -65,9 +60,10 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
         id: 'status',
         header: 'Status',
         accessorFn: (row: ComponentRecord) => String(hookEnabled(row)),
-        cell: ({ row }) => h(UBadge, {
+        cell: ({ row }) => h(StatusBadge, {
             color: hookEnabled(row.original) ? 'success' : 'neutral',
-        }, () => hookEnabled(row.original) ? 'Enabled' : 'Disabled'),
+            label: hookEnabled(row.original) ? 'Enabled' : 'Disabled',
+        }),
     },
     ...stateSchemaColumns(catalogStore.definitionsForKind('hook')[0]),
     dateColumn<ComponentRecord>('created_at', 'Created'),

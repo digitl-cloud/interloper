@@ -73,11 +73,18 @@ const RUN_STATUSES = ['pending', 'queued', 'dispatched', 'running', 'success', '
 watch([settledSearch, kindParam, type, status], ([q, kind, key, status]) =>
     runsStore.setFilters({ q: q.trim(), kind, key, status }), { immediate: true })
 
-function clearFilters() {
-    search.value = ''
+/** The filters set apart from the search: the phone's Filters button counts them, and its sheet resets them. */
+const activeFilters = computed(() => [kindParam.value, type.value, status.value].filter(value => value !== null).length)
+
+function resetFilters() {
     kindParam.value = null
     type.value = null
     status.value = null
+}
+
+function clearFilters() {
+    search.value = ''
+    resetFilters()
 }
 
 const typeChoices = computed(() => kindParam.value
@@ -155,10 +162,10 @@ const columns: TableColumn<RunRow>[] = [
         cell: ({ row }) => {
             const stats = runStats(row.original, row.original.execution_counts ?? {})
             if (!stats.total) return emptyCell()
-            return h(UTooltip, { text: outcomeSummary(stats).join(' · '), delayDuration: 0 }, () => h('div', { class: 'flex w-40 items-center gap-2' }, [
-                h(UProgressGroup, { items: progressSegments(stats), max: stats.total, size: 'sm', class: 'flex-1' }),
-                h('span', { class: 'text-xs tabular-nums text-muted' }, `${stats.succeeded}/${stats.total}`),
-            ]))
+            return h(UTooltip, { text: `${stats.succeeded}/${stats.total} · ${outcomeSummary(stats).join(' · ')}`, delayDuration: 0 }, () =>
+                h('div', { class: 'flex w-32 items-center' }, [
+                    h(UProgressGroup, { items: progressSegments(stats), max: stats.total, size: 'sm', class: 'flex-1' }),
+                ]))
         },
     },
     dateColumn<RunRow>('created_at', 'Created'),
@@ -195,18 +202,21 @@ function onPageChange(page: number) {
         <UCard v-else-if="showTable"
                :ui="FILL_CARD_UI">
             <template #header>
-                <div class="flex flex-wrap items-center gap-3">
-                    <UInput v-model="search"
-                            placeholder="Search runs by target…"
-                            :icon="appConfig.ui.icons.search"
-                            class="max-w-sm" />
+                <FilterBar :active="activeFilters"
+                           @reset="resetFilters">
+                    <template #search>
+                        <UInput v-model="search"
+                                placeholder="Search runs by target…"
+                                :icon="appConfig.ui.icons.search"
+                                class="w-full sm:w-64" />
+                    </template>
                     <KindFilter v-model="kind"
                                 :components="componentsStore.all" />
                     <TypeFilter v-model="type"
                                 :components="typeChoices" />
                     <StatusFilter v-model="status"
                                   :statuses="RUN_STATUSES" />
-                </div>
+                </FilterBar>
             </template>
 
             <UTable v-model:expanded="expanded"

@@ -110,23 +110,6 @@ function toggle(key: string) {
     expanded.value = next
 }
 
-const summary = computed(() => {
-    const present = groups.value.flatMap(group => group.rows.flatMap(row => row.days[dates.value.indexOf(props.date)] ?? []))
-    if (!present.length) return 'No partitions on this day'
-    const successful = present.reduce((n, day) => n + day.successful, 0)
-    const failed = present.reduce((n, day) => n + day.failed, 0)
-    const missing = present.reduce((n, day) => n + day.missing, 0)
-    const missed = present.reduce((n, day) => n + day.missed, 0)
-    const total = successful + failed + missing
-    const parts = total ? [`${successful} of ${total} assets successful`] : []
-    if (failed) parts.push(`${failed} failed`)
-    if (missing) parts.push(`${missing} missing`)
-    if (missed) parts.push(`${missed} snapshot${missed === 1 ? '' : 's'} missed`)
-    return parts.join(' · ')
-})
-
-const label = computed(() => formatCalendarDay(props.date, { weekday: true }))
-
 const windowLabel = computed(() => {
     const { since, until } = props.coverage
     const year = since.slice(0, 4) !== until.slice(0, 4)
@@ -162,10 +145,6 @@ const COL = {
 
 <template>
     <div class="mt-4">
-        <div class="mb-3 flex flex-wrap items-baseline gap-3">
-            <span class="text-sm font-semibold text-highlighted">{{ label }}</span>
-            <span class="text-xs tabular-nums text-muted">{{ summary }}</span>
-        </div>
         <template v-if="groups.length">
             <div :class="ROW"
                  class="border-t-0 text-xs text-muted">

@@ -54,16 +54,18 @@ const connectorCards = computed(() => catalogStore.sourceDefinitions
                        variant="naked"
                        orientation="horizontal" />
 
-            <div class="flex flex-wrap items-center gap-2">
-                <UTabs v-model="connectorFilter"
-                       :items="connectorFilters"
-                       variant="pill"
-                       size="xs"
-                       :content="false" />
-                <span class="ml-auto text-xs text-dimmed tabular-nums">
-                    {{ connectorCards.length }} of {{ catalogStore.sourceDefinitions.length }} connectors
-                </span>
-            </div>
+            <FilterBar :active="Number(connectorFilter !== 'All')"
+                       @reset="connectorFilter = 'All'">
+                <FilterBarField label="Category">
+                    <UTabs v-model="connectorFilter"
+                           :items="connectorFilters" />
+                </FilterBarField>
+                <template #actions>
+                    <span class="text-xs text-dimmed tabular-nums">
+                        {{ connectorCards.length }} of {{ catalogStore.sourceDefinitions.length }} connectors
+                    </span>
+                </template>
+            </FilterBar>
 
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <CatalogCard v-for="card in connectorCards"

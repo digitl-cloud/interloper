@@ -23,7 +23,13 @@ const appConfig = useAppConfig()
 const catalogStore = useCatalogStore()
 const typeFilter = ref('all')
 const selected = ref<string | null>(null)
-const { byDate, summary } = useCoverageCalendar(coverage, typeFilter)
+const { byDate } = useCoverageCalendar(coverage, typeFilter)
+/** The day the list below reads, as the card's subtitle; with the year once the window spans two. */
+const selectedLabel = computed(() => {
+    if (!coverage.value || !selected.value) return undefined
+    const year = coverage.value.since.slice(0, 4) !== coverage.value.until.slice(0, 4)
+    return formatCalendarDay(selected.value, { weekday: true, year })
+})
 
 const typeOptions = computed(() => [
     { label: 'All types', value: 'all' },
@@ -176,21 +182,23 @@ watch(coverage, (value) => {
     <UCard>
         <template #header>
             <CardHeader title="Partition coverage"
-                        :description="coverage && !coverageError && !empty ? summary : undefined"
+                        :description="!coverageError && !empty ? selectedLabel : undefined"
                         :loading="!coverage && !coverageError">
                 <UIcon v-if="switching"
                        :name="appConfig.ui.icons.loading"
                        class="size-4 animate-spin text-dimmed" />
-                <USelect v-if="!empty"
-                         v-model="typeFilter"
-                         :items="typeOptions"
-                         size="sm"
-                         class="w-44" />
-                <UTabs v-model="activeWindow"
-                       :items="windowItems"
-                       variant="pill"
-                       size="xs"
-                       :content="false" />
+                <FilterBarField v-if="!empty"
+                                label="Type"
+                                :inline-label="false">
+                    <USelect v-model="typeFilter"
+                             :items="typeOptions"
+                             size="sm"
+                             class="w-44" />
+                </FilterBarField>
+                <FilterBarField label="Window">
+                    <UTabs v-model="activeWindow"
+                           :items="windowItems" />
+                </FilterBarField>
             </CardHeader>
         </template>
         <div ref="frame"

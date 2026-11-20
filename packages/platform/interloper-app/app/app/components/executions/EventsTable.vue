@@ -5,7 +5,8 @@ import type { EventType } from '~/types/event'
 import type { RunEvent } from '~/stores/events'
 import { LazyExecutionsErrorDetailModal } from '#components'
 
-const UBadge = resolveComponent('UBadge')
+const UTooltip = resolveComponent('UTooltip')
+const StatusBadge = resolveComponent('StatusBadge')
 const UButton = resolveComponent('UButton')
 const EntityBadge = resolveComponent('EntityBadge')
 
@@ -58,7 +59,11 @@ const columns: TableColumn<RunEvent>[] = [
     {
         accessorKey: 'timestamp',
         header: 'Time',
-        cell: ({ row }) => h('span', { class: 'text-xs tabular-nums text-muted' }, formatClockTime(new Date(row.getValue<string>('timestamp')), 'ms')),
+        cell: ({ row }) => {
+            const at = new Date(row.getValue<string>('timestamp'))
+            return h(UTooltip, { text: formatClockTime(at, 'ms') }, () =>
+                h('span', { class: 'text-xs tabular-nums text-muted' }, formatClockTime(at, true)))
+        },
     },
     {
         id: 'source',
@@ -86,15 +91,12 @@ const columns: TableColumn<RunEvent>[] = [
         header: 'Event',
         cell: ({ row }) => {
             const et = row.getValue<EventType>('event_type')
-            const badge = h(UBadge, {
-                color: eventTypeColor(et),
-                icon: eventTypeIcon(et),
-            }, () => eventTypeLabel(et))
+            const label = h(StatusBadge, { color: eventTypeColor(et), label: eventTypeLabel(et) })
             const level = row.original.level
-            if (et !== 'log' || !level) return badge
-            return h('div', { class: 'flex items-center gap-1.5' }, [
-                badge,
-                h(UBadge, { color: logLevelColor(level) }, () => level),
+            if (et !== 'log' || !level) return label
+            return h('div', { class: 'flex items-center gap-3' }, [
+                label,
+                h(StatusBadge, { color: logLevelColor(level), label: level }),
             ])
         },
     },
