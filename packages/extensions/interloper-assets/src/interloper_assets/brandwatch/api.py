@@ -16,14 +16,15 @@ logger = logging.getLogger(__name__)
 
 
 class BrandwatchApi:
-    """The Brandwatch (Falcon.io) Measure API: its insights requests.
+    """The Brandwatch (Falcon.io) Measure API: its reads and its insights requests.
 
     Insights are read as a job. A POST names the days, the metrics and what
-    else the insights are for (``channelIds`` on ``/channel``), and is answered
-    with an ``insightsRequestId``; the request is polled until it is ``READY``,
-    then read page by page, each page naming the ``nextPage`` until none is
-    left. A request names at most ``MAX_METRICS_PER_REQUEST`` metrics, so a
-    longer list is asked for in batches and their insights merged.
+    else the insights are for (``channelIds`` on ``/insights/channel``), and is
+    answered with an ``insightsRequestId``; the request is polled at
+    ``/insights/{insightsRequestId}`` until it is ``READY``, then read there
+    page by page, each page naming the ``nextPage`` until none is left. A
+    request names at most ``MAX_METRICS_PER_REQUEST`` metrics, so a longer
+    list is asked for in batches and their insights merged.
 
     Measure refuses a request with an HTTP error status, raised as it comes;
     a request that ends in any status but ``READY`` raises that status.
@@ -37,13 +38,27 @@ class BrandwatchApi:
         """
         self.client = client
 
+    async def get(self, path: str, **params: Any) -> dict[str, Any]:
+        """Read the one response of an endpoint.
+
+        Args:
+            path: The endpoint, relative to the API's base URL, such as ``/metrics/channel``.
+            **params: The query parameters, beside the key the client sends on every request.
+
+        Returns:
+            The response's JSON body.
+        """
+        response = await self.client.get(path, params=params)
+        response.raise_for_status()
+        return response.json()
+
     async def report(
         self, path: str, day: dt.date, metric_ids: list[str], **body: Any
     ) -> dict[str, list[dict[str, Any]]]:
         """Read one day of insights.
 
         Args:
-            path: The insights endpoint, relative to the API's base URL, such as ``/channel``.
+            path: The insights endpoint, relative to the API's base URL, such as ``/insights/channel``.
             day: The insights' only day, sent as the request's ``since`` and ``until``.
             metric_ids: The metrics to read, such as ``channel/fans/day``; any number, batched by the cap.
             **body: What else the request names, such as ``channelIds``, sent as is in its JSON body.
@@ -62,7 +77,7 @@ class BrandwatchApi:
             )
             await self._wait(request_id)
             pages = self.client.paginate(
-                f"/{request_id}",
+                f"/insights/{request_id}",
                 il.JSONCursorPaginator(cursor_path="data.paging.nextPage", cursor_param="page"),
                 params={"page": 1},
                 data_selector=self._insights,
@@ -102,7 +117,7 @@ class BrandwatchApi:
         loop = get_running_loop()
         deadline = loop.time() + constants.POLL_TIMEOUT
         while True:
-            response = await self.client.get(f"/{request_id}")
+            response = await self.client.get(f"/insights/{request_id}")
             response.raise_for_status()
             status = response.json().get("status")
 

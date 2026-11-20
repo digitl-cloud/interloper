@@ -168,7 +168,7 @@ class TestRequests:
 
         connection = BrandwatchConnection(api_key="key")
         connection.__dict__["client"] = il.AsyncRESTClient(
-            constants.BASE_URL, params={"param_key": "key"}, transport=httpx2.MockTransport(handler)
+            constants.BASE_URL, params=dict(connection.client.params), transport=httpx2.MockTransport(handler)
         )
         source = Brandwatch(id="src-1", channel_id="chan-1", connection=connection)
         asset = next(a for a in source.assets if type(a).key == key)
@@ -194,10 +194,10 @@ class TestRequests:
             step
             for index in range(1, len(batches) + 1)
             for step in (
-                ("POST", "/measure/v2/insights/channel", b"param_key=key"),
-                ("GET", f"/measure/v2/insights/request-{index}", b"param_key=key"),
-                ("GET", f"/measure/v2/insights/request-{index}", b"param_key=key&page=1"),
-                ("GET", f"/measure/v2/insights/request-{index}", b"param_key=key&page=2"),
+                ("POST", "/measure/v2/insights/channel", b"apikey=key"),
+                ("GET", f"/measure/v2/insights/request-{index}", b"apikey=key"),
+                ("GET", f"/measure/v2/insights/request-{index}", b"apikey=key&page=1"),
+                ("GET", f"/measure/v2/insights/request-{index}", b"apikey=key&page=2"),
             )
         ]
         posts = [request for request in requests if request.method == "POST"]
