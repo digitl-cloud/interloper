@@ -341,17 +341,27 @@ class TestEntityListing:
             None: {"items": [{"id": "1"}], "bookmark": "b2"},
             "b2": {"items": [{"id": "2"}], "bookmark": None},
         }
-        sent: list[tuple[str, str, dict[str, str]]] = []
+        sent: list[tuple[str, str, str | None, str, list[str]]] = []
 
         def handler(request: httpx2.Request) -> httpx2.Response:
             # the cursor paginator rewrites one request in place, so record each page as it is sent
-            sent.append((request.method, request.url.path, dict(request.url.params)))
-            return httpx2.Response(200, json=pages[request.url.params.get("bookmark")])
+            params = request.url.params
+            sent.append(
+                (
+                    request.method,
+                    request.url.path,
+                    params.get("bookmark"),
+                    params["page_size"],
+                    params.get_list("entity_statuses"),
+                )
+            )
+            return httpx2.Response(200, json=pages[params.get("bookmark")])
 
         assert await _run(_source_with_api(handler), key) == [{"id": "1", "date": DAY}, {"id": "2", "date": DAY}]
         path = f"/v5/ad_accounts/549759962542/{key}"
         page_size = str(constants.PAGE_SIZE)
+        every_status = ["ACTIVE", "PAUSED", "ARCHIVED", "DRAFT", "DELETED_DRAFT"]
         assert sent == [
-            ("GET", path, {"page_size": page_size}),
-            ("GET", path, {"page_size": page_size, "bookmark": "b2"}),
+            ("GET", path, None, page_size, every_status),
+            ("GET", path, "b2", page_size, every_status),
         ]
