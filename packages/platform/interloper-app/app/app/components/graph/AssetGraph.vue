@@ -7,13 +7,15 @@ import type { ComponentRecord } from '~/types/component'
 /**
  * Collection adapter: binds the store-backed collection model + dependency-editing
  * rules to the presentational <GraphCanvas>. Keeps the original props/emits
- * so the graph page is unaffected.
+ * so the Assets graph is unaffected.
  */
 const props = withDefaults(defineProps<{
     sourceIds?: string[]
     readonly?: boolean
     groupBy?: GroupBy
     statusFilter?: StatusFilter
+    /** The assets a search matched, and the sources holding them; null shows every asset. */
+    assetIds?: Set<string> | null
     showNewSourceButton?: boolean
     /** Asset id whose panel is open — the only highlighted node. */
     selectedId?: string | null
@@ -22,6 +24,7 @@ const props = withDefaults(defineProps<{
     readonly: false,
     groupBy: 'type',
     statusFilter: 'all',
+    assetIds: null,
     showNewSourceButton: true,
     selectedId: null,
 })
@@ -64,27 +67,20 @@ function getAssetDefinition(qk: string): AssetDefinition | undefined {
     return catalogStore.getAssetDefinition(qk)
 }
 
-// Filtered model for display (the status filter narrows which sources render).
+// Filtered model for display: the status filter narrows which sources render, a search which assets.
 const displayModel = computed<GraphModel>(() => {
     const m = model.value
-    if (props.statusFilter === 'all') return m
+    const { statusFilter, assetIds } = props
+    if (statusFilter === 'all' && !assetIds) return m
 
-    const keep = new Set(
-        m.sources
-            .filter((s) => {
-                const state = sourceStatus(s.source).state
-                if (props.statusFilter === 'healthy') return state === 'idle'
-                if (props.statusFilter === 'attention') return state === 'attention'
-                if (props.statusFilter === 'paused') return state === 'paused'
-                return true
-            })
-            .map(s => s.source.id),
-    )
+    const statusKept = new Set(m.sources.filter(s => matchesStatusFilter(sourceStatus(s.source).state, statusFilter)).map(s => s.source.id))
+    // Standalone assets (no source) pass the status filter; a search keeps only the matches.
+    const assets = m.assets.filter(a => (a.source === null || statusKept.has(a.source.id)) && (!assetIds || assetIds.has(a.asset.id)))
+    const shownSources = new Set(assets.map(a => a.source?.id))
 
     return {
-        sources: m.sources.filter(s => keep.has(s.source.id)),
-        // Keep standalone assets (no source) regardless of the source filter.
-        assets: m.assets.filter(a => a.source === null || keep.has(a.source.id)),
+        sources: m.sources.filter(s => statusKept.has(s.source.id) && (!assetIds || shownSources.has(s.source.id))),
+        assets,
         dependencies: m.dependencies,
     }
 })

@@ -8,7 +8,6 @@ const EntityBadge = resolveComponent('EntityBadge')
 
 const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
-const views = useComponentViews()
 const { statusBadge } = useDrift()
 
 const destinations = computed(() => componentsStore.byKind('destination'))
@@ -77,12 +76,7 @@ const typeKey = useQueryParam('type', null)
 <template>
     <UDashboardPanel id="destinations">
         <template #header>
-            <AppNavbar title="Components" />
-            <UDashboardToolbar>
-                <template #left>
-                    <PageTabs :items="views" />
-                </template>
-            </UDashboardToolbar>
+            <AppNavbar title="Destinations" />
         </template>
         <template #body>
             <DriftBanner kind="destination" />

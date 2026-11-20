@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Executions is a hub whose views are routes; land on the first one.
+// Runs and Backfills live beneath it; its bare address lands on Runs.
 definePageMeta({ redirect: to => `/${to.params.org}/executions/runs` })
 </script>
 

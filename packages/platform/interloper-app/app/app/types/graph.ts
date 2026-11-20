@@ -4,7 +4,7 @@ import type { ExecutionStatus } from './execution'
 
 /**
  * Canonical node status states shared across every graph surface
- * (collection graph page, job page, run page). Decoration (colour, dot)
+ * (the Assets graph, job page, run page). Decoration (colour, dot)
  * is derived from this single union so all surfaces agree.
  *
  * `idle | attention | paused` are collection-level states; the remainder

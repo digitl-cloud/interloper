@@ -92,10 +92,13 @@ export default defineAppConfig({
       slots: {
         label: 'caption text-muted'
       },
+      // Groups are set apart by space, not a rule: their captions name them, and a
+      // collapsed sidebar, which hides the captions, keeps the gap.
       variants: {
         orientation: {
           vertical: {
-            link: 'py-2'
+            link: 'py-2',
+            separator: 'h-3 bg-transparent'
           }
         }
       },
@@ -279,6 +282,7 @@ export default defineAppConfig({
     overview: 'i-lucide-layout-dashboard',
     timeline: 'i-lucide-chart-gantt',
     graph: 'i-lucide-workflow',
+    table: 'i-lucide-table',
     collection: 'i-lucide-library',
     components: 'i-lucide-boxes',
     executions: 'i-lucide-activity',

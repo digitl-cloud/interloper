@@ -2,7 +2,7 @@ import { MAX_PAGE_SIZE, type Page } from '~/composables/api'
 import type { Run } from '~/types/run'
 
 /**
- * Runs of one wall-clock window, for the Timeline page.
+ * Runs of one wall-clock window, for the Runs page's timeline.
  *
  * Separate from the runs store on purpose: that one pages the runs *table*
  * (50 newest, offset-paged), while a timeline asks a different question — every

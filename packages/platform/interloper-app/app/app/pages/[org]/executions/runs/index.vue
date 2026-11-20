@@ -1,19 +1,21 @@
 <script setup lang="ts">
-const views = useExecutionViews()
+/** The organisation's runs, as a table, or on a wall-clock timeline (`?view=timeline`). */
+const { view, tabs } = usePageView(useRunViews())
 </script>
 
 <template>
     <UDashboardPanel id="runs">
         <template #header>
-            <AppNavbar title="Executions" />
+            <AppNavbar title="Runs" />
             <UDashboardToolbar>
                 <template #left>
-                    <PageTabs :items="views" />
+                    <PageTabs :items="tabs" />
                 </template>
             </UDashboardToolbar>
         </template>
         <template #body>
-            <ExecutionsRunsTable />
+            <ExecutionsRunsTimeline v-if="view === 'timeline'" />
+            <ExecutionsRunsTable v-else />
         </template>
     </UDashboardPanel>
 </template>

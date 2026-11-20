@@ -22,6 +22,13 @@ export function nodeStateExecuting(state: GraphNodeState): boolean {
     return statusMeta(state).executing
 }
 
+/** Whether a source in this state passes the Assets toolbar's status filter. */
+export function matchesStatusFilter(state: GraphNodeState, filter: StatusFilter): boolean {
+    if (filter === 'all') return true
+    if (filter === 'healthy') return state === 'idle'
+    return state === filter
+}
+
 /** Rollup precedence for a container's dot: the loudest child state wins. */
 const ROLLUP: GraphNodeState[] = ['failed', 'running', 'queued', 'canceled', 'success']
 

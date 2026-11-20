@@ -8,7 +8,6 @@ const StatusBadge = resolveComponent('StatusBadge')
 const EntityBadge = resolveComponent('EntityBadge')
 
 const componentsStore = useComponentsStore()
-const views = useComponentViews()
 const { statusBadge } = useDrift()
 const catalogStore = useCatalogStore()
 const toast = useToast()
@@ -96,12 +95,7 @@ function matchesFilters(hook: ComponentRecord): boolean {
 <template>
     <UDashboardPanel id="hooks">
         <template #header>
-            <AppNavbar title="Components" />
-            <UDashboardToolbar>
-                <template #left>
-                    <PageTabs :items="views" />
-                </template>
-            </UDashboardToolbar>
+            <AppNavbar title="Hooks" />
         </template>
         <template #body>
             <DriftBanner kind="hook" />

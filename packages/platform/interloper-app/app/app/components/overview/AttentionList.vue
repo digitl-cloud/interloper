@@ -34,7 +34,7 @@ function openTarget(item: AttentionItem): { label: string, to: RouteLocationRaw 
             return { label: 'Open connection', to: organisationStore.path(kindPath('connection')) }
         case 'drift':
             if (!item.component_kind || item.component_kind === 'asset')
-                return { label: 'Open collection', to: { path: organisationStore.path('/collection'), query: { q: item.target ?? undefined } } }
+                return { label: 'Open assets', to: { path: organisationStore.path('/assets'), query: { view: 'table', q: item.target ?? undefined } } }
             return { label: `Open ${item.component_kind}`, to: { path: organisationStore.path(kindPath(item.component_kind)), query: { type: item.target ?? undefined } } }
         case 'overdue':
             return { label: 'Open job', to: { path: organisationStore.path(kindPath('job')), query: { q: item.target ?? undefined } } }

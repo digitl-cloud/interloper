@@ -17,7 +17,6 @@ const route = useRoute()
 const catalogStore = useCatalogStore()
 const organisationStore = useOrganisationStore()
 const componentsStore = useComponentsStore()
-const views = useComponentViews()
 const appConfig = useAppConfig()
 const { statusBadge } = useDrift()
 
@@ -205,12 +204,7 @@ const typeKey = useQueryParam('type', null)
 <template>
     <UDashboardPanel id="kind">
         <template #header>
-            <AppNavbar title="Components" />
-            <UDashboardToolbar>
-                <template #left>
-                    <PageTabs :items="views" />
-                </template>
-            </UDashboardToolbar>
+            <AppNavbar :title="pageTitle" />
         </template>
         <template #body>
             <DriftBanner :kind="kind" />

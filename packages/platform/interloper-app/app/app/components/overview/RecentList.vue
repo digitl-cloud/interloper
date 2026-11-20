@@ -54,7 +54,7 @@ const columns = withSkeletons<Row>([
     <UCard>
         <template #header>
             <CardHeader title="Just happened">
-                <UButton label="All executions"
+                <UButton label="All runs"
                          :to="organisationStore.path('/executions/runs')"
                          color="neutral"
                          variant="outline"

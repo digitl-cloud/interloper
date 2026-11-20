@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Organization is a hub whose views are routes; land on the first one.
+// The organisation's pages are Members and Settings; its bare address lands on the first.
 definePageMeta({ redirect: to => `/${to.params.org}/organization/members` })
 </script>
 

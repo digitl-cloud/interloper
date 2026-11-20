@@ -420,6 +420,31 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
     return { data, sourceInfoById, typeInfoByKey, assetCount }
 }
 
+/** What {@link useCollectionRows} gives: the rows and what they roll up to. */
+export type CollectionRows = ReturnType<typeof useCollectionRows>
+
+/**
+ * The assets a search matches: by their name or tags, their source's name,
+ * discriminator or type, their connection, or a destination they land in.
+ * Null when the query is blank, so nothing is narrowed.
+ *
+ * @param rows           The collection's rows.
+ * @param sourceInfoById The collection's sources, for their names and discriminators.
+ * @param query          What was typed, matched case-insensitively.
+ * @returns The ids of the matching assets, or null when not searching.
+ */
+export function searchAssets(rows: CollectionRow[], sourceInfoById: CollectionRows['sourceInfoById']['value'], query: string): Set<string> | null {
+    const term = query.trim().toLowerCase()
+    if (!term) return null
+    const matches = new Set<string>()
+    for (const row of rows) {
+        const source = sourceInfoById.get(row.sourceId)
+        const fields = [row.name, row.sourceKey, source?.name, source?.discriminator, row.connectionName, row.destinationName, ...row.tags]
+        if (fields.some(field => field?.toLowerCase().includes(term))) matches.add(row.assetId)
+    }
+    return matches
+}
+
 /**
  * Asks to confirm deleting a source, with what blocks the delete or gets
  * detached by it: the one confirmation every surface that deletes a source
