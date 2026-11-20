@@ -37,9 +37,9 @@ class GoogleAds(il.Source):
         partitioning=il.TimePartitionConfig(column="segments_date"),
         tags=["Report"],
     )
-    def campaigns_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+    async def campaigns_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Campaign performance metrics per day, with campaign settings and budget."""
-        return self.connection.api.report(
+        return await self.connection.api.report(
             self.customer_id,
             context.partition_date,
             resource="campaign",
@@ -52,9 +52,9 @@ class GoogleAds(il.Source):
         partitioning=il.TimePartitionConfig(column="segments_date"),
         tags=["Report"],
     )
-    def ads_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+    async def ads_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad performance metrics per day, segmented by device, click type and keyword."""
-        return self.connection.api.report(
+        return await self.connection.api.report(
             self.customer_id,
             context.partition_date,
             resource="ad_group_ad",

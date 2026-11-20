@@ -94,7 +94,7 @@ incompatible-mutable-override = "ignore"
 # Optional vendor SDKs ship no type information and are only pulled in via
 # extras; their imports are guarded and assigned to `Any`-typed properties.
 # Treat them as `Any` instead of unresolved rather than disabling the rule globally.
-replace-imports-with-any = ["bingads.**", "google.ads.**"]
+replace-imports-with-any = ["bingads.**"]
 
 [[tool.ty.overrides]]
 # Schema and Normalizer intentionally shadow the `id` identity attribute

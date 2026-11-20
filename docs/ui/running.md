@@ -36,7 +36,7 @@ Two rules decide what a loaded image carries. Any role that builds a catalog mus
 import every class the catalog can name, which is why the api and mcp ship sources,
 destinations and hooks they never execute: they *describe* them, and a class that fails to
 import is skipped with a warning rather than an error, so the answer would quietly be wrong.
-The vendor SDKs (`bingads`, `facebook-business`, `google-ads`) are the exception, because the
+The vendor SDKs (`bingads`, `facebook-business`) are the exception, because the
 asset modules guard those imports: only the roles that actually execute assets, `scheduler` and
 `core`, carry them. That single distinction is why the api and mcp images are a fraction of the
 size of the two that run assets.
@@ -51,7 +51,7 @@ FROM ghcr.io/digitl-cloud/interloper-scheduler:<version>-slim
 
 USER root
 RUN pip --python /interloper/.venv/bin/python install --no-cache-dir \
-      "interloper-assets[google]" \
+      "interloper-assets[facebook]" \
       interloper-google-cloud \
       my-own-connectors
 USER app

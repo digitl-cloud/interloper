@@ -79,7 +79,7 @@ class TestSites:
         assert await connection.sites() == []
 
     async def test_runs_without_the_sdk_extras(self, monkeypatch: pytest.MonkeyPatch):
-        for module in ("bingads", "facebook_business", "google.ads"):
+        for module in ("bingads", "facebook_business"):
             monkeypatch.setitem(sys.modules, module, None)
         connection, _ = _connection(200, {"siteEntry": [{"siteUrl": "sc-domain:example.com"}]})
 

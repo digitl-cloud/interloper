@@ -1,138 +1,144 @@
 """Tests for the Google Ads API engine.
 
-The engine runs GAQL through the SDK's ``GoogleAdsService.search_stream``,
-scoped to a customer and, through a manager account, to its
-``login-customer-id`` header, and returns every streamed row in the REST JSON
-shape. These tests drive it against a fake SDK client.
+The engine posts GAQL to a customer's ``googleAds:searchStream``, through a
+manager account by the ``login-customer-id`` header, and returns the rows of
+every batch of the streamed JSON array as Google sends them. Google refuses a
+query with an error status, or, once the stream has started, with an error
+object closing the array; both raise `GoogleApiError` with Google's reason.
+These tests drive it against a fake transport.
 """
 
 from __future__ import annotations
 
 import datetime as dt
-from collections.abc import Iterator
-from types import SimpleNamespace
+import json
+from collections.abc import Callable
 from typing import Any
 
+import httpx2
+import interloper as il
 import pytest
-from google.ads.googleads.errors import GoogleAdsException
-from google.ads.googleads.v23.services.types.google_ads_service import GoogleAdsRow
 
+from interloper_assets.google.errors import GoogleApiError
 from interloper_assets.google_ads.api import GoogleAdsApi
+from interloper_assets.google_ads.constants import BASE_URL
 
 QUERY = "SELECT campaign.id FROM campaign"
 
 
-def _row(campaign_id: int) -> GoogleAdsRow:
-    row = GoogleAdsRow()
-    row.campaign.id = campaign_id
-    return row
+def _api(handler: Callable[[httpx2.Request], httpx2.Response]) -> GoogleAdsApi:
+    return GoogleAdsApi(il.AsyncRESTClient(BASE_URL, transport=httpx2.MockTransport(handler)))
 
 
-class _FakeClient:
-    """The SDK client and its ``GoogleAdsService``: streams ``batches``, raising ``error`` after them."""
+def _stream(*batches: list[dict[str, Any]]) -> Callable[[httpx2.Request], httpx2.Response]:
+    return lambda request: httpx2.Response(200, json=[{"results": rows, "requestId": "r1"} for rows in batches])
 
-    def __init__(self, *batches: list[GoogleAdsRow], error: Exception | None = None):
-        self.batches = batches
-        self.error = error
-        self.service_names: list[str] = []
-        self.calls: list[dict[str, Any]] = []
 
-    def get_service(self, name: str) -> _FakeClient:
-        self.service_names.append(name)
-        return self
+def _refusal(code: int, status: str, message: str) -> dict[str, Any]:
+    failure = {"errors": [{"errorCode": {"queryError": "BAD_FIELD_NAME"}, "message": message}]}
+    return {
+        "error": {
+            "code": code,
+            "message": "Request contains an invalid argument.",
+            "status": status,
+            "details": [failure],
+        }
+    }
 
-    def search_stream(self, **kwargs: Any) -> Iterator[Any]:
-        self.calls.append(kwargs)
-        return self._stream()
 
-    def _stream(self) -> Iterator[Any]:
-        for rows in self.batches:
-            yield SimpleNamespace(results=rows)
-        if self.error is not None:
-            raise self.error
+class TestGet:
+    async def test_reads_the_response(self):
+        sent: list[str] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            sent.append(f"{request.method} {request.url}")
+            return httpx2.Response(200, json={"resourceNames": ["customers/111"]})
+
+        assert await _api(handler).get("/customers:listAccessibleCustomers") == {"resourceNames": ["customers/111"]}
+        assert sent == [f"GET {BASE_URL}/customers:listAccessibleCustomers"]
+
+    async def test_a_refusal_raises_googles_reason(self):
+        api = _api(lambda request: httpx2.Response(401, json=_refusal(401, "UNAUTHENTICATED", "Not an Ads user.")))
+
+        with pytest.raises(GoogleApiError, match=r"\(HTTP 401, UNAUTHENTICATED\): Not an Ads user\.$"):
+            await api.get("/customers:listAccessibleCustomers")
 
 
 class TestSearchStream:
-    def test_streams_the_query_for_the_customer(self):
-        client = _FakeClient([_row(1)])
+    async def test_posts_the_query_to_the_customers_stream(self):
+        requests: list[httpx2.Request] = []
 
-        assert GoogleAdsApi(client).search_stream("123", QUERY) == [{"campaign": {"id": "1"}}]
-        assert client.service_names == ["GoogleAdsService"]
-        assert client.calls == [{"customer_id": "123", "query": QUERY, "metadata": []}]
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            return _stream([{"campaign": {"id": "1"}}])(request)
 
-    def test_a_manager_account_is_sent_as_the_login_customer_id(self):
-        client = _FakeClient([_row(1)])
+        assert await _api(handler).search_stream("123", QUERY) == [{"campaign": {"id": "1"}}]
+        (request,) = requests
+        assert (request.method, str(request.url)) == ("POST", f"{BASE_URL}/customers/123/googleAds:searchStream")
+        assert json.loads(request.content) == {"query": QUERY}
+        assert "login-customer-id" not in request.headers
 
-        GoogleAdsApi(client).search_stream("123", QUERY, login_customer_id="999")
+    async def test_a_manager_account_is_sent_as_the_login_customer_id(self):
+        requests: list[httpx2.Request] = []
 
-        assert client.calls == [{"customer_id": "123", "query": QUERY, "metadata": [("login-customer-id", "999")]}]
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            return _stream()(request)
 
-    def test_reads_every_batch_in_order(self):
-        client = _FakeClient([_row(1), _row(2)], [], [_row(3)])
+        await _api(handler).search_stream("123", QUERY, login_customer_id="999")
 
-        rows = GoogleAdsApi(client).search_stream("123", QUERY)
+        assert requests[0].headers["login-customer-id"] == "999"
+
+    async def test_reads_every_batch_in_order(self):
+        api = _api(_stream([{"campaign": {"id": "1"}}, {"campaign": {"id": "2"}}], [], [{"campaign": {"id": "3"}}]))
+
+        rows = await api.search_stream("123", QUERY)
 
         assert rows == [{"campaign": {"id": "1"}}, {"campaign": {"id": "2"}}, {"campaign": {"id": "3"}}]
 
-    def test_an_empty_stream_has_no_rows(self):
-        assert GoogleAdsApi(_FakeClient()).search_stream("123", QUERY) == []
+    @pytest.mark.parametrize("body", [[], [{"fieldMask": "campaign.id", "requestId": "r1"}]])
+    async def test_a_stream_without_results_has_no_rows(self, body: list[dict[str, Any]]):
+        assert await _api(lambda request: httpx2.Response(200, json=body)).search_stream("123", QUERY) == []
 
-    def test_rows_take_the_rest_json_shape(self):
-        row = GoogleAdsRow()
-        row.ad_group_ad.ad.id = 111
-        row.ad_group_ad.ad.type_ = "RESPONSIVE_SEARCH_AD"
-        row.campaign.network_settings.target_search_network = False
-        row.metrics.cost_micros = 12_500_000
-        row.metrics.ctr = 0.5
+    async def test_a_refused_query_raises_googles_reason(self):
+        api = _api(lambda request: httpx2.Response(400, json=_refusal(400, "INVALID_ARGUMENT", "Unrecognized field.")))
 
-        (record,) = GoogleAdsApi(_FakeClient([row])).search_stream("123", QUERY)
+        with pytest.raises(GoogleApiError, match=r"\(HTTP 400, INVALID_ARGUMENT\): Unrecognized field\.$"):
+            await api.search_stream("123", QUERY)
 
-        assert record == {
-            "adGroupAd": {"ad": {"id": "111", "type": "RESPONSIVE_SEARCH_AD"}},
-            "campaign": {"networkSettings": {"targetSearchNetwork": False}},
-            "metrics": {"costMicros": "12500000", "ctr": 0.5},
-        }
+    async def test_an_error_closing_the_stream_raises_googles_reason(self):
+        body = [{"results": [{"campaign": {"id": "1"}}]}, _refusal(500, "INTERNAL", "Internal error encountered.")]
+        api = _api(lambda request: httpx2.Response(200, json=body))
 
-    def test_a_refusal_mid_stream_raises_the_sdks_exception_unchanged(self):
-        refusal = GoogleAdsException(error=None, call=None, failure=None, request_id="request-1")
-        client = _FakeClient([_row(1)], error=refusal)
-
-        with pytest.raises(GoogleAdsException) as raised:
-            GoogleAdsApi(client).search_stream("123", QUERY)
-
-        assert raised.value is refusal
-
-    def test_a_transport_error_raises_unchanged(self):
-        error = ConnectionError("unreachable")
-
-        with pytest.raises(ConnectionError) as raised:
-            GoogleAdsApi(_FakeClient(error=error)).search_stream("123", QUERY)
-
-        assert raised.value is error
+        with pytest.raises(GoogleApiError, match=r"\(HTTP 500, INTERNAL\): Internal error encountered\.$"):
+            await api.search_stream("123", QUERY)
 
 
 class TestReport:
-    def test_queries_the_resource_over_its_one_day(self):
-        client = _FakeClient([_row(1)])
+    async def test_queries_the_resource_over_its_one_day(self):
+        queries: list[str] = []
 
-        rows = GoogleAdsApi(client).report(
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            queries.append(json.loads(request.content)["query"])
+            return _stream([{"campaign": {"id": "1"}}])(request)
+
+        rows = await _api(handler).report(
             "123", dt.date(2026, 6, 14), resource="campaign", fields=["campaign.id", "metrics.clicks"]
         )
 
         assert rows == [{"campaign": {"id": "1"}}]
-        assert client.calls == [
-            {
-                "customer_id": "123",
-                "query": "SELECT campaign.id, metrics.clicks FROM campaign "
-                "WHERE segments.date BETWEEN '2026-06-14' AND '2026-06-14'",
-                "metadata": [],
-            }
+        assert queries == [
+            "SELECT campaign.id, metrics.clicks FROM campaign WHERE segments.date BETWEEN '2026-06-14' AND '2026-06-14'"
         ]
 
-    def test_conditions_narrow_the_day(self):
-        client = _FakeClient()
+    async def test_conditions_narrow_the_day(self):
+        queries: list[str] = []
 
-        GoogleAdsApi(client).report(
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            queries.append(json.loads(request.content)["query"])
+            return _stream()(request)
+
+        await _api(handler).report(
             "123",
             dt.date(2026, 6, 14),
             resource="campaign",
@@ -140,16 +146,21 @@ class TestReport:
             conditions=["campaign.status != 'REMOVED'", "metrics.impressions > 0"],
         )
 
-        assert client.calls[0]["query"] == (
+        (query,) = queries
+        assert query == (
             "SELECT campaign.id FROM campaign WHERE segments.date BETWEEN '2026-06-14' AND '2026-06-14' "
             "AND campaign.status != 'REMOVED' AND metrics.impressions > 0"
         )
 
-    def test_a_manager_account_is_sent_as_the_login_customer_id(self):
-        client = _FakeClient()
+    async def test_a_manager_account_is_sent_as_the_login_customer_id(self):
+        requests: list[httpx2.Request] = []
 
-        GoogleAdsApi(client).report(
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            return _stream()(request)
+
+        await _api(handler).report(
             "123", dt.date(2026, 6, 14), resource="ad_group_ad", fields=["ad_group_ad.ad.id"], login_customer_id="999"
         )
 
-        assert client.calls[0]["metadata"] == [("login-customer-id", "999")]
+        assert requests[0].headers["login-customer-id"] == "999"

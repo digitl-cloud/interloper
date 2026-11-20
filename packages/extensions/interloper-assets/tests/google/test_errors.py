@@ -2,7 +2,8 @@
 
 Google's APIs refuse with one error object (``code``, ``message``, ``status``),
 whose ``details`` carry the specific reason on the Ads APIs, and its OAuth token
-endpoint with ``error`` and ``error_description``. These tests pin the reason
+endpoint with ``error`` and ``error_description``. A stream that fails after it
+started answers 200 and closes on the error object. These tests pin the reason
 read from each.
 """
 
@@ -81,3 +82,14 @@ class TestFromResponse:
         assert isinstance(error, httpx2.HTTPStatusError)
         assert error.response is response
         assert error.request is response.request
+
+
+class TestFromBody:
+    def test_an_error_closing_a_stream_names_its_own_code(self):
+        refusal = {"code": 500, "message": "Internal error encountered.", "status": "INTERNAL"}
+        response = _refusal(200, [{"results": []}, {"error": refusal}])
+
+        error = GoogleApiError.from_body({"error": refusal}, response)
+
+        assert str(error) == "Google refused the request (HTTP 500, INTERNAL): Internal error encountered."
+        assert error.response is response

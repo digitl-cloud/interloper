@@ -82,7 +82,7 @@ class TestProfiles:
         assert await connection.profiles() == []
 
     async def test_runs_without_the_sdk_extras(self, monkeypatch: pytest.MonkeyPatch):
-        for module in ("bingads", "facebook_business", "google.ads"):
+        for module in ("bingads", "facebook_business"):
             monkeypatch.setitem(sys.modules, module, None)
         connection, _ = _connection(200, {"items": [{"profileId": "111", "accountId": "222"}]})
 
