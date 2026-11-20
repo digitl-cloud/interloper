@@ -31,7 +31,7 @@ export interface ExtensionNavPage {
     exact?: boolean
 }
 
-/** A sidebar and command-palette entry; with `views` it is a hub, its views a submenu. */
+/** A sidebar and command-palette entry, in the Extensions section; its `views` light it in the sidebar and stand in its place in the palette. */
 export interface ExtensionNavDestination extends ExtensionNavPage {
     views?: ExtensionNavPage[]
 }

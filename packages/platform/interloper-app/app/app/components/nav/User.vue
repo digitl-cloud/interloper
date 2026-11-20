@@ -17,29 +17,22 @@ function toggleColorMode() {
 const displayName = computed(() => userStore.user?.name || userStore.user?.email || 'Account')
 
 const items = computed<DropdownMenuItem[][]>(() => {
-    const groups: DropdownMenuItem[][] = [
-        [{
-            label: displayName.value,
-            avatar: { src: userStore.user?.avatar_url ?? undefined, alt: displayName.value },
-            type: 'label',
-        }],
-    ]
-
-    groups.push([{
-        label: 'Profile',
-        icon: appConfig.icons.user,
+    // Your settings follow you across organisations: the menu that is yours opens them.
+    const settings: DropdownMenuItem[] = [{
+        label: 'Settings',
+        icon: appConfig.icons.settings,
         to: '/settings/profile',
-    }])
-
+    }]
     if (userStore.isSuperAdmin) {
-        groups.push([{
+        settings.push({
             label: 'Platform admin',
             icon: appConfig.icons.admin,
             to: '/admin',
-        }])
+        })
     }
 
-    groups.push(
+    const groups: DropdownMenuItem[][] = [
+        settings,
         [{
             label: colorMode.value === 'dark' ? 'Light mode' : 'Dark mode',
             icon: colorMode.value === 'dark' ? appConfig.ui.icons.light : appConfig.ui.icons.dark,
@@ -50,9 +43,9 @@ const items = computed<DropdownMenuItem[][]>(() => {
             icon: appConfig.icons.signOut,
             onSelect: () => userStore.signOut(),
         }],
-    )
+    ]
 
-    if (appVersion) groups.push([{ label: `Interloper v${appVersion}`, type: 'label' }])
+    if (appVersion) groups.push([{ label: `Interloper v${appVersion}`, type: 'label', class: 'text-xs font-normal text-dimmed' }])
 
     return groups
 })

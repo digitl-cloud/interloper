@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
 
+/**
+ * The organisation's menu, at the sidebar's foot: its own pages first, then
+ * the organisations to switch to. It is ringed while one of its pages shows,
+ * as the sidebar's entries are.
+ */
 defineProps<{
     collapsed?: boolean
 }>()
@@ -9,6 +14,7 @@ const route = useRoute()
 const appConfig = useAppConfig()
 const userStore = useUserStore()
 const orgStore = useOrganisationStore()
+const organizationViews = useOrganizationViews()
 
 /** Every organisation lives at its own address, so switching is following a link; another tab keeps its own. */
 const orgItems = computed<DropdownMenuItem[]>(() => {
@@ -33,16 +39,11 @@ const orgItems = computed<DropdownMenuItem[]>(() => {
 })
 
 const items = computed<DropdownMenuItem[][]>(() => [
-    orgItems.value,
-    [{
-        label: 'Manage',
-        icon: appConfig.icons.members,
-        to: orgStore.path('/organization'),
-    }],
+    organizationViews.value.map(view => ({ label: view.label, icon: view.icon, to: view.to })),
+    [{ label: 'Switch organisation', type: 'label' as const }, ...orgItems.value],
 ])
 
-/** The organisation's own pages light the switcher up, as the sidebar does its destinations. */
-const onOrganisationPages = computed(() => route.path.startsWith(orgStore.path('/organization')))
+const onOrganisationPages = computed(() => organizationViews.value.some(view => isNavActive(view, route.path)))
 </script>
 
 <template>
@@ -53,10 +54,10 @@ const onOrganisationPages = computed(() => route.path.startsWith(orgStore.path('
                  :label="collapsed ? undefined : (orgStore.organisation?.name || 'Organisation')"
                  :aria-label="collapsed ? (orgStore.organisation?.name || 'Organisation') : undefined"
                  class="w-full justify-start"
-                 variant="ghost"
+                 variant="soft"
                  color="neutral"
                  :active="onOrganisationPages"
-                 active-variant="soft"
+                 active-variant="subtle"
                  :square="collapsed"
                  truncate>
             <template v-if="!collapsed"

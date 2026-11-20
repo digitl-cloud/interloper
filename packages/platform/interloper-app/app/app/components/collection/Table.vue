@@ -2,55 +2,77 @@
 import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import { getGroupedRowModel } from '@tanstack/vue-table'
 import type { GroupingOptions } from '@tanstack/vue-table'
-import type { CollectionRow, LastRun } from '~/composables/collection'
+import type { CollectionRow, CollectionRows, LastRun } from '~/composables/collection'
 import type { AssetWarning } from '~/composables/warnings'
 
 /**
- * The collection as a tree table: source types, their sources, the sources'
- * assets, and each asset's destinations, with the warnings, jobs, connection
- * and last run of every source and asset.
+ * The collection as a tree table: its assets grouped by source type and source
+ * (or by source alone, or not at all, as `groupBy` says), each asset's
+ * destinations beneath it, with the warnings, jobs, connection and last run of
+ * every group. The page filters the rows; the table shows what it is given.
  */
-
-const organisationStore = useOrganisationStore()
+const props = defineProps<{
+    /** The rows to show, already narrowed by the page's filters. */
+    rows: CollectionRow[]
+    sourceInfoById: CollectionRows['sourceInfoById']['value']
+    typeInfoByKey: CollectionRows['typeInfoByKey']['value']
+    /** Every asset in the collection, for the footer. */
+    assetCount: number
+    groupBy: GroupBy
+}>()
 
 const componentsStore = useComponentsStore()
-const runsStore = useRunsStore()
 const toast = useToast()
 const confirmDeleteSource = useConfirmDeleteSource()
 const appConfig = useAppConfig()
-const { loading, upstreams } = storeToRefs(componentsStore)
-const sources = computed(() => componentsStore.byKind('source'))
-const destinations = computed(() => componentsStore.byKind('destination'))
-const jobs = computed(() => componentsStore.byKind('job'))
-const { runs } = storeToRefs(runsStore)
-const { latestByAssetId } = storeToRefs(useExecutionsStore())
-const { getWarnings, filterByCategory } = useAssetWarnings()
+const { loading } = storeToRefs(componentsStore)
+const { filterByCategory } = useAssetWarnings()
 const { statusBadge } = useDrift()
-const { data, sourceInfoById, typeInfoByKey, assetCount } = useCollectionRows({
-    sources,
-    upstreams,
-    destinations,
-    jobs,
-    runs,
-    latestExecutions: latestByAssetId,
-    getWarnings,
-})
 
-function lastRunOf(row: { depth: number; original: CollectionRow }): LastRun | null {
-    return row.depth === 1
-        ? sourceInfoById.value.get(row.original.sourceId)?.lastRun ?? null
+/** The group a row heads, named after its grouping column. */
+type Tier = 'source_type' | 'source_id' | 'asset_id'
+
+// The tiers each grouping nests, outermost first. Constants, so TanStack sees one array per
+// grouping: a new one on every render would reset the expanded state each time.
+const TIERS: Record<GroupBy, Tier[]> = {
+    type: ['source_type', 'source_id', 'asset_id'],
+    source: ['source_id', 'asset_id'],
+    asset: ['asset_id'],
+}
+const grouping = computed(() => TIERS[props.groupBy])
+
+// The grouping columns exist to group by; a grouping that leaves one out must not show it as a column.
+const columnVisibility = { source_type: false, source_id: false, asset_id: false }
+
+type TableRow = { depth: number; original: CollectionRow; getIsGrouped: () => boolean }
+
+/** The group a row heads, or null for a destination row. */
+function tierOf(row: TableRow): Tier | null {
+    return row.getIsGrouped() ? grouping.value[row.depth] ?? null : null
+}
+
+/** Whether a row heads a source or an asset: the rows that carry their own columns and actions. */
+function headsSourceOrAsset(row: TableRow): boolean {
+    const tier = tierOf(row)
+    return tier === 'source_id' || tier === 'asset_id'
+}
+
+function lastRunOf(row: TableRow): LastRun | null {
+    return tierOf(row) === 'source_id'
+        ? props.sourceInfoById.get(row.original.sourceId)?.lastRun ?? null
         : row.original.lastRun
 }
 
 /** Drift badge meta for a source's rollup status, or null when healthy. */
 function sourceDriftBadge(sourceId: string) {
-    return statusBadge(sourceInfoById.value.get(sourceId)?.drift ?? 'ok')
+    return statusBadge(props.sourceInfoById.get(sourceId)?.drift ?? 'ok')
 }
 
 /** A row's warnings of one category: what its warning tooltip lists. A group's are those of everything inside it. */
-function cellWarnings(row: { depth: number; original: CollectionRow }, category: AssetWarning['category']): AssetWarning[] {
-    if (row.depth === 0) return filterByCategory(typeInfoByKey.value.get(row.original.groupKey)?.warnings ?? [], category)
-    if (row.depth === 1) return filterByCategory(sourceInfoById.value.get(row.original.sourceId)?.warnings ?? [], category)
+function cellWarnings(row: TableRow, category: AssetWarning['category']): AssetWarning[] {
+    const tier = tierOf(row)
+    if (tier === 'source_type') return filterByCategory(props.typeInfoByKey.get(row.original.groupKey)?.warnings ?? [], category)
+    if (tier === 'source_id') return filterByCategory(props.sourceInfoById.get(row.original.sourceId)?.warnings ?? [], category)
     return filterByCategory(row.original.warnings, category)
 }
 
@@ -61,13 +83,13 @@ function countLabel(count: number, noun: string): string {
 
 /** A type group's drifted sources, and the colour of the worst. */
 function typeDrift(groupKey: string) {
-    const drift = typeInfoByKey.value.get(groupKey)?.drift ?? []
+    const drift = props.typeInfoByKey.get(groupKey)?.drift ?? []
     return { drift, color: drift.some(d => d.color === 'error') ? 'text-error' : 'text-warning' }
 }
 
 /** The type tier's state, as the graph's dot shows it. */
 function typeState(groupKey: string): GraphNodeState {
-    return typeInfoByKey.value.get(groupKey)?.state ?? 'pending'
+    return props.typeInfoByKey.get(groupKey)?.state ?? 'pending'
 }
 
 const columns: TableColumn<CollectionRow>[] = [
@@ -84,10 +106,6 @@ const columns: TableColumn<CollectionRow>[] = [
     { id: 'jobs', header: 'Jobs' },
     { id: 'actions', header: '' },
 ]
-
-// Stable reference: an inline literal would be a "new" grouping on every
-// re-render, making TanStack auto-reset the expanded state each time.
-const grouping = ['source_type', 'source_id', 'asset_id']
 
 const groupingOptions = ref<GroupingOptions>({
     groupedColumnMode: 'remove',
@@ -111,7 +129,7 @@ const emit = defineEmits<{
 // ── Row actions ────────────────────────────────────────────────
 
 async function deleteSource(sourceId: string) {
-    const info = sourceInfoById.value.get(sourceId)
+    const info = props.sourceInfoById.get(sourceId)
     const confirmed = await confirmDeleteSource({ id: sourceId, name: info?.name ?? 'this source', icon: info?.icon })
     if (!confirmed) return
     try {
@@ -156,13 +174,12 @@ const ctxMenuVirtual = ref({ getBoundingClientRect: () => new DOMRect() })
 const ctxMenuItems = ref<DropdownMenuItem[][]>([])
 
 function onRowContextMenu(e: Event, row: any) {
-    const isGrouped = row.getIsGrouped?.()
-    const depth = row.depth ?? -1
-    if (!isGrouped) return
+    const tier = tierOf(row)
+    if (!tier) return
 
     let actions: DropdownMenuItem[][] = []
-    if (depth === 1) actions = buildSourceActions(row.original.sourceId)
-    else if (depth === 2) actions = buildAssetActions(row.original.assetId, row.original.sourceId)
+    if (tier === 'source_id') actions = buildSourceActions(row.original.sourceId)
+    else if (tier === 'asset_id') actions = buildAssetActions(row.original.assetId, row.original.sourceId)
     if (actions.length === 0) return
 
     const event = e as MouseEvent
@@ -174,51 +191,38 @@ function onRowContextMenu(e: Event, row: any) {
     ctxMenuOpen.value = true
 }
 
-const globalFilter = useQueryParam('q', '')
-
-const filteredData = computed(() => {
-    const q = globalFilter.value.trim().toLowerCase()
-    if (!q) return data.value
-
-    const matchingAssetIds = new Set<string>()
-    for (const d of data.value) {
-        const sourceInfo = sourceInfoById.value.get(d.sourceId)
-        if (d.name.toLowerCase().includes(q)
-            || (sourceInfo?.name.toLowerCase().includes(q) ?? false)
-            || (sourceInfo?.discriminator?.toLowerCase().includes(q) ?? false)
-            || d.sourceKey.toLowerCase().includes(q)
-            || d.tags.some(t => t.toLowerCase().includes(q))
-            || (d.connectionName?.toLowerCase().includes(q) ?? false)
-            || (d.destinationName?.toLowerCase().includes(q) ?? false)) {
-            matchingAssetIds.add(d.assetId)
-        }
-    }
-
-    return data.value.filter(d => matchingAssetIds.has(d.assetId))
-})
-
-// Expanded state keyed by TanStack grouped-row id (`source_type:<key>` /
-// `source_type:<key>>source_id:<id>`). Always replace the object — TanStack
+// Expanded state keyed by TanStack grouped-row id, its tiers' values joined
+// (`source_type:<key>>source_id:<id>`). Always replace the object: TanStack
 // memoizes the row model on its identity, so in-place mutation goes stale.
 const expanded = ref<Record<string, boolean>>({})
 
 const allExpanded = ref(false)
 
+/** A row's value in a grouping column. */
+function tierValue(row: CollectionRow, tier: Tier): string {
+    if (tier === 'source_type') return row.groupKey
+    return tier === 'source_id' ? row.sourceId : row.assetId
+}
+
+/** Expand every group above the assets, or fold them all; the assets keep their destinations folded. */
 function toggleAllExpanded() {
     allExpanded.value = !allExpanded.value
-
+    const next: Record<string, boolean> = {}
     if (allExpanded.value) {
-        const next: Record<string, boolean> = {}
-        for (const d of filteredData.value) {
-            next[`source_type:${d.groupKey}`] = true
-            next[`source_type:${d.groupKey}>source_id:${d.sourceId}`] = true
+        const above = grouping.value.slice(0, -1)
+        for (const row of props.rows) {
+            for (let depth = 1; depth <= above.length; depth++)
+                next[above.slice(0, depth).map(tier => `${tier}:${tierValue(row, tier)}`).join('>')] = true
         }
-        expanded.value = next
     }
-    else {
-        expanded.value = {}
-    }
+    expanded.value = next
 }
+
+// Another grouping keys its rows differently: start it folded.
+watch(grouping, () => {
+    expanded.value = {}
+    allExpanded.value = false
+})
 
 function createdLabel(at: string | null): string {
     return at ? relativeTime(new Date(at)) : '—'
@@ -226,38 +230,19 @@ function createdLabel(at: string | null): string {
 
 function onRowClick(row: any) {
     if (!row.getIsGrouped()) return
-    if (row.depth < 2) row.toggleExpanded()
+    if (tierOf(row) !== 'asset_id') row.toggleExpanded()
     else emit('view-asset', row.original.assetId, row.original.sourceId)
 }
 </script>
 
 <template>
     <UCard :ui="FILL_CARD_UI">
-        <template #header>
-            <FilterBar>
-                <template #search>
-                    <UInput v-model="globalFilter"
-                            placeholder="Search collection…"
-                            :icon="appConfig.ui.icons.search"
-                            class="w-full max-w-sm sm:w-auto" />
-                </template>
-                <template #actions>
-                    <UButton variant="ghost"
-                             color="neutral"
-                             size="sm"
-                             :icon="allExpanded ? appConfig.icons.collapseAll : appConfig.icons.expandAll"
-                             :label="allExpanded ? 'Collapse all' : 'Expand all'"
-                             @click="toggleAllExpanded" />
-                    <slot name="actions" />
-                </template>
-            </FilterBar>
-        </template>
-
         <UTable v-model:expanded="expanded"
-                :data="filteredData"
+                :data="rows"
                 :columns="columns"
                 :loading="loading"
                 :grouping="grouping"
+                :column-visibility="columnVisibility"
                 :grouping-options="groupingOptions"
                 :expanded-options="expandedOptions"
                 :virtualize="virtualize"
@@ -271,6 +256,21 @@ function onRowClick(row: any) {
                 @select="(_e: Event, row: any) => onRowClick(row)"
                 @contextmenu="onRowContextMenu">
             <!-- Name / group header -->
+            <template #title-header>
+                <div class="flex items-center gap-2">
+                    <UTooltip v-if="groupBy !== 'asset'"
+                              :text="allExpanded ? 'Collapse all' : 'Expand all'">
+                        <UButton :icon="allExpanded ? appConfig.icons.collapseAll : appConfig.icons.expandAll"
+                                 :aria-label="allExpanded ? 'Collapse all' : 'Expand all'"
+                                 color="neutral"
+                                 variant="ghost"
+                                 size="sm"
+                                 @click="toggleAllExpanded" />
+                    </UTooltip>
+                    <span>Name</span>
+                </div>
+            </template>
+
             <template #title-cell="{ row }">
                 <div class="flex items-center gap-2"
                      :class="['', 'pl-6', 'pl-12', 'pl-12'][row.depth]">
@@ -287,7 +287,7 @@ function onRowClick(row: any) {
                              @click.stop="row.toggleExpanded()" />
 
                     <!-- Source type group header (depth 0) -->
-                    <template v-if="row.getIsGrouped() && row.depth === 0">
+                    <template v-if="tierOf(row) === 'source_type'">
                         <UIcon :name="typeInfoByKey.get(row.original.groupKey)?.icon ?? appConfig.icons.source"
                                class="size-5 shrink-0" />
                         <span class="font-semibold">{{ typeInfoByKey.get(row.original.groupKey)?.name ?? row.original.groupKey }}</span>
@@ -314,7 +314,7 @@ function onRowClick(row: any) {
                         </UTooltip>
                     </template>
                     <!-- Source group header (depth 1) -->
-                    <template v-else-if="row.getIsGrouped() && row.depth === 1">
+                    <template v-else-if="tierOf(row) === 'source_id'">
                         <UIcon :name="sourceInfoById.get(row.original.sourceId)?.icon ?? appConfig.icons.source"
                                class="size-5 shrink-0" />
                         <span class="flex min-w-0 items-center gap-2">
@@ -336,10 +336,12 @@ function onRowClick(row: any) {
                                      :label="sourceDriftBadge(row.original.sourceId)!.label" />
                     </template>
                     <!-- Asset group header (depth 2) -->
-                    <template v-else-if="row.getIsGrouped() && row.depth === 2">
+                    <template v-else-if="tierOf(row) === 'asset_id'">
                         <UIcon :name="row.original.icon"
                                class="size-4 shrink-0 text-dimmed" />
                         <span>{{ row.original.name }}</span>
+                        <span v-if="groupBy === 'asset'"
+                              class="truncate text-dimmed">{{ sourceInfoById.get(row.original.sourceId)?.name }}</span>
                         <MaturityBadge :maturity="row.original.maturity" />
                         <StatusBadge v-if="statusBadge(row.original.assetStatus)"
                                      :color="statusBadge(row.original.assetStatus)!.color"
@@ -358,15 +360,15 @@ function onRowClick(row: any) {
 
             <!-- Tags (asset level only) -->
             <template #tags-cell="{ row }">
-                <span v-if="row.getIsGrouped() && row.depth === 2 && row.original.tags.length > 0"
+                <span v-if="tierOf(row) === 'asset_id' && row.original.tags.length > 0"
                       class="block text-center text-muted">{{ row.original.tags.join(', ') }}</span>
             </template>
 
             <!-- Dependencies: warnings at source level, count and warnings at asset level -->
             <template #dependencies-cell="{ row }">
-                <div v-if="row.getIsGrouped() && (row.depth > 0 || cellWarnings(row, 'dependency').length)"
+                <div v-if="headsSourceOrAsset(row) || (tierOf(row) && cellWarnings(row, 'dependency').length)"
                      class="flex items-center justify-center gap-1.5">
-                    <template v-if="row.depth === 2">
+                    <template v-if="tierOf(row) === 'asset_id'">
                         <span v-if="row.original.dependencies.length === 0 && cellWarnings(row, 'dependency').length === 0"
                               class="text-dimmed">&mdash;</span>
                         <span v-else-if="row.original.dependencies.length > 0"
@@ -387,11 +389,11 @@ function onRowClick(row: any) {
 
             <!-- Destinations (source and asset level) -->
             <template #destinations-cell="{ row }">
-                <div v-if="row.getIsGrouped() && (row.depth > 0 || cellWarnings(row, 'destination').length)"
+                <div v-if="headsSourceOrAsset(row) || (tierOf(row) && cellWarnings(row, 'destination').length)"
                      class="flex items-center justify-center gap-1.5">
-                    <span v-if="row.depth > 0 && row.original.destinations.length === 0 && cellWarnings(row, 'destination').length === 0"
+                    <span v-if="headsSourceOrAsset(row) && row.original.destinations.length === 0 && cellWarnings(row, 'destination').length === 0"
                           class="text-dimmed">&mdash;</span>
-                    <EntityBadge v-else-if="row.depth > 0 && row.original.destinations.length > 0"
+                    <EntityBadge v-else-if="headsSourceOrAsset(row) && row.original.destinations.length > 0"
                                  :icon="row.original.destinations[0]!.icon"
                                  :label="row.original.destinations[0]!.name"
                                  :extra="row.original.destinations.length - 1" />
@@ -410,11 +412,11 @@ function onRowClick(row: any) {
 
             <!-- Jobs (source and asset level) -->
             <template #jobs-cell="{ row }">
-                <div v-if="row.getIsGrouped() && (row.depth > 0 || cellWarnings(row, 'job').length)"
+                <div v-if="headsSourceOrAsset(row) || (tierOf(row) && cellWarnings(row, 'job').length)"
                      class="flex items-center justify-center gap-1.5">
-                    <span v-if="row.depth > 0 && row.original.jobs.length === 0 && cellWarnings(row, 'job').length === 0"
+                    <span v-if="headsSourceOrAsset(row) && row.original.jobs.length === 0 && cellWarnings(row, 'job').length === 0"
                           class="text-dimmed">&mdash;</span>
-                    <EntityBadge v-else-if="row.depth > 0 && row.original.jobs.length > 0"
+                    <EntityBadge v-else-if="headsSourceOrAsset(row) && row.original.jobs.length > 0"
                                  :icon="appConfig.icons.job"
                                  :label="row.original.jobs[0]!.name"
                                  :extra="row.original.jobs.length - 1" />
@@ -433,7 +435,7 @@ function onRowClick(row: any) {
 
             <!-- Last run (source and asset level) -->
             <template #lastRun-cell="{ row }">
-                <template v-if="row.getIsGrouped() && row.depth > 0">
+                <template v-if="headsSourceOrAsset(row)">
                     <span v-if="!lastRunOf(row)"
                           class="text-dimmed">&mdash;</span>
                     <div v-else
@@ -448,7 +450,7 @@ function onRowClick(row: any) {
 
             <!-- Connection (all levels) -->
             <template #connection-cell="{ row }">
-                <template v-if="row.getIsGrouped() && row.depth > 0">
+                <template v-if="headsSourceOrAsset(row)">
                     <span v-if="!row.original.connectionName"
                           class="text-dimmed">&mdash;</span>
                     <EntityBadge v-else
@@ -462,7 +464,7 @@ function onRowClick(row: any) {
 
             <!-- Created (all levels) -->
             <template #created-cell="{ row }">
-                <span v-if="row.getIsGrouped() ? row.depth > 0 : true"
+                <span v-if="!row.getIsGrouped() || headsSourceOrAsset(row)"
                       class="text-dimmed tabular-nums">
                     {{ createdLabel(row.getIsGrouped() ? row.original.createdAt : row.original.destinationCreatedAt) }}
                 </span>
@@ -470,9 +472,9 @@ function onRowClick(row: any) {
 
             <!-- Actions (source and asset rows) -->
             <template #actions-cell="{ row }">
-                <div v-if="row.getIsGrouped() && (row.depth === 1 || row.depth === 2)"
+                <div v-if="headsSourceOrAsset(row)"
                      class="flex justify-end">
-                    <UDropdownMenu :items="row.depth === 1
+                    <UDropdownMenu :items="tierOf(row) === 'source_id'
                         ? buildSourceActions(row.original.sourceId)
                         : buildAssetActions(row.original.assetId, row.original.sourceId)">
                         <UButton :icon="appConfig.icons.options"
@@ -496,7 +498,7 @@ function onRowClick(row: any) {
 
         <template #footer>
             <TableFooter>
-                {{ sources.length }} {{ sources.length === 1 ? 'source' : 'sources' }},
+                {{ sourceInfoById.size }} {{ sourceInfoById.size === 1 ? 'source' : 'sources' }},
                 {{ assetCount }} {{ assetCount === 1 ? 'asset' : 'assets' }}
             </TableFooter>
         </template>

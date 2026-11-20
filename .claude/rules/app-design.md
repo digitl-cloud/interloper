@@ -177,13 +177,13 @@ Show the one fact a row, tile or line exists for; the rest waits for hover, a to
 - **Text, not chips.** Tags and counts in a table are text (`text-muted`, `text-dimmed`). Badges are kept for a status and for what is an object or an identifier: an entity reference (`EntityBadge`), a component's discriminator, a count beside a title, and the few marks that must stand out (maturity).
 - **Tooltips, not legends.** A timeline's bar names its status in its tooltip, and a summary card's bar its segments; neither carries a legend.
 - **Lists say when, not what time.** A time in a list is relative, the exact one on hover (`RelativeTime`); a time to the second or millisecond keeps the extra precision for hover.
-- **One navigation.** The sidebar names each hub once; its views are the tabs on its pages.
+- **One navigation.** The sidebar names every page once, in captioned sections (Data, Automation, Activity, and Extensions when any), with two menus at its foot, each owning its pages: the organisation's menu its Members and Settings (then the organisations to switch to), your menu your own settings, which are the same in every organisation. A page's other views are tabs in its toolbar, never sidebar entries, and a sidebar link returns to its page as it was left (its view and filters).
 
 ## 8. Components by job
 
 | Job | Use |
 |---|---|
-| Page frame | `UDashboardPanel`; `#header` is `AppNavbar`: Nuxt UI's default navbar (its height and bottom border, no theme override), the same on every page (sidebar toggle, title, search, agent toggle) and never given actions. Detail pages put a `UBreadcrumb` in its `#title`. `UDashboardToolbar` holds sub-page navigation (`PageTabs`) on its left and a detail page's own actions (cancel, retry, open) on its right; the theme makes it the first row of the page's content (no rule, the content's top spacing). |
+| Page frame | `UDashboardPanel`; `#header` is `AppNavbar`: Nuxt UI's default navbar (its height and bottom border, no theme override), the same on every page (sidebar toggle, title, search, agent toggle) and never given actions. Detail pages put a `UBreadcrumb` in its `#title`. `UDashboardToolbar` holds a page's view switch (`PageTabs`) on its left and a detail page's own actions (cancel, retry, open) on its right; the theme makes it the first row of the page's content (no rule, the content's top spacing). |
 | Where an action goes | With the card it acts on: a list's create action in `DataTable` `#actions`, a canvas's in its toolbar's `#actions` (CollectionTable, GraphToolbar), a card's in its `CardHeader`. A page with no data repeats its create action in its `UEmpty`. |
 | Section header above a card | `UPageCard variant="naked" orientation="horizontal"`: title, description, actions in its default slot |
 | Toolbar above a list or canvas | `FilterBar`: search in `#search`, filters in its default slot, the card's actions in `#actions`, and `active` / `@reset` for the filters' count and reset (`DataTable` forwards them as `active-filters` / `@reset-filters`). Every action has an icon: on a phone it is all that shows. No `ms-auto` or margin hacks between groups. |
@@ -199,6 +199,7 @@ Show the one fact a row, tile or line exists for; the rest waits for hover, a to
 | Discriminator beside a name | `UBadge color="neutral" size="sm"` with `slashed-zero` (`nameColumn` does it for component tables) |
 | Count beside a title | `UBadge color="neutral" size="sm"`, the number alone; in a tree's group row (the collection's types and sources) its noun rides a tooltip ("4 sources") |
 | A run's outcome at a time (a Last run, a Last renewed, an asset's latest materialization) | `LastRunBadge`: a soft badge in the status colour with its icon and the relative time, always a link to the run; the tooltip names the outcome, or a note in its place, and the exact time |
+| Expand or fold a whole tree | An icon button in the header of its first column, its label in a tooltip (`CollectionTable`) |
 | Warnings in a tree | A group row shows what its children hold: the same warning icon in the same column, its tooltip listing each child's warnings under the child's name, so a collapsed group still says something inside needs attention |
 | Time in a list | `RelativeTime` ("2d ago", "in 14h"), the exact time on hover; `dateColumn` and the state columns use it |
 | Sortable column | `withSortableHeaders`: the sorted column shows its arrow, the others on hover or focus |
@@ -217,7 +218,7 @@ Show the one fact a row, tile or line exists for; the rest waits for hover, a to
 | Destructive action | `color="error"`: solid in the confirm dialog, `variant="soft"` elsewhere |
 | Inline text action | `variant="link"` |
 | Button size | the theme default for toolbar, table-toolbar and overlay actions; `size="sm"` for actions beside a card title (`CardHeader`) and in rows |
-| Sub-pages of a hub | `PageTabs`: `UNavigationMenu variant="pill"` in the toolbar, labels without icons, themed in app.config to the same segmented look as the pill `UTabs` (real links, so pages open in new tabs and prefetch). The sidebar links the hub once, with no expandable sub-items. |
+| A page's views | Views of the same records that share their filters (Assets: Graph, Table) switch with a `FilterBarField label="View"` right after the search, its tabs carrying the views' icons, so every filter beside it reads as applying to both; on a phone it joins the other fields in the filter sheet, and the selection stays across the views. A side pane closes from its own header, never from the toolbar. Otherwise `PageTabs` over `usePageView`: `UNavigationMenu variant="pill"` in the toolbar, labels without icons, themed in app.config to the same segmented look as the pill `UTabs` (real links, so views open in new tabs). Either way the view rides `?view=`, absent for the default, and the views are declared once in `composables/navigation.ts`, which also lists them in the command palette. |
 | Views inside a card | `UTabs variant="pill" size="xs" :content="false"` |
 | Form | `UForm` + `UFormField` (`label`, `description`, `required`, `error`) for every field; no hand-built labels or error text. Vertical in modals and drawers, horizontal in settings. Inputs are `w-full` in vertical forms. |
 | Confirm | `useConfirm()` (ConfirmModal) |

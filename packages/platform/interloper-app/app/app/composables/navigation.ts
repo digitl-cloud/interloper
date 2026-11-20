@@ -10,7 +10,7 @@ export interface NavPage {
     exact?: boolean
 }
 
-/** A view in a page's tab group: a route, or a `?tab=` query with its own `active` flag. */
+/** A view in a page's tab group: a route, or a `?view=` query with its own `active` flag. */
 export interface PageTab {
     label: string
     to: RouteLocationRaw
@@ -19,9 +19,28 @@ export interface PageTab {
     badge?: string | number
 }
 
-/** A sidebar destination; a hub also carries its routed views, shown in its page toolbar and as its sidebar submenu. */
+/**
+ * A sidebar destination. Its `views` are the other addresses it answers for:
+ * they light it in the sidebar and stand in its place in the command palette
+ * (an extension's sub-pages, a page's views).
+ */
 export interface NavDestination extends NavPage {
     views?: NavPage[]
+}
+
+/** A captioned group of sidebar destinations; the first, without a caption, holds the landing page. */
+export interface NavSection {
+    label?: string
+    destinations: NavDestination[]
+}
+
+/** One way a page shows its records, chosen by `?view=`; a page's first view is its default. */
+export interface PageView {
+    value: string
+    label: string
+    icon: string
+    /** Aliases the command palette matches this view on. */
+    keywords?: string[]
 }
 
 /** The icon of a resource kind, from the app's concept icons; an unknown kind is a generic asset box. */
@@ -45,23 +64,59 @@ export function kindFromSlug(slug: string): string {
     return slug.slice(0, -1)
 }
 
-/** List view of a kind inside the Components hub, within the organisation ("connection" → "/components/connections"). */
+/** List page of a kind, within the organisation ("connection" → "/components/connections"). */
 export function kindPath(kind: string): string {
     return `/components/${kindSlug(kind)}`
 }
 
-/** Views of the Executions hub, in toolbar order. */
-export function useExecutionViews() {
+/** The Assets page's views: its dependency graph, and its table. */
+export function useAssetViews(): PageView[] {
     const { icons } = useAppConfig()
-    const organisationStore = useOrganisationStore()
-
-    return computed<NavPage[]>(() => [
-        { label: 'Runs', icon: icons.run, to: organisationStore.path('/executions/runs'), keywords: ['executions', 'history'] },
-        { label: 'Backfills', icon: icons.backfill, to: organisationStore.path('/executions/backfills'), keywords: ['executions'] },
-    ])
+    return [
+        { value: 'graph', label: 'Graph', icon: icons.graph },
+        { value: 'table', label: 'Table', icon: icons.table, keywords: ['collection', 'catalog', 'library'] },
+    ]
 }
 
-/** Views of the Organisation hub; its settings only for the organisation's admins. */
+/** The Runs page's views: its table, and its runs on a wall-clock timeline. */
+export function useRunViews(): PageView[] {
+    const { icons } = useAppConfig()
+    return [
+        { value: 'table', label: 'Table', icon: icons.table },
+        { value: 'timeline', label: 'Timeline', icon: icons.timeline, keywords: ['gantt', 'schedule'] },
+    ]
+}
+
+/**
+ * The view a page shows, from `?view=` (its first view when absent), and its
+ * views as the tabs of its toolbar.
+ *
+ * @param views The page's views, its default first.
+ * @returns The view shown, and the tabs that switch it.
+ */
+export function usePageView(views: PageView[]) {
+    const values = views.map(view => view.value)
+    const fallback = values[0]!
+    const view = useQueryParam('view', fallback, oneOfQuery(values))
+    const tabs = computed<PageTab[]>(() => views.map(option => ({
+        label: option.label,
+        to: { query: { view: option.value === fallback ? undefined : option.value } },
+        active: view.value === option.value,
+    })))
+    return { view, tabs }
+}
+
+/** A page with views as a destination: its default view is the page itself, each other one opens as "<Page> <view>". */
+function withViews(page: NavPage, views: PageView[]): NavDestination {
+    return {
+        ...page,
+        views: views.map((view, index) => index === 0
+            ? page
+            : { label: `${page.label} ${view.label.toLowerCase()}`, icon: view.icon, to: `${page.to}?view=${view.value}`, keywords: view.keywords }),
+    }
+}
+
+/** The organisation's own pages, in its menu at the sidebar's foot; its settings only for its admins. */
 export function useOrganizationViews() {
     const { icons } = useAppConfig()
     const organisationStore = useOrganisationStore()
@@ -74,46 +129,53 @@ export function useOrganizationViews() {
     ])
 }
 
-/** Views of the Components hub, one per kind, in lifecycle order. */
-export function useComponentViews() {
+/**
+ * Single source of truth for the app's main pages: the sidebar renders the
+ * sections and the command palette lists their destinations, so neither can
+ * drift from the other. The extensions' destinations get a section of their own.
+ */
+export function useNavSections() {
     const { icons } = useAppConfig()
     const catalogStore = useCatalogStore()
     const organisationStore = useOrganisationStore()
-
-    return computed<NavPage[]>(() => [
-        { label: 'Sources', icon: icons.source, to: organisationStore.path(kindPath('source')), keywords: ['components', 'connectors', 'integrations'] },
-        { label: 'Destinations', icon: icons.destination, to: organisationStore.path(kindPath('destination')), keywords: ['warehouse', 'export'] },
-        ...catalogStore.resourceKinds.map(kind => ({
-            label: kindLabel(kind),
-            icon: resourceKindIcon(kind),
-            to: organisationStore.path(kindPath(kind)),
-        })),
-        { label: 'Jobs', icon: icons.job, to: organisationStore.path(kindPath('job')), keywords: ['cron', 'schedule'] },
-        { label: 'Hooks', icon: icons.hook, to: organisationStore.path(kindPath('hook')), keywords: ['triggers', 'automation'] },
-    ])
-}
-
-/**
- * Single source of truth for the app's main pages: the sidebar renders the
- * destinations with each hub's views as a submenu, each hub page renders those
- * views in its toolbar, and the command palette flattens both — so none of
- * them can drift apart. The extensions' destinations follow the app's own.
- */
-export function useNavDestinations() {
-    const { icons } = useAppConfig()
-    const organisationStore = useOrganisationStore()
-    const componentViews = useComponentViews()
-    const executionViews = useExecutionViews()
     const extensionDestinations = useExtensionDestinations()
+    const assetViews = useAssetViews()
+    const runViews = useRunViews()
 
-    return computed<NavDestination[]>(() => [
-        { label: 'Overview', icon: icons.overview, to: organisationStore.path('/'), exact: true, keywords: ['home', 'dashboard', 'health'] },
-        { label: 'Timeline', icon: icons.timeline, to: organisationStore.path('/timeline'), keywords: ['gantt', 'schedule', 'runs', 'history'] },
-        { label: 'Graph', icon: icons.graph, to: organisationStore.path('/graph'), keywords: ['dag', 'pipeline', 'lineage'] },
-        { label: 'Collection', icon: icons.collection, to: organisationStore.path('/collection'), keywords: ['catalog', 'library'] },
-        { label: 'Components', icon: icons.components, to: organisationStore.path(kindPath('source')), views: componentViews.value },
-        { label: 'Executions', icon: icons.executions, to: organisationStore.path('/executions/runs'), views: executionViews.value },
-        ...extensionDestinations.value,
+    return computed<NavSection[]>(() => [
+        {
+            destinations: [
+                { label: 'Overview', icon: icons.overview, to: organisationStore.path('/'), exact: true, keywords: ['home', 'dashboard', 'health'] },
+            ],
+        },
+        {
+            label: 'Data',
+            destinations: [
+                withViews({ label: 'Assets', icon: icons.asset, to: organisationStore.path('/assets'), keywords: ['graph', 'dag', 'pipeline', 'lineage'] }, assetViews),
+                { label: 'Sources', icon: icons.source, to: organisationStore.path(kindPath('source')), keywords: ['components', 'connectors', 'integrations'] },
+                { label: 'Destinations', icon: icons.destination, to: organisationStore.path(kindPath('destination')), keywords: ['warehouse', 'export'] },
+                ...catalogStore.resourceKinds.map(kind => ({
+                    label: kindLabel(kind),
+                    icon: resourceKindIcon(kind),
+                    to: organisationStore.path(kindPath(kind)),
+                })),
+            ],
+        },
+        {
+            label: 'Automation',
+            destinations: [
+                { label: 'Jobs', icon: icons.job, to: organisationStore.path(kindPath('job')), keywords: ['cron', 'schedule'] },
+                { label: 'Hooks', icon: icons.hook, to: organisationStore.path(kindPath('hook')), keywords: ['triggers', 'automation'] },
+            ],
+        },
+        {
+            label: 'Activity',
+            destinations: [
+                withViews({ label: 'Runs', icon: icons.run, to: organisationStore.path('/executions/runs'), keywords: ['executions', 'history'] }, runViews),
+                { label: 'Backfills', icon: icons.backfill, to: organisationStore.path('/executions/backfills'), keywords: ['executions'] },
+            ],
+        },
+        ...(extensionDestinations.value.length ? [{ label: 'Extensions', destinations: extensionDestinations.value }] : []),
     ])
 }
 

@@ -10,7 +10,6 @@ const UTooltip = resolveComponent('UTooltip')
 const EntityBadge = resolveComponent('EntityBadge')
 
 const componentsStore = useComponentsStore()
-const views = useComponentViews()
 const { statusBadge } = useDrift()
 const catalogStore = useCatalogStore()
 const toast = useToast()
@@ -176,12 +175,7 @@ const enabled = useQueryParam<boolean | null>('enabled', null, booleanQuery)
 <template>
     <UDashboardPanel id="jobs">
         <template #header>
-            <AppNavbar title="Components" />
-            <UDashboardToolbar>
-                <template #left>
-                    <PageTabs :items="views" />
-                </template>
-            </UDashboardToolbar>
+            <AppNavbar title="Jobs" />
         </template>
         <template #body>
             <DriftBanner kind="job" />

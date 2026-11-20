@@ -13,7 +13,6 @@ definePageMeta({
 const route = useRoute()
 const organisationStore = useOrganisationStore()
 const userStore = useUserStore()
-const views = useOrganizationViews()
 
 /** Follow a new key to the organisation's new address, then refresh the memberships it is listed under. */
 async function onSaved(updated: Organisation) {
@@ -27,12 +26,7 @@ async function onSaved(updated: Organisation) {
 <template>
     <UDashboardPanel id="organization-settings">
         <template #header>
-            <AppNavbar title="Organisation" />
-            <UDashboardToolbar>
-                <template #left>
-                    <PageTabs :items="views" />
-                </template>
-            </UDashboardToolbar>
+            <AppNavbar title="Organisation settings" />
         </template>
         <template #body>
             <OrganizationGeneralSettings :organisation="organisationStore.requireOrganisation()"

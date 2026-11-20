@@ -7,33 +7,38 @@ per connector; each page is rendered from component definitions, as
 [Generated from definitions](definitions.md) explains. This page walks through the app with the
 demo sources that ship with the framework.
 
-## Timeline
+The sidebar opens on the Overview, then groups the pages in three sections: **Data** (Assets,
+Sources, Destinations, Connections), **Automation** (Jobs, Hooks) and **Activity** (Runs,
+Backfills). Its foot holds two menus: the organisation's, with its Members and Settings and the
+organisations to switch to, and yours, with your own settings, the same in every organisation. An
+installed extension's pages get a section of their own.
 
-![Timeline](../assets/ui/timeline-light.png#only-light)
-![Timeline](../assets/ui/timeline-dark.png#only-dark)
+## Assets
 
-The landing page: one row per job and per source, one bar per run over a selectable window, green
-for success and red for failure. Hovering a bar shows the run; clicking opens it.
+Every asset in the organisation, in two views the toolbar switches between: the page opens on the
+graph, and the table is one click away. The rest of the toolbar applies to both: a search over
+names, tags, sources, connections and destinations, the sources' status, and the grouping by
+source type, by source or by asset. Selecting an asset opens a panel with its schema,
+partitioning, destinations and last runs, and the panel stays open across the two views.
 
-## Graph
+### Graph
 
-![Graph](../assets/ui/graph-light.png#only-light)
-![Graph](../assets/ui/graph-dark.png#only-dark)
+![Assets graph](../assets/ui/graph-light.png#only-light)
+![Assets graph](../assets/ui/graph-dark.png#only-dark)
 
 The lineage of every asset in the organisation, built from the dependency relations the
 framework infers (`a` feeds `b`, `c`, `d`, which feed `e`). Nodes carry the asset's tags and its
-health; the toolbar groups by asset, by source instance or by source type, and filters by status.
-Selecting a node opens a panel with the asset's schema, partitioning, destinations and last runs.
+health.
 
-## Collection
+### Table
 
-![Collection](../assets/ui/collection-light.png#only-light)
-![Collection](../assets/ui/collection-dark.png#only-dark)
+![Assets table](../assets/ui/collection-light.png#only-light)
+![Assets table](../assets/ui/collection-dark.png#only-dark)
 
-Every source instance and its assets, grouped by source type. Columns show the last run, the
-connection, the number of upstream dependencies, the destinations and the jobs that target each
-asset. The catalog of installed but not yet configured types is reachable from the "New source"
-button.
+Every asset as a row, under its source and source type, under its source alone, or on its own,
+as the grouping says. Columns show the last run, the connection, the number of upstream
+dependencies, the destinations and the jobs that target each asset. A new source is created from
+the Sources page.
 
 ## Sources
 
@@ -72,6 +77,14 @@ configuration fields: the framework's own (`materialization_strategy`, `dataset`
 class's (`hello`, `random_failure_probability` on the demo source), with the labels,
 descriptions and tooltips their field helpers declare.
 
+## Destinations
+
+![Destinations](../assets/ui/destinations-light.png#only-light)
+![Destinations](../assets/ui/destinations-dark.png#only-dark)
+
+Where data lands. A destination's form comes from its configuration fields, and its connection
+relation, when it declares one, is a picker over the matching connections.
+
 ## Connections
 
 ![Connections](../assets/ui/connections-light.png#only-light)
@@ -88,14 +101,6 @@ kind gets its own entry.
 A connection declaring `OAuthConfig` gets a sign-in tab when the provider's app credentials are
 configured on the server, and a manual tab showing every field. The `auto_renew` toggle appears
 because the class is renewable; a "Test connection" action appears when it implements `check()`.
-
-## Destinations
-
-![Destinations](../assets/ui/destinations-light.png#only-light)
-![Destinations](../assets/ui/destinations-dark.png#only-dark)
-
-Where data lands. A destination's form comes from its configuration fields, and its connection
-relation, when it declares one, is a picker over the matching connections.
 
 ## Jobs
 
@@ -117,21 +122,23 @@ Reactions to run and backfill outcomes: a webhook posting failures to an operati
 hook starting the monthly rollup when the daily job completes. The watched components and, for
 trigger hooks, the targets are relation pickers derived from the hook class's vocabulary.
 
-## Executions
+## Runs
 
-![Executions](../assets/ui/executions-light.png#only-light)
-![Executions](../assets/ui/executions-dark.png#only-dark)
+### Table
+
+![Runs table](../assets/ui/executions-light.png#only-light)
+![Runs table](../assets/ui/executions-dark.png#only-dark)
 
 Every run with its target, partition key, status and timings. Runs come from schedules, manual
 triggers, hooks and backfills.
 
-![Backfills](../assets/ui/backfills-light.png#only-light)
-![Backfills](../assets/ui/backfills-dark.png#only-dark)
+### Timeline
 
-A backfill is one run per partition over a range, dispatched newest first with a concurrency
-cap; the range is shown in the target's partition-key shape, and the Partitions column draws
-each partition's latest attempt by status, the same bar the runs table draws for a run's assets.
-Both tables filter by status, and a status still executing spins.
+![Runs timeline](../assets/ui/timeline-light.png#only-light)
+![Runs timeline](../assets/ui/timeline-dark.png#only-dark)
+
+One row per job and per source, one bar per run over a selectable window, green for success and
+red for failure. Hovering a bar shows the run; clicking opens it.
 
 ### Run detail
 
@@ -141,6 +148,16 @@ Both tables filter by status, and a status still executing spins.
 One run: the per-asset execution timeline (or the run's graph), and the full event stream the
 framework emitted, filterable to lifecycle events, errors or the log lines assets wrote through
 `context.logger`. A stack's latest attempt, when it failed, offers "Retry failed" and "Retry all".
+
+## Backfills
+
+![Backfills](../assets/ui/backfills-light.png#only-light)
+![Backfills](../assets/ui/backfills-dark.png#only-dark)
+
+A backfill is one run per partition over a range, dispatched newest first with a concurrency
+cap; the range is shown in the target's partition-key shape, and the Partitions column draws
+each partition's latest attempt by status, the same bar the runs table draws for a run's assets.
+Both the runs and backfills tables filter by status, and a status still executing spins.
 
 ## Search and switching
 

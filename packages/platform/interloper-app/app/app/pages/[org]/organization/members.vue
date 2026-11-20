@@ -4,7 +4,6 @@ import type { OrgMember } from '~/types/organisation'
 const organisationStore = useOrganisationStore()
 const toast = useToast()
 const appConfig = useAppConfig()
-const views = useOrganizationViews()
 
 const rows = ref<OrgMember[]>([])
 const loading = ref(false)
@@ -66,12 +65,7 @@ onMounted(loadData)
 <template>
     <UDashboardPanel id="organization-members">
         <template #header>
-            <AppNavbar title="Organisation" />
-            <UDashboardToolbar>
-                <template #left>
-                    <PageTabs :items="views" />
-                </template>
-            </UDashboardToolbar>
+            <AppNavbar title="Members" />
         </template>
         <template #body>
             <LoadError v-if="loadError"

@@ -8,7 +8,6 @@ const EntityBadge = resolveComponent('EntityBadge')
 
 const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
-const views = useComponentViews()
 const { statusBadge, sourceDrift } = useDrift()
 
 const sources = computed(() => componentsStore.byKind('source'))
@@ -127,12 +126,7 @@ const typeKey = useQueryParam('type', null)
 <template>
     <UDashboardPanel id="sources">
         <template #header>
-            <AppNavbar title="Components" />
-            <UDashboardToolbar>
-                <template #left>
-                    <PageTabs :items="views" />
-                </template>
-            </UDashboardToolbar>
+            <AppNavbar title="Sources" />
         </template>
         <template #body>
             <DriftBanner />

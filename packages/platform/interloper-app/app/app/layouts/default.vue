@@ -12,15 +12,19 @@ const {
 } = useCommandPalette()
 provide(AGENT_PANEL_HOST, true)
 
-const destinations = useNavDestinations()
+const sections = useNavSections()
+const withLastQuery = useLastQuery()
 
-/** The sidebar names each hub once; its views are the tabs on its pages. */
-const navItems = computed<NavigationMenuItem[]>(() => destinations.value.map(page => ({
-    label: page.label,
-    icon: page.icon,
-    to: page.to,
-    active: isNavActive(page, route.path),
-})))
+/** A sidebar link returns to its page as it was left: its view and its filters. */
+function navItem(destination: NavDestination): NavigationMenuItem {
+    return { label: destination.label, icon: destination.icon, to: withLastQuery(destination.to), active: isNavActive(destination, route.path) }
+}
+
+/** One list per section under its caption; a collapsed sidebar drops the captions and keeps the lists' gaps. */
+const navItems = computed<NavigationMenuItem[][]>(() => sections.value.map(section => [
+    ...(section.label ? [{ label: section.label, type: 'label' as const }] : []),
+    ...section.destinations.map(navItem),
+]))
 </script>
 
 <template>

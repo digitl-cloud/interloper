@@ -14,7 +14,7 @@ export function useCommandPalette() {
     const appConfig = useAppConfig()
     const { icons } = appConfig
     const { open: agentOpen } = useAgentPanel()
-    const destinations = useNavDestinations()
+    const sections = useNavSections()
     const organizationViews = useOrganizationViews()
     const assetNames = useAssetDisplayName()
     const assetIcons = useAssetIcon()
@@ -92,7 +92,7 @@ export function useCommandPalette() {
         const searching = Boolean(searchTerm.value.trim())
 
         return [
-            { id: 'pages', label: 'Pages', items: destinations.value.flatMap(page => (page.views ?? [page]).map(toItem)) },
+            { id: 'pages', label: 'Pages', items: sections.value.flatMap(section => section.destinations).flatMap(page => (page.views ?? [page]).map(toItem)) },
             // Entity groups only join in once the user types — the empty palette
             // stays a compact quick-nav instead of a dump of the whole collection.
             ...(searching ? entityGroups(close) : []),
@@ -144,7 +144,7 @@ export function useCommandPalette() {
                         label: names?.assetName ?? asset.name ?? asset.key,
                         suffix: names?.sourceName,
                         icon: assetIcons.value.get(asset.id) ?? icons.asset,
-                        to: `${orgStore.path('/graph')}?select=${asset.id}`,
+                        to: `${orgStore.path('/assets')}?asset=${asset.id}`,
                         onSelect: close,
                     }
                 })),

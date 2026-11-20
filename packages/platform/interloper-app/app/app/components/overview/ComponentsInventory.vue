@@ -12,7 +12,7 @@ const props = defineProps<{ rows: KindInventory[] | null }>()
 
 const KIND_META: Record<string, { label: string, icon: string, to: string }> = {
     source: { label: 'Sources', icon: icons.source, to: kindPath('source') },
-    asset: { label: 'Assets', icon: icons.asset, to: '/collection' },
+    asset: { label: 'Assets', icon: icons.asset, to: '/assets' },
     destination: { label: 'Destinations', icon: icons.destination, to: kindPath('destination') },
     connection: { label: 'Connections', icon: icons.connection, to: kindPath('connection') },
     job: { label: 'Jobs', icon: icons.job, to: kindPath('job') },
@@ -91,8 +91,8 @@ const columns = withSkeletons<(typeof table.value)[number]>([
             <CardHeader title="Components"
                         :description="summary"
                         :loading="!rows && !error">
-                <UButton label="Open collection"
-                         :to="organisationStore.path('/collection')"
+                <UButton label="Open assets"
+                         :to="organisationStore.path('/assets')"
                          color="neutral"
                          variant="outline"
                          size="sm" />

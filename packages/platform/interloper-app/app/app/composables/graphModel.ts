@@ -7,7 +7,7 @@ import { jobTargetIds } from '~/types/component'
 
 /**
  * Graph model builders — one per surface. Each returns the same normalised
- * {@link GraphModel} so a single <GraphCanvas> can render the collection page,
+ * {@link GraphModel} so a single <GraphCanvas> can render the Assets graph,
  * a job's subgraph, or a run's live subgraph.
  *
  * Only {@link useCollectionGraph} is mounted today; {@link useJobGraph} and

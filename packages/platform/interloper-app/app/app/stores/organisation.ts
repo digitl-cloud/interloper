@@ -85,7 +85,7 @@ export const useOrganisationStore = defineStore('organisation', () => {
         return last ? `/${last.key}` : '/welcome'
     }
 
-    /** A path inside the active organisation: `path('/graph')` is `/<key>/graph`, `path('/')` its landing page. */
+    /** A path inside the active organisation: `path('/assets')` is `/<key>/assets`, `path('/')` its landing page. */
     function path(subpath: string): string {
         const base = `/${requireOrganisation().key}`
         return subpath === '/' ? base : `${base}${subpath}`

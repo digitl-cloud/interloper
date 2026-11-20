@@ -1,17 +1,22 @@
 <script setup lang="ts">
 /**
- * Graph canvas toolbar: the status filter tabs, then the group-by tabs, with
- * the page's `actions` slot at the far end.
+ * The Assets page's toolbar, the same for both its views: a search, which view
+ * shows, the sources' status and the grouping. The search, status and grouping
+ * narrow the graph and the table alike.
  */
-const groupBy = defineModel<GroupBy>('groupBy', { default: 'type' })
-const statusFilter = defineModel<StatusFilter>('statusFilter', { default: 'all' })
+const view = defineModel<string>('view', { required: true })
+const query = defineModel<string>('query', { required: true })
+const groupBy = defineModel<GroupBy>('groupBy', { required: true })
+const statusFilter = defineModel<StatusFilter>('statusFilter', { required: true })
 
 const props = defineProps<{
-    /** Per-state source counts for the filter tabs. */
+    /** Per-state source counts for the status tabs. */
     counts: Record<StatusFilter, number>
 }>()
 
 const appConfig = useAppConfig()
+
+const viewItems = useAssetViews().map(option => ({ label: option.label, value: option.value, icon: option.icon }))
 
 const groupOptions = computed(() => [
     { value: 'type', label: 'Type', icon: appConfig.icons.type },
@@ -40,6 +45,16 @@ function dotOf(item: unknown): GraphNodeState | undefined {
     <FilterBar class="shrink-0"
                :active="statusFilter === 'all' ? 0 : 1"
                @reset="statusFilter = 'all'">
+        <template #search>
+            <UInput v-model="query"
+                    placeholder="Search assets…"
+                    :icon="appConfig.ui.icons.search"
+                    class="w-full sm:w-44" />
+        </template>
+        <FilterBarField label="View">
+            <UTabs v-model="view"
+                   :items="viewItems" />
+        </FilterBarField>
         <FilterBarField label="Status">
             <UTabs v-model="statusFilter"
                    :items="filterItems">
@@ -54,9 +69,5 @@ function dotOf(item: unknown): GraphNodeState | undefined {
             <UTabs v-model="groupBy"
                    :items="groupOptions" />
         </FilterBarField>
-        <template v-if="$slots.actions"
-                  #actions>
-            <slot name="actions" />
-        </template>
     </FilterBar>
 </template>

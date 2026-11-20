@@ -9,7 +9,8 @@ import type { Execution } from '~/types/execution'
 /**
  * The open asset's side panel: its identity and warnings, then folding
  * sections for its latest materializations, destinations, partitions,
- * upstream dependencies and schema.
+ * upstream dependencies and schema. The `actions` slot (the page's way to
+ * close the panel) sits at the end of the identity header.
  */
 const props = defineProps<{
     asset: ComponentRecord
@@ -226,6 +227,10 @@ const dependencyRows = computed(() => {
                         </span>
                     </span>
                 </span>
+            </template>
+            <template v-if="$slots.actions"
+                      #actions>
+                <slot name="actions" />
             </template>
 
             <p v-if="assetDefn?.description"
