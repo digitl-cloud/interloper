@@ -33,9 +33,7 @@ def _api(*responses: tuple[int, dict[str, Any]]) -> tuple[SearchConsoleApi, list
         status, body = remaining.pop(0)
         return httpx2.Response(status, json=body)
 
-    client = il.AsyncRESTClient(
-        constants.BASE_URL, transport=httpx2.MockTransport(handler), retry=il.RetryPolicy(max_attempts=1)
-    )
+    client = il.AsyncRESTClient(constants.BASE_URL, transport=httpx2.MockTransport(handler))
     return SearchConsoleApi(client), requests
 
 

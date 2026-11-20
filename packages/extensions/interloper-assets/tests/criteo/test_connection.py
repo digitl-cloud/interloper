@@ -80,3 +80,10 @@ class TestCheck:
         result = await _connection(_refused).verify(timeout=5)
 
         assert (result.ok, result.live) == (False, True)
+
+
+class TestRetry:
+    def test_the_client_repeats_requests_under_http_s_default_policy(self):
+        assert (
+            CriteoConnection(client_id="cid", client_secret="x", refresh_token="x").client.retry == il.HttpRetryPolicy()
+        )

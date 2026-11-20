@@ -61,8 +61,10 @@ def _graph(monkeypatch: Any, handler: Any) -> None:
     """
 
     class GraphClient(il.AsyncRESTClient):
-        def __init__(self, base_url: str, **kwargs: Any) -> None:
-            super().__init__(base_url, transport=httpx2.MockTransport(handler), **kwargs)
+        def __init__(self, base_url: str, *, retry: il.HttpRetryPolicy | None = None, **kwargs: Any) -> None:
+            # the connection's own policy, without its waits
+            retry = retry.model_copy(update={"delay": 0, "jitter": 0}) if retry else None
+            super().__init__(base_url, transport=httpx2.MockTransport(handler), retry=retry, **kwargs)
 
     monkeypatch.setattr(il, "AsyncRESTClient", GraphClient)
 

@@ -103,3 +103,20 @@ class TestAccounts:
 
         assert await _connection().accounts() == []
         assert slept == [60]
+
+
+class TestRetry:
+    async def test_the_account_lookup_repeats_requests_under_http_s_default_policy(self, monkeypatch):
+        policies: list[il.HttpRetryPolicy | None] = []
+
+        class RecordingClient(il.AsyncRESTClient):
+            def __init__(self, base_url: str, **kwargs):
+                policies.append(kwargs.get("retry"))
+                answer = httpx2.Response(200, json={"data": [{"account_id": "1", "name": "Acme", "account_status": 1}]})
+                super().__init__(base_url, transport=httpx2.MockTransport(lambda _: answer), **kwargs)
+
+        monkeypatch.setattr(il, "AsyncRESTClient", RecordingClient)
+
+        await _connection().accounts()
+
+        assert policies == [il.HttpRetryPolicy()]

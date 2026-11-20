@@ -31,7 +31,7 @@ class CampaignManager360Connection(il.Connection):
             The client authenticated as the service account, cached per connection instance.
         """
         auth = ServiceAccountAuth(json.loads(self.service_account_key), constants.SCOPES)
-        return il.AsyncRESTClient(constants.BASE_URL, auth=auth)
+        return il.AsyncRESTClient(constants.BASE_URL, auth=auth, retry=il.HttpRetryPolicy())
 
     @cached_property
     def api(self) -> CampaignManager360Api:

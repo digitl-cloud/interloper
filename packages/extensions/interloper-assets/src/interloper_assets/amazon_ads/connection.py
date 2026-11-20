@@ -88,6 +88,7 @@ class AmazonAdsConnection(il.RefreshTokenOAuthConnection):
                 client_secret=self.client_secret,
                 refresh_token=self.refresh_token,
             ),
+            retry=il.HttpRetryPolicy(),
         )
         client.base_url = location.api_url
         client.headers.update({"Amazon-Advertising-API-ClientId": self.client_id})

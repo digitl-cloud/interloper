@@ -119,4 +119,5 @@ class FacebookInsightsConnection(il.RefreshTokenOAuthConnection):
         return il.AsyncRESTClient(
             f"{constants.BASE_URL}/{constants.API_VERSION}",
             auth=il.HTTPBearerAuth(access_token),
+            retry=il.HttpRetryPolicy(),
         )

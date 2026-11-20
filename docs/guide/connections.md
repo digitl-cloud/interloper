@@ -90,6 +90,26 @@ Authentication helpers to pass as `auth=`:
 The OAuth2 helpers work with both the sync and the async client. For fan-out beyond
 pagination, `il.bounded_gather(coros, limit=8)` awaits coroutines with a concurrency cap.
 
+A client sends each request once unless it is built with a retry policy. `il.HttpRetryPolicy`
+declares one: the numbers of a `RetryPolicy` (`max_attempts=5`, `delay=2`, `max_delay=60` by
+default) and which failures are worth another attempt.
+
+```py
+il.AsyncRESTClient(base_url, auth=auth, retry=il.HttpRetryPolicy())
+
+# an API whose POSTs only read
+il.AsyncRESTClient(base_url, auth=auth, retry=il.HttpRetryPolicy(idempotent_methods={"GET", "POST"}))
+```
+
+| Field | Default | Repeated |
+|-------|---------|----------|
+| `throttle_statuses` | `{429}` | whatever the method, after the server's `Retry-After` (capped at `max_delay`) |
+| `error_statuses` | `{500, 502, 503, 504}` | only for an idempotent method, like a dropped connection |
+| `idempotent_methods` | `{"GET", "HEAD", "OPTIONS", "PUT", "DELETE"}` | |
+
+A platform that signals a passing failure some other way, such as a throttle code inside a 400,
+subclasses `HttpRetryPolicy` and overrides `retryable(request, response)`.
+
 ## Health check
 
 Implement `check()` to verify credentials with the cheapest authenticated call. It may be sync

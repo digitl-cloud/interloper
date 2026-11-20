@@ -218,3 +218,8 @@ class TestCheck:
         assert result == il.CheckResult(
             ok=False, live=True, category="auth", message="The provider rejected the credentials."
         )
+
+
+class TestRetry:
+    def test_the_client_repeats_requests_under_http_s_default_policy(self):
+        assert _connection().client.retry == il.HttpRetryPolicy()

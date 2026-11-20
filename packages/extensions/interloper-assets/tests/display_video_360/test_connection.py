@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import sys
 
+import interloper as il
 import pytest
 
 from interloper_assets.display_video_360 import constants
@@ -78,3 +79,11 @@ class TestCheck:
         result = await connection.verify(timeout=5)
 
         assert (result.ok, result.category) == (False, "auth")
+
+
+class TestRetry:
+    def test_the_client_repeats_requests_under_http_s_default_policy(self):
+        assert (
+            DisplayVideo360Connection(service_account_key=json.dumps({"client_email": CLIENT_EMAIL})).client.retry
+            == il.HttpRetryPolicy()
+        )

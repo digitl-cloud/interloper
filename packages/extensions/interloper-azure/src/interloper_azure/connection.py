@@ -10,7 +10,7 @@ import httpx2
 from azure.identity import ClientSecretCredential
 from interloper.connection import Connection, connection
 from interloper.resource import InputField, SecretField, fetch_field_provider
-from interloper.rest import JSONCursorPaginator, RESTClient
+from interloper.rest import HttpRetryPolicy, JSONCursorPaginator, RESTClient
 from pydantic_settings import SettingsConfigDict
 
 FABRIC_API = "https://api.fabric.microsoft.com/v1"
@@ -103,7 +103,9 @@ class AzureConnection(Connection):
         Returns:
             The client, authenticated for the Fabric API and cached per connection instance.
         """
-        return RESTClient(FABRIC_API, auth=_CredentialAuth(self, FABRIC_SCOPE), timeout=_TIMEOUT)
+        return RESTClient(
+            FABRIC_API, auth=_CredentialAuth(self, FABRIC_SCOPE), timeout=_TIMEOUT, retry=HttpRetryPolicy()
+        )
 
     def _list(self, path: str) -> list[dict[str, Any]]:
         """List every item of a Fabric collection, following continuation tokens.

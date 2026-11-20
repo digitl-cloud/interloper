@@ -105,7 +105,9 @@ class FacebookAdsConnection(il.OAuthConnection):
         Raises:
             ConnectionCheckError: If Graph refuses the lookup, carrying Graph's reason, which names no credential.
         """
-        async with il.AsyncRESTClient(_GRAPH_URL, auth=il.HTTPBearerAuth(self.access_token), timeout=30) as client:
+        async with il.AsyncRESTClient(
+            _GRAPH_URL, auth=il.HTTPBearerAuth(self.access_token), timeout=30, retry=il.HttpRetryPolicy()
+        ) as client:
             fields = ["account_id", "name", "account_status"]
             try:
                 data = await GraphApi(client).rows("/me/adaccounts", fields=fields, limit=500)

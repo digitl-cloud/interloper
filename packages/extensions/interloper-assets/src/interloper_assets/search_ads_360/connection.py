@@ -33,11 +33,16 @@ class SearchAds360Connection(il.Connection):
     def client(self) -> il.AsyncRESTClient:
         """The Search Ads 360 Reporting API client every caller shares.
 
+        The Reporting API only reads, its ``searchAds360:search`` POST included,
+        so the client repeats a failed POST as it would a GET.
+
         Returns:
             The client authenticated as the service account, cached per connection instance.
         """
         auth = ServiceAccountAuth(json.loads(self.service_account_key), SCOPES)
-        return il.AsyncRESTClient(BASE_URL, auth=auth, timeout=60)
+        return il.AsyncRESTClient(
+            BASE_URL, auth=auth, timeout=60, retry=il.HttpRetryPolicy(idempotent_methods={"GET", "POST"})
+        )
 
     @cached_property
     def api(self) -> SearchAds360Api:

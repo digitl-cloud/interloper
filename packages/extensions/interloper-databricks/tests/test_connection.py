@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import httpx2
 import pytest
+from interloper.rest import HttpRetryPolicy
 from pydantic import ValidationError
 
 from interloper_databricks import DatabricksConnection
@@ -195,3 +196,15 @@ class TestProviders:
 
         assert _pat().catalogs() == [{"name": "Analytics"}, {"name": "dev"}, {"name": "main"}]
         assert workspace.params(path) == [{"max_results": "0"}, {"max_results": "0", "page_token": "n"}]
+
+
+class TestRetry:
+    def test_the_client_repeats_requests_under_http_s_default_policy(self, workspace):
+        _ = _pat().client
+
+        assert workspace.retries == [HttpRetryPolicy()]
+
+    def test_the_token_exchange_repeats_requests_under_http_s_default_policy(self, workspace):
+        _m2m().token()
+
+        assert workspace.retries == [HttpRetryPolicy()]

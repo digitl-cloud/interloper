@@ -2,7 +2,7 @@
 
 import httpx2
 import pytest
-from interloper.rest.client import TransientRetry
+from interloper.rest import HttpRetryPolicy
 
 from interloper_slack import SlackConnection
 
@@ -13,6 +13,11 @@ class TestClient:
 
         assert str(slack.requests[0].url) == "https://slack.com/api/auth.test"
         assert slack.auth() == "Bearer xoxb-secret"
+
+    def test_repeats_requests_under_http_s_default_policy(self, slack):
+        _ = SlackConnection(bot_token="xoxb-t").client
+
+        assert slack.retries == [HttpRetryPolicy()]
 
     def test_is_cached_across_calls(self, slack):
         conn = SlackConnection(bot_token="xoxb-t")
@@ -66,7 +71,7 @@ class TestChannels:
             SlackConnection(bot_token="xoxb-t").channels()
 
     def test_http_error_raises(self, slack):
-        for _ in range(TransientRetry.DEFAULT.max_attempts):
+        for _ in range(HttpRetryPolicy().max_attempts):
             slack.raw(httpx2.Response(500))
 
         with pytest.raises(httpx2.HTTPStatusError):

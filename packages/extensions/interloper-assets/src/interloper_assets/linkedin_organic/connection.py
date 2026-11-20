@@ -39,6 +39,7 @@ class LinkedinOrganicConnection(il.RefreshTokenOAuthConnection):
                 client_secret=self.client_secret,
                 refresh_token=self.refresh_token,
             ),
+            retry=il.HttpRetryPolicy(),
         )
         client.headers.update(
             {

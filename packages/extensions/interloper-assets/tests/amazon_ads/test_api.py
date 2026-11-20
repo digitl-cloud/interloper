@@ -35,9 +35,7 @@ DAY = dt.date(2026, 10, 1)
 
 def _api(handler: Callable[[httpx2.Request], httpx2.Response], *, auth: httpx2.Auth | None = None) -> AmazonAdsApi:
     # the client repeats nothing itself, so each test sees the engine's own repeats
-    client = il.RESTClient(
-        API_URL, auth=auth, transport=httpx2.MockTransport(handler), retry=il.RetryPolicy(max_attempts=1)
-    )
+    client = il.RESTClient(API_URL, auth=auth, transport=httpx2.MockTransport(handler))
     return AmazonAdsApi(client)
 
 

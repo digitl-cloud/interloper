@@ -304,3 +304,10 @@ class TestCredentials:
         monkeypatch.setattr(sheets.google.auth, "default", default)
         assert sheets._credentials(GoogleCloudConnection(id="c", service_account_key="")) == "ambient"
         assert seen["scopes"] == [sheets.SHEETS_SCOPE]
+
+
+class TestRetry:
+    def test_the_client_repeats_requests_under_http_s_default_policy(self):
+        api = sheets._SheetsAPI("sheet-id", cast(Any, object()))
+
+        assert api._client.retry == il.HttpRetryPolicy()

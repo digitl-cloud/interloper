@@ -215,7 +215,7 @@ def _api(vendor: FakeJob, *, attempts: int = 1) -> AmazonSellingPartnerApi:
         auth=AccessToken(),
         transport=httpx2.MockTransport(vendor),
         timeout=60,
-        retry=il.RetryPolicy(max_attempts=attempts, delay=0),
+        retry=il.HttpRetryPolicy(max_attempts=attempts, delay=0),
     )
     return AmazonSellingPartnerApi(client)
 

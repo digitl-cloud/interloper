@@ -30,7 +30,7 @@ class SearchConsoleConnection(il.Connection):
             The client authenticated as the service account with read-only scopes, cached per connection instance.
         """
         auth = ServiceAccountAuth(json.loads(self.service_account_key), constants.SCOPES)
-        return il.AsyncRESTClient(constants.BASE_URL, auth=auth)
+        return il.AsyncRESTClient(constants.BASE_URL, auth=auth, retry=il.HttpRetryPolicy())
 
     @cached_property
     def api(self) -> SearchConsoleApi:

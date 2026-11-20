@@ -19,13 +19,22 @@ import pytest
 
 from interloper_assets.google.errors import GoogleApiError
 from interloper_assets.search_ads_360.api import SearchAds360Api
+from interloper_assets.search_ads_360.connection import SearchAds360Connection
 from interloper_assets.search_ads_360.constants import BASE_URL
 
 SEARCH_URL = "https://searchads360.googleapis.com/v0/customers/222/searchAds360:search"
 
 
-def _api(handler: Callable[[httpx2.Request], httpx2.Response], retry: il.RetryPolicy | None = None) -> SearchAds360Api:
+def _api(
+    handler: Callable[[httpx2.Request], httpx2.Response], retry: il.HttpRetryPolicy | None = None
+) -> SearchAds360Api:
     return SearchAds360Api(il.AsyncRESTClient(BASE_URL, transport=httpx2.MockTransport(handler), retry=retry))
+
+
+def _connection_policy() -> il.HttpRetryPolicy:
+    connection = SearchAds360Connection(service_account_key=json.dumps({"client_email": "reporter@example.com"}))
+    assert connection.client.retry is not None
+    return connection.client.retry.model_copy(update={"delay": 0, "jitter": 0})
 
 
 def _answering(
@@ -163,8 +172,15 @@ class TestSearch:
         with pytest.raises(GoogleApiError, match="HTTP 429, RESOURCE_EXHAUSTED"):
             await _api(handler).search("222", resource="campaign", fields=["campaign.id"])
 
+    async def test_the_engine_sends_a_page_once_and_raises_a_server_error(self):
+        requests, handler = _answering([httpx2.Response(503, json={"error": {"code": 503, "status": "UNAVAILABLE"}})])
+
+        with pytest.raises(GoogleApiError, match="HTTP 503, UNAVAILABLE"):
+            await _api(handler).search("222", resource="campaign", fields=["campaign.id"])
+        assert len(requests) == 1
+
     @pytest.mark.parametrize("status", [500, 502, 503, 504])
-    async def test_a_server_error_repeats_the_same_page(self, status: int):
+    async def test_under_the_connections_policy_a_server_error_repeats_the_same_page(self, status: int):
         requests, handler = _answering(
             [
                 httpx2.Response(200, json={"results": [{"campaign": {"id": "1"}}], "nextPageToken": "p2"}),
@@ -173,44 +189,30 @@ class TestSearch:
             ]
         )
 
-        rows = await _api(handler).search("222", resource="campaign", fields=["campaign.id"])
+        rows = await _api(handler, retry=_connection_policy()).search(
+            "222", resource="campaign", fields=["campaign.id"]
+        )
 
         assert rows == [{"campaign": {"id": "1"}}, {"campaign": {"id": "2"}}]
         assert [json.loads(request.content).get("pageToken") for request in requests] == [None, "p2", "p2"]
 
-    async def test_a_dropped_connection_repeats_the_request(self):
+    async def test_under_the_connections_policy_a_dropped_connection_repeats_the_request(self):
         found = httpx2.Response(200, json={"results": [{"campaign": {"id": "1"}}]})
         requests, handler = _answering([httpx2.ConnectError("connection reset"), found])
 
-        rows = await _api(handler).search("222", resource="campaign", fields=["campaign.id"])
+        rows = await _api(handler, retry=_connection_policy()).search(
+            "222", resource="campaign", fields=["campaign.id"]
+        )
 
         assert rows == [{"campaign": {"id": "1"}}]
         assert len(requests) == 2
 
-    async def test_a_server_error_raises_once_the_clients_budget_is_spent(self):
-        requests, handler = _answering(
-            [httpx2.Response(503, json={"error": {"code": 503, "status": "UNAVAILABLE"}}) for _ in range(3)]
-        )
-        api = _api(handler, retry=il.RetryPolicy(max_attempts=3, delay=0, jitter=0))
-
-        with pytest.raises(GoogleApiError, match="HTTP 503, UNAVAILABLE"):
-            await api.search("222", resource="campaign", fields=["campaign.id"])
-        assert len(requests) == 3
-
-    async def test_a_connection_dropped_on_every_attempt_raises(self):
-        requests, handler = _answering([httpx2.ConnectError("connection reset")] * 2)
-        api = _api(handler, retry=il.RetryPolicy(max_attempts=2, delay=0, jitter=0))
-
-        with pytest.raises(httpx2.ConnectError):
-            await api.search("222", resource="campaign", fields=["campaign.id"])
-        assert len(requests) == 2
-
-    async def test_a_client_error_is_not_repeated(self):
+    async def test_under_the_connections_policy_a_client_error_is_not_repeated(self):
         refusal = {"error": {"code": 400, "status": "INVALID_ARGUMENT"}}
         requests, handler = _answering([httpx2.Response(400, json=refusal)])
 
         with pytest.raises(GoogleApiError, match="HTTP 400, INVALID_ARGUMENT"):
-            await _api(handler).search("222", resource="campaign", fields=["campaign.id"])
+            await _api(handler, retry=_connection_policy()).search("222", resource="campaign", fields=["campaign.id"])
         assert len(requests) == 1
 
 

@@ -113,3 +113,11 @@ class TestAccounts:
         assert str(raised.value) == (
             "Graph refused the request (HTTP 400, code 190): Error validating access token: Session has expired"
         )
+
+
+class TestRetry:
+    def test_the_client_repeats_requests_under_http_s_default_policy(self):
+        assert (
+            InstagramInsightsConnection(client_id="cid", client_secret="secret", refresh_token="token").client.retry
+            == il.HttpRetryPolicy()
+        )

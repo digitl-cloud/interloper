@@ -32,7 +32,7 @@ class AdtractionConnection(il.Connection):
             The authenticated client, cached per connection instance.
         """
         headers = {"X-Token": self.api_token, "Accept": "application/json", "Content-Type": "application/json"}
-        return il.AsyncRESTClient("https://api.adtraction.net/v2", headers=headers)
+        return il.AsyncRESTClient("https://api.adtraction.net/v2", headers=headers, retry=il.HttpRetryPolicy())
 
     @cached_property
     def api(self) -> AdtractionApi:

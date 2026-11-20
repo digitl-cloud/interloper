@@ -6,6 +6,8 @@ every API request, and builds the engine on that client.
 
 from __future__ import annotations
 
+import interloper as il
+
 from interloper_assets.teads.connection import TeadsConnection
 from interloper_assets.teads.constants import BASE_URL
 
@@ -27,3 +29,8 @@ class TestApi:
         connection = TeadsConnection(api_key="key")
 
         assert connection.api.client is connection.client
+
+
+class TestRetry:
+    def test_the_client_repeats_requests_under_http_s_default_policy(self):
+        assert TeadsConnection(api_key="key").client.retry == il.HttpRetryPolicy()

@@ -176,6 +176,7 @@ class AmazonSellingPartnerConnection(il.Connection):
             ),
             headers={"user-agent": "interloper (Language=Python)"},
             timeout=60,
+            retry=il.HttpRetryPolicy(),
         )
 
     @cached_property

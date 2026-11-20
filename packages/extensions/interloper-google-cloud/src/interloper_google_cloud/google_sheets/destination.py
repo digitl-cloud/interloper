@@ -21,7 +21,7 @@ from interloper.errors import ConfigError, DataNotFoundError
 from interloper.partitioning import PartitionFilter
 from interloper.representation import TableData
 from interloper.resource import InputField
-from interloper.rest import RESTClient
+from interloper.rest import HttpRetryPolicy, RESTClient
 from interloper.schema import FieldSpec
 from interloper.utils import json_default, replace_non_finite
 
@@ -67,7 +67,7 @@ class _SheetsAPI:
         self.spreadsheet_id = spreadsheet_id
         self._credentials = credentials
         self._path = "/" + quote(spreadsheet_id, safe="")
-        self._client = RESTClient(_API_BASE, timeout=_TIMEOUT, **client_kwargs)
+        self._client = RESTClient(_API_BASE, timeout=_TIMEOUT, retry=HttpRetryPolicy(), **client_kwargs)
 
     def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         """Send one authorized request, refreshing the token when it has expired.

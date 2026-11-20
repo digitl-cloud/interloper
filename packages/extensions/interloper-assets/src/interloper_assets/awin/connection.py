@@ -27,7 +27,7 @@ class AwinConnection(il.Connection):
         Returns:
             The authenticated client, cached per connection instance.
         """
-        return il.AsyncRESTClient(BASE_URL, auth=il.HTTPBearerAuth(self.access_token))
+        return il.AsyncRESTClient(BASE_URL, auth=il.HTTPBearerAuth(self.access_token), retry=il.HttpRetryPolicy())
 
     @cached_property
     def api(self) -> AwinApi:

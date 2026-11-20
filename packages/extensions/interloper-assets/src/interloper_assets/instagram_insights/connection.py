@@ -41,6 +41,7 @@ class InstagramInsightsConnection(il.RefreshTokenOAuthConnection):
         return il.AsyncRESTClient(
             f"{constants.BASE_URL}/{constants.API_VERSION}",
             auth=il.HTTPBearerAuth(self.refresh_token),
+            retry=il.HttpRetryPolicy(),
         )
 
     @cached_property

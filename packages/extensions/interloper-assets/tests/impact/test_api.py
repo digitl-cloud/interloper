@@ -24,8 +24,8 @@ DAY = dt.date(2026, 6, 10)
 WINDOW = {"StartDate": "2026-06-10T00:00:00Z", "EndDate": "2026-06-10T23:59:59Z"}
 
 
-def _api(handler: Callable[[httpx2.Request], httpx2.Response], retry: il.RetryPolicy | None = None) -> ImpactApi:
-    return ImpactApi(il.AsyncRESTClient(ACCOUNT, retry=retry, transport=httpx2.MockTransport(handler)))
+def _api(handler: Callable[[httpx2.Request], httpx2.Response]) -> ImpactApi:
+    return ImpactApi(il.AsyncRESTClient(ACCOUNT, transport=httpx2.MockTransport(handler)))
 
 
 def _sent(requests: list[httpx2.Request]) -> list[tuple[str, str, dict[str, str]]]:
@@ -194,7 +194,7 @@ class TestExport:
                     return httpx2.Response(503)
             return job(request)
 
-        api = _api(handler, retry=il.RetryPolicy(max_attempts=1))
+        api = _api(handler)
         assert await api.export("/Programs/123/ClickExport", "Clicks") == [{"Id": "1"}, {"Id": "2"}]
         assert len(polls) == 2
         assert sleeps == [constants.JOB_POLL_INTERVAL]

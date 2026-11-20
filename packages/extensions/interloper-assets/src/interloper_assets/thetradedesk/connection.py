@@ -36,6 +36,7 @@ class TheTradeDeskConnection(il.Connection):
             headers={"TTD-Auth": self.api_key},
             timeout=60,
             event_hooks={"request": [self._withhold_key]},
+            retry=il.HttpRetryPolicy(),
         )
 
     @staticmethod
