@@ -2,10 +2,11 @@ import base64
 from functools import cached_property
 
 import interloper as il
+from interloper.errors import ConnectionCheckError
 from pydantic_settings import SettingsConfigDict
 
 from interloper_assets.pinterest_ads import constants
-from interloper_assets.pinterest_ads.api import PinterestAdsApi
+from interloper_assets.pinterest_ads.api import PinterestAdsApi, PinterestAdsApiError
 
 
 class PinterestRefreshTokenAuth(il.OAuth2RefreshTokenAuth):
@@ -76,15 +77,22 @@ class PinterestAdsConnection(il.RefreshTokenOAuthConnection):
 
         Returns:
             The options for the field's dropdown.
+
+        Raises:
+            ConnectionCheckError: If Pinterest refuses the lookup, carrying Pinterest's code and message, which name
+                no credential.
         """
-        accounts = await self.api.rows("/ad_accounts")
+        try:
+            accounts = await self.api.rows("/ad_accounts")
+        except PinterestAdsApiError as error:
+            raise ConnectionCheckError(str(error)) from error
         return [{"id": account["id"], "name": account.get("name") or account["id"]} for account in accounts]
 
     async def check(self) -> bool:
         """Prove the credentials work by running the ``accounts`` lookup.
 
         Returns:
-            True — any credential failure raises out of the lookup.
+            True — any credential failure raises out of the lookup, Pinterest's refusal as a `ConnectionCheckError`.
         """
         await self.accounts()
         return True
