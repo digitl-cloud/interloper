@@ -174,7 +174,7 @@ Show the one fact a row, tile or line exists for; the rest waits for hover, a to
 - **Colour belongs to status.** A status is a badge in its colour (`StatusBadge`), and so is when something last ran, its time in its outcome's colour (`LastRunBadge`). The rest of a row stays neutral.
 - **No zero counts, no line that restates its neighbour.** A tile is a label, a number and one line; a run's status chips list only the outcomes that occurred; a summary drops its zero parts.
 - **Text, not chips.** Tags and counts in a table are text (`text-muted`, `text-dimmed`). Badges are kept for a status and for what is an object or an identifier: an entity reference (`EntityBadge`), a component's discriminator, a count beside a title, and the few marks that must stand out (maturity).
-- **Legends on full pages only.** A summary card's bars name their segments in a tooltip; the page it links to keeps the legend.
+- **Tooltips, not legends.** A timeline's bar names its status in its tooltip, and a summary card's bar its segments; neither carries a legend.
 - **Lists say when, not what time.** A time in a list is relative, the exact one on hover (`RelativeTime`); a time to the second or millisecond keeps the extra precision for hover.
 - **One navigation.** The sidebar names each hub once; its views are the tabs on its pages.
 

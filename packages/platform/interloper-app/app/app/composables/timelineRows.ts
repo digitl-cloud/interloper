@@ -16,12 +16,6 @@ export const TIMELINE_LAYOUT = {
     axisHeight: 30,
 }
 
-/**
- * The statuses a timeline's bars and legend show, one per colour of the status
- * table: `dispatched` draws as running and `pending` as queued.
- */
-export const TIMELINE_STATUSES = ['success', 'failed', 'running', 'queued', 'canceled'] as const
-
 /** Fill of a bar: its status colour; a scheduled firing has none, only the dashed outline. */
 export function timelineBarColor(status: string): string | undefined {
     return status === 'scheduled' ? undefined : STATUS_CSS[statusMeta(status).color]
