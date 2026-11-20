@@ -115,7 +115,7 @@ export function sourceDay(source: CoverageSource, date: string): CoverageDay | n
     return partitionCount(day) || day.missed ? day : null
 }
 
-/** Sum the days of the sources of the selected type per date, and phrase the window's summary. */
+/** Sum the days of the sources of the selected type per date. */
 export function useCoverageCalendar(
     coverage: MaybeRefOrGetter<Coverage | null>,
     typeFilter: MaybeRefOrGetter<string>,
@@ -143,21 +143,5 @@ export function useCoverageCalendar(
         return map
     })
 
-    const summary = computed(() => {
-        let total = 0
-        let successful = 0
-        let missingDays = 0
-        let failures = 0
-        for (const day of byDate.value.values()) {
-            total += partitionCount(day)
-            successful += day.successful
-            if (day.failed) failures++
-            else if (day.missing) missingDays++
-        }
-        if (!total) return NO_PARTITIONS
-        const pct = Math.round((100 * successful) / total)
-        return `${pct}% of ${total.toLocaleString()} partitions successful · ${missingDays} days with missing partitions · ${failures} with failures`
-    })
-
-    return { byDate, summary }
+    return { byDate }
 }

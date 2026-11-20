@@ -45,6 +45,14 @@ const shown = computed(() => {
     )
 })
 
+/** The filters set apart from the search: the phone's Filters button counts them, and its sheet resets them. */
+const activeFilters = computed(() => Number(status.value !== null) + Number(showSinglePartition.value))
+
+function resetFilters() {
+    status.value = null
+    showSinglePartition.value = false
+}
+
 /** What can bring rows back when the filters leave none: dropping the search and status, or showing the single-partition ones. */
 const filteredEmptyActions = computed(() => [
     ...(search.value || status.value
@@ -127,16 +135,22 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
         <UCard v-else-if="showTable"
                :ui="FILL_CARD_UI">
             <template #header>
-                <div class="flex flex-wrap items-center gap-3">
-                    <UInput v-model="search"
-                            placeholder="Search backfills by target…"
-                            :icon="appConfig.ui.icons.search"
-                            class="max-w-sm" />
+                <FilterBar :active="activeFilters"
+                           @reset="resetFilters">
+                    <template #search>
+                        <UInput v-model="search"
+                                placeholder="Search backfills by target…"
+                                :icon="appConfig.ui.icons.search"
+                                class="w-full sm:w-64" />
+                    </template>
                     <StatusFilter v-model="status"
                                   :statuses="BACKFILL_STATUSES" />
-                    <UCheckbox v-model="showSinglePartition"
-                               label="Show single partition" />
-                </div>
+                    <FilterBarField label="Partitions"
+                                    :inline-label="false">
+                        <UCheckbox v-model="showSinglePartition"
+                                   label="Show single partition" />
+                    </FilterBarField>
+                </FilterBar>
             </template>
 
             <UTable v-model:pagination="pagination"

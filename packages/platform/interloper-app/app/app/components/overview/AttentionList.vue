@@ -60,9 +60,16 @@ function when(item: AttentionItem): string {
 <template>
     <UCard>
         <template #header>
-            <CardHeader title="Needs attention"
-                        :description="items?.length ? `${items.length} item${items.length === 1 ? '' : 's'}` : undefined"
-                        :loading="!items && !error" />
+            <CardHeader>
+                <template #title>
+                    Needs attention
+                    <UBadge v-if="items?.length"
+                            :label="String(items.length)"
+                            color="neutral"
+                            size="sm"
+                            class="ml-1.5 align-middle" />
+                </template>
+            </CardHeader>
         </template>
         <LoadError v-if="!items && error"
                    title="Couldn't load what needs attention"

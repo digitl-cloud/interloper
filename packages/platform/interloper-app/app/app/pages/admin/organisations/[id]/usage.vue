@@ -164,9 +164,8 @@ watch(orgId, reloadQuotas, { immediate: true })
                 <UCard :ui="{ body: 'flex flex-col gap-4' }">
                     <UFormField label="Status"
                                 orientation="horizontal">
-                        <UBadge :label="ledgerInSync ? 'In sync' : 'Drift'"
-                                :color="ledgerInSync ? 'success' : 'warning'"
-                                :icon="ledgerInSync ? appConfig.ui.icons.success : appConfig.ui.icons.warning" />
+                        <StatusBadge :label="ledgerInSync ? 'In sync' : 'Drift'"
+                                     :color="ledgerInSync ? 'success' : 'warning'" />
                     </UFormField>
                     <template v-for="row in ledgerRows"
                               :key="row.label">

@@ -1,5 +1,5 @@
 import { h } from 'vue'
-import { UBadge, UButton, UIcon, UTooltip } from '#components'
+import { RelativeTime, StatusBadge, UBadge, UButton, UIcon, UTooltip } from '#components'
 import type { Column } from '@tanstack/vue-table'
 import type { TableColumn } from '@nuxt/ui'
 import { stateColumns, type ComponentDefinition } from '~/types/catalog'
@@ -7,14 +7,14 @@ import type { ComponentRecord } from '~/types/component'
 import type { DriftBadge } from '~/composables/drift'
 import { componentIcon } from '~/utils/icons'
 import { shortId } from '~/utils/ids'
-import { formatDate } from '~/utils/time'
 
 /**
- * Builds a clickable column header that toggles sorting (none → asc → desc)
- * and reflects the current state with an arrow icon. Use as a column's
- * `header` to make it sortable. The button sits flush with the column (its
- * padding is pulled out) and keeps the header row's type, so sortable and
- * plain headers read alike.
+ * Builds a clickable column header that toggles sorting (none → asc → desc).
+ * Only the sorted column shows its arrow; the others reveal theirs on hover
+ * or focus, so a header row reads as plain labels. Use as a column's `header`
+ * to make it sortable. The button sits flush with the column (its padding is
+ * pulled out) and keeps the header row's type, so sortable and plain headers
+ * read alike.
  */
 export function sortableHeader<T>(label: string) {
     return ({ column }: { column: Column<T> }) => {
@@ -31,7 +31,8 @@ export function sortableHeader<T>(label: string) {
             label,
             icon,
             trailing: true,
-            class: '-mx-2.5 font-semibold text-highlighted',
+            class: 'group -mx-2.5 font-semibold text-highlighted',
+            ui: sorted ? undefined : { trailingIcon: 'opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100' },
             'aria-label': `Sort by ${label}`,
             onClick: () => column.toggleSorting(column.getIsSorted() === 'asc'),
         })
@@ -49,25 +50,25 @@ export function idCell(id: string) {
 }
 
 /**
- * A sortable timestamp column. It orders on the raw ISO value — the
- * formatted text would sort by day name — and renders it through `formatDate`.
+ * A sortable timestamp column. It orders on the raw ISO value and reads as a
+ * relative time ("2d ago"), the exact one on hover.
  */
 export function dateColumn<T>(key: keyof T & string, header: string): TableColumn<T> {
     return {
         accessorKey: key,
         header,
         cell: ({ row }: { row: { getValue: <V>(key: string) => V } }) => {
-            const value = formatDate(row.getValue<string | null>(key))
-            return value ? h('span', { class: 'text-muted tabular-nums' }, value) : emptyCell()
+            const value = row.getValue<string | null>(key)
+            return value ? h(RelativeTime, { value, class: 'text-muted' }) : emptyCell()
         },
     } as TableColumn<T>
 }
 
 /**
  * The first column of a component table: the name, its discriminator when the
- * two differ, and an optional status badge — on one line, stacking under the
- * name once the viewport is too narrow for it. Search matches the name and
- * the discriminator alike.
+ * two differ, and an optional status, on one line, stacking under the name
+ * once the viewport is too narrow for it. Search matches the name and the
+ * discriminator alike.
  */
 export function nameColumn(
     header: string,
@@ -86,9 +87,7 @@ export function nameColumn(
             if (discriminator && discriminator !== name) {
                 children.push(h(UBadge, { color: 'neutral', size: 'sm', label: discriminator, class: 'max-w-full slashed-zero sm:shrink-0' }))
             }
-            if (meta) {
-                children.push(h(UBadge, { color: meta.color, size: 'sm', icon: meta.icon }, () => meta.label))
-            }
+            if (meta) children.push(h(StatusBadge, { color: meta.color, label: meta.label, class: 'shrink-0' }))
             return h('span', { class: 'flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2' }, children)
         },
     } as TableColumn<ComponentRecord>
@@ -110,7 +109,7 @@ export function typeColumn(icon: (key: string) => string = componentIcon): Table
 
 /**
  * Table columns for a component row's `state`, derived from its definition's
- * `state_schema`. Datetime values render via `formatDate`; `_id` values as a
+ * `state_schema`. Datetime values read as relative times; `_id` values as a
  * short id with the full one in a tooltip.
  */
 export function stateSchemaColumns(defn: ComponentDefinition | undefined): TableColumn<ComponentRecord>[] {
@@ -122,8 +121,8 @@ export function stateSchemaColumns(defn: ComponentDefinition | undefined): Table
                 header: col.label,
                 accessorFn: (row: ComponentRecord) => row.state?.[col.key] ?? '',
                 cell: ({ row }: { row: { original: ComponentRecord } }) => {
-                    const value = formatDate(row.original.state?.[col.key])
-                    return value ? h('span', { class: 'tabular-nums' }, value) : emptyCell()
+                    const value = row.original.state?.[col.key]
+                    return value ? h(RelativeTime, { value }) : emptyCell()
                 },
             } as TableColumn<ComponentRecord>
         }

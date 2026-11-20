@@ -9,6 +9,7 @@ definePageMeta({
 })
 
 const UBadge = resolveComponent('UBadge')
+const StatusBadge = resolveComponent('StatusBadge')
 const AdminUsageMeter = resolveComponent('AdminUsageMeter')
 
 const adminStore = useAdminStore()
@@ -129,8 +130,8 @@ const columns: TableColumn<AdminOrganisation>[] = [
             if (row.original.deleted_at || !usage) return dash()
             const drift = usage.successful_runs !== usage.recomputed_successful_runs
             return drift
-                ? h(UBadge, { label: 'Drift', color: 'warning', icon: appConfig.ui.icons.warning })
-                : h(UBadge, { label: 'In sync', color: 'success', icon: appConfig.ui.icons.success })
+                ? h(StatusBadge, { label: 'Drift', color: 'warning' })
+                : h(StatusBadge, { label: 'In sync', color: 'success' })
         },
     },
     {

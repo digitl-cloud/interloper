@@ -34,7 +34,6 @@ const items = computed(() => {
         <USelectMenu :model-value="key ?? ALL"
                      :items="items"
                      value-key="value"
-                     :icon="appConfig.icons.type"
                      :search-input="{ placeholder: 'Search types…', icon: appConfig.ui.icons.search }"
                      :ui="{ content: 'min-w-fit' }"
                      class="w-full sm:w-40"

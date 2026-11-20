@@ -48,7 +48,6 @@ const jobs = computed(() => {
     return {
         enabled,
         failing,
-        healthy: enabled - failing,
         segments: [{ value: enabled - failing, color: SUCCESS }, { value: failing, color: FAILED }],
     }
 })
@@ -65,7 +64,7 @@ const jobs = computed(() => {
                             :to="organisationStore.path('/executions/runs')"
                             :loading="!overview"
                             :headline="overview?.runs.total"
-                            :empty="overview?.runs.total ? undefined : 'No runs in the last 24h'">
+                            :empty="!overview?.runs.total">
             <template #detail>
                 {{ overview?.runs.succeeded }} succeeded ·
                 <ULink :to="{ path: organisationStore.path('/executions/runs'), query: { status: 'failed' } }"
@@ -91,7 +90,6 @@ const jobs = computed(() => {
                         </div>
                     </UTooltip>
                 </div>
-                <div class="flex justify-between text-xs text-dimmed"><span>24h ago</span><span>Now</span></div>
             </template>
         </OverviewHealthTile>
 
@@ -99,18 +97,15 @@ const jobs = computed(() => {
                             :to="{ path: organisationStore.path('/executions/runs'), query: { status: 'running' } }"
                             :loading="!overview"
                             :headline="activity.running"
-                            :empty="activity.running + activity.queued ? undefined : 'Nothing running or queued'">
+                            :empty="!(activity.running + activity.queued)">
             <template #detail>
                 <ULink :to="{ path: organisationStore.path('/executions/runs'), query: { status: 'queued' } }"
                        class="relative text-muted hover:underline">{{ activity.queued }} queued</ULink>
+                <template v-if="activity.longest"> · longest {{ activity.longest }}</template>
             </template>
             <template #footer>
                 <UProgressGroup :items="activity.segments"
                                 :max="activity.running + activity.queued" />
-                <div class="flex justify-between text-xs tabular-nums text-dimmed">
-                    <span>{{ activity.running }} running · {{ activity.queued }} queued</span>
-                    <span v-if="activity.longest">Longest {{ activity.longest }}</span>
-                </div>
             </template>
         </OverviewHealthTile>
 
@@ -118,17 +113,13 @@ const jobs = computed(() => {
                             :to="{ path: organisationStore.path('/executions/backfills'), query: { status: 'running', single: 'true' } }"
                             :loading="!overview"
                             :headline="overview?.backfills.active"
-                            :empty="overview?.backfills.active ? undefined : 'No backfills in progress'">
+                            :empty="!overview?.backfills.active">
             <template v-if="overview?.backfills.active"
                       #detail>
                 <span class="tabular-nums">{{ overview.backfills.partitions_done }} of {{ overview.backfills.partitions_total }} partitions</span>
             </template>
             <template #footer>
                 <UProgress :model-value="backfillPct" />
-                <div class="flex justify-between text-xs text-dimmed">
-                    <span>Combined progress</span>
-                    <span class="font-semibold tabular-nums text-primary">{{ backfillPct }}%</span>
-                </div>
             </template>
         </OverviewHealthTile>
 
@@ -137,15 +128,11 @@ const jobs = computed(() => {
                             :loading="!overview"
                             :headline="jobs.failing"
                             :headline-class="jobs.failing ? 'text-error' : ''"
-                            :empty="overview?.jobs.enabled ? undefined : 'No jobs enabled'">
+                            :empty="!overview?.jobs.enabled">
             <template #detail>of {{ overview?.jobs.enabled }} enabled</template>
             <template #footer>
                 <UProgressGroup :items="jobs.segments"
                                 :max="jobs.enabled" />
-                <div class="flex justify-between text-xs tabular-nums text-dimmed">
-                    <span>{{ jobs.healthy }} healthy</span>
-                    <span>{{ jobs.failing ? `${jobs.failing} failing` : 'None failing' }}</span>
-                </div>
             </template>
         </OverviewHealthTile>
     </div>

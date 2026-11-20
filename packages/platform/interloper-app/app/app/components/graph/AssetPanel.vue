@@ -175,18 +175,12 @@ const latestExecution = computed(() => recentExecutions.value[0])
 /** Oldest → newest, for the materialization history heatmap. */
 const history = computed(() => [...recentExecutions.value].reverse())
 
-const lastRunText = computed(() => {
-    const at = latestExecution.value?.completed_at ?? latestExecution.value?.started_at
-    return at ? relativeTime(new Date(at)) : null
-})
+const latestAt = computed(() => latestExecution.value?.completed_at ?? latestExecution.value?.started_at ?? null)
 
 /** Job that materialises this asset (the source's first job). */
 const jobName = computed(() => jobsForSource(props.source)[0]?.name ?? null)
 
-const materializationMeta = computed(() => {
-    const head = lastRunText.value ? `Last run ${lastRunText.value}` : 'Not yet materialized'
-    return jobName.value ? `${head} · ${jobName.value}` : head
-})
+const materializationMeta = computed(() => jobName.value ? `By ${jobName.value}` : 'No job materializes it')
 
 function historyTooltip(execution: Execution): string {
     const elapsed = formatElapsed(execution.started_at, execution.completed_at)
@@ -281,8 +275,10 @@ const dependencyRows = computed(() => {
                             <div class="text-sm font-medium text-highlighted">Latest materialization</div>
                             <div class="truncate text-xs text-muted tabular-nums">{{ materializationMeta }}</div>
                         </div>
-                        <StatusBadge v-if="latestExecution"
-                                     :status="latestExecution.status" />
+                        <LastRunBadge v-if="latestExecution && latestAt"
+                                      :status="latestExecution.status"
+                                      :at="latestAt"
+                                      :run-id="latestExecution.run_id" />
                         <UBadge v-else
                                 color="neutral"
                                 label="Not materialized" />

@@ -194,19 +194,22 @@ function setDep(assetKey: string, dep: AssetDep, value: string | string[]) {
 <template>
     <div class="flex flex-col gap-6">
         <div class="flex flex-col gap-3">
-            <div class="flex items-center gap-2">
-                <UTabs v-if="tagTabs.length > 2"
-                       v-model="tagFilter"
-                       :items="tagTabs"
-                       variant="pill"
-                       size="xs"
-                       :content="false"
-                       class="w-fit" />
-                <UInput v-model="search"
-                        placeholder="Search assets…"
-                        :icon="appConfig.ui.icons.search"
-                        class="min-w-0 flex-1" />
-            </div>
+            <FilterBar :active="Number(tagFilter !== 'all')"
+                       @reset="tagFilter = 'all'">
+                <template #search>
+                    <UInput v-model="search"
+                            placeholder="Search assets…"
+                            :icon="appConfig.ui.icons.search"
+                            class="w-full sm:w-64" />
+                </template>
+                <template v-if="tagTabs.length > 2"
+                          #default>
+                    <FilterBarField label="Tag">
+                        <UTabs v-model="tagFilter"
+                               :items="tagTabs" />
+                    </FilterBarField>
+                </template>
+            </FilterBar>
 
             <div class="flex items-center justify-between">
                 <span class="text-sm text-muted tabular-nums">
@@ -249,13 +252,7 @@ function setDep(assetKey: string, dep: AssetDep, value: string | string[]) {
                 </template>
                 <template v-if="asset.tags.length"
                           #details>
-                    <div class="mt-1.5 flex flex-wrap gap-1">
-                        <UBadge v-for="tag in asset.tags"
-                                :key="tag"
-                                color="neutral"
-                                size="sm"
-                                :label="tag" />
-                    </div>
+                    <span class="mt-0.5 text-xs text-dimmed">{{ asset.tags.join(', ') }}</span>
                 </template>
                 <template v-if="asset.partitioning || depsByAsset.get(asset.key)?.length"
                           #trailing>

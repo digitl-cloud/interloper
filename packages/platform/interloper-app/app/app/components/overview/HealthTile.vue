@@ -1,12 +1,11 @@
 <script setup lang="ts">
 /**
- * Overview KPI tile: label, headline number with inline detail, footer visual pinned to the bottom; skeletons until loaded.
- * With nothing to draw, `empty` says so in the footer's place, so a bare track never reads as a loader.
+ * Overview KPI tile: label, headline number with one line of detail, and a footer visual pinned to the
+ * bottom; skeletons until loaded. With nothing to draw (`empty`) the tile keeps its label, number and
+ * detail, and no footer: the number already says it, and a bare track would read as a loader.
  * The whole tile links to `to` through an overlay, so a `relative` link in the detail can point at a narrower view.
  */
 import type { RouteLocationRaw } from 'vue-router'
-
-const appConfig = useAppConfig()
 
 defineProps<{
     label: string
@@ -14,7 +13,7 @@ defineProps<{
     headline?: string | number
     headlineClass?: string
     loading?: boolean
-    empty?: string
+    empty?: boolean
 }>()
 </script>
 
@@ -41,12 +40,7 @@ defineProps<{
                 <USkeleton class="h-8 w-full" />
                 <USkeleton class="h-4 w-2/3" />
             </template>
-            <div v-else-if="empty"
-                 class="flex items-center gap-1.5 text-xs text-dimmed">
-                <UIcon :name="appConfig.ui.icons.minus"
-                       class="size-3.5" />{{ empty }}
-            </div>
-            <slot v-else
+            <slot v-else-if="!empty"
                   name="footer" />
         </div>
     </UCard>

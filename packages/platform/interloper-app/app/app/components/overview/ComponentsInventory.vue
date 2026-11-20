@@ -25,12 +25,12 @@ function kindMeta(kind: string): { label: string, icon: string, to: string } {
     return { ...meta, to: organisationStore.path(meta.to) }
 }
 
-/** In bar and legend order: from healthy to failing, then the inactive ones; colours as the graph's node states. */
+/** In bar order: from healthy to failing, then the inactive ones; colours as the graph's node states. */
 const STATES = [
-    { key: 'healthy', label: 'healthy', legend: 'Healthy', color: nodeStateColor('idle') },
-    { key: 'attention', label: 'needs attention', legend: 'Needs attention', color: nodeStateColor('attention') },
-    { key: 'failing', label: 'failing', legend: 'Failing', color: nodeStateColor('failed') },
-    { key: 'disabled', label: 'disabled', legend: 'Disabled', color: nodeStateColor('paused') },
+    { key: 'healthy', label: 'healthy', color: nodeStateColor('idle') },
+    { key: 'attention', label: 'needs attention', color: nodeStateColor('attention') },
+    { key: 'failing', label: 'failing', color: nodeStateColor('failed') },
+    { key: 'disabled', label: 'disabled', color: nodeStateColor('paused') },
 ] as const
 /** The issues read worst first. */
 const ISSUES = ['failing', 'attention', 'disabled'] as const
@@ -114,15 +114,5 @@ const columns = withSkeletons<(typeof table.value)[number]>([
                 :columns="columns"
                 :ui="{ tr: 'cursor-pointer' }"
                 @select="(_e: Event, row: any) => isSkeletonRow(row.original) || navigateTo(row.original.meta.to)" />
-        <template v-if="!empty && !(!rows && error)"
-                  #footer>
-            <div class="flex flex-wrap items-center gap-4 text-xs text-muted">
-                <span v-for="state in STATES"
-                      :key="state.key"
-                      class="inline-flex items-center gap-1.5">
-                    <StatusDot :color="state.color" />{{ state.legend }}
-                </span>
-            </div>
-        </template>
     </UCard>
 </template>

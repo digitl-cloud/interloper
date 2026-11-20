@@ -7,9 +7,10 @@ export default defineAppConfig({
       neutral: 'neutral'
     },
     badge: {
-      // `soft` = tinted fill, no ring: statuses, tags and counts all ride this
-      // default. EntityBadge is the one exception, opting into `outline` so
-      // object references read as references. Counts line up in tabular figures.
+      // `soft` = tinted fill, no ring: ids, counts beside a title and the few
+      // marks that must stand out ride this default. EntityBadge is the one
+      // exception, opting into `outline` so object references read as
+      // references. Counts line up in tabular figures.
       slots: {
         base: 'tabular-nums'
       },

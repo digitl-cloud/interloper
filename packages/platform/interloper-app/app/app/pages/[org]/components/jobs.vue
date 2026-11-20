@@ -5,7 +5,7 @@ import type { ComponentRecord, RelationRef } from '~/types/component'
 import { jobCron, jobEnabled, jobTimezone, relationRefs } from '~/types/component'
 
 const USwitch = resolveComponent('USwitch')
-const UBadge = resolveComponent('UBadge')
+const LastRunBadge = resolveComponent('LastRunBadge')
 const UTooltip = resolveComponent('UTooltip')
 const EntityBadge = resolveComponent('EntityBadge')
 
@@ -86,7 +86,7 @@ function targetsOf(job: ComponentRecord): RelationRef[] {
     return relationRefs(job, 'targets')
 }
 
-/** A job's last run reads as one badge — its age coloured by how the run ended. */
+/** A job's last run reads as one badge: its age, coloured by how the run ended, linking to the run. */
 function lastRunColumn(): TableColumn<ComponentRecord> {
     return {
         id: 'last_run_at',
@@ -94,14 +94,8 @@ function lastRunColumn(): TableColumn<ComponentRecord> {
         accessorFn: (row: ComponentRecord) => row.state?.last_run_at ?? '',
         cell: ({ row }) => {
             const state = row.original.state ?? {}
-            if (!state.last_run_at) return h('span', { class: 'text-dimmed' }, '—')
-            const status = state.last_run_status as string | undefined
-            const meta = statusMeta(status)
-            return h(UBadge, {
-                color: meta.color,
-                icon: statusIcon(status),
-                ui: { leadingIcon: meta.executing ? 'animate-spin' : undefined },
-            }, () => h('span', { class: 'tabular-nums' }, relativeTime(new Date(state.last_run_at))))
+            if (!state.last_run_at) return emptyCell()
+            return h(LastRunBadge, { status: state.last_run_status, at: state.last_run_at, runId: state.last_run_id, target: row.original })
         },
     }
 }

@@ -599,49 +599,52 @@ watch(axisMax, () => {
                  @scroll="onScroll"
                  @click="onBlankClick"
                  @dblclick="resetZoom">
-                <!-- Time axis / ruler: sticky, and the drag-to-pan surface when zoomed. -->
-                <div class="sticky top-0 z-30 flex select-none border-b border-default bg-default"
-                     :class="fitted ? '' : 'cursor-ew-resize'"
-                     :style="{ height: AXIS_HEIGHT + 'px' }"
-                     @pointerdown="onRulerPointerDown"
-                     @pointermove="onRulerPointerMove"
-                     @pointerup="onRulerPointerUp"
-                     @pointercancel="onRulerPointerUp">
-                    <div v-if="labelColumn"
-                         class="flex shrink-0 items-center border-r border-default px-4"
-                         :style="{ width: labelColumn + 'px' }">
-                        <span class="caption truncate text-muted">{{ labelTitle }}</span>
-                    </div>
-                    <div ref="plotEl"
-                         class="relative flex-1"
-                         :style="{ marginInline: PLOT_GUTTER + 'px' }">
-                        <div v-for="t in rulerTicks"
-                             :key="t.value"
-                             class="absolute top-0 flex h-full items-center whitespace-nowrap text-xs font-medium tabular-nums text-muted"
-                             :style="{
-                                 left: `min(${t.percent}%, calc(100% - 1px))`,
-                                 transform: t.percent <= 1 ? 'translateX(0)' : t.percent >= 96 ? 'translateX(-100%)' : 'translateX(-50%)',
-                             }">
-                            {{ t.label }}
+                <!-- Time axis / ruler: sticky, and the drag-to-pan surface when zoomed. The strip keeps the
+                     card tone so rows scrolling beneath never show at the band's rounded corners. -->
+                <div class="sticky top-0 z-30 bg-muted"
+                     :style="{ height: AXIS_HEIGHT + 'px' }">
+                    <div class="flex h-full select-none rounded-md bg-elevated"
+                         :class="fitted ? '' : 'cursor-ew-resize'"
+                         @pointerdown="onRulerPointerDown"
+                         @pointermove="onRulerPointerMove"
+                         @pointerup="onRulerPointerUp"
+                         @pointercancel="onRulerPointerUp">
+                        <div v-if="labelColumn"
+                             class="flex shrink-0 items-center px-4"
+                             :style="{ width: labelColumn + 'px' }">
+                            <span class="caption truncate text-muted">{{ labelTitle }}</span>
                         </div>
+                        <div ref="plotEl"
+                             class="relative flex-1"
+                             :style="{ marginInline: PLOT_GUTTER + 'px' }">
+                            <div v-for="t in rulerTicks"
+                                 :key="t.value"
+                                 class="absolute top-0 flex h-full items-center whitespace-nowrap text-xs font-medium tabular-nums text-muted"
+                                 :style="{
+                                     left: `min(${t.percent}%, calc(100% - 1px))`,
+                                     transform: t.percent <= 1 ? 'translateX(0)' : t.percent >= 96 ? 'translateX(-100%)' : 'translateX(-50%)',
+                                 }">
+                                {{ t.label }}
+                            </div>
 
-                        <UBadge v-if="markerLabel && markerPercent !== null"
-                                :label="markerLabel"
-                                variant="solid"
-                                size="sm"
-                                class="pointer-events-none absolute top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap tabular-nums"
-                                :style="{ left: `${markerPercent}%` }" />
+                            <UBadge v-if="markerLabel && markerPercent !== null"
+                                    :label="markerLabel"
+                                    variant="solid"
+                                    size="sm"
+                                    class="pointer-events-none absolute top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap tabular-nums"
+                                    :style="{ left: `${markerPercent}%` }" />
 
-                        <UButton v-if="!fitted"
-                                 icon="i-lucide-zoom-out"
-                                 label="Reset zoom"
-                                 size="xs"
-                                 color="neutral"
-                                 variant="outline"
-                                 class="absolute right-2 top-1/2 z-30 -translate-y-1/2"
-                                 @click.stop="resetZoom"
-                                 @pointerdown.stop
-                                 @dblclick.stop />
+                            <UButton v-if="!fitted"
+                                     icon="i-lucide-zoom-out"
+                                     label="Reset zoom"
+                                     size="xs"
+                                     color="neutral"
+                                     variant="outline"
+                                     class="absolute right-2 top-1/2 z-30 -translate-y-1/2"
+                                     @click.stop="resetZoom"
+                                     @pointerdown.stop
+                                     @dblclick.stop />
+                        </div>
                     </div>
                 </div>
 
@@ -667,11 +670,8 @@ watch(axisMax, () => {
                             <UIcon :name="row.icon"
                                    class="size-4 shrink-0 text-muted" />
                             <span class="truncate text-sm font-medium">{{ row.name }}</span>
-                            <UBadge v-if="row.kind"
-                                    color="neutral"
-                                    size="sm"
-                                    :label="row.kind"
-                                    class="ml-auto shrink-0 capitalize" />
+                            <span v-if="row.kind"
+                                  class="ml-auto shrink-0 text-xs text-dimmed capitalize">{{ row.kind }}</span>
                         </div>
                     </div>
 

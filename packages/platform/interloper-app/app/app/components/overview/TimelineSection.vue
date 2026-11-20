@@ -79,8 +79,12 @@ onUnmounted(() => timelineStore.$reset())
 <template>
     <UCard>
         <template #header>
-            <CardHeader title="Timeline"
-                        :description="`${timezone} · ${rangeLabel}`">
+            <CardHeader>
+                <template #title>
+                    <UTooltip :text="`${timezone} · ${rangeLabel}`">
+                        <span>Timeline</span>
+                    </UTooltip>
+                </template>
                 <UIcon v-if="switching"
                        :name="appConfig.ui.icons.loading"
                        class="size-4 animate-spin text-dimmed" />
@@ -91,7 +95,7 @@ onUnmounted(() => timelineStore.$reset())
                 <UButton label="All executions"
                          :to="organisationStore.path('/executions/runs')"
                          color="neutral"
-                         variant="outline"
+                         variant="link"
                          size="sm" />
             </CardHeader>
         </template>
@@ -135,8 +139,5 @@ onUnmounted(() => timelineStore.$reset())
                                     label-title="Target"
                                     @bar-click="onBarClick" />
         </div>
-        <ChartTimelineLegend v-if="!error && (!loaded || rows.length)"
-                             scheduled
-                             class="mt-3" />
     </UCard>
 </template>

@@ -8,8 +8,6 @@ const ALL = '__all__'
 
 const kind = defineModel<string | null>({ required: true })
 
-const appConfig = useAppConfig()
-
 const props = defineProps<{
     components: Pick<ComponentRecord, 'kind'>[]
 }>()
@@ -21,10 +19,12 @@ const items = computed(() => [
 </script>
 
 <template>
-    <USelect :model-value="kind ?? ALL"
-             :items="items"
-             value-key="value"
-             :icon="appConfig.icons.kind"
-             class="w-40"
-             @update:model-value="kind = $event === ALL ? null : $event" />
+    <FilterBarField label="Kind"
+                    :inline-label="false">
+        <USelect :model-value="kind ?? ALL"
+                 :items="items"
+                 value-key="value"
+                 class="w-full sm:w-40"
+                 @update:model-value="kind = $event === ALL ? null : $event" />
+    </FilterBarField>
 </template>

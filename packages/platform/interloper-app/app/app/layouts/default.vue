@@ -14,38 +14,13 @@ provide(AGENT_PANEL_HOST, true)
 
 const destinations = useNavDestinations()
 
-/**
- * Hubs start folded and open whenever the route enters one, so the active
- * view is never hidden; the user can fold them again.
- */
-const openMenus = ref<string[]>([])
-watch(() => route.path, (path) => {
-    for (const page of destinations.value) {
-        if (page.views && isNavActive(page, path) && !openMenus.value.includes(page.to)) openMenus.value.push(page.to)
-    }
-}, { immediate: true })
-
-/** A hub lights up only while its views are hidden (folded, or a collapsed sidebar); otherwise its active view does. */
-function buildNavItems(collapsed: boolean): NavigationMenuItem[] {
-    return destinations.value.map(page => ({
-        value: page.to,
-        label: page.label,
-        icon: page.icon,
-        to: page.to,
-        active: isNavActive(page, route.path) && (!page.views || collapsed || !openMenus.value.includes(page.to)),
-        children: page.views?.map(view => ({
-            label: view.label,
-            icon: view.icon,
-            to: view.to,
-            active: route.path === view.to || route.path.startsWith(`${view.to}/`),
-        })),
-    }))
-}
-
-// One stable list per sidebar state: built inside the sidebar's slot, a new list on every render
-// would re-render the whole menu on each pointer move while the sidebar is resized.
-const expandedNavItems = computed(() => buildNavItems(false))
-const collapsedNavItems = computed(() => buildNavItems(true))
+/** The sidebar names each hub once; its views are the tabs on its pages. */
+const navItems = computed<NavigationMenuItem[]>(() => destinations.value.map(page => ({
+    label: page.label,
+    icon: page.icon,
+    to: page.to,
+    active: isNavActive(page, route.path),
+})))
 </script>
 
 <template>
@@ -61,11 +36,8 @@ const collapsedNavItems = computed(() => buildNavItems(true))
                 </template>
 
                 <template #default="{ collapsed }">
-                    <UNavigationMenu v-model="openMenus"
-                                     :collapsed="collapsed"
-                                     :items="collapsed ? collapsedNavItems : expandedNavItems"
-                                     type="multiple"
-                                     popover
+                    <UNavigationMenu :collapsed="collapsed"
+                                     :items="navItems"
                                      color="neutral"
                                      orientation="vertical" />
                 </template>

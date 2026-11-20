@@ -35,6 +35,13 @@ const filtered = computed(() => byKind.value.filter(component =>
     keyFilter.value === null || component.key === keyFilter.value,
 ))
 
+const activeFilters = computed(() => Number(kindFilter.value !== null) + Number(keyFilter.value !== null))
+
+function resetFilters() {
+    kindFilter.value = null
+    keyFilter.value = null
+}
+
 const kinds = computed(() => new Set(props.components.map(c => c.kind)).size)
 const keys = computed(() => new Set(props.components.map(c => c.key)).size)
 
@@ -58,15 +65,16 @@ function deselectVisible() {
     <div class="flex flex-col gap-6">
         <div class="flex flex-col gap-3">
             <!-- A single kind or type is no choice at all. -->
-            <div v-if="kinds > 1 || keys > 1"
-                 class="flex items-center gap-2">
+            <FilterBar v-if="kinds > 1 || keys > 1"
+                       :active="activeFilters"
+                       @reset="resetFilters">
                 <KindFilter v-if="kinds > 1"
                             v-model="kindFilter"
                             :components="components" />
                 <TypeFilter v-if="keys > 1"
                             v-model="keyFilter"
                             :components="byKind" />
-            </div>
+            </FilterBar>
 
             <div class="flex items-center justify-between">
                 <span class="text-sm text-muted tabular-nums">

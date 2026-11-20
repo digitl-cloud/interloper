@@ -12,7 +12,6 @@ const withLastQuery = useLastQuery()
 
 const navItems = computed<NavigationMenuItem[]>(() => props.items.map(item => ({
     label: item.label,
-    icon: item.icon,
     to: withLastQuery(item.to),
     active: item.active,
     badge: item.badge,

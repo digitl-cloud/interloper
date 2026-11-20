@@ -10,7 +10,8 @@ const props = withDefaults(defineProps<{
 /** Active status bucket key (e.g. "failed"); the host filters what it shows by it. */
 const statusFilter = defineModel<string | null>('statusFilter', { default: null })
 
-const legend = computed(() => props.stats.buckets.filter(b => b.core || b.count > 0))
+// Only the outcomes that occurred, and the one being filtered on.
+const legend = computed(() => props.stats.buckets.filter(b => b.count > 0 || statusFilter.value === b.key))
 
 /** Toggle a status filter; empty buckets aren't selectable (nothing to show). */
 function toggle(bucket: RunStatusBucket) {
