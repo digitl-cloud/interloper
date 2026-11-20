@@ -28,6 +28,7 @@ from interloper_db.models import (
     Execution,
     Identity,
     Organisation,
+    Partition,
     Profile,
     Quota,
     Run,
@@ -159,7 +160,7 @@ def engine() -> Iterator[Engine]:
         Quota,
         Usage,
     )
-    for model in (*models, Execution):
+    for model in (*models, Execution, Partition):
         table_of(model).create(engine)
     try:
         yield engine
@@ -286,14 +287,15 @@ def _run(
 
 
 def _execution(store: Store, run: Run, asset: Component, status: str) -> None:
-    """Record one asset execution of a run, stamped with its partition key as the database does.
+    """Record one asset execution of a run and fold it into its partition, as the database's triggers do.
 
     Args:
-        store: The store whose engine the row is written through.
+        store: The store whose engine the rows are written through.
         run: The run the execution belongs to.
         asset: The executed asset.
         status: The execution's status.
     """
+    key = run.partition_key
     with Session(store.engine) as session:
         session.add(
             Execution(
@@ -301,11 +303,19 @@ def _execution(store: Store, run: Run, asset: Component, status: str) -> None:
                 component_id=asset.id,
                 org_id=run.org_id,
                 component_key=asset.key,
-                partition_key=run.partition_key,
+                partition_key=key,
                 status=status,
                 created_at=run.created_at,
             )
         )
+        if key is not None:
+            partition = session.get(Partition, (run.org_id, asset.id, key)) or Partition(
+                org_id=run.org_id, component_id=asset.id, partition_key=key
+            )
+            partition.succeeded = partition.succeeded or status == "success"
+            if status == "failed":
+                partition.failed_run_id = max(partition.failed_run_id or run.id, run.id)
+            session.add(partition)
         session.commit()
 
 

@@ -34,6 +34,7 @@ from interloper_db.models.runs import (
     Event,
     Execution,
     Overdue,
+    Partition,
     Run,
     RunStatus,
 )
@@ -57,6 +58,7 @@ __all__ = [
     "OAuthClient",
     "Organisation",
     "Overdue",
+    "Partition",
     "Profile",
     "Quota",
     "Role",

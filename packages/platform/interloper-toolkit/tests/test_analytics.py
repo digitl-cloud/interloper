@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from interloper_db import engine as engine_module
-from interloper_db.models import Component, Execution, Run
+from interloper_db.models import Component, Execution, Partition, Run
 from sqlmodel import Session
 
 from interloper_toolkit import ToolkitContext, analytics
@@ -149,10 +149,20 @@ class TestAssetCoverage:
             )
             for key, asset, status in outcomes
         ]
+        partitions = [
+            Partition(
+                org_id=ctx.org_id,
+                component_id=asset.id,
+                partition_key=key,
+                succeeded=status == "success",
+                failed_run_id=runs[key].id if status == "failed" else None,
+            )
+            for key, asset, status in outcomes
+        ]
         with Session(engine_module.get_engine()) as session:
             session.add_all(runs.values())
             session.commit()
-            session.add_all(executions)
+            session.add_all([*executions, *partitions])
             session.commit()
         return job.id, orders.id, revenue.id
 

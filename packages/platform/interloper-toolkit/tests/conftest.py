@@ -21,6 +21,7 @@ from interloper_db.models import (
     Event,
     Execution,
     Organisation,
+    Partition,
     Quota,
     Run,
     Usage,
@@ -126,7 +127,7 @@ def toolkit_db() -> Iterator[Engine]:
 
     # Execution maps a Postgres view; its table definition doubles as the view's
     # schema, so SQLite gets it as a plain table the tests write rows into.
-    for model in (Organisation, Component, ComponentRelation, Backfill, Run, Event, Execution, Quota, Usage):
+    for model in (Organisation, Component, ComponentRelation, Backfill, Run, Event, Execution, Partition, Quota, Usage):
         table_of(model).create(eng)
     try:
         yield eng

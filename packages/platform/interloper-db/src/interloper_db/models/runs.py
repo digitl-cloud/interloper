@@ -7,7 +7,7 @@ from typing import Any, ClassVar, NamedTuple, Optional
 from uuid import UUID, uuid4
 
 import interloper as il
-from sqlalchemy import ForeignKey, Index, event
+from sqlalchemy import ForeignKey, Index, PrimaryKeyConstraint, event
 from sqlmodel import AutoString, Column, Relationship, SQLModel, text
 from sqlmodel import Field as SQLField
 
@@ -485,21 +485,13 @@ class Execution(SQLModel, table=True):
     the trigger and the backfill, which is why ``create_all`` skips it (see
     the ``migration_owned`` marker). The partition the operation's events
     name, else its run's, is stamped on the row as it is created (migrations
-    013 and 020), so coverage reads executions by partition without joining
-    every one to its run, and a snapshot's execution is filed under the
-    period it observed.
+    013 and 020), so a snapshot's execution is filed under the period it
+    observed, and :class:`Partition` folds each execution under that key.
     """
 
     __tablename__: ClassVar[str] = "executions"
     __table_args__: ClassVar[tuple[Any, ...]] = (
         Index("ix_executions_latest", "org_id", "component_id", text("created_at DESC")),
-        Index(
-            "ix_executions_partition_key",
-            "org_id",
-            "partition_key",
-            postgresql_include=["component_id", "status", "run_id"],
-        ),
-        Index("ix_executions_component_partition_key", "org_id", "component_id", "partition_key"),
         {"info": {"migration_owned": True}},
     )
 
@@ -513,3 +505,31 @@ class Execution(SQLModel, table=True):
     started_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     completed_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     created_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
+
+
+class Partition(SQLModel, table=True):
+    """What an asset's executions came to for one of its partitions, from runs of any target.
+
+    One row per organisation, asset and partition key ever attempted, folded
+    from ``executions``: ``succeeded`` once any execution of the pair
+    succeeded, ``failed_run_id`` the greatest id among the runs whose
+    execution of it failed. The fold is a Postgres trigger on ``executions``
+    (migration 025), so the application never writes this table. The primary
+    key leads with the organisation, as every read of it is scoped to one, and
+    carries both outcomes, so coverage reads an asset's partitions off the
+    index, in key order, without visiting the table. Like ``executions``, the
+    table keeps a deleted asset's rows: neither id is a foreign key.
+    """
+
+    __tablename__: ClassVar[str] = "partitions"
+    __table_args__: ClassVar[tuple[Any, ...]] = (
+        PrimaryKeyConstraint(
+            "org_id", "component_id", "partition_key", postgresql_include=["succeeded", "failed_run_id"]
+        ),
+    )
+
+    org_id: UUID
+    component_id: UUID
+    partition_key: str
+    succeeded: bool = False
+    failed_run_id: UUID | None = None
