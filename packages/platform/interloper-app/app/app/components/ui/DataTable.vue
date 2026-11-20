@@ -231,7 +231,7 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
                 <template #actions-cell="{ row }">
                     <div class="flex justify-end">
                         <UDropdownMenu v-if="buildRowActions(row.original).length" :items="buildRowActions(row.original)">
-                            <UButton :icon="appConfig.ui.icons.ellipsis"
+                            <UButton :icon="appConfig.icons.options"
                                      color="neutral"
                                      variant="ghost"
                                      size="sm"

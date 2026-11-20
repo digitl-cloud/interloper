@@ -142,6 +142,7 @@ Buttons, badges and empty states size their own icons.
 - **Sets.** Lucide (`i-lucide-*`). Brand marks come from the `icon:` collection (`assets/icons/`, hyphenated names, 64×64 canvas, official artwork only).
 - **Generic concepts** use `appConfig.ui.icons`: `loading`, `success`, `error`, `warning`, `info`, `close`, `external`, `reload`, `copy`, `ellipsis`, `search`, `plus`, `chevronDown`, ...
 - **Domain concepts** use `appConfig.icons`: `source`, `destination`, `connection`, `job`, `hook`, `asset`, `run`, `backfill`, ...
+  - An options menu opens from `options`, the vertical ellipsis; the generic `ellipsis` stays Nuxt UI's, for elided items.
   - A concept has one icon, and an icon means one concept.
   - A concept used in two places goes in the map; never write its literal twice.
 - **Spinner:** `appConfig.ui.icons.loading` with `animate-spin`, or a component's `loading` prop.

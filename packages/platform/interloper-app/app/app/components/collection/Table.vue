@@ -475,7 +475,7 @@ function onRowClick(row: any) {
                     <UDropdownMenu :items="row.depth === 1
                         ? buildSourceActions(row.original.sourceId)
                         : buildAssetActions(row.original.assetId, row.original.sourceId)">
-                        <UButton :icon="appConfig.ui.icons.ellipsis"
+                        <UButton :icon="appConfig.icons.options"
                                  color="neutral"
                                  variant="ghost"
                                  size="sm"

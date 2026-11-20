@@ -303,6 +303,7 @@ export default defineAppConfig({
     app: 'i-lucide-app-window',
     signIn: 'i-lucide-log-in',
     signOut: 'i-lucide-log-out',
+    options: 'i-lucide-ellipsis-vertical',
     edit: 'i-lucide-pencil',
     delete: 'i-lucide-trash-2',
     refresh: 'i-lucide-refresh-cw',
