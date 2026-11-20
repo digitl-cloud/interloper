@@ -66,9 +66,6 @@ AD_FIELDS = [
     "metrics.impressions",
     "metrics.interaction_rate",
     "metrics.interactions",
-    "segments.click_type",
     "segments.date",
     "segments.device",
-    "segments.keyword.info.match_type",
-    "segments.keyword.info.text",
 ]

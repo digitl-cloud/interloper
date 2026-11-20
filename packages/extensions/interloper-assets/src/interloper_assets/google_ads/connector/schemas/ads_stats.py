@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class AdsStats(Schema):
-    """Google Ads ad performance metrics per day, device, click type and keyword (GAQL over ad_group_ad)."""
+    """Google Ads ad performance metrics per day and device (GAQL over ad_group_ad)."""
 
     ad_group_ad_ad_final_urls: str | None = Field(
         default=None, description="The list of possible final URLs of the ad, as a JSON array."
@@ -80,15 +80,5 @@ class AdsStats(Schema):
     metrics_interactions: int | None = Field(
         default=None, description="The number of interactions (e.g. clicks, video views, calls)."
     )
-    segments_click_type: str | None = Field(
-        default=None, description="The part of the ad that was clicked (e.g. URL_CLICKS, SITELINKS)."
-    )
     segments_date: dt.date | None = Field(default=None, description="The day the metrics were aggregated for.")
     segments_device: str | None = Field(default=None, description="The device type (e.g. MOBILE, DESKTOP).")
-    segments_keyword_ad_group_criterion: str | None = Field(
-        default=None, description="The resource name of the keyword criterion that matched."
-    )
-    segments_keyword_info_match_type: str | None = Field(
-        default=None, description="The match type of the keyword (e.g. EXACT, PHRASE, BROAD)."
-    )
-    segments_keyword_info_text: str | None = Field(default=None, description="The text of the keyword.")

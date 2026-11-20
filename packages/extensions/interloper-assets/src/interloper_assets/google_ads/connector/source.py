@@ -53,7 +53,10 @@ class GoogleAds(il.Source):
         tags=["Report"],
     )
     async def ads_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-        """Ad performance metrics per day, segmented by device, click type and keyword."""
+        """Ad performance metrics per ad, day and device.
+
+        Performance Max serves through asset groups rather than ads, so its traffic is not in this report.
+        """
         return await self.connection.api.report(
             self.customer_id,
             context.partition_date,

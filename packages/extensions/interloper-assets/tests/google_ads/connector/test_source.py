@@ -4,8 +4,8 @@ Google answers GAQL in the REST JSON shape: camelCase keys nested per resource,
 int64 values as strings, enums by name, unset fields omitted, and doubles as
 JSON numbers, so a whole one has no fraction (``"conversions": 2``). The source
 normalizer flattens that into full GAQL resource paths (``metrics_clicks``,
-``ad_group_ad_ad_type``, ``segments_keyword_info_text``) and the schema types
-it. These tests pin the asset set, the normalizer, the spec round-trip, each
+``ad_group_ad_ad_type``, ``campaign_network_settings_target_search_network``)
+and the schema types it. These tests pin the asset set, the normalizer, the spec round-trip, each
 asset's request (customer, query, manager account) and the rows it writes, and
 the partition column (the vendor's ``segments_date``).
 """
@@ -100,15 +100,7 @@ AD_ROW = {
         "costPerAllConversions": 600000,
         "conversionsFromInteractionsRate": 0.3333333333333333,
     },
-    "segments": {
-        "date": "2026-06-14",
-        "device": "MOBILE",
-        "clickType": "URL_CLICKS",
-        "keyword": {
-            "adGroupCriterion": "customers/123/adGroupCriteria/789~222",
-            "info": {"text": "running shoes", "matchType": "EXACT"},
-        },
-    },
+    "segments": {"date": "2026-06-14", "device": "MOBILE"},
 }
 
 CAMPAIGN_COLUMNS = {
@@ -183,12 +175,8 @@ AD_COLUMNS = {
     "metrics_impressions": ("Int64", 100),
     "metrics_interaction_rate": ("Float64", 0.03),
     "metrics_interactions": ("Int64", 3),
-    "segments_click_type": ("string", "URL_CLICKS"),
     "segments_date": ("object", DAY),
     "segments_device": ("string", "MOBILE"),
-    "segments_keyword_ad_group_criterion": ("string", "customers/123/adGroupCriteria/789~222"),
-    "segments_keyword_info_match_type": ("string", "EXACT"),
-    "segments_keyword_info_text": ("string", "running shoes"),
 }
 
 
@@ -264,6 +252,11 @@ class TestRequests:
         await _run(_asset("ads_stats", _source(google, login_customer_id="999")))
         query = f"SELECT {', '.join(constants.AD_FIELDS)} FROM ad_group_ad WHERE {WINDOW}"
         assert google.sent == [("123", query, "999")]
+
+    def test_ads_stats_reads_one_row_per_ad_day_and_device(self):
+        """A click type repeats an impression per type it carried, and a keyword keeps only keyword-triggered rows."""
+        segments = [field for field in constants.AD_FIELDS if field.startswith("segments.")]
+        assert segments == ["segments.date", "segments.device"]
 
 
 class TestRows:
