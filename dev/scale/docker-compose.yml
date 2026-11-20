@@ -1,0 +1,86 @@
+# Scale-test stack: Postgres held to the production database's shape, and two
+# api replicas behind a round-robin proxy, as the load balancer spreads them.
+#
+#   make scale-up      # build the api image from this checkout and start the stack
+#   make scale-down    # stop it and drop the database volume
+#
+# The generator, the load driver and the scheduler probe run from the
+# workspace against it (see the Makefile's scale-* targets). Throwaway
+# credentials, never reused anywhere real.
+
+name: interloper-scale
+
+x-interloper-env: &interloper-env
+  INTERLOPER_POSTGRES_HOST: postgres
+  INTERLOPER_POSTGRES_PORT: "5432"
+  INTERLOPER_POSTGRES_USER: postgres
+  INTERLOPER_POSTGRES_PASSWORD: postgres
+  INTERLOPER_POSTGRES_DATABASE: interloper
+  INTERLOPER_ENCRYPTION_KEY: scale-encryption-key-not-for-production
+  INTERLOPER_SERVER_EXTERNAL_URL: http://localhost:3010
+
+services:
+  # The production instance's tier: 1 vCPU, 3.75GB of memory, a third of it
+  # shared buffers, Postgres 17. pg_stat_statements ranks what the load costs.
+  postgres:
+    image: postgres:17-alpine
+    command:
+      - postgres
+      - -c
+      - shared_buffers=1280MB
+      - -c
+      - effective_cache_size=2560MB
+      - -c
+      - max_connections=100
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=top
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: interloper
+    ports:
+      - "5434:5432"
+    volumes:
+      - scale-pgdata:/var/lib/postgresql/data
+    cpus: 1
+    mem_limit: 3840m
+    shm_size: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d interloper"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # Production's api: two replicas, 1Gi each. CPU is a request, not a limit, in
+  # production; SCALE_API_CPUS caps each replica here (one core by default).
+  api:
+    build:
+      context: ../..
+      dockerfile: dockerfile
+      target: api
+    image: interloper-api:scale
+    depends_on:
+      postgres:
+        condition: service_healthy
+    working_dir: /interloper
+    environment: *interloper-env
+    volumes:
+      - ../interloper.yaml:/interloper/interloper.yaml:ro
+    mem_limit: 1g
+    cpus: ${SCALE_API_CPUS:-1}
+    deploy:
+      replicas: 2
+
+  proxy:
+    image: nginx:1.29-alpine
+    depends_on:
+      - api
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "3010:80"
+
+volumes:
+  scale-pgdata:
