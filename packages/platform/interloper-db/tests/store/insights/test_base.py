@@ -30,6 +30,7 @@ from interloper_db.models import (
     Identity,
     Invitation,
     Organisation,
+    Partition,
     Profile,
     Quota,
     Run,
@@ -82,7 +83,7 @@ def store() -> Iterator[Store]:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
     tenant = (Organisation, Profile, Identity, UserOrganisation, Invitation, Token)
-    for model in (*tenant, Component, ComponentRelation, Backfill, Run, Event, Execution, Quota, Usage):
+    for model in (*tenant, Component, ComponentRelation, Backfill, Run, Event, Execution, Partition, Quota, Usage):
         table_of(model).create(engine)
     try:
         yield Store(catalog=il.Catalog.from_assets([DemoSource, SnapshotSource]))
@@ -143,7 +144,7 @@ def _error(run_id: UUID, event_type: str, error: str | None, *, second: int = 0,
 
 
 def _execution(run_id: UUID, asset_id: UUID, status: str, partition_key: str | None = None) -> None:
-    """Record an asset's execution in a run, under the run's organisation and stamped with its partition key.
+    """Record an asset's execution in a run and fold it into its partition, as the database's triggers do.
 
     Args:
         run_id: The run.
@@ -155,17 +156,26 @@ def _execution(run_id: UUID, asset_id: UUID, status: str, partition_key: str | N
     with Session(engine_module.get_engine()) as session:
         run = session.get(Run, run_id)
         assert run is not None
-        org_id, partition_key = run.org_id, partition_key or run.partition_key
-    _add(
-        Execution(
-            run_id=run_id,
-            component_id=asset_id,
-            org_id=org_id,
-            component_key="orders",
-            partition_key=partition_key,
-            status=status,
+        key = partition_key or run.partition_key
+        session.add(
+            Execution(
+                run_id=run_id,
+                component_id=asset_id,
+                org_id=run.org_id,
+                component_key="orders",
+                partition_key=key,
+                status=status,
+            )
         )
-    )
+        if key is not None:
+            partition = session.get(Partition, (run.org_id, asset_id, key)) or Partition(
+                org_id=run.org_id, component_id=asset_id, partition_key=key
+            )
+            partition.succeeded = partition.succeeded or status == "success"
+            if status == "failed":
+                partition.failed_run_id = max(partition.failed_run_id or run_id, run_id)
+            session.add(partition)
+        session.commit()
 
 
 class TestErrorGroups:
@@ -217,53 +227,57 @@ class TestErrorGroups:
 
 
 def _window(first: dt.date, last: dt.date) -> list[Any]:
-    return [partition_keys_overlapping(col(Execution.partition_key), first, last)]
+    return [partition_keys_overlapping(col(Partition.partition_key), first, last)]
 
 
 class TestPartitionResults:
     """Per asset and time partition, from runs of any target."""
 
     def test_reads_the_keys_of_every_granularity_overlapping_the_window(self, store: Store) -> None:
-        job, asset = uuid4(), uuid4()
+        job, asset = uuid4(), _component("asset")
         inside = ["2026-07-02", "2026-07-01T13", "2026-07", "2026"]
         for key in [*inside, "2026-06-30", "2026-06", "2025", "2026-08-01T00", "eu"]:
             _execution(_run(job, partition_key=key), asset, "success")
 
-        rows = list(store.insights._partition_results(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 31))))
+        rows = list(
+            store.insights._partition_results(_ORG, [asset], _window(dt.date(2026, 7, 1), dt.date(2026, 7, 31)))
+        )
 
         assert sorted(row.partition_key for row in rows) == sorted(inside)
         assert all(row.asset_id == asset and row.succeeded for row in rows)
 
     def test_an_assets_rows_come_back_together(self, store: Store) -> None:
-        job, first, second = uuid4(), uuid4(), uuid4()
+        job, first, second = uuid4(), _component("asset"), _component("asset")
         for day in ("2026-07-01", "2026-07-02", "2026-07-03"):
             run = _run(job, partition_key=day)
             _execution(run, first, "success")
             _execution(run, second, "success")
 
-        rows = store.insights._partition_results(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 3)))
+        rows = store.insights._partition_results(
+            _ORG, [second, first], _window(dt.date(2026, 7, 1), dt.date(2026, 7, 3))
+        )
 
         assert [asset_id for asset_id, _ in groupby(row.asset_id for row in rows)] == sorted([first, second])
 
     def test_runs_of_every_target_fold_into_one_result_per_asset_and_partition(self, store: Store) -> None:
-        asset = uuid4()
+        asset = _component("asset")
         by_job = _run(uuid4(), partition_key="2026-07-01")
         by_a_deleted_target = _run(None, partition_key="2026-07-01")
         _execution(by_job, asset, "failed")
         _execution(_run(asset, partition_key="2026-07-01"), asset, "success")
         _execution(by_a_deleted_target, asset, "failed")
 
-        [row] = store.insights._partition_results(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 1)))
+        [row] = store.insights._partition_results(_ORG, [asset], _window(dt.date(2026, 7, 1), dt.date(2026, 7, 1)))
 
         assert (row.asset_id, row.partition_key, row.succeeded, row.failed) == (asset, "2026-07-01", True, True)
         assert row.failed_run_id == max(by_job, by_a_deleted_target)
 
     def test_only_a_failed_execution_marks_the_result_failed(self, store: Store) -> None:
-        job, asset = uuid4(), uuid4()
+        job, asset = uuid4(), _component("asset")
         for key, status in (("2026-07-01", "failed"), ("2026-07-02", "running"), ("2026-07-03", "canceled")):
             _execution(_run(job, partition_key=key), asset, status)
 
-        rows = store.insights._partition_results(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 3)))
+        rows = store.insights._partition_results(_ORG, [asset], _window(dt.date(2026, 7, 1), dt.date(2026, 7, 3)))
 
         assert {row.partition_key: (row.succeeded, row.failed) for row in rows} == {
             "2026-07-01": (False, True),
@@ -271,12 +285,30 @@ class TestPartitionResults:
             "2026-07-03": (False, False),
         }
 
-    def test_unpartitioned_runs_and_other_orgs_stay_out(self, store: Store) -> None:
-        asset = uuid4()
+    def test_unpartitioned_runs_other_assets_and_other_orgs_stay_out(self, store: Store) -> None:
+        asset, other, elsewhere = _component("asset"), _component("asset"), uuid4()
         _execution(_run(uuid4()), asset, "success")
-        _execution(_run(uuid4(), partition_key="2026-07-01", org_id=uuid4()), asset, "success")
+        _execution(_run(uuid4(), partition_key="2026-07-01"), other, "success")
+        # Even an execution of this organisation's asset counts only for the organisation that ran it.
+        _execution(_run(uuid4(), partition_key="2026-07-01", org_id=elsewhere), asset, "success")
 
-        assert list(store.insights._partition_results(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 1)))) == []
+        assert (
+            list(store.insights._partition_results(_ORG, [asset], _window(dt.date(2026, 7, 1), dt.date(2026, 7, 1))))
+            == []
+        )
+
+    def test_assets_beyond_one_statement_are_read_in_several(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(insights_base, "MAX_ASSETS_PER_READ", 2)
+        assets = [_component("asset") for _ in range(5)]
+        run = _run(uuid4(), partition_key="2026-07-01")
+        for asset in assets:
+            _execution(run, asset, "success")
+
+        rows = store.insights._partition_results(_ORG, assets, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 1)))
+
+        assert [row.asset_id for row in rows] == sorted(assets)
 
 
 class TestAttemptedSpans:
