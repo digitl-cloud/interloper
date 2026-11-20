@@ -1034,7 +1034,9 @@ class RunStore:
             UsageLedger(session).settle_run(db_run, success=status == RunStatus.SUCCESS)
 
             if status != RunStatus.CANCELED and db_run.target is not None:
-                db_run.target.stamp_state(last_run_at=db_run.completed_at, last_run_status=db_run.status)
+                db_run.target.stamp_state(
+                    last_run_at=db_run.completed_at, last_run_status=db_run.status, last_run_id=str(db_run.id)
+                )
                 session.add(db_run.target)
 
             closed = self._events.close_operations(db_run, error=error)

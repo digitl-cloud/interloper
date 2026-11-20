@@ -75,6 +75,7 @@ class TestDefinition:
             "next_run_at",
             "last_run_at",
             "last_run_status",
+            "last_run_id",
         }
         assert il.Source.definition().state_schema == {}
 

@@ -21,13 +21,15 @@ class JobState(BaseModel):
 
     Timestamps are canonical timezone-aware ISO-8601 strings; the scheduler
     compares them lexicographically in SQL, so they are validated here but
-    never rewritten. ``last_run_status`` qualifies ``last_run_at`` — it reads
-    as that timestamp's badge rather than a column of its own.
+    never rewritten. ``last_run_status`` and ``last_run_id`` qualify
+    ``last_run_at``: it reads as that timestamp's badge, linked to the run,
+    rather than as columns of their own.
     """
 
     next_run_at: str | None = Field(default=None, title="Next run")
     last_run_at: str | None = Field(default=None, title="Last run")
     last_run_status: str | None = Field(default=None, json_schema_extra={"x-hidden": True})
+    last_run_id: str | None = Field(default=None, json_schema_extra={"x-hidden": True})
 
 
 class Job(Component, Workload):
