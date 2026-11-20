@@ -96,11 +96,12 @@ const markerTime = computed(() => {
 })
 const highlightedAsset = computed(() => hoveredAsset.value ?? eventInFocus.value?.component_id ?? null)
 
-// Panes clip overflow, so each keeps a 1px inset for its card's ring. On a phone the rail starts folded,
-// leaving the timeline the width, and keeps its own saved layout so the desktop one is untouched.
+// Panes clip overflow, so each keeps a 1px inset for its card's ring; the rail keeps it on the content it
+// scrolls, which clips too. On a phone the rail starts folded, leaving the timeline the width, and keeps its
+// own saved layout so the desktop one is untouched.
 const wide = useMediaQuery('(min-width: 640px)')
 const railItems = computed<SplitterItem[]>(() => [
-    { slot: 'rail', sizeUnit: 'px', defaultSize: wide.value ? 268 : 0, minSize: 200, maxSize: 480, collapsible: true, collapsedSize: 0, class: 'overflow-hidden p-px' },
+    { slot: 'rail', sizeUnit: 'px', defaultSize: wide.value ? 268 : 0, minSize: 200, maxSize: 480, collapsible: true, collapsedSize: 0, class: 'overflow-hidden' },
     { slot: 'main', class: 'min-w-0' },
 ])
 const panelItems: SplitterItem[] = [
@@ -303,7 +304,7 @@ onUnmounted(() => {
                                :ui="{ root: 'min-h-0 flex-1 -mt-px', handle: railHandleClass }">
                         <template #rail="{ collapsed }">
                             <div v-if="!collapsed"
-                                 class="h-full w-full min-w-0 overflow-y-auto">
+                                 class="h-full w-full min-w-0 overflow-y-auto p-px">
                                 <ExecutionsRunRail v-model:status-filter="statusFilter"
                                                    v-model:selected="selectedAsset"
                                                    v-model:hovered="hoveredAsset"
