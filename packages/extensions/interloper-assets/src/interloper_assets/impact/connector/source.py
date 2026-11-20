@@ -31,7 +31,12 @@ class Impact(il.Source):
         tags=["Report"],
     )
     async def actions(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-        """Conversion actions including revenue, commissions, and attribution data."""
+        """Conversion actions including revenue, commissions, and attribution data, by the day each happened.
+
+        An action's state (pending, approved, reversed) can change after that day, until its locking
+        date. A partition keeps the states its last run read, so a job whose lookback spans the
+        program's locking period re-reads recent days and picks the changes up.
+        """
         rows = await self.connection.api.rows(
             "/Actions",
             "Actions",
