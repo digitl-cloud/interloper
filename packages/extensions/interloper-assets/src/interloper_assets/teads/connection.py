@@ -27,7 +27,7 @@ class TeadsConnection(il.Connection):
         Returns:
             The authenticated client, cached per connection instance.
         """
-        client = il.AsyncRESTClient(constants.BASE_URL)
+        client = il.AsyncRESTClient(constants.BASE_URL, retry=il.HttpRetryPolicy())
         client.headers.update(
             {
                 "Authorization": self.api_key,

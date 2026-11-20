@@ -56,6 +56,7 @@ class PinterestAdsConnection(il.RefreshTokenOAuthConnection):
                 client_secret=self.client_secret,
                 refresh_token=self.refresh_token,
             ),
+            retry=il.HttpRetryPolicy(),
         )
 
     @cached_property

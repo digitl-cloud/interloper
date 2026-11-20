@@ -33,6 +33,7 @@ class CriteoConnection(il.RefreshTokenOAuthConnection):
             auth=il.OAuth2RefreshTokenAuth(
                 constants.BASE_URL, self.client_id, self.client_secret, refresh_token=self.refresh_token
             ),
+            retry=il.HttpRetryPolicy(),
         )
 
     @cached_property

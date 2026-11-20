@@ -66,9 +66,7 @@ def _row(*keys: str, clicks: float = 3.0) -> dict[str, Any]:
 
 def _connection(server: FakeSearchAnalytics) -> SearchConsoleConnection:
     connection = SearchConsoleConnection(service_account_key="{}")
-    connection.__dict__["client"] = il.AsyncRESTClient(
-        constants.BASE_URL, transport=httpx2.MockTransport(server), retry=il.RetryPolicy(max_attempts=1)
-    )
+    connection.__dict__["client"] = il.AsyncRESTClient(constants.BASE_URL, transport=httpx2.MockTransport(server))
     return connection
 
 

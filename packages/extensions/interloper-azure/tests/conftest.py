@@ -15,6 +15,7 @@ from typing import Any
 import httpx2
 import mssql_python
 import pytest
+from interloper.rest import HttpRetryPolicy
 
 from interloper_azure import connection as connection_module
 
@@ -79,6 +80,7 @@ class FakeFabric:
 
     def __init__(self) -> None:
         """Start with no script and no recorded traffic."""
+        self.retries: list[HttpRetryPolicy | None] = []
         self.requests: list[httpx2.Request] = []
         self._script: dict[str, list[httpx2.Response]] = {}
 
@@ -129,8 +131,11 @@ def fabric(monkeypatch: pytest.MonkeyPatch) -> FakeFabric:
     fake = FakeFabric()
     real = connection_module.RESTClient
 
-    def factory(*args: Any, **kwargs: Any) -> Any:
-        return real(*args, transport=httpx2.MockTransport(fake.handle), **kwargs)
+    def factory(*args: Any, retry: HttpRetryPolicy | None = None, **kwargs: Any) -> Any:
+        fake.retries.append(retry)
+        # the connection's own policy, without its waits
+        retry = retry.model_copy(update={"delay": 0, "jitter": 0}) if retry else None
+        return real(*args, transport=httpx2.MockTransport(fake.handle), retry=retry, **kwargs)
 
     monkeypatch.setattr(connection_module, "RESTClient", factory)
     return fake

@@ -30,9 +30,7 @@ def _connection(status: int, body: dict[str, Any]) -> tuple[SearchConsoleConnect
         return httpx2.Response(status, json=body)
 
     connection = SearchConsoleConnection(service_account_key="{}")
-    connection.__dict__["client"] = il.AsyncRESTClient(
-        constants.BASE_URL, transport=httpx2.MockTransport(handler), retry=il.RetryPolicy(max_attempts=1)
-    )
+    connection.__dict__["client"] = il.AsyncRESTClient(constants.BASE_URL, transport=httpx2.MockTransport(handler))
     return connection, requests
 
 
@@ -103,3 +101,11 @@ class TestCheck:
         result = await connection.verify(timeout=5)
 
         assert (result.ok, result.category) == (False, "auth")
+
+
+class TestRetry:
+    def test_the_client_repeats_requests_under_http_s_default_policy(self):
+        assert (
+            SearchConsoleConnection(service_account_key=json.dumps({"client_email": CLIENT_EMAIL})).client.retry
+            == il.HttpRetryPolicy()
+        )

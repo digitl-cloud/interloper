@@ -90,3 +90,11 @@ class TestCheck:
             category="error",
             message="LinkedIn refused the request (HTTP 401, REVOKED_ACCESS_TOKEN, service error 65601): revoked",
         )
+
+
+class TestRetry:
+    def test_the_client_repeats_requests_under_http_s_default_policy(self):
+        assert (
+            LinkedinAdsConnection(client_id="cid", client_secret="secret", refresh_token="token").client.retry
+            == il.HttpRetryPolicy()
+        )

@@ -4,6 +4,7 @@ from typing import Any
 
 import httpx2
 import pytest
+from interloper.rest import HttpRetryPolicy
 
 from interloper_azure import AzureConnection
 
@@ -122,3 +123,10 @@ class TestMetadata:
         extra = AzureConnection.model_fields["client_secret"].json_schema_extra
         assert isinstance(extra, dict)
         assert extra["x-widget"] == "password"
+
+
+class TestRetry:
+    def test_the_client_repeats_requests_under_http_s_default_policy(self, fabric):
+        _ = _connection().client
+
+        assert fabric.retries == [HttpRetryPolicy()]

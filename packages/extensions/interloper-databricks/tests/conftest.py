@@ -19,6 +19,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 from databricks import sql
+from interloper.rest import HttpRetryPolicy
 
 from interloper_databricks import connection as connection_module
 
@@ -45,6 +46,7 @@ class FakeWorkspace:
         """Start with no script and no recorded traffic."""
         self.requests: list[httpx2.Request] = []
         self.expires_in = 3600
+        self.retries: list[HttpRetryPolicy | None] = []
         self.token_status = 200
         self._script: dict[str, list[httpx2.Response]] = {}
         self._params: list[tuple[str, dict[str, str]]] = []
@@ -115,8 +117,11 @@ def workspace(monkeypatch: pytest.MonkeyPatch) -> FakeWorkspace:
     fake = FakeWorkspace()
     real = connection_module.RESTClient
 
-    def factory(*args: Any, **kwargs: Any) -> Any:
-        return real(*args, transport=httpx2.MockTransport(fake.handle), **kwargs)
+    def factory(*args: Any, retry: HttpRetryPolicy | None = None, **kwargs: Any) -> Any:
+        fake.retries.append(retry)
+        # the connection's own policy, without its waits
+        retry = retry.model_copy(update={"delay": 0, "jitter": 0}) if retry else None
+        return real(*args, transport=httpx2.MockTransport(fake.handle), retry=retry, **kwargs)
 
     monkeypatch.setattr(connection_module, "RESTClient", factory)
     return fake

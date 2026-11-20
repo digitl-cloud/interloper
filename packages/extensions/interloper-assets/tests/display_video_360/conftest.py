@@ -74,7 +74,6 @@ class FakeGoogle:
             constants.DISPLAY_VIDEO_URL,
             auth=il.HTTPBearerAuth("service-account-token"),
             transport=httpx2.MockTransport(self),
-            retry=il.RetryPolicy(max_attempts=1),
         )
         self._script: list[Any] = []
 

@@ -8,7 +8,7 @@ from typing import Any
 import httpx2
 from interloper.connection import Connection, connection
 from interloper.resource import SecretField, fetch_field_provider
-from interloper.rest import HTTPBearerAuth, JSONCursorPaginator, RESTClient
+from interloper.rest import HTTPBearerAuth, HttpRetryPolicy, JSONCursorPaginator, RESTClient
 from pydantic_settings import SettingsConfigDict
 
 API_BASE = "https://slack.com/api"
@@ -86,7 +86,7 @@ class SlackConnection(Connection):
         Returns:
             The bearer-authenticated client, cached per connection instance.
         """
-        return RESTClient(API_BASE, auth=HTTPBearerAuth(self.bot_token), timeout=_TIMEOUT)
+        return RESTClient(API_BASE, auth=HTTPBearerAuth(self.bot_token), timeout=_TIMEOUT, retry=HttpRetryPolicy())
 
     @fetch_field_provider
     def channels(self) -> list[dict[str, str]]:

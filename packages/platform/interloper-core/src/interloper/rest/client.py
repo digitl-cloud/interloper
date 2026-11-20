@@ -6,12 +6,12 @@ import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator, Iterator
-from typing import Any, ClassVar
+from typing import Any
 
 import httpx2
 
 from interloper.rest.paginator import BasePaginator, DataSelector, RangePaginator, select
-from interloper.retry import RetryPolicy
+from interloper.rest.retry import HttpRetryPolicy
 from interloper.utils.concurrency import bounded_gather
 
 logger = logging.getLogger(__name__)
@@ -20,57 +20,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_TIMEOUT = 300.0
 
 
-class TransientRetry:
-    """Which refused requests a REST client repeats, and how long it waits first.
-
-    A throttled request (429) was refused before it did anything, so it is
-    repeated whatever its method. A server error (5xx) or a dropped
-    connection may have left the request half done, so only an idempotent
-    request is repeated. The wait is the server's ``Retry-After`` when it
-    gives one in seconds, else the policy's.
-    """
-
-    THROTTLED: ClassVar[int] = 429
-    SERVER_ERRORS: ClassVar[frozenset[int]] = frozenset({500, 502, 503, 504})
-    IDEMPOTENT: ClassVar[frozenset[str]] = frozenset({"GET", "HEAD", "OPTIONS", "PUT", "DELETE"})
-    DEFAULT: ClassVar[RetryPolicy] = RetryPolicy(max_attempts=5, delay=2, max_delay=60)
-
-    def __init__(self, policy: RetryPolicy) -> None:
-        """Hold the attempt budget the client retries within.
-
-        Args:
-            policy: How many attempts a request gets and how long between them.
-        """
-        self.policy = policy
-
-    def wait(self, request: httpx2.Request, attempt: int, response: httpx2.Response | None) -> float | None:
-        """The seconds to wait before repeating a request, or None when it is not repeated.
-
-        Args:
-            request: The request sent.
-            attempt: The attempt about to be made, the first repeat being 2.
-            response: The server's answer, or None when the connection failed.
-
-        Returns:
-            The wait, or None for a success, a non-transient failure, or a spent budget.
-        """
-        if not self.policy.allows(attempt):
-            return None
-        idempotent = request.method in self.IDEMPOTENT
-        if response is None:
-            return self.policy.delay_before(attempt) if idempotent else None
-        if response.status_code == self.THROTTLED:
-            announced = response.headers.get("Retry-After", "")
-            if announced.isdigit():
-                return min(float(announced), self.policy.max_delay)
-            return self.policy.delay_before(attempt)
-        if response.status_code in self.SERVER_ERRORS and idempotent:
-            return self.policy.delay_before(attempt)
-        return None
-
-
 class RESTClient(httpx2.Client):
-    """A REST client that extends httpx2.Client with pagination support and transient retries."""
+    """A REST client that extends httpx2.Client with pagination support and opt-in retries."""
 
     def __init__(
         self,
@@ -79,7 +30,7 @@ class RESTClient(httpx2.Client):
         timeout: float | None = DEFAULT_TIMEOUT,
         headers: dict[str, str] | None = None,
         params: dict[str, str] | None = None,
-        retry: RetryPolicy | None = None,
+        retry: HttpRetryPolicy | None = None,
         **kwargs: Any,
     ):
         """Initialize the REST client.
@@ -91,8 +42,8 @@ class RESTClient(httpx2.Client):
                 waits forever.
             headers: The headers to include in requests.
             params: The parameters to include in requests.
-            retry: The budget for repeating throttled and transient failures (see
-                `TransientRetry`); ``None`` for its default of 5 attempts.
+            retry: The policy a failed request is sent again under (see
+                `HttpRetryPolicy`); ``None`` sends each request once.
             **kwargs: Additional keyword arguments to pass to httpx2.Client.
         """
         super().__init__(
@@ -103,10 +54,10 @@ class RESTClient(httpx2.Client):
             params=params,
             **kwargs,
         )
-        self.retry = TransientRetry(retry or TransientRetry.DEFAULT)
+        self.retry = retry
 
     def send(self, request: httpx2.Request, **kwargs: Any) -> httpx2.Response:
-        """Send a request, repeating it while it fails for a transient reason.
+        """Send a request, repeating it while it fails in a way the client's policy repeats.
 
         Args:
             request: The request to send.
@@ -118,8 +69,10 @@ class RESTClient(httpx2.Client):
 
         Raises:
             TransportError: When the connection fails and the request is not
-                repeated: not idempotent, or the budget is spent.
+                repeated: no policy, a failure it does not repeat, or a spent budget.
         """
+        if self.retry is None:
+            return super().send(request, **kwargs)
         attempt = 1
         while True:
             try:
@@ -212,7 +165,7 @@ class AsyncRESTClient(httpx2.AsyncClient):
         timeout: float | None = DEFAULT_TIMEOUT,
         headers: dict[str, str] | None = None,
         params: dict[str, str] | None = None,
-        retry: RetryPolicy | None = None,
+        retry: HttpRetryPolicy | None = None,
         **kwargs: Any,
     ):
         """Initialize the async REST client.
@@ -224,8 +177,8 @@ class AsyncRESTClient(httpx2.AsyncClient):
                 waits forever.
             headers: The headers to include in requests.
             params: The parameters to include in requests.
-            retry: The budget for repeating throttled and transient failures (see
-                `TransientRetry`); ``None`` for its default of 5 attempts.
+            retry: The policy a failed request is sent again under (see
+                `HttpRetryPolicy`); ``None`` sends each request once.
             **kwargs: Additional keyword arguments to pass to httpx2.AsyncClient.
         """
         super().__init__(
@@ -236,10 +189,10 @@ class AsyncRESTClient(httpx2.AsyncClient):
             params=params,
             **kwargs,
         )
-        self.retry = TransientRetry(retry or TransientRetry.DEFAULT)
+        self.retry = retry
 
     async def send(self, request: httpx2.Request, **kwargs: Any) -> httpx2.Response:
-        """Send a request, repeating it while it fails for a transient reason.
+        """Send a request, repeating it while it fails in a way the client's policy repeats.
 
         Args:
             request: The request to send.
@@ -251,8 +204,10 @@ class AsyncRESTClient(httpx2.AsyncClient):
 
         Raises:
             TransportError: When the connection fails and the request is not
-                repeated: not idempotent, or the budget is spent.
+                repeated: no policy, a failure it does not repeat, or a spent budget.
         """
+        if self.retry is None:
+            return await super().send(request, **kwargs)
         attempt = 1
         while True:
             try:

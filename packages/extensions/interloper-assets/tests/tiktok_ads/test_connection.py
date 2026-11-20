@@ -93,3 +93,8 @@ class TestCheck:
             category="error",
             message="TikTok API error 40001: The app_id is inconsistent with the token's app information",
         )
+
+
+class TestRetry:
+    def test_the_client_repeats_requests_under_http_s_default_policy(self):
+        assert TiktokAdsConnection(access_token="access-token").client.retry == il.HttpRetryPolicy()

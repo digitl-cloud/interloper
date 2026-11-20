@@ -37,7 +37,7 @@ class TiktokAdsConnection(il.OAuthConnection):
         """
         # The TikTok Business API authenticates via the "Access-Token" header, not Bearer.
         # Static-header auth drops straight into the async client.
-        return il.AsyncRESTClient(BASE_URL, headers={"Access-Token": self.access_token})
+        return il.AsyncRESTClient(BASE_URL, headers={"Access-Token": self.access_token}, retry=il.HttpRetryPolicy())
 
     @cached_property
     def api(self) -> TiktokAdsApi:

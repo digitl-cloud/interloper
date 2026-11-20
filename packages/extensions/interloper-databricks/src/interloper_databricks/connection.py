@@ -13,7 +13,7 @@ from databricks import sql
 from databricks.sql.client import Connection as Session
 from interloper.connection import Connection, connection
 from interloper.resource import InputField, SecretField, fetch_field_provider
-from interloper.rest import JSONCursorPaginator, RESTClient
+from interloper.rest import HttpRetryPolicy, JSONCursorPaginator, RESTClient
 from pydantic import PrivateAttr, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
@@ -171,7 +171,7 @@ class DatabricksConnection(Connection):
         if cached is not None and cached[1] - time.monotonic() > _REFRESH_MARGIN:
             return cached[0]
         assert self.client_id is not None and self.client_secret is not None
-        with RESTClient(self.host, timeout=_TIMEOUT) as oauth:
+        with RESTClient(self.host, timeout=_TIMEOUT, retry=HttpRetryPolicy()) as oauth:
             response = oauth.post(
                 _TOKEN_ENDPOINT,
                 data={"grant_type": "client_credentials", "scope": "all-apis"},
@@ -236,7 +236,7 @@ class DatabricksConnection(Connection):
         Returns:
             The bearer-authenticated client, cached per connection instance.
         """
-        return RESTClient(self.host, auth=_TokenAuth(self.token), timeout=_TIMEOUT)
+        return RESTClient(self.host, auth=_TokenAuth(self.token), timeout=_TIMEOUT, retry=HttpRetryPolicy())
 
     def _list(self, path: str, key: str, params: dict[str, str] | None = None) -> list[dict[str, Any]]:
         """Walk a paginated list endpoint and collect its items.

@@ -29,7 +29,7 @@ class AdupConnection(il.Connection):
             The authenticated client, cached per connection instance.
         """
         auth = il.OAuth2ClientCredentialsAuth(constants.BASE_URL, self.client_id, self.client_secret)
-        return il.AsyncRESTClient(constants.BASE_URL, auth=auth)
+        return il.AsyncRESTClient(constants.BASE_URL, auth=auth, retry=il.HttpRetryPolicy())
 
     @cached_property
     def api(self) -> AdupApi:

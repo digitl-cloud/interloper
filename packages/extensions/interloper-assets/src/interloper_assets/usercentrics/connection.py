@@ -28,7 +28,7 @@ class UsercentricsConnection(il.Connection):
             The authenticated client, cached per connection instance.
         """
         # Static API-key header (no token refresh) drops straight into the async client.
-        return il.AsyncRESTClient(constants.BASE_URL, headers={"X-API-Key": self.api_key})
+        return il.AsyncRESTClient(constants.BASE_URL, headers={"X-API-Key": self.api_key}, retry=il.HttpRetryPolicy())
 
     @cached_property
     def api(self) -> UsercentricsApi:

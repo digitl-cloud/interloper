@@ -12,6 +12,7 @@ import interloper as il
 from interloper.cli.commands.launch import LaunchCommand
 from interloper.events import Event, EventBatch, EventRecorder, EventType
 from interloper.operation import OperationResult
+from interloper.rest import HttpRetryPolicy
 from interloper.runner.spec import RunSpec
 
 
@@ -53,6 +54,7 @@ class FakeApi:
         self.live = True
         self.requests: list[httpx2.Request] = []
         self.batches: list[list[Event]] = []
+        self.retries: list[HttpRetryPolicy | None] = []
 
     def __call__(self, request: httpx2.Request) -> httpx2.Response:
         """Answer one request of the run's process.
@@ -100,7 +102,8 @@ def api(monkeypatch: pytest.MonkeyPatch) -> FakeApi:
     api = FakeApi()
     monkeypatch.setenv("INTERLOPER_RUN_TOKEN", "ilr_x")
 
-    def client(base_url: str, auth: httpx2.Auth, timeout: float) -> httpx2.Client:
+    def client(base_url: str, auth: httpx2.Auth, timeout: float, retry: HttpRetryPolicy | None = None) -> httpx2.Client:
+        api.retries.append(retry)
         return httpx2.Client(base_url=base_url, auth=auth, timeout=timeout, transport=httpx2.MockTransport(api))
 
     monkeypatch.setattr("interloper.rest.RESTClient", client)
@@ -158,6 +161,13 @@ class TestLaunch:
         LaunchCommand().run(_args())
 
         assert cadences == [(3, 30)]
+
+    def test_the_api_client_repeats_requests_under_http_s_default_policy(self, api: FakeApi) -> None:
+        api.serve(il.DAG(LaunchedSource(destinations=[il.MemoryDestination()])))
+
+        LaunchCommand().run(_args())
+
+        assert api.retries == [HttpRetryPolicy()]
 
     def test_the_window_is_the_runs_partition(self, api: FakeApi) -> None:
         # An unpartitioned DAG given a key: `interloper run` refuses it, a launched run reads it as the platform does.

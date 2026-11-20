@@ -103,3 +103,14 @@ class TestPageApi:
         with pytest.raises(PermissionError, match="cannot obtain a Page access token for page 42"):
             async with connection.page_api("42"):
                 pass
+
+
+class TestRetry:
+    def test_the_client_repeats_requests_under_http_s_default_policy(self):
+        assert (
+            FacebookInsightsConnection(client_id="cid", client_secret="secret", refresh_token="user-token").client.retry
+            == il.HttpRetryPolicy()
+        )
+
+    def test_a_page_client_repeats_requests_under_http_s_default_policy(self):
+        assert FacebookInsightsConnection._client("page-token").retry == il.HttpRetryPolicy()

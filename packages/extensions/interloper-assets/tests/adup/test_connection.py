@@ -58,3 +58,8 @@ class TestAuthentication:
             "grant_type": "client_credentials",
         }
         assert account_request.headers["Authorization"] == "Bearer access-token"
+
+
+class TestRetry:
+    def test_the_client_repeats_requests_under_http_s_default_policy(self):
+        assert AdupConnection(client_id="client-id", client_secret="client-secret").client.retry == il.HttpRetryPolicy()

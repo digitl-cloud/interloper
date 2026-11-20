@@ -31,7 +31,9 @@ class BrandwatchConnection(il.Connection):
         # parameter applied to every request. NOTE: the parameter name
         # (`param_key`) is carried over unverified from the reference connector
         # and may need to be `apikey` — confirm against a live key.
-        return il.AsyncRESTClient(constants.BASE_URL, params={"param_key": self.api_key}, timeout=60)
+        return il.AsyncRESTClient(
+            constants.BASE_URL, params={"param_key": self.api_key}, timeout=60, retry=il.HttpRetryPolicy()
+        )
 
     @cached_property
     def api(self) -> BrandwatchApi:

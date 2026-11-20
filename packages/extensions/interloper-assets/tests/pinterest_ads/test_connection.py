@@ -99,3 +99,8 @@ class TestCheck:
 
         with pytest.raises(httpx2.HTTPStatusError):
             await connection.check()
+
+
+class TestRetry:
+    def test_the_client_repeats_requests_under_http_s_default_policy(self):
+        assert _connection().client.retry == il.HttpRetryPolicy()

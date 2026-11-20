@@ -5,43 +5,11 @@ from __future__ import annotations
 import httpx2
 import pytest
 
-from interloper.rest.client import AsyncRESTClient, RESTClient, TransientRetry
+from interloper.rest.client import AsyncRESTClient, RESTClient
 from interloper.rest.paginator import JSONCursorPaginator, PageNumberPaginator
-from interloper.retry import RetryPolicy
+from interloper.rest.retry import HttpRetryPolicy
 
-POLICY = RetryPolicy(max_attempts=3, delay=5, jitter=0)
-NO_WAIT = RetryPolicy(max_attempts=3, delay=0, jitter=0)
-
-
-class TestTransientRetry:
-    """Which failures are worth another attempt, and how long to wait first."""
-
-    def test_throttling_waits_as_long_as_the_server_says_whatever_the_method(self):
-        request = httpx2.Request("POST", "https://api.test/query")
-        assert TransientRetry(POLICY).wait(request, 2, httpx2.Response(429, headers={"Retry-After": "7"})) == 7
-
-    def test_throttling_without_a_hint_follows_the_policy(self):
-        request = httpx2.Request("POST", "https://api.test/query")
-        assert TransientRetry(POLICY).wait(request, 2, httpx2.Response(429)) == 5
-
-    def test_a_server_error_is_retried_only_for_an_idempotent_request(self):
-        retry = TransientRetry(POLICY)
-        assert retry.wait(httpx2.Request("GET", "https://api.test/x"), 2, httpx2.Response(503)) == 5
-        assert retry.wait(httpx2.Request("POST", "https://api.test/x"), 2, httpx2.Response(503)) is None
-
-    def test_a_dropped_connection_is_retried_only_for_an_idempotent_request(self):
-        retry = TransientRetry(POLICY)
-        assert retry.wait(httpx2.Request("GET", "https://api.test/x"), 2, None) == 5
-        assert retry.wait(httpx2.Request("POST", "https://api.test/x"), 2, None) is None
-
-    def test_success_and_client_errors_are_not_retried(self):
-        request = httpx2.Request("GET", "https://api.test/x")
-        for status in (200, 400, 404):
-            assert TransientRetry(POLICY).wait(request, 2, httpx2.Response(status)) is None
-
-    def test_the_budget_ends_the_retries(self):
-        request = httpx2.Request("GET", "https://api.test/x")
-        assert TransientRetry(POLICY).wait(request, 4, httpx2.Response(503)) is None
+NO_WAIT = HttpRetryPolicy(max_attempts=3, delay=0, jitter=0)
 
 
 class TestTimeouts:
@@ -50,8 +18,41 @@ class TestTimeouts:
         assert AsyncRESTClient("https://api.test").timeout.read == 300
 
 
+class TestWithoutPolicy:
+    """A client built without a retry policy sends each request once."""
+
+    def test_has_no_policy_by_default(self):
+        assert RESTClient("https://api.test").retry is None
+        assert AsyncRESTClient("https://api.test").retry is None
+
+    @pytest.mark.parametrize("status", [429, 503])
+    def test_the_sync_client_returns_a_refusal_at_once(self, status: int):
+        calls: list[int] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            calls.append(1)
+            return httpx2.Response(status)
+
+        client = RESTClient("https://api.test", transport=httpx2.MockTransport(handler))
+        assert client.get("/x").status_code == status
+        assert calls == [1]
+
+    async def test_the_async_client_raises_a_dropped_connection_at_once(self):
+        calls: list[int] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            calls.append(1)
+            raise httpx2.ConnectError("connection reset", request=request)
+
+        client = AsyncRESTClient("https://api.test", transport=httpx2.MockTransport(handler))
+        async with client:
+            with pytest.raises(httpx2.ConnectError):
+                await client.get("/x")
+        assert calls == [1]
+
+
 class TestRetries:
-    """Both clients repeat a request the server refused for a passing reason."""
+    """Both clients repeat a request the server refused for a passing reason, under the policy they were built with."""
 
     def test_the_sync_client_repeats_a_server_error(self):
         statuses = [503, 200]
@@ -198,3 +199,17 @@ class TestAsyncRESTClient:
 
         assert response.json() == {"ok": True}
         assert seen == {"path": "/things", "token": "tok", "a": "1"}
+
+
+class TestDeclaredPolicy:
+    async def test_a_method_the_policy_declares_idempotent_is_repeated_after_a_server_error(self):
+        statuses = [503, 200]
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(statuses.pop(0))
+
+        policy = HttpRetryPolicy(max_attempts=3, delay=0, jitter=0, idempotent_methods={"GET", "POST"})
+        client = AsyncRESTClient("https://api.test", retry=policy, transport=httpx2.MockTransport(handler))
+        async with client:
+            assert (await client.post("/search", json={})).status_code == 200
+        assert statuses == []

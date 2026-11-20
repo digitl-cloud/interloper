@@ -32,6 +32,7 @@ class ImpactConnection(il.Connection):
             f"{BASE_URL}/Advertisers/{self.account_sid}",
             auth=httpx2.BasicAuth(username=self.account_sid, password=self.auth_token),
             headers={"Accept": "application/json"},
+            retry=il.HttpRetryPolicy(),
         )
 
     @cached_property

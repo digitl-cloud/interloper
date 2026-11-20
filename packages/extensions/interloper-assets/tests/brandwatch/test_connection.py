@@ -8,6 +8,7 @@ on that client.
 from __future__ import annotations
 
 import httpx2
+import interloper as il
 
 from interloper_assets.brandwatch import constants
 from interloper_assets.brandwatch.connection import BrandwatchConnection
@@ -38,3 +39,8 @@ class TestApi:
         connection = BrandwatchConnection(api_key="key")
 
         assert connection.api is connection.api
+
+
+class TestRetry:
+    def test_the_client_repeats_requests_under_http_s_default_policy(self):
+        assert BrandwatchConnection(api_key="key").client.retry == il.HttpRetryPolicy()

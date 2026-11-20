@@ -31,7 +31,7 @@ class DisplayVideo360Connection(il.Connection):
             The client authenticated as the service account for both APIs, cached per connection instance.
         """
         auth = ServiceAccountAuth(json.loads(self.service_account_key), constants.SCOPES)
-        return il.AsyncRESTClient(constants.DISPLAY_VIDEO_URL, auth=auth)
+        return il.AsyncRESTClient(constants.DISPLAY_VIDEO_URL, auth=auth, retry=il.HttpRetryPolicy())
 
     @cached_property
     def api(self) -> DisplayVideo360Api:

@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx2
 import pytest
+from interloper.rest import HttpRetryPolicy
 
 from interloper_slack import connection as connection_module
 
@@ -27,6 +28,7 @@ class FakeSlack:
         """Start with an empty script and no recorded traffic."""
         self.requests: list[httpx2.Request] = []
         self._script: list[httpx2.Response] = []
+        self.retries: list[HttpRetryPolicy | None] = []
 
     # -- Scripting -------------------------------------------------------------
 
@@ -120,8 +122,11 @@ def slack(monkeypatch: pytest.MonkeyPatch) -> FakeSlack:
     fake = FakeSlack()
     real = connection_module.RESTClient
 
-    def factory(*args: Any, **kwargs: Any) -> Any:
-        return real(*args, transport=httpx2.MockTransport(fake.handle), **kwargs)
+    def factory(*args: Any, retry: HttpRetryPolicy | None = None, **kwargs: Any) -> Any:
+        fake.retries.append(retry)
+        # the connection's own policy, without its waits
+        retry = retry.model_copy(update={"delay": 0, "jitter": 0}) if retry else None
+        return real(*args, transport=httpx2.MockTransport(fake.handle), retry=retry, **kwargs)
 
     monkeypatch.setattr(connection_module, "RESTClient", factory)
     return fake

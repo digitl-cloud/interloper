@@ -112,9 +112,7 @@ class FakeApi:
         """
         self.answers = list(answers)
         self.requests: list[tuple[str, str, Any]] = []
-        self.client = il.AsyncRESTClient(
-            constants.BASE_URL, transport=httpx2.MockTransport(self.answer), retry=il.RetryPolicy(max_attempts=1)
-        )
+        self.client = il.AsyncRESTClient(constants.BASE_URL, transport=httpx2.MockTransport(self.answer))
 
     def answer(self, request: httpx2.Request) -> httpx2.Response:
         """Record one request and serve the next answer.

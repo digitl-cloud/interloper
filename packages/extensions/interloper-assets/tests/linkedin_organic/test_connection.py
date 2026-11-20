@@ -148,3 +148,11 @@ class TestCheck:
             category="error",
             message="LinkedIn refused the request (HTTP 403): Not enough permissions",
         )
+
+
+class TestRetry:
+    def test_the_client_repeats_requests_under_http_s_default_policy(self):
+        assert (
+            LinkedinOrganicConnection(client_id="cid", client_secret="secret", refresh_token="token").client.retry
+            == il.HttpRetryPolicy()
+        )

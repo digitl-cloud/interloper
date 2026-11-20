@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import interloper as il
+
 from interloper_assets.usercentrics.api import UsercentricsApi
 from interloper_assets.usercentrics.connection import UsercentricsConnection
 from interloper_assets.usercentrics.constants import BASE_URL
@@ -31,3 +33,8 @@ class TestApi:
         connection = UsercentricsConnection(api_key="secret")
 
         assert connection.api is connection.api
+
+
+class TestRetry:
+    def test_the_client_repeats_requests_under_http_s_default_policy(self):
+        assert UsercentricsConnection(api_key="secret").client.retry == il.HttpRetryPolicy()

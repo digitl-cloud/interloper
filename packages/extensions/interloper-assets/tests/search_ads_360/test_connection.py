@@ -72,3 +72,8 @@ class TestCheck:
 
         with pytest.raises(ConnectionCheckError, match="lists no customer this service account can access"):
             await connection.check()
+
+
+class TestRetry:
+    def test_the_client_repeats_a_search_like_a_get_since_the_api_only_reads(self):
+        assert _connection().client.retry == il.HttpRetryPolicy(idempotent_methods={"GET", "POST"})

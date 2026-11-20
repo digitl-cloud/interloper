@@ -41,6 +41,7 @@ class SnapchatAdsConnection(il.RefreshTokenOAuthConnection):
                 refresh_token=self.refresh_token,
                 token_endpoint=_TOKEN_ENDPOINT,
             ),
+            retry=il.HttpRetryPolicy(),
         )
 
     @cached_property

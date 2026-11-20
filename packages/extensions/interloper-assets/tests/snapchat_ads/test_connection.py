@@ -107,3 +107,11 @@ class TestCheck:
         assert result == il.CheckResult(
             ok=False, live=True, category="error", message="The provider responded with HTTP 500."
         )
+
+
+class TestRetry:
+    def test_the_client_repeats_requests_under_http_s_default_policy(self):
+        assert (
+            SnapchatAdsConnection(client_id="client-id", client_secret="secret", refresh_token="refresh").client.retry
+            == il.HttpRetryPolicy()
+        )

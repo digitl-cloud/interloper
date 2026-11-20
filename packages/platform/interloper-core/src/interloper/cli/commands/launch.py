@@ -63,7 +63,7 @@ class LaunchCommand(Command):
         from interloper.dag import DAG
         from interloper.errors import RunnerError, format_exception
         from interloper.events import Event, EventBatch, EventRecorder, EventType
-        from interloper.rest import HTTPBearerAuth, RESTClient
+        from interloper.rest import HTTPBearerAuth, HttpRetryPolicy, RESTClient
         from interloper.runner import Runner
         from interloper.runner.spec import RunSpec
         from interloper.settings import RunnerSettings, RunSettings, ServerSettings
@@ -75,7 +75,9 @@ class LaunchCommand(Command):
                 "Error: launch executes a platform run, which needs the run's token (INTERLOPER_RUN_TOKEN) "
                 "and the API it belongs to (server.internal_url)."
             )
-        client = RESTClient(ServerSettings.get().internal_url, auth=HTTPBearerAuth(run.token), timeout=30)
+        client = RESTClient(
+            ServerSettings.get().internal_url, auth=HTTPBearerAuth(run.token), timeout=30, retry=HttpRetryPolicy()
+        )
         recorder = EventRecorder(
             partial(EventBatch.post, client=client, run_id=args.run_id),
             run_id=args.run_id,
