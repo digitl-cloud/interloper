@@ -7,7 +7,6 @@ import logging
 from asyncio import get_running_loop, sleep
 from typing import Any
 
-import httpx2
 import interloper as il
 
 from interloper_assets.impact import constants
@@ -67,10 +66,16 @@ class ImpactApi:
 
         Returns:
             The records of every page of the job's download, in page order.
+
+        Raises:
+            RuntimeError: If Impact answers the export without queueing a job.
         """
         response = await self.client.get(path, params={**params, "ResultFormat": "JSON"})
         response.raise_for_status()
-        job_id = response.json()["QueuedUri"].split("/")[-1]
+        answer = response.json()
+        if not answer.get("QueuedUri"):
+            raise RuntimeError(f"Impact did not queue {path}: {answer}")
+        job_id = answer["QueuedUri"].split("/")[-1]
         await self._wait(job_id)
         return await self._records(
             f"/Jobs/{job_id}/Download",
@@ -124,7 +129,7 @@ class ImpactApi:
 
         Each poll depends on the previous one's status, so the polls run one
         after another, ``JOB_POLL_INTERVAL`` apart, until ``JOB_POLL_TIMEOUT``.
-        A poll that fails is read as no status yet and polled again.
+        A refused poll raises as it comes.
 
         Args:
             job_id: The job, as its ``QueuedUri`` names it.
@@ -136,13 +141,9 @@ class ImpactApi:
         deadline = loop.time() + constants.JOB_POLL_TIMEOUT
         while True:
             logger.info(f"Waiting for Impact job {job_id}...")
-            try:
-                response = await self.client.get(f"/Jobs/{job_id}")
-                response.raise_for_status()
-                status = response.json()["Status"]
-            except httpx2.HTTPError as error:
-                logger.debug(f"Transient error polling Impact job {job_id}: {error}")
-                status = None
+            response = await self.client.get(f"/Jobs/{job_id}")
+            response.raise_for_status()
+            status = response.json()["Status"]
 
             if status == "COMPLETED":
                 return

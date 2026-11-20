@@ -13,6 +13,7 @@ from collections.abc import Callable
 
 import httpx2
 import interloper as il
+import pytest
 
 from interloper_assets.impact.connection import ImpactConnection
 from interloper_assets.impact.constants import BASE_URL
@@ -68,6 +69,12 @@ class TestPrograms:
             (f"{ACCOUNT}/Campaigns", {"Page": "1"}),
             (f"{ACCOUNT}/Campaigns", {"Page": "2"}),
         ]
+
+    @pytest.mark.parametrize("program", [{"Id": "7"}, {"Id": "7", "Name": None}, {"Id": "7", "Name": ""}])
+    async def test_a_program_without_a_name_is_labelled_by_its_id(self, program: dict[str, str | None]):
+        connection = _connection(lambda _: httpx2.Response(200, json={"@numpages": "1", "Campaigns": [program]}))
+
+        assert await connection.programs() == [{"Id": "7", "Name": "7"}]
 
 
 class TestCheck:

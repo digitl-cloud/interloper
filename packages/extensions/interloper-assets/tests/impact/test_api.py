@@ -183,21 +183,30 @@ class TestExport:
         assert sleeps == [constants.JOB_POLL_INTERVAL] * 2
         assert caplog.messages == ["Waiting for Impact job J1..."] * 3
 
-    async def test_a_poll_that_fails_is_polled_again(self, sleeps: list[float]):
-        polls: list[httpx2.Request] = []
+    @pytest.mark.parametrize(("status", "reason"), [(401, "Unauthorized"), (403, "Forbidden"), (503, "Unavailable")])
+    async def test_a_refused_poll_raises_at_once(
+        self, status: int, reason: str, monkeypatch: pytest.MonkeyPatch, sleeps: list[float]
+    ):
+        monkeypatch.setattr(constants, "JOB_POLL_TIMEOUT", 0.0)
         job = _Job("Clicks", ["COMPLETED"])
 
         def handler(request: httpx2.Request) -> httpx2.Response:
             if request.url.path.endswith("/Jobs/J1"):
-                polls.append(request)
-                if len(polls) == 1:
-                    return httpx2.Response(503)
+                job.requests.append(request)
+                return httpx2.Response(status)
             return job(request)
 
-        api = _api(handler)
-        assert await api.export("/Programs/123/ClickExport", "Clicks") == [{"Id": "1"}, {"Id": "2"}]
-        assert len(polls) == 2
-        assert sleeps == [constants.JOB_POLL_INTERVAL]
+        with pytest.raises(httpx2.HTTPStatusError, match=f"{status} .*{reason}"):
+            await _api(handler).export("/Programs/123/ClickExport", "Clicks")
+        assert sleeps == []
+        assert not any(str(request.url).startswith(DOWNLOAD) for request in job.requests)
+
+    async def test_an_export_left_unqueued_raises_impacts_answer(self, sleeps: list[float]):
+        answer = {"Status": "ERROR", "Message": "SUBAID is required"}
+
+        with pytest.raises(RuntimeError, match=r"Impact did not queue /ReportExport/some_report: .*SUBAID is required"):
+            await _api(lambda _: httpx2.Response(200, json=answer)).export("/ReportExport/some_report", "Records")
+        assert sleeps == []
 
     async def test_a_poll_without_a_status_raises_at_once(self, sleeps: list[float]):
         def handler(request: httpx2.Request) -> httpx2.Response:

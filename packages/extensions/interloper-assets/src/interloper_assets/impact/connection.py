@@ -53,7 +53,7 @@ class ImpactConnection(il.Connection):
 
         """
         programs = await self.api.rows("/Campaigns", "Campaigns")
-        return [{"Id": program["Id"], "Name": program.get("Name", program["Id"])} for program in programs]
+        return [{"Id": program["Id"], "Name": program.get("Name") or program["Id"]} for program in programs]
 
     async def check(self) -> bool:
         """Prove the credentials work by running the ``programs`` lookup.
