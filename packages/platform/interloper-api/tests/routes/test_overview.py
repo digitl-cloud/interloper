@@ -247,6 +247,9 @@ def _run(
 ) -> Run:
     """Insert one run attempt directly, bypassing the queueing path.
 
+    An attempt after its stack's first marks the earlier ones retried, as
+    queueing it does.
+
     Args:
         store: The store whose engine the row is written through.
         org_id: The organisation.
@@ -281,6 +284,9 @@ def _run(
         session.refresh(run)
         run.root_run_id = root or run.id
         session.add(run)
+        for earlier in session.exec(select(Run).where(Run.root_run_id == run.root_run_id, Run.attempt < attempt)):
+            earlier.mark_retried()
+            session.add(earlier)
         session.commit()
         session.refresh(run)
     return run

@@ -40,7 +40,7 @@ import interloper as il
 from interloper.errors import ConfigError
 from interloper.partitioning import TimeGranularity, TimePartition
 from interloper.runner.spec import RunSpec
-from sqlalchemy import Engine, and_, exists, func, or_
+from sqlalchemy import Engine, and_, func, or_
 from sqlalchemy.orm import aliased, joinedload
 from sqlmodel import col, select
 
@@ -184,18 +184,14 @@ class RunQuery(PageQuery):
 def latest_attempt() -> Any:
     """Keep only each stack's latest attempt.
 
-    An attempt is its stack's latest when no attempt of the same stack
-    carries a higher number: a per-row probe of the stack's unique
-    ``(root_run_id, attempt)`` index, never an aggregate the planner has to
-    estimate. The probe takes none of the caller's filters on purpose:
-    narrowing it would answer "the latest *failed* attempt" rather than "the
-    stacks whose latest attempt failed".
+    An attempt is its stack's latest until its next one is queued, which the
+    run records itself (``Run.retried``), so the rule reads one column of the
+    row and costs a listing nothing more per run.
 
     Returns:
         A filter expression selecting the latest attempt of each stack.
     """
-    later = aliased(Run)
-    return ~exists().where(col(later.root_run_id) == col(Run.root_run_id), col(later.attempt) > col(Run.attempt))
+    return col(Run.retried).is_(False)
 
 
 class RunStore:
@@ -332,6 +328,9 @@ class RunStore:
     def recent(self, org_id: UUID, *, until: datetime, limit: int) -> builtins.list[Run]:
         """The stacks that completed most recently, newest completion first.
 
+        Read off the organisation's completions in order and stopped at
+        *limit*: nothing counts how many stacks ever completed.
+
         Args:
             org_id: Organisation UUID.
             until: Keep stacks completed by this instant.
@@ -340,7 +339,15 @@ class RunStore:
         Returns:
             Each stack's latest attempt, its target loaded.
         """
-        return self.list(org_id, RunQuery(completed_before=until, sort="-completed_at", limit=limit)).items
+        statement = (
+            select(Run)
+            .where(*self._filters(org_id, RunQuery(completed_before=until)))
+            .order_by(col(Run.completed_at).desc(), col(Run.id))
+            .limit(limit)
+            .options(*RUN_LOAD_OPTIONS)
+        )
+        with session_scope(self._engine) as session:
+            return [*session.exec(statement).all()]
 
     def failures(self, org_id: UUID, query: PageQuery) -> Page[Run]:
         """The stacks whose latest attempt failed, newest first.
@@ -425,7 +432,7 @@ class RunStore:
         """Every organisation's verdicts whose hooks have not been evaluated, oldest completion first.
 
         For the hook sweep: a run that will never fire hooks (canceled, or a
-        failure a retry superseded) is stamped at that transition, so what
+        failure that was retried) is stamped at that transition, so what
         is left is exactly what the sweep owes.
 
         Returns:
@@ -447,7 +454,9 @@ class RunStore:
         created attempt targeting the component, whatever stack it belongs to.
         The runs of one backfill share their creation instant, so a tie goes
         to the later partition key, then to the greater id. Runs whose target
-        was deleted are left out.
+        was deleted are left out. Each target's run is one probe of its own
+        runs, newest first, so the read follows the organisation's targets,
+        never its history.
 
         Args:
             org_id: Organisation UUID.
@@ -456,47 +465,62 @@ class RunStore:
         Returns:
             One run per target, newest first, with the target loaded.
         """
-        rank = (
-            func.row_number()
-            .over(
-                partition_by=col(Run.component_id),
-                order_by=(col(Run.created_at).desc(), col(Run.partition_key).desc().nulls_last(), col(Run.id).desc()),
+        latest = aliased(Run)
+        newest = (
+            select(latest.id)
+            .where(col(latest.component_id) == col(Component.id), latest.org_id == org_id)
+            .order_by(
+                col(latest.created_at).desc(), col(latest.partition_key).desc().nulls_last(), col(latest.id).desc()
             )
-            .label("rank")
+            .limit(1)
+            .correlate(Component)
+            .scalar_subquery()
         )
-        ranked = select(col(Run.id), rank).where(Run.org_id == org_id, col(Run.component_id).is_not(None)).subquery()
+        targets = select(newest).where(Component.org_id == org_id)
+        if kind:
+            targets = targets.where(Component.kind == kind)
         statement = (
             select(Run)
-            .where(col(Run.id).in_(select(ranked.c.id).where(ranked.c.rank == 1)))
-            .order_by(col(Run.created_at).desc())
+            .where(col(Run.id).in_(targets))
+            .order_by(col(Run.created_at).desc(), col(Run.id))
             .options(*RUN_LOAD_OPTIONS)
         )
-        if kind:
-            statement = statement.where(col(Run.target).has(col(Component.kind) == kind))
         with session_scope(self._engine) as session:
             return [*session.exec(statement).all()]
 
-    def last_successes(self, org_id: UUID) -> dict[UUID, datetime]:
+    def last_successes(self, org_id: UUID, *, kind: str | None = None) -> dict[UUID, datetime]:
         """When each target last completed a successful run.
+
+        One probe of each target's successful runs, latest completion first,
+        so the read follows the organisation's targets, never its history.
 
         Args:
             org_id: Organisation UUID.
+            kind: Keep targets of this kind; ``None`` keeps every kind.
 
         Returns:
             The latest successful completion by target id; a target that never
             succeeded is absent.
         """
-        statement = (
-            select(col(Run.component_id), func.max(col(Run.completed_at)))
-            .where(Run.org_id == org_id, Run.status == RunStatus.SUCCESS, col(Run.component_id).is_not(None))
-            .group_by(col(Run.component_id))
+        succeeded = aliased(Run)
+        last = (
+            select(succeeded.completed_at)
+            .where(
+                col(succeeded.component_id) == col(Component.id),
+                succeeded.org_id == org_id,
+                succeeded.status == RunStatus.SUCCESS,
+                col(succeeded.completed_at).is_not(None),
+            )
+            .order_by(col(succeeded.completed_at).desc())
+            .limit(1)
+            .correlate(Component)
+            .scalar_subquery()
         )
+        statement = select(col(Component.id), last).where(Component.org_id == org_id)
+        if kind:
+            statement = statement.where(Component.kind == kind)
         with session_scope(self._engine) as session:
-            return {
-                component_id: completed
-                for component_id, completed in session.exec(statement).all()
-                if component_id is not None and completed is not None
-            }
+            return {target: completed for target, completed in session.exec(statement).all() if completed is not None}
 
     def claim_next(self) -> Run | None:
         """Claim the oldest claimable queued run and dispatch it, reserving its quota.
@@ -872,7 +896,7 @@ class RunStore:
                 retry_scope=scope,
                 billable=head.billable,
             )
-            head.supersede()
+            head.mark_retried()
             session.add(head)
             save(session, db_run, "target")
             return db_run
@@ -1088,7 +1112,7 @@ class RunStore:
             retry_scope="failed",
             billable=db_run.billable,
         )
-        db_run.supersede()
+        db_run.mark_retried()
         with session_scope(self._engine) as session:
             session.add_all((successor, db_run))
             session.flush()

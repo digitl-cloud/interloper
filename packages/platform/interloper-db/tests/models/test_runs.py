@@ -64,6 +64,24 @@ def test_a_stack_holds_one_run_per_attempt(auth_db: Engine) -> None:
             session.commit()
 
 
+def test_a_retried_run_says_so_and_settles_its_hooks() -> None:
+    run = Run(org_id=uuid4(), status="failed")
+
+    run.mark_retried()
+
+    assert run.retried
+    assert run.hooks_evaluated_at is not None
+
+
+def test_a_retried_run_whose_hooks_already_ran_keeps_their_stamp() -> None:
+    run = Run(org_id=uuid4(), status="failed", hooks_evaluated_at=_CREATED)
+
+    run.mark_retried()
+
+    assert run.retried
+    assert run.hooks_evaluated_at == _CREATED
+
+
 _ORG_ID = uuid4()
 _RUN_ID = UUID("99c018d6-98fe-4de5-a867-1f1a9a545a38")
 

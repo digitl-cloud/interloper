@@ -497,6 +497,7 @@ class TestStackIdentity:
         assert retry.root_run_id == run.root_run_id
         assert retry.id != run.id
         assert retry.attempt == 2
+        assert store.runs.get(run.id).retried and not retry.retried
 
 
 class TestAutomaticRetry:
@@ -516,6 +517,7 @@ class TestAutomaticRetry:
         assert successor.status == "queued"
         assert successor.scheduled_for is not None
         assert successor.billable == run.billable
+        assert store.runs.get(run.id).retried and not successor.retried
 
     def test_an_exhausted_budget_queues_nothing(self, store: Store) -> None:
         target = _job_with_retry(store, max_attempts=1)
@@ -525,6 +527,7 @@ class TestAutomaticRetry:
 
         with Session(store.engine) as session:
             assert session.exec(select(Run).where(Run.retry_of == run.id)).all() == []
+        assert not store.runs.get(run.id).retried
 
     def test_a_successful_run_queues_nothing(self, store: Store) -> None:
         target = _job_with_retry(store, max_attempts=3)
@@ -644,6 +647,16 @@ class TestStackNativeListing:
 
         assert [run.id for run in attempts.items] == [successor.id, first.id]
         assert attempts.total == 2
+
+    def test_a_canceled_retry_is_still_its_stacks_latest_attempt(self, store: Store) -> None:
+        first = store.runs.create(_ORG_ID)
+        store.runs.fail(first.id, "failed")
+        retry = store.runs.retry(first.id)
+
+        store.runs.cancel(retry.id)
+
+        assert store.runs.get(first.id).retried
+        assert [run.id for run in store.runs.list(_ORG_ID, RunQuery()).items] == [retry.id]
 
     def test_unretried_runs_are_unaffected(self, store: Store) -> None:
         first = store.runs.create(_ORG_ID)
@@ -994,7 +1007,7 @@ class TestRetryValidation:
         with pytest.raises(ConflictError, match="latest attempt 2 is 'success'"):
             store.runs.retry(first.id)
 
-    def test_a_head_superseded_while_its_lock_was_awaited_is_refused(self, store: Store):
+    def test_a_head_retried_while_its_lock_was_awaited_is_refused(self, store: Store):
         # SQLite has no row locks, so the rival retry is written right after
         # the locked read of the head, where a concurrent commit would land.
         first = store.runs.create(_ORG_ID)
@@ -1040,7 +1053,7 @@ class TestAllAttemptsAndPartitionRange:
             return run.id
 
     def test_all_attempts_lists_and_counts_every_attempt(self, store: Store):
-        first = self._add(store, status="failed")
+        first = self._add(store, status="failed", retried=True)
         second = self._add(store, retry_of=first, root_run_id=first, attempt=2)
 
         latest = store.runs.list(_ORG_ID, RunQuery())
@@ -1844,6 +1857,41 @@ def _attempt(
         session.add(run)
         session.commit()
     return run_id
+
+
+class TestLastSuccesses:
+    """One instant per target that ever succeeded: its latest successful completion."""
+
+    def _succeeded(
+        self, target: UUID, completed: dt.datetime, *, status: str = "success", org_id: UUID = _ORG_ID
+    ) -> None:
+        with Session(engine_module.get_engine()) as session:
+            session.add(Run(org_id=org_id, component_id=target, status=status, completed_at=completed))
+            session.commit()
+
+    def test_the_latest_successful_completion_wins(self, store: Store) -> None:
+        job = _component(store, "job")
+        self._succeeded(job, _T0 + dt.timedelta(hours=2))
+        self._succeeded(job, _T0 + dt.timedelta(hours=1))
+        self._succeeded(job, _T0 + dt.timedelta(hours=3), status="failed")
+
+        assert store.runs.last_successes(_ORG_ID) == {job: _T0 + dt.timedelta(hours=2)}
+
+    def test_a_target_that_never_succeeded_is_absent(self, store: Store) -> None:
+        job = _component(store, "job")
+        self._succeeded(job, _T0, status="failed")
+
+        assert store.runs.last_successes(_ORG_ID) == {}
+
+    def test_kind_filter_and_org_scoping(self, store: Store) -> None:
+        job, source = _component(store, "job"), _component(store, "source")
+        self._succeeded(job, _T0)
+        self._succeeded(source, _T0)
+        self._succeeded(job, _T0 + dt.timedelta(hours=1), org_id=uuid4())
+
+        assert store.runs.last_successes(_ORG_ID, kind="job") == {job: _T0}
+        assert store.runs.last_successes(_ORG_ID) == {job: _T0, source: _T0}
+        assert store.runs.last_successes(uuid4()) == {}
 
 
 class TestLatestByTarget:

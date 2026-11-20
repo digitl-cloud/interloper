@@ -388,7 +388,7 @@ class InsightStore:
             One entry per job, in the order of *jobs*.
         """
         latest = {run.component_id: run for run in self._runs.latest_by_target(org_id, kind="job")}
-        last_success = self._runs.last_successes(org_id)
+        last_success = self._runs.last_successes(org_id, kind="job")
         granularities = self._components.job_partition_granularities([job.id for job in jobs if job.enabled])
         health = []
         for job in jobs:
