@@ -8,6 +8,7 @@ import functools
 import inspect
 import warnings
 from collections.abc import Sized
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, cast, get_args, get_origin, get_type_hints, overload
 
 from pydantic import Field
@@ -231,20 +232,24 @@ class Asset(Operation, metaclass=AssetMeta):
 
     @classmethod
     def _data_hints(cls) -> dict[str, Any]:
-        """The resolved type hints of ``data()``.
+        """The resolved type hints of ``data()``'s parameters.
 
-        Resolving a string annotation needs the globals of the module the
-        function was written in. The ``@asset`` decorator's ``data()`` is a
-        wrapper, so `typing.get_type_hints` follows its ``__wrapped__``
-        to the decorated function, as it does for any wrapper.
+        The parameters are what describe the asset; its return annotation is
+        never read, so a module may name its return type (a DataFrame, an
+        ibis table) for the type checker alone and import that library only
+        where it runs. Resolving a string annotation needs the globals of the
+        module the function was written in, read off the decorated function
+        under the ``@asset`` decorator's wrapper.
 
         Returns:
             Parameter name to resolved annotation, empty when an annotation
             cannot be resolved at all (a class local to a function body, say),
             in which case the caller falls back to the raw annotations.
         """
+        function = inspect.unwrap(cls.data)
+        parameters = {name: hint for name, hint in function.__annotations__.items() if name != "return"}
         try:
-            return get_type_hints(cls.data)
+            return get_type_hints(SimpleNamespace(__annotations__=parameters), globalns=function.__globals__)
         except Exception:  # noqa: BLE001 - an unresolvable annotation is handled by the caller
             return {}
 

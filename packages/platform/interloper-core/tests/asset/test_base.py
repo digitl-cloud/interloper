@@ -381,6 +381,13 @@ class TestInference:
                 def data(self, x: "Nope") -> Any:  # noqa: F821  # ty: ignore[unresolved-reference]
                     return []
 
+    def test_the_return_annotation_is_never_resolved(self):
+        class A(il.Asset):
+            def data(self, context: il.ExecutionContext, upstream: il.Upstream) -> "Unimported":  # noqa: F821  # ty: ignore[unresolved-reference]  # pragma: no cover
+                return []
+
+        assert A.relations["upstream"].kind == "asset"
+
     def test_unknown_parameter_is_a_definition_error(self):
         with pytest.raises(TypeError, match="nothing can fill it"):
 
