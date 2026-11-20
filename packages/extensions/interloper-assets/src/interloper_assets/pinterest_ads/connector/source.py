@@ -9,6 +9,8 @@ from interloper_assets.pinterest_ads.connector import schemas
 
 _Record = dict[str, Any]
 
+_EVERY_STATUS = {"entity_statuses": ["ACTIVE", "PAUSED", "ARCHIVED", "DRAFT", "DELETED_DRAFT"]}
+
 
 # -- NORMALIZERS ---------------------------------------------------------------
 # Report columns come back UPPER_SNAKE; the snake-caser splits "3SEC"/"15SEC" into "3_sec"/"15_sec".
@@ -125,8 +127,8 @@ class PinterestAds(il.Source):
         normalizer=_ENTITY_NORMALIZER,
     )
     async def campaigns(self, context: il.ExecutionContext) -> list[_Record]:
-        """All active and paused campaigns in the ad account with their attributes."""
-        rows = await self.connection.api.rows(f"/ad_accounts/{self.account_id}/campaigns")
+        """Every campaign in the ad account, whatever its status, with its attributes."""
+        rows = await self.connection.api.rows(f"/ad_accounts/{self.account_id}/campaigns", **_EVERY_STATUS)
         return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
@@ -136,8 +138,8 @@ class PinterestAds(il.Source):
         normalizer=_ENTITY_NORMALIZER,
     )
     async def ad_groups(self, context: il.ExecutionContext) -> list[_Record]:
-        """All active and paused ad groups in the ad account with their attributes."""
-        rows = await self.connection.api.rows(f"/ad_accounts/{self.account_id}/ad_groups")
+        """Every ad group in the ad account, whatever its status, with its attributes."""
+        rows = await self.connection.api.rows(f"/ad_accounts/{self.account_id}/ad_groups", **_EVERY_STATUS)
         return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
@@ -147,6 +149,6 @@ class PinterestAds(il.Source):
         normalizer=_ENTITY_NORMALIZER,
     )
     async def ads(self, context: il.ExecutionContext) -> list[_Record]:
-        """All active and paused ads in the ad account with their attributes."""
-        rows = await self.connection.api.rows(f"/ad_accounts/{self.account_id}/ads")
+        """Every ad in the ad account, whatever its status, with its attributes."""
+        rows = await self.connection.api.rows(f"/ad_accounts/{self.account_id}/ads", **_EVERY_STATUS)
         return [{**row, "date": context.partition_date} for row in rows]
