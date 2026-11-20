@@ -17,7 +17,7 @@ import httpx2
 import interloper as il
 import pytest
 
-from interloper_assets.criteo.api import CriteoApi
+from interloper_assets.criteo.api import CriteoApi, CriteoApiError
 from interloper_assets.criteo.constants import BASE_URL
 
 CAMPAIGN = {"id": "7", "type": "Campaign", "attributes": {"id": "7", "name": "Prospecting"}}
@@ -79,10 +79,35 @@ class TestGet:
         assert await api.get("/advertisers/me") == []
 
     async def test_a_response_without_data_raises(self):
-        api = _api(lambda _: httpx2.Response(200, json={"errors": [{"title": "Unexpected"}], "warnings": []}))
+        api = _api(lambda _: httpx2.Response(200, json={"errors": [], "warnings": []}))
 
         with pytest.raises(KeyError, match="data"):
             await api.get("/advertisers/me")
+
+    async def test_a_success_carrying_errors_raises_each_errors_code_and_detail(self):
+        errors = [
+            {"code": "resource-not-found", "title": "Not found", "detail": "Advertiser 1 is not accessible"},
+            {"title": "Unexpected"},
+        ]
+        api = _api(lambda _: httpx2.Response(200, json={"data": [CAMPAIGN], "errors": errors, "warnings": []}))
+
+        with pytest.raises(CriteoApiError) as raised:
+            await api.get("/advertisers/me")
+
+        assert str(raised.value) == (
+            "Criteo answered with errors: resource-not-found: Advertiser 1 is not accessible; Unexpected"
+        )
+        assert raised.value.errors == errors
+
+    async def test_warnings_are_logged_and_the_rows_kept(self, caplog: pytest.LogCaptureFixture):
+        warnings = [{"code": "deprecated-field", "detail": "Field budget is deprecated"}]
+        api = _api(lambda _: httpx2.Response(200, json={"data": [CAMPAIGN], "errors": [], "warnings": warnings}))
+
+        with caplog.at_level("WARNING"):
+            rows = await api.get("/advertisers/me")
+
+        assert rows == [{"id": "7", "type": "Campaign", "name": "Prospecting"}]
+        assert "deprecated-field: Field budget is deprecated" in caplog.text
 
     async def test_an_http_error_raises(self):
         with pytest.raises(httpx2.HTTPStatusError, match="403"):
@@ -106,7 +131,7 @@ class TestPost:
         assert json.loads(request.content) == {"filters": {"advertiserIds": ["123"]}}
 
     async def test_a_response_without_data_raises(self):
-        api = _api(lambda _: httpx2.Response(200, json={"errors": [{"title": "Unexpected"}], "warnings": []}))
+        api = _api(lambda _: httpx2.Response(200, json={"errors": [], "warnings": []}))
 
         with pytest.raises(KeyError, match="data"):
             await api.post("/marketing-solutions/campaigns/search", filters={})
@@ -158,10 +183,18 @@ class TestRows:
         assert await _api(handler).rows("/marketing-solutions/advertisers/123/ads") == []
         assert len(requests) == 1
 
+    async def test_a_page_carrying_errors_raises(self):
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            errors = [{"code": "partial-failure", "detail": "Ad 9 could not be read"}]
+            return httpx2.Response(200, json={"data": [CAMPAIGN], "errors": errors, "warnings": []})
+
+        with pytest.raises(CriteoApiError, match="partial-failure: Ad 9 could not be read"):
+            await _api(handler).rows("/marketing-solutions/advertisers/1/ads")
+
     async def test_a_page_without_data_raises(self):
         def handler(request: httpx2.Request) -> httpx2.Response:
             if request.url.params["offset"] == "50":
-                return httpx2.Response(200, json={"errors": [{"title": "Unexpected"}], "warnings": []})
+                return httpx2.Response(200, json={"errors": [], "warnings": []})
             return _resources(CAMPAIGN)
 
         with pytest.raises(KeyError, match="data"):

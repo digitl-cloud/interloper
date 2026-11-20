@@ -3,12 +3,42 @@
 from __future__ import annotations
 
 import datetime as dt
+import logging
 from typing import Any
 
 import httpx2
 import interloper as il
 
 from interloper_assets.criteo.constants import API_VERSION, PAGE_SIZE
+
+logger = logging.getLogger(__name__)
+
+
+class CriteoApiError(RuntimeError):
+    """Criteo answered a request with a success status and errors beside its data."""
+
+    def __init__(self, errors: list[dict[str, Any]]) -> None:
+        """Name every error Criteo reported.
+
+        Args:
+            errors: The response's ``errors``, each a Criteo problem with its ``code``, ``title`` and ``detail``.
+        """
+        super().__init__(f"Criteo answered with errors: {'; '.join(_describe(error) for error in errors)}")
+        self.errors = errors
+
+
+def _describe(problem: dict[str, Any]) -> str:
+    """Spell a Criteo problem as its code and detail, falling back on its title.
+
+    Args:
+        problem: One entry of a response's ``errors`` or ``warnings``.
+
+    Returns:
+        ``code: detail`` when both are present, else whichever of them, or the title, is.
+    """
+    code = problem.get("code")
+    detail = problem.get("detail") or problem.get("title") or ""
+    return f"{code}: {detail}" if code and detail else str(code or detail)
 
 
 class CriteoApi:
@@ -19,7 +49,10 @@ class CriteoApi:
     each ``{id, type, attributes}``; `get`, `post` and `rows` return them as
     rows, the attributes beside the resource's own fields, and a success
     without ``data`` raises rather than reading as nothing to list. Criteo
-    refuses a request with an HTTP error status, raised as is.
+    refuses a request with an HTTP error status, raised as is. A success can
+    also carry ``errors`` for the entities it could not answer: that raises as
+    `CriteoApiError`, so no asset writes a partial answer, and its
+    ``warnings`` (deprecations) are logged.
     """
 
     def __init__(self, client: il.AsyncRESTClient) -> None:
@@ -127,9 +160,17 @@ class CriteoApi:
 
         Returns:
             One row per resource of the response's ``data``, none when it is null.
+
+        Raises:
+            CriteoApiError: When the response carries ``errors`` beside its data.
         """
+        body = response.json()
+        for warning in body.get("warnings") or []:
+            logger.warning("Criteo warned: %s", _describe(warning))
+        if body.get("errors"):
+            raise CriteoApiError(body["errors"])
         rows = []
-        for resource in response.json()["data"] or []:
+        for resource in body["data"] or []:
             fields = {key: value for key, value in resource.items() if key != "attributes"}
             rows.append({**(resource.get("attributes") or {}), **fields})
         return rows
