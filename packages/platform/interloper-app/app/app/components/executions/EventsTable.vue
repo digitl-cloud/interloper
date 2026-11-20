@@ -94,7 +94,7 @@ const columns: TableColumn<RunEvent>[] = [
             const label = h(StatusBadge, { color: eventTypeColor(et), label: eventTypeLabel(et) })
             const level = row.original.level
             if (et !== 'log' || !level) return label
-            return h('div', { class: 'flex items-center gap-3' }, [
+            return h('div', { class: 'flex items-center gap-1.5' }, [
                 label,
                 h(StatusBadge, { color: logLevelColor(level), label: level }),
             ])
