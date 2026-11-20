@@ -32,7 +32,13 @@ class Impact(il.Source):
     )
     async def actions(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Conversion actions including revenue, commissions, and attribution data."""
-        rows = await self.connection.api.rows("/Actions", "Actions", context.partition_date, CampaignId=self.program_id)
+        rows = await self.connection.api.rows(
+            "/Actions",
+            "Actions",
+            context.partition_date,
+            window=("ActionDateStart", "ActionDateEnd"),
+            CampaignId=self.program_id,
+        )
         return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
