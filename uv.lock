@@ -1472,25 +1472,6 @@ wheels = [
 ]
 
 [[package]]
-name = "google-ads"
-version = "35.1.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "google-api-core" },
-    { name = "google-auth-oauthlib" },
-    { name = "googleapis-common-protos" },
-    { name = "grpcio" },
-    { name = "grpcio-status" },
-    { name = "proto-plus" },
-    { name = "protobuf" },
-    { name = "pyyaml" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/65/b1/c70a1839d3b6c6aef7f0cf9c0bfe1cf272cc3532f21d4663a195c55012f4/google_ads-35.1.0.tar.gz", hash = "sha256:374c22f9ff204879e51b5efb4768f2bd316727f15ef2f70679910a45a69bbaac", size = 10121802, upload-time = "2026-11-11T23:18:14.955Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/33/03/fa370529c13309f2bfaef2920a6377c87c2314762b49bc3a7fbdf5217ccc/google_ads-35.1.0-py3-none-any.whl", hash = "sha256:e47e2a58bdd2c1b34066fb060d4298be653a20a1791606f5550b799dd27bbde2", size = 19523223, upload-time = "2026-11-11T23:18:11.897Z" },
-]
-
-[[package]]
 name = "google-api-core"
 version = "2.44.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2142,15 +2123,11 @@ bing = [
 facebook = [
     { name = "facebook-business" },
 ]
-google = [
-    { name = "google-ads" },
-]
 
 [package.metadata]
 requires-dist = [
     { name = "bingads", marker = "extra == 'bing'", specifier = ">=13.0.24.1" },
     { name = "facebook-business", marker = "extra == 'facebook'", specifier = ">=20.0.0" },
-    { name = "google-ads", marker = "extra == 'google'", specifier = ">=29.2.0" },
     { name = "google-auth", specifier = ">=2.40.0" },
     { name = "httpx2", specifier = ">=2.13.1" },
     { name = "interloper-core", editable = "packages/platform/interloper-core" },
@@ -2158,7 +2135,7 @@ requires-dist = [
     { name = "interloper-sql", editable = "packages/extensions/interloper-sql" },
     { name = "tenacity", specifier = ">=9.1.4" },
 ]
-provides-extras = ["bing", "google", "facebook"]
+provides-extras = ["bing", "facebook"]
 
 [[package]]
 name = "interloper-aws"

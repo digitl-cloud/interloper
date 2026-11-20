@@ -1,44 +1,64 @@
-"""The Google Ads API engine every Google Ads report goes through."""
+"""The Google Ads API engine every Google Ads request goes through."""
 
 from __future__ import annotations
 
 import datetime as dt
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from google.ads.googleads.client import GoogleAdsClient
+import interloper as il
+
+from interloper_assets.google.errors import GoogleApiError
 
 
 class GoogleAdsApi:
-    """The Google Ads API: GAQL over the SDK's search stream.
+    """The Google Ads REST API: GAQL over a customer's ``googleAds:searchStream``.
 
     Every call is scoped to a customer, and to the manager account it is
     reached through, if any, by the ``login-customer-id`` header. The stream
-    answers in batches of proto-plus rows; ``MessageToDict`` over their
-    protobuf form gives exactly what the REST API sends: camelCase keys nested
-    per resource, int64 values as strings, enums by name, unset fields omitted,
-    and ``type`` where proto-plus would say ``type_``.
+    answers with one JSON array of batches, each carrying ``results``; rows
+    come back as Google sends them: camelCase keys nested per resource, int64
+    values as strings, enums by name, unset fields omitted. The array is read
+    whole before it is parsed, so a very large report is held in memory once,
+    as text.
 
-    Google's refusal is the SDK's ``GoogleAdsException``, carrying its failure
-    and request id; it is raised as the SDK raises it.
-
-    The module imports nothing from the SDK or protobuf when it loads (the
-    client is passed in, ``json_format`` is imported by ``search_stream``), so
-    the connection that builds it loads in the API process, which has neither.
+    A refusal raises as `GoogleApiError`, with Google's reason, whether Google
+    answers it with an error status or, for a stream that fails after it
+    started, as an error object closing the array.
     """
 
-    def __init__(self, client: GoogleAdsClient) -> None:
-        """Build the engine on an authenticated SDK client.
+    def __init__(self, client: il.AsyncRESTClient) -> None:
+        """Build the engine on an authenticated client.
 
         Args:
-            client: The SDK client every query goes through, carrying the connection's credentials.
+            client: The client every request goes through, carrying the connection's token and developer token.
         """
         self.client = client
 
-    def search_stream(
+    async def get(self, path: str, **params: Any) -> dict[str, Any]:
+        """Read the one response of an endpoint that does not page.
+
+        A refusal raises as `GoogleApiError`, with Google's reason.
+
+        Args:
+            path: The endpoint's path, such as ``/customers:listAccessibleCustomers``.
+            **params: The query parameters, under the vendor's names.
+
+        Returns:
+            The response as the vendor sends it.
+        """
+        response = await self.client.get(path, params=params)
+        if response.is_error:
+            refusal = GoogleApiError.from_response(response)
+            raise refusal
+        return response.json()
+
+    async def search_stream(
         self, customer_id: str, query: str, *, login_customer_id: str | None = None
     ) -> list[dict[str, Any]]:
         """Read every row a GAQL query streams for a customer.
+
+        A refusal, before the stream or as the error object closing it, raises
+        as `GoogleApiError`, with Google's reason.
 
         Args:
             customer_id: The customer the query reads, without hyphens.
@@ -46,16 +66,23 @@ class GoogleAdsApi:
             login_customer_id: The manager account the customer is reached through; None reaches it directly.
 
         Returns:
-            The rows of every streamed batch, in order, in the REST JSON shape.
+            The rows of every streamed batch, in order, as Google sends them.
         """
-        from google.protobuf import json_format
+        headers = {"login-customer-id": login_customer_id} if login_customer_id else {}
+        path = f"/customers/{customer_id}/googleAds:searchStream"
+        response = await self.client.post(path, json={"query": query}, headers=headers)
+        if response.is_error:
+            refusal = GoogleApiError.from_response(response)
+            raise refusal
+        rows: list[dict[str, Any]] = []
+        for batch in response.json():
+            if "error" in batch:
+                refusal = GoogleApiError.from_body(batch, response)
+                raise refusal
+            rows.extend(batch.get("results") or [])
+        return rows
 
-        metadata = [("login-customer-id", login_customer_id)] if login_customer_id else []
-        service = self.client.get_service("GoogleAdsService")
-        stream = service.search_stream(customer_id=customer_id, query=query, metadata=metadata)
-        return [json_format.MessageToDict(type(row).pb(row)) for batch in stream for row in batch.results]
-
-    def report(
+    async def report(
         self,
         customer_id: str,
         day: dt.date,
@@ -77,9 +104,9 @@ class GoogleAdsApi:
             login_customer_id: The manager account the customer is reached through; None reaches it directly.
 
         Returns:
-            The report's rows, in the REST JSON shape.
+            The report's rows, as Google sends them.
         """
         window = f"segments.date BETWEEN '{day.isoformat()}' AND '{day.isoformat()}'"
         where = " AND ".join([window, *(conditions or [])])
         query = f"SELECT {', '.join(fields)} FROM {resource} WHERE {where}"
-        return self.search_stream(customer_id, query, login_customer_id=login_customer_id)
+        return await self.search_stream(customer_id, query, login_customer_id=login_customer_id)

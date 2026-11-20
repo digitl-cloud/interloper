@@ -61,7 +61,7 @@ class TestPartners:
         assert await connection.partners() == []
 
     async def test_runs_without_the_sdk_extras(self, google, connection, monkeypatch: pytest.MonkeyPatch):
-        for module in ("bingads", "facebook_business", "google.ads"):
+        for module in ("bingads", "facebook_business"):
             monkeypatch.setitem(sys.modules, module, None)
         google.serve({"partners": [{"partnerId": "1"}]})
 

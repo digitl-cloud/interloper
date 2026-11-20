@@ -53,7 +53,7 @@
 #                       interloper-assets, which each stage names itself
 #                       since its extras differ by role, and the scheduler
 #                       names its two launcher packages.
-#   ASSETS_EXTRAS       comma-separated interloper-assets extras (default: bing,facebook,google)
+#   ASSETS_EXTRAS       comma-separated interloper-assets extras (default: bing,facebook)
 #                       Each extra maps to --extra {name} on interloper-assets.
 #                       Pass "" to disable.
 #   API_EXTRAS          comma-separated interloper-api extras (default: agent).
@@ -72,7 +72,7 @@
 # ================================================================
 
 ARG COMPONENT_PACKAGES=interloper-aws,interloper-azure,interloper-clickhouse,interloper-databricks,interloper-duckdb,interloper-google-cloud,interloper-slack,interloper-snowflake,interloper-sql
-ARG ASSETS_EXTRAS=bing,facebook,google
+ARG ASSETS_EXTRAS=bing,facebook
 ARG API_EXTRAS=agent
 ARG COMMON_EXTRAS=otel,postgres
 
@@ -246,7 +246,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # (Catalog.from_paths runs definition() on each module, which is pure
 # introspection). interloper-assets is still installed so its modules
 # remain importable from the catalog, but the heavy SDK extras
-# (bing/google/facebook) are skipped.
+# (bing/facebook) are skipped.
 FROM base AS build-api
 ARG COMPONENT_PACKAGES
 ARG API_EXTRAS

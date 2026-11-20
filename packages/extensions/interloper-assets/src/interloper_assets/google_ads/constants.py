@@ -1,4 +1,5 @@
 API_VERSION = "v23"
+BASE_URL = f"https://googleads.googleapis.com/{API_VERSION}"
 
 CAMPAIGN_FIELDS = [
     "campaign.bidding_strategy_type",
