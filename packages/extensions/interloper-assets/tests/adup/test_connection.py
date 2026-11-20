@@ -1,7 +1,8 @@
 """Tests for the AdUp connection.
 
 The connection exchanges its OAuth2 client credentials for an access token and
-sends it as a bearer token on every request its engine makes.
+sends it as a bearer token on every request its engine makes; its check reads
+the advertiser the credentials belong to.
 """
 
 from __future__ import annotations
@@ -35,6 +36,42 @@ class TestApi:
         connection = _connection(lambda _: httpx2.Response(200))
 
         assert connection.api is connection.api
+
+
+class TestCheck:
+    async def test_working_credentials_pass_by_reading_the_advertiser(self):
+        requests: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            if request.url.path == "/oauth2/token":
+                return httpx2.Response(200, json=TOKEN)
+            return httpx2.Response(200, json={"id": 42, "username": "advertiser"})
+
+        assert await _connection(handler).verify(timeout=5) == il.CheckResult(ok=True, live=True)
+        _, account_request = requests
+        assert (account_request.method, str(account_request.url)) == (
+            "GET",
+            "https://api.adup-tech.com/advertisers/me",
+        )
+
+    async def test_refused_client_credentials_fail_as_bad_credentials(self):
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(401, json={"error": "invalid_client"})
+
+        result = await _connection(handler).verify(timeout=5)
+
+        assert (result.ok, result.live, result.category) == (False, True, "auth")
+
+    async def test_a_refused_advertiser_read_fails_as_bad_credentials(self):
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            if request.url.path == "/oauth2/token":
+                return httpx2.Response(200, json=TOKEN)
+            return httpx2.Response(403, json={"detail": "Not enough permissions"})
+
+        result = await _connection(handler).verify(timeout=5)
+
+        assert (result.ok, result.live, result.category) == (False, True, "auth")
 
 
 class TestAuthentication:

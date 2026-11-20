@@ -39,3 +39,12 @@ class AdupConnection(il.Connection):
             The engine, cached per connection instance.
         """
         return AdupApi(self.client)
+
+    async def check(self) -> bool:
+        """Prove the credentials work by reading the advertiser they belong to.
+
+        Returns:
+            True; refused credentials raise out of the token exchange or the read.
+        """
+        await self.api.get("/advertisers/me")
+        return True
