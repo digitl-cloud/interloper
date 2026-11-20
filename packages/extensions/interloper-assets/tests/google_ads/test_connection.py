@@ -2,11 +2,14 @@
 
 The connection's client speaks the Google Ads REST API: it trades the refresh
 token for an access token at Google's token endpoint and sends the developer
-token on every request. The ``customers`` lookup goes through the engine as the
-assets do: it lists the accessible customers and names each one with a one-row
-GAQL search, falling back to the bare id for a customer that refuses the query.
-These tests drive the connection's own client, its token exchange included,
-against a fake transport.
+token on every request. The lookups go through the engine as the assets do:
+they list the accessible customers and name each one with a one-row GAQL
+search, falling back to the bare id for a customer that refuses the query.
+``managers`` offers the accessible manager accounts; ``customers`` offers the
+client accounts, those reached directly and those each manager's
+``customer_client`` rows list, naming the manager. These tests drive the
+connection's own client, its token exchange included, against a fake
+transport.
 """
 
 from __future__ import annotations
@@ -68,31 +71,67 @@ class TestClient:
         assert connection.api is connection.api
 
 
+CUSTOMER_QUERY = "SELECT customer.id, customer.descriptive_name, customer.manager FROM customer LIMIT 1"
+CLIENTS_QUERY = (
+    "SELECT customer_client.id, customer_client.descriptive_name, customer_client.manager "
+    "FROM customer_client WHERE customer_client.level > 0"
+)
+
+
+def _rows(*rows: dict[str, Any]) -> httpx2.Response:
+    return httpx2.Response(200, json=[{"results": list(rows)}])
+
+
+# three accessible customers: a client, a suspended one and a manager with clients of its own
+def _google(requests: list[httpx2.Request]) -> Callable[[httpx2.Request], httpx2.Response]:
+    customers = {
+        "111": _rows({"customer": {"id": "111", "descriptiveName": "Acme", "manager": False}}),
+        "222": httpx2.Response(403, json={"error": "suspended"}),
+        "900": _rows({"customer": {"id": "900", "descriptiveName": "Agency", "manager": True}}),
+    }
+    clients = _rows(
+        {"customerClient": {"id": "333", "descriptiveName": "Shop", "manager": False}},
+        {"customerClient": {"id": "444", "descriptiveName": "Sub-agency", "manager": True}},
+        {"customerClient": {"id": "555", "manager": False}},
+        {"customerClient": {"id": "111", "descriptiveName": "Acme", "manager": False}},
+    )
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        if request.url.host == "oauth2.googleapis.com":
+            return httpx2.Response(200, json={"access_token": "access"})
+        if request.url.path.endswith("customers:listAccessibleCustomers"):
+            return httpx2.Response(200, json={"resourceNames": ["customers/111", "customers/222", "customers/900"]})
+        customer_id = request.url.path.split("/")[-2]
+        return clients if json.loads(request.content)["query"] == CLIENTS_QUERY else customers[customer_id]
+
+    return handler
+
+
+def _searches(requests: list[httpx2.Request]) -> list[tuple[str, str, str | None]]:
+    return sorted(
+        (
+            request.url.path.split("/")[-2],
+            json.loads(request.content)["query"],
+            request.headers.get("login-customer-id"),
+        )
+        for request in requests
+        if request.url.path.endswith("googleAds:searchStream")
+    )
+
+
 class TestCustomers:
-    def _handler(self, requests: list[httpx2.Request]) -> Callable[[httpx2.Request], httpx2.Response]:
-        streams = {
-            "111": httpx2.Response(200, json=[{"results": [{"customer": {"id": "111", "descriptiveName": "Acme"}}]}]),
-            "222": httpx2.Response(403, json={"error": "suspended"}),
-            "333": httpx2.Response(200, json=[{"results": [{"customer": {"id": "333"}}]}]),
-        }
-
-        def handler(request: httpx2.Request) -> httpx2.Response:
-            requests.append(request)
-            if request.url.host == "oauth2.googleapis.com":
-                return httpx2.Response(200, json={"access_token": "access"})
-            if request.url.path.endswith("customers:listAccessibleCustomers"):
-                return httpx2.Response(200, json={"resourceNames": ["customers/111", "customers/222", "customers/333"]})
-            return streams[request.url.path.split("/")[-2]]
-
-        return handler
-
-    async def test_names_every_accessible_customer(self):
-        requests: list[httpx2.Request] = []
-        assert await _connection(self._handler(requests)).customers() == [
+    async def test_offers_every_client_account_naming_the_manager_it_is_reached_through(self):
+        assert await _connection(_google([])).customers() == [
             {"customer_id": "111", "name": "Acme"},
             {"customer_id": "222", "name": "222"},
-            {"customer_id": "333", "name": "333"},
+            {"customer_id": "333", "name": "Shop (via Agency)"},
+            {"customer_id": "555", "name": "555 (via Agency)"},
         ]
+
+    async def test_names_each_accessible_customer_then_lists_each_managers_clients(self):
+        requests: list[httpx2.Request] = []
+        await _connection(_google(requests)).customers()
 
         token_request, list_request, *search_requests = requests
         assert str(token_request.url) == "https://oauth2.googleapis.com/token"
@@ -103,15 +142,29 @@ class TestCustomers:
             "client_secret": ["secret"],
         }
         assert str(list_request.url) == f"{BASE_URL}/customers:listAccessibleCustomers"
-        assert [str(r.url) for r in search_requests] == [
-            f"{BASE_URL}/customers/{customer_id}/googleAds:searchStream" for customer_id in ("111", "222", "333")
+        assert _searches(search_requests) == [
+            ("111", CUSTOMER_QUERY, None),
+            ("222", CUSTOMER_QUERY, None),
+            ("900", CUSTOMER_QUERY, None),
+            ("900", CLIENTS_QUERY, None),
         ]
         for request in (list_request, *search_requests):
             assert request.headers["Authorization"] == "Bearer access"
             assert request.headers["developer-token"] == "dev"
-        assert json.loads(search_requests[0].content) == {
-            "query": "SELECT customer.id, customer.descriptive_name, customer.status FROM customer LIMIT 1"
-        }
+
+    async def test_a_manager_refusing_its_clients_fails_with_googles_reason(self):
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            if (
+                request.url.path.endswith("googleAds:searchStream")
+                and json.loads(request.content)["query"] == CLIENTS_QUERY
+            ):
+                return _refusal(
+                    403, "PERMISSION_DENIED", {"authorizationError": "CUSTOMER_NOT_ENABLED"}, "Not enabled."
+                )
+            return _google([])(request)
+
+        with pytest.raises(ConnectionCheckError, match=r"PERMISSION_DENIED\): Not enabled\.$"):
+            await _connection(handler).customers()
 
     @pytest.mark.parametrize("listing", [{}, {"resourceNames": []}])
     async def test_credentials_reaching_no_customer_fail(self, listing: dict[str, Any]):
@@ -138,7 +191,7 @@ class TestCustomers:
             await _connection(_token_or(handler)).check()
 
     async def test_check_runs_the_lookup(self):
-        assert await _connection(self._handler([])).check() is True
+        assert await _connection(_google([])).check() is True
 
     async def test_a_rejected_refresh_token_fails_with_googles_reason(self):
         rejection = {"error": "invalid_grant", "error_description": "Token has been expired or revoked."}
@@ -146,3 +199,20 @@ class TestCustomers:
 
         with pytest.raises(ConnectionCheckError, match=r"invalid_grant\): Token has been expired or revoked\.$"):
             await connection.check()
+
+
+class TestManagers:
+    async def test_offers_the_accessible_manager_accounts(self):
+        requests: list[httpx2.Request] = []
+
+        assert await _connection(_google(requests)).managers() == [{"customer_id": "900", "name": "Agency"}]
+        assert [query for _, query, _ in _searches(requests)] == [CUSTOMER_QUERY] * 3
+
+    async def test_credentials_every_customer_refuses_fail_with_googles_reason(self):
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            if request.url.path.endswith("customers:listAccessibleCustomers"):
+                return httpx2.Response(200, json={"resourceNames": ["customers/900"]})
+            return _refusal(403, "PERMISSION_DENIED", {"authorizationError": "USER_PERMISSION_DENIED"}, "No access.")
+
+        with pytest.raises(ConnectionCheckError, match=r"PERMISSION_DENIED\): No access\.$"):
+            await _connection(_token_or(handler)).managers()

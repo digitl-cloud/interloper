@@ -238,6 +238,28 @@ class TestAssets:
         assert child.normalizer.flatten_max_level == 3
 
 
+class TestFields:
+    def test_the_customer_is_picked_from_the_connections_client_accounts(self):
+        field = GoogleAds.model_fields["customer_id"]
+        assert isinstance(field.json_schema_extra, dict)
+        assert field.is_required()
+        assert field.json_schema_extra["x-fetch"] == {
+            "provider": "connection.customers",
+            "label_key": "name",
+            "value_key": "customer_id",
+        }
+
+    def test_the_manager_account_is_picked_from_the_connections_managers_or_left_empty(self):
+        field = GoogleAds.model_fields["login_customer_id"]
+        assert isinstance(field.json_schema_extra, dict)
+        assert field.default is None
+        assert field.json_schema_extra["x-fetch"] == {
+            "provider": "connection.managers",
+            "label_key": "name",
+            "value_key": "customer_id",
+        }
+
+
 class TestRequests:
     """Each asset reads its one-day GAQL query for the source's customer, through the manager account when set."""
 

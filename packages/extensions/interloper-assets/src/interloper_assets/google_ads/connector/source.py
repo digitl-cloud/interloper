@@ -24,12 +24,15 @@ class GoogleAds(il.Source):
         provider="connection.customers",
         label_key="name",
         value_key="customer_id",
-        description="Google Ads customer ID (without hyphens)",
+        description="Google Ads customer ID (without hyphens); one reached through a manager account names it",
         discriminator=True,
     )
-    login_customer_id: str | None = il.InputField(
+    login_customer_id: str | None = il.FetchField(
         default=None,
-        description="Manager account customer ID (required if accessing through a manager account)",
+        provider="connection.managers",
+        label_key="name",
+        value_key="customer_id",
+        description="Manager account the customer is reached through; empty for a customer reached directly",
     )
 
     @il.asset(
