@@ -87,7 +87,7 @@ export function nameColumn(
             if (discriminator && discriminator !== name) {
                 children.push(h(UBadge, { color: 'neutral', size: 'sm', label: discriminator, class: 'max-w-full slashed-zero sm:shrink-0' }))
             }
-            if (meta) children.push(h(StatusBadge, { color: meta.color, label: meta.label, class: 'shrink-0' }))
+            if (meta) children.push(h(StatusBadge, { color: meta.color, label: meta.label, size: 'sm', class: 'shrink-0' }))
             return h('span', { class: 'flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2' }, children)
         },
     } as TableColumn<ComponentRecord>
