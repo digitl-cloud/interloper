@@ -6,6 +6,8 @@ The HTTP client sources fetch with, its authentication schemes and its paginator
 
 ::: interloper.AsyncRESTClient
 
+::: interloper.HttpRetryPolicy
+
 ::: interloper.HTTPBearerAuth
 
 ::: interloper.OAuth2Auth
