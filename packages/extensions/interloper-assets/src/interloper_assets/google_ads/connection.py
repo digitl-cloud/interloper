@@ -14,7 +14,12 @@ from interloper_assets.google_ads.constants import BASE_URL
 
 _TOKEN_BASE_URL = "https://oauth2.googleapis.com"
 _TOKEN_ENDPOINT = "/token"
-_NAME_QUERY = "SELECT customer.id, customer.descriptive_name, customer.status FROM customer LIMIT 1"
+_CUSTOMER_QUERY = "SELECT customer.id, customer.descriptive_name, customer.manager FROM customer LIMIT 1"
+_CLIENTS_QUERY = (
+    "SELECT customer_client.id, customer_client.descriptive_name, customer_client.manager "
+    "FROM customer_client WHERE customer_client.level > 0"
+)
+_LOOKUP_CONCURRENCY = 10
 
 
 @il.connection(
@@ -98,14 +103,69 @@ class GoogleAdsConnection(il.RefreshTokenOAuthConnection):
 
     @il.fetch_field_provider
     async def customers(self) -> list[dict[str, str]]:
-        """List the customers this connection can access, by name.
+        """List the client accounts this connection can report on.
 
         Backs the source's ``customer_id`` ``FetchField``, through the same
-        engine as the assets. A customer that refuses to be named (suspended,
-        cancelled) is offered under its id.
+        engine as the assets. A customer reached directly is offered by its
+        name; a client account of an accessible manager is offered as
+        ``<name> (via <manager>)``, that manager being the source's
+        ``login_customer_id``. One reached both ways is offered once, directly.
+        Manager accounts report no metrics, so they are offered by ``managers``
+        instead, and a customer that refuses to be named (suspended, cancelled)
+        is offered under its id.
 
         Returns:
             The options for the field's dropdown.
+
+        Raises:
+            ConnectionCheckError: If a manager refuses to list its client
+                accounts, carrying Google's reason.
+        """
+        accessible = await self._accessible()
+        managers = [customer for customer in accessible if customer.get("manager")]
+        options = {
+            customer["id"]: {"customer_id": customer["id"], "name": self._name(customer)}
+            for customer in accessible
+            if not customer.get("manager")
+        }
+        try:
+            listings = await il.bounded_gather(
+                (self.api.search_stream(manager["id"], _CLIENTS_QUERY) for manager in managers),
+                limit=_LOOKUP_CONCURRENCY,
+            )
+        except GoogleApiError as error:
+            raise ConnectionCheckError(str(error)) from error
+        for manager, rows in zip(managers, listings, strict=True):
+            for row in rows:
+                client = row["customerClient"]
+                if not client.get("manager"):
+                    name = f"{self._name(client)} (via {self._name(manager)})"
+                    options.setdefault(client["id"], {"customer_id": client["id"], "name": name})
+        return list(options.values())
+
+    @il.fetch_field_provider
+    async def managers(self) -> list[dict[str, str]]:
+        """List the manager accounts this connection can access.
+
+        Backs the source's ``login_customer_id`` ``FetchField``: the manager a
+        client account is reached through, as ``customers`` names it.
+
+        Returns:
+            The options for the field's dropdown.
+        """
+        return [
+            {"customer_id": customer["id"], "name": self._name(customer)}
+            for customer in await self._accessible()
+            if customer.get("manager")
+        ]
+
+    async def _accessible(self) -> list[dict[str, Any]]:
+        """Name every customer these credentials reach directly.
+
+        Returns:
+            Each accessible customer's ``customer`` as Google sends it (``id``,
+            ``descriptiveName``, ``manager``), in the listing's order, or its
+            ``id`` alone for a customer that refuses to be named.
 
         Raises:
             ConnectionCheckError: If Google refuses the token exchange or the
@@ -116,28 +176,48 @@ class GoogleAdsConnection(il.RefreshTokenOAuthConnection):
             listing = await self.api.get("/customers:listAccessibleCustomers")
         except (GoogleApiError, OAuth2TokenError) as error:
             raise ConnectionCheckError(str(error)) from error
-        resource_names: list[str] = listing.get("resourceNames") or []
-        if not resource_names:
+        customer_ids = [resource_name.split("/")[-1] for resource_name in listing.get("resourceNames") or []]
+        if not customer_ids:
             raise ConnectionCheckError("Google Ads lists no customer these credentials can access")
 
-        options: list[dict[str, str]] = []
-        refusals: list[GoogleApiError] = []
-        for resource_name in resource_names:
-            customer_id = resource_name.split("/")[-1]
-            try:
-                rows = await self.api.search_stream(customer_id, _NAME_QUERY)
-            except GoogleApiError as refusal:
-                refusals.append(refusal)
-                options.append({"customer_id": customer_id, "name": customer_id})
-                continue
-            for row in rows:
-                name = row.get("customer", {}).get("descriptiveName", customer_id)
-                options.append({"customer_id": customer_id, "name": name})
-
+        answers = await il.bounded_gather(
+            (self._customer(customer_id) for customer_id in customer_ids), limit=_LOOKUP_CONCURRENCY
+        )
+        refusals = [answer for answer in answers if isinstance(answer, GoogleApiError)]
         # credentials every customer refuses can run no report, whatever the listing says
-        if len(refusals) == len(resource_names):
+        if len(refusals) == len(customer_ids):
             raise ConnectionCheckError(str(refusals[0])) from refusals[0]
-        return options
+        return [
+            {"id": customer_id} if isinstance(answer, GoogleApiError) else answer
+            for customer_id, answer in zip(customer_ids, answers, strict=True)
+        ]
+
+    async def _customer(self, customer_id: str) -> dict[str, Any] | GoogleApiError:
+        """Read one accessible customer's name and whether it is a manager.
+
+        Args:
+            customer_id: The customer, as the accessible customers listing names it.
+
+        Returns:
+            The customer as Google sends it, its id alone when Google sends no row, or Google's refusal.
+        """
+        try:
+            rows = await self.api.search_stream(customer_id, _CUSTOMER_QUERY)
+        except GoogleApiError as refusal:
+            return refusal
+        return rows[0]["customer"] if rows else {"id": customer_id}
+
+    @staticmethod
+    def _name(customer: dict[str, Any]) -> str:
+        """Name a customer for a dropdown.
+
+        Args:
+            customer: A ``customer`` or ``customerClient`` as Google sends it.
+
+        Returns:
+            Its descriptive name, or its id when it has none.
+        """
+        return customer.get("descriptiveName") or customer["id"]
 
     async def check(self) -> bool:
         """Prove the credentials work by running the ``customers`` lookup.
