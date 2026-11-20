@@ -35,9 +35,9 @@ class ConnectionState(BaseModel):
     provisional ``next_renewal_at`` when it enqueues a renewal run, and the
     run overwrites it with the real next due time on completion. Timestamps
     are canonical timezone-aware ISO-8601 strings, compared lexicographically
-    in SQL like ``JobState``'s. ``last_run_at`` and ``last_run_status`` are
-    stamped by run completion on every run's component — plumbing, hidden
-    from state columns.
+    in SQL like ``JobState``'s. ``last_run_at``, ``last_run_status`` and
+    ``last_run_id`` are stamped by run completion on every run's component:
+    plumbing, hidden from state columns.
     """
 
     next_renewal_at: str | None = Field(default=None, title="Next renewal")
@@ -45,6 +45,7 @@ class ConnectionState(BaseModel):
     last_renewal_error: str | None = Field(default=None, title="Renewal error")
     last_run_at: str | None = Field(default=None, json_schema_extra={"x-hidden": True})
     last_run_status: str | None = Field(default=None, json_schema_extra={"x-hidden": True})
+    last_run_id: str | None = Field(default=None, json_schema_extra={"x-hidden": True})
 
 
 class Renewal(BaseModel):

@@ -885,7 +885,7 @@ class TestGetAndComplete:
 
 
 class TestCompletionStamping:
-    """Completing a run stamps its target's ``last_run_at`` and ``last_run_status``."""
+    """Completing a run stamps its target's ``last_run_at``, ``last_run_status`` and ``last_run_id``."""
 
     def _job_run(self, store: Store) -> tuple[UUID, UUID]:
         """Insert a job and a running run targeting it, in an organisation of their own.
@@ -906,7 +906,7 @@ class TestCompletionStamping:
             session.commit()
             return job.id, run.id
 
-    def test_a_success_stamps_the_jobs_last_run_at_and_status(self, store: Store) -> None:
+    def test_a_success_stamps_the_jobs_last_run_at_status_and_id(self, store: Store) -> None:
         component_id, run_id = self._job_run(store)
 
         completed = store.runs.complete(run_id)
@@ -920,6 +920,7 @@ class TestCompletionStamping:
             stamped_at = dt.datetime.fromisoformat(stamped.state["last_run_at"])
             assert stamped_at == completed.completed_at.replace(tzinfo=dt.UTC)
             assert stamped.state["last_run_status"] == "success"
+            assert stamped.state["last_run_id"] == str(run_id)
 
     def test_a_failure_stamps_a_failed_status(self, store: Store) -> None:
         component_id, run_id = self._job_run(store)
