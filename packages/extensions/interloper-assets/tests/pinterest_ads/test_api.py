@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -18,7 +19,7 @@ import interloper as il
 import pytest
 
 from interloper_assets.pinterest_ads import api as api_module
-from interloper_assets.pinterest_ads.api import PinterestAdsApi
+from interloper_assets.pinterest_ads.api import PinterestAdsApi, PinterestAdsApiError
 from interloper_assets.pinterest_ads.constants import BASE_URL, DOWNLOAD_TIMEOUT, PAGE_SIZE
 
 DAY = dt.date(2026, 9, 14)
@@ -52,11 +53,30 @@ class TestGet:
 
         assert sent == [{"ad_account_id": "1"}]
 
-    async def test_an_http_error_raises(self):
+    async def test_a_refusal_raises_pinterests_own_code_and_message_without_the_url(self):
         api = _api(lambda _: httpx2.Response(401, json={"code": 2, "message": "Authentication failed."}))
 
-        with pytest.raises(httpx2.HTTPStatusError):
+        with pytest.raises(PinterestAdsApiError) as raised:
+            await api.get("/ad_accounts/1", fields="id")
+
+        assert str(raised.value) == "Pinterest refused the request (HTTP 401, code 2): Authentication failed."
+        assert raised.value.code == 2
+
+    async def test_a_refusal_is_still_its_http_error_status(self):
+        api = _api(lambda _: httpx2.Response(403, json={"code": 29, "message": "Not permitted."}))
+
+        with pytest.raises(httpx2.HTTPStatusError) as raised:
             await api.get("/ad_accounts/1")
+
+        assert raised.value.response.status_code == 403
+
+    @pytest.mark.parametrize("body", [{"text": "<html>denied</html>"}, {"json": ["not", "an", "error"]}])
+    async def test_an_http_error_without_a_pinterest_body_raises_its_status(self, body: dict[str, Any]):
+        with pytest.raises(PinterestAdsApiError) as raised:
+            await _api(lambda _: httpx2.Response(502, **body)).get("/ad_accounts/1")
+
+        assert str(raised.value) == "Pinterest refused the request (HTTP 502): Bad Gateway"
+        assert raised.value.code is None
 
 
 class TestRows:
@@ -98,7 +118,7 @@ class TestRows:
                 return httpx2.Response(403, json={"code": 29, "message": "You are not permitted to access that."})
             return httpx2.Response(200, json={"items": [{"id": "1"}], "bookmark": "b2"})
 
-        with pytest.raises(httpx2.HTTPStatusError):
+        with pytest.raises(PinterestAdsApiError, match=re.escape("(HTTP 403, code 29): You are not permitted")):
             await _api(handler).rows("/ad_accounts/1/ads")
 
     async def test_nothing_to_list_reads_one_page(self):
@@ -286,7 +306,7 @@ class TestReport:
         api, job = report_job()
         job.refuse_creation = True
 
-        with pytest.raises(httpx2.HTTPStatusError):
+        with pytest.raises(PinterestAdsApiError, match=re.escape("(HTTP 400, code 1): Invalid columns")):
             await api.report("549759962542", DAY, level="CAMPAIGN", columns=["NOT_A_COLUMN"])
         assert job.sent == [("POST", REPORTS, {})]
         assert job.downloads == []
@@ -294,13 +314,14 @@ class TestReport:
     async def test_an_http_error_while_polling_raises(self, report_job: ReportJobFactory):
         api, job = report_job(IN_PROGRESS, 401)
 
-        with pytest.raises(httpx2.HTTPStatusError):
+        with pytest.raises(PinterestAdsApiError, match=re.escape("(HTTP 401, code 2): Authentication failed.")):
             await api.report("549759962542", DAY, level="CAMPAIGN", columns=["CAMPAIGN_ID"])
         assert job.downloads == []
 
-    async def test_an_http_error_while_downloading_raises(self, report_job: ReportJobFactory):
+    async def test_an_http_error_while_downloading_raises_as_storage_sent_it(self, report_job: ReportJobFactory):
         api, job = report_job(FINISHED, content=b"<Error>AccessDenied</Error>")
         job.download_status = 403
 
-        with pytest.raises(httpx2.HTTPStatusError):
+        with pytest.raises(httpx2.HTTPStatusError) as raised:
             await api.report("549759962542", DAY, level="CAMPAIGN", columns=["CAMPAIGN_ID"])
+        assert not isinstance(raised.value, PinterestAdsApiError)

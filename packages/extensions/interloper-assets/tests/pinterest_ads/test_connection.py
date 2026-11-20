@@ -8,11 +8,13 @@ connection's client must send that header on the refresh grant, and the
 from __future__ import annotations
 
 import base64
+import re
 from urllib.parse import parse_qs
 
 import httpx2
 import interloper as il
 import pytest
+from interloper.errors import ConnectionCheckError
 
 from interloper_assets.pinterest_ads import constants
 from interloper_assets.pinterest_ads.connection import PinterestAdsConnection, PinterestRefreshTokenAuth
@@ -94,11 +96,21 @@ class TestCheck:
 
         assert await connection.check() is True
 
-    async def test_a_refused_listing_fails_the_check(self):
+    async def test_a_refused_listing_reports_pinterests_reason(self):
         connection = self._connection(httpx2.Response(401, json={"code": 2, "message": "Authentication failed."}))
 
-        with pytest.raises(httpx2.HTTPStatusError):
-            await connection.check()
+        assert await connection.verify(timeout=5) == il.CheckResult(
+            ok=False,
+            live=True,
+            category="error",
+            message="Pinterest refused the request (HTTP 401, code 2): Authentication failed.",
+        )
+
+    async def test_a_refused_lookup_raises_the_curated_reason(self):
+        connection = self._connection(httpx2.Response(403, json={"code": 29, "message": "Not permitted."}))
+
+        with pytest.raises(ConnectionCheckError, match=re.escape("(HTTP 403, code 29): Not permitted.")):
+            await connection.accounts()
 
 
 class TestRetry:
