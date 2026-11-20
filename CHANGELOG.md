@@ -2,6 +2,45 @@
 
 <!-- version list -->
 
+## v0.139.0 (2026-11-20)
+
+### Bug Fixes
+
+- **app**: Keep the run rail's card rings clear of its scroll clip
+  ([`d5c9c37`](https://github.com/digitl-cloud/interloper/commit/d5c9c37c1ef7c68593fe6c958e0c6f1e5fc616e5))
+
+- **app**: Sign out with a full page load, so no page runs without an organisation
+  ([`9235cc1`](https://github.com/digitl-cloud/interloper/commit/9235cc107b896f5e14a4ddc00d81ef35dc506f2f))
+
+- **assets**: Page the LinkedIn Ads account lookup by cursor
+  ([`c52d734`](https://github.com/digitl-cloud/interloper/commit/c52d734b6719b1e4f5fc073bc97fe15d635eb043))
+
+- **assets**: Read whole LinkedIn campaigns and campaign groups
+  ([`22d736b`](https://github.com/digitl-cloud/interloper/commit/22d736bf7ce6bb18107cdef4285afc515b8dc5a6))
+
+- **core**: Raise the provider's reason when it refuses an access token request
+  ([`183c51b`](https://github.com/digitl-cloud/interloper/commit/183c51bd7d91fc127984c6318adaf1b9ed3995d0))
+
+### Features
+
+- **app**: Declutter the app around one quiet set of status marks
+  ([`62bd1d6`](https://github.com/digitl-cloud/interloper/commit/62bd1d6b2c983c00fb599d771c3b3cdfc093c3da))
+
+- **db**: Stamp the id of the run that last completed on its component
+  ([`cc92d70`](https://github.com/digitl-cloud/interloper/commit/cc92d701308eaefa7271942e1d3c36af9e4638e4))
+
+### Performance Improvements
+
+- **agent**: Import a model provider's SDK only when building for it
+  ([`ba53ca6`](https://github.com/digitl-cloud/interloper/commit/ba53ca6670287e4dce8ce0faf56baa249ef4c8fb))
+
+- **db**: Bound the overview's memory by its response, not the org's history
+  ([`c60b194`](https://github.com/digitl-cloud/interloper/commit/c60b194ac02b30d5546fd72eeb43ea1e9c9d2e73))
+
+- **docker**: Cap glibc malloc arenas at two in the Python images
+  ([`c58a577`](https://github.com/digitl-cloud/interloper/commit/c58a5773fbacf9bbd8314b2a6aec078b17d2b2bc))
+
+
 ## v0.138.0 (2026-11-19)
 
 ### Bug Fixes
