@@ -2,6 +2,7 @@
 
 import datetime
 import json
+import sys
 from decimal import Decimal
 
 import numpy as np
@@ -43,6 +44,11 @@ class TestDataFrameRepresentation:
         rep = DataFrameRepresentation()
         assert rep.matches(pd.DataFrame())
         assert not rep.matches([{"a": 1}])
+
+    def test_matches_nothing_without_importing_pandas_while_it_is_not_loaded(self, monkeypatch):
+        monkeypatch.delitem(sys.modules, "pandas")
+        assert not DataFrameRepresentation().matches([{"a": 1}])
+        assert "pandas" not in sys.modules
 
     def test_to_rows_maps_missing_values_to_none(self):
         rep = DataFrameRepresentation()

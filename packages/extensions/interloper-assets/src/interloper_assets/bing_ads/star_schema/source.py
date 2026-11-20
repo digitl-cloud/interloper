@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-import ibis
+from typing import TYPE_CHECKING
+
 import interloper as il
 from interloper.errors import ConfigError
 from interloper_sql import ibis_view, latest, union
 
 from interloper_assets.bing_ads import constants
 from interloper_assets.bing_ads.star_schema import schemas
+
+if TYPE_CHECKING:
+    import ibis
 
 MEASURE_COLUMNS = ("impressions", "clicks", "spend", "conversions", "revenue", "currency_code")
 INSTANT = "timestamp('UTC')"
@@ -148,6 +152,7 @@ class BingAdsStarSchema(il.Source):
 
         Each account comes from its entity snapshot, else its latest report, else the facts.
         """
+        import ibis
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -216,6 +221,7 @@ class BingAdsStarSchema(il.Source):
 
         Each campaign comes from its entity snapshot, else its latest report, else the facts.
         """
+        import ibis
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -299,6 +305,7 @@ class BingAdsStarSchema(il.Source):
 
         Each ad group comes from its entity snapshot, else its latest report, else the facts.
         """
+        import ibis
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -379,6 +386,8 @@ class BingAdsStarSchema(il.Source):
 
         Each ad comes from its entity snapshot, else its latest report, else the facts.
         """
+        import ibis
+
         groups = dim_ad_groups.data.select("ad_group_id", "campaign_id")
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:

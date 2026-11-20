@@ -1,8 +1,12 @@
-import datetime as dt
-from typing import Any
+from __future__ import annotations
 
-import pandas as pd
+import datetime as dt
+from typing import TYPE_CHECKING, Any
+
 from interloper_pandas import DataFrameNormalizer
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 class LinkedinAdsStatsNormalizer(DataFrameNormalizer):
@@ -22,6 +26,8 @@ class LinkedinAdsStatsNormalizer(DataFrameNormalizer):
         Returns:
             The normalized frame.
         """
+        import pandas as pd
+
         records = data.to_dict("records") if isinstance(data, pd.DataFrame) else data
         rows = []
         for record in records:

@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, Self
+from typing import TYPE_CHECKING, Any, Literal, Self
 
-import pandas as pd
 from interloper.errors import NormalizerError
 from interloper.normalizer import Normalizer
 from pydantic import Field, model_validator
 
 from interloper_pandas.representation import DataFrameRepresentation
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 class DataFrameNormalizer(Normalizer):
@@ -72,6 +74,8 @@ class DataFrameNormalizer(Normalizer):
         Raises:
             NormalizerError: If *data* is neither a list of rows nor a ``DataFrame``.
         """
+        import pandas as pd
+
         if isinstance(data, pd.DataFrame):
             df = data
         elif isinstance(data, list):

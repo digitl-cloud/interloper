@@ -13,13 +13,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from functools import cached_property
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import pandas as pd
-import pyarrow as pa
-import pyarrow.parquet as pq
-from databricks.sql.client import Connection as Session
-from databricks.sql.client import Cursor
 from interloper.destination import DatabaseDestination, IOContext, destination
 from interloper.errors import ConfigError, DataNotFoundError
 from interloper.partitioning import Partition, PartitionFilter
@@ -31,6 +26,11 @@ from pydantic import PrivateAttr, field_validator
 
 from interloper_databricks.connection import DatabricksConnection
 from interloper_databricks.types import TIMESTAMP, VARIANT, clusterable, column_type
+
+if TYPE_CHECKING:
+    import pandas as pd
+    from databricks.sql.client import Connection as Session
+    from databricks.sql.client import Cursor
 
 #: Delta collects statistics on a table's first 32 columns, and a clustering
 #: key must be one of them.
@@ -573,6 +573,10 @@ def _parquet(frame: pd.DataFrame, specs: Sequence[FieldSpec]) -> bytes:
     Returns:
         The Parquet file's bytes.
     """
+    import pandas as pd
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
     columns: dict[str, pd.Series] = {}
     for spec in specs:
         series = frame[spec.name]
@@ -600,6 +604,8 @@ def _json(value: Any) -> str | None:
     Returns:
         The JSON text, or ``None`` for a missing value.
     """
+    import pandas as pd
+
     if value is None or value is pd.NA or (isinstance(value, float) and math.isnan(value)):
         return None
     if hasattr(value, "tolist"):

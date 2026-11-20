@@ -5,17 +5,18 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Generator
 from functools import cached_property
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 import httpx2
-from databricks import sql
-from databricks.sql.client import Connection as Session
 from interloper.connection import Connection, connection
 from interloper.resource import InputField, SecretField, fetch_field_provider
 from interloper.rest import JSONCursorPaginator, RESTClient
 from pydantic import PrivateAttr, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
+
+if TYPE_CHECKING:
+    from databricks.sql.client import Connection as Session
 
 _TOKEN_ENDPOINT = "/oidc/v1/token"
 
@@ -217,6 +218,8 @@ class DatabricksConnection(Connection):
         Returns:
             The new connector session.
         """
+        from databricks import sql
+
         if self.access_token is not None:
             credentials: dict[str, Any] = {"access_token": self.access_token}
         else:

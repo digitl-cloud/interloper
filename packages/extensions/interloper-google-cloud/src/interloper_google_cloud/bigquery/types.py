@@ -12,26 +12,26 @@ from __future__ import annotations
 import datetime
 from collections.abc import Sequence
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from google.cloud import bigquery
-from google.cloud.bigquery.enums import StandardSqlTypeNames
-from google.cloud.bigquery.schema import LEGACY_TO_STANDARD_TYPES
 from interloper.schema import FieldSpec
+
+if TYPE_CHECKING:
+    from google.cloud import bigquery
 
 TIME_PARTITIONABLE = frozenset({"DATE", "DATETIME", "TIMESTAMP"})
 
 # Ordered: the first base class that matches wins, so bool (a subclass of int)
 # and datetime (a subclass of date) must come before their parents.
 _PYTHON_TO_BIGQUERY: dict[type, str] = {
-    bool: StandardSqlTypeNames.BOOL.value,
-    int: StandardSqlTypeNames.INT64.value,
-    float: StandardSqlTypeNames.FLOAT64.value,
-    Decimal: StandardSqlTypeNames.NUMERIC.value,
-    datetime.datetime: StandardSqlTypeNames.TIMESTAMP.value,
-    datetime.date: StandardSqlTypeNames.DATE.value,
-    bytes: StandardSqlTypeNames.BYTES.value,
-    str: StandardSqlTypeNames.STRING.value,
+    bool: "BOOL",
+    int: "INT64",
+    float: "FLOAT64",
+    Decimal: "NUMERIC",
+    datetime.datetime: "TIMESTAMP",
+    datetime.date: "DATE",
+    bytes: "BYTES",
+    str: "STRING",
 }
 
 
@@ -50,7 +50,7 @@ def column_type(python_type: Any) -> str:
         for base, name in _PYTHON_TO_BIGQUERY.items():
             if issubclass(python_type, base):
                 return name
-    return StandardSqlTypeNames.STRING.value
+    return "STRING"
 
 
 def parameter_type(field_type: str) -> str:
@@ -62,8 +62,10 @@ def parameter_type(field_type: str) -> str:
     Returns:
         The standard SQL type name, ``STRING`` for a spelling the client does not know.
     """
-    standard = LEGACY_TO_STANDARD_TYPES.get(field_type)
-    return standard.value if standard is not None else StandardSqlTypeNames.STRING.value
+    from google.cloud import bigquery
+
+    standard = bigquery.schema.LEGACY_TO_STANDARD_TYPES.get(field_type)
+    return standard.value if standard is not None else "STRING"
 
 
 def to_fields(specs: Sequence[FieldSpec]) -> list[bigquery.SchemaField]:
@@ -76,6 +78,8 @@ def to_fields(specs: Sequence[FieldSpec]) -> list[bigquery.SchemaField]:
         One ``SchemaField`` per spec, nested models as ``RECORD``, each
         carrying the spec's description when it has one.
     """
+    from google.cloud import bigquery
+
     fields = []
     for spec in specs:
         mode = "REPEATED" if spec.repeated else ("NULLABLE" if spec.nullable else "REQUIRED")

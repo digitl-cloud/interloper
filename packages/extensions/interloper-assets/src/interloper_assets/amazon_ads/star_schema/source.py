@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-import ibis
-import ibis.expr.types as ir
+from typing import TYPE_CHECKING
+
 import interloper as il
 from interloper.errors import ConfigError
 from interloper_sql import ibis_view, latest
 
 from interloper_assets.amazon_ads.star_schema import schemas
+
+if TYPE_CHECKING:
+    import ibis
+    import ibis.expr.types as ir
 
 AD_PRODUCTS = {
     "products_campaigns_stats": "sponsored_products",
@@ -115,6 +119,7 @@ class AmazonAdsStarSchema(il.Source):
 
         Key: date, account_id, campaign_type, campaign_id.
         """
+        import ibis
 
         def from_products(table: ibis.Table) -> ibis.Table:
             return table.select(
@@ -189,6 +194,7 @@ class AmazonAdsStarSchema(il.Source):
     )
     def dim_accounts(self, profiles: list[il.Upstream], fact_campaign_performance: il.Upstream) -> ibis.Table:
         """One row per profile with its account and marketplace, from its own entity row, else the facts."""
+        import ibis
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -246,6 +252,7 @@ class AmazonAdsStarSchema(il.Source):
 
         Each campaign comes from its entity row, else its report, else the facts.
         """
+        import ibis
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -334,6 +341,7 @@ class AmazonAdsStarSchema(il.Source):
     )
     def dim_ad_groups(self, ad_groups: list[il.Upstream], ad_groups_stats: list[il.Upstream]) -> ibis.Table:
         """One row per ad group with its name, campaign and status: its entity row, else its latest report."""
+        import ibis
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -394,6 +402,7 @@ class AmazonAdsStarSchema(il.Source):
     )
     def dim_ads(self, ads: list[il.Upstream], ads_stats: list[il.Upstream]) -> ibis.Table:
         """One row per ad with its ad group, campaign and advertised product: its entity row, else its latest report."""
+        import ibis
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data

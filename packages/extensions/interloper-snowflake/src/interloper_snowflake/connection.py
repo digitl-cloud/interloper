@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import snowflake.connector
 from interloper.connection import Connection, connection
 from interloper.resource import InputField, SecretField, fetch_field_provider
 from pydantic_settings import SettingsConfigDict
-from snowflake.connector import SnowflakeConnection as Session
+
+if TYPE_CHECKING:
+    from snowflake.connector import SnowflakeConnection as Session
 
 
 @connection(
@@ -46,6 +47,8 @@ class SnowflakeConnection(Connection):
         Returns:
             The new connector session.
         """
+        import snowflake.connector
+
         return snowflake.connector.connect(
             account=self.account,
             user=self.user,

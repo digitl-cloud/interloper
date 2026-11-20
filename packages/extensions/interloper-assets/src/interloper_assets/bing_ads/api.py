@@ -7,14 +7,16 @@ import datetime as dt
 import tempfile
 from collections.abc import Sequence
 from functools import cached_property
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from xml.etree import ElementTree as ET
 from xml.sax.saxutils import escape
 
 import httpx2
-import pandas as pd
 
 from interloper_assets.bing_ads import constants
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 class BingAdsApi:
@@ -338,6 +340,7 @@ class BingAdsApi:
         Returns:
             The report's rows; see `report`.
         """
+        import pandas as pd
         from bingads import ServiceClient
         from bingads.v13.reporting import ReportingDownloadParameters, ReportingServiceManager
 
@@ -429,6 +432,7 @@ class BingAdsApi:
         Returns:
             One row per record, under the Bulk file's column names.
         """
+        import pandas as pd
         from bingads.v13.bulk import BulkServiceManager, DownloadParameters
 
         manager = BulkServiceManager(

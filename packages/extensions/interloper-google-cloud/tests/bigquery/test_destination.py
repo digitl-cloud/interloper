@@ -62,6 +62,35 @@ def _make_destination(**overrides: Any) -> tuple[BigQueryDestination, MagicMock]
     return dest, mock_client
 
 
+# -- client --------------------------------------------------------------------
+
+
+class TestClient:
+    """The client signs with the connection's key when there is one, else with ambient credentials."""
+
+    def test_a_service_account_key_signs_the_client(self, monkeypatch: pytest.MonkeyPatch):
+        built = MagicMock()
+        monkeypatch.setattr("google.cloud.bigquery.Client", built)
+        monkeypatch.setattr(
+            "google.oauth2.service_account.Credentials.from_service_account_info", lambda info: ("key", info)
+        )
+        connection = GoogleCloudConnection(id="test-connection", service_account_key=_SA_KEY)
+        dest = BigQueryDestination(id="test", project="test-proj", location="EU", connection=connection)
+
+        assert dest.client is built.return_value
+        built.assert_called_once_with(project="test-proj", credentials=("key", json.loads(_SA_KEY)), location="EU")
+
+    def test_without_a_key_the_client_uses_ambient_credentials(self, monkeypatch: pytest.MonkeyPatch):
+        built = MagicMock()
+        monkeypatch.setattr("google.cloud.bigquery.Client", built)
+        monkeypatch.setattr("google.auth.default", lambda: ("ambient", "some-project"))
+        connection = GoogleCloudConnection(id="test-connection", service_account_key="")
+        dest = BigQueryDestination(id="test", project="test-proj", location="EU", connection=connection)
+
+        assert dest.client is built.return_value
+        built.assert_called_once_with(project="test-proj", credentials="ambient", location="EU")
+
+
 # -- insert --------------------------------------------------------------------
 
 

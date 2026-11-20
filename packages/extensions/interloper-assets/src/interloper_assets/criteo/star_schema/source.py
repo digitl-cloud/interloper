@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-import ibis
+from typing import TYPE_CHECKING
+
 import interloper as il
 from interloper.errors import ConfigError
 from interloper_sql import ibis_view, latest, local_date, union
 
 from interloper_assets.criteo.connector.source import Criteo
 from interloper_assets.criteo.star_schema import schemas
+
+if TYPE_CHECKING:
+    import ibis
 
 MEASURE_COLUMNS = (
     "displays",
@@ -176,6 +180,7 @@ class CriteoStarSchema(il.Source):
         else the facts. Its currency is NULL: Criteo does not state it, and the
         facts' euros are a conversion, not the advertiser's currency.
         """
+        import ibis
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -236,6 +241,7 @@ class CriteoStarSchema(il.Source):
 
         Each campaign comes from its entity snapshot, else its latest report, else the facts.
         """
+        import ibis
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -305,6 +311,8 @@ class CriteoStarSchema(il.Source):
         Each ad set comes from its entity snapshot, else its latest ad report,
         else the facts. The schedule's instants are read as the advertiser's days.
         """
+        import ibis
+
         timezones = dim_accounts.data.select(zone_account_id="account_id", timezone="timezone")
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
@@ -404,6 +412,8 @@ class CriteoStarSchema(il.Source):
 
         Each ad comes from its entity snapshot, else its latest ad report, else the facts.
         """
+        import ibis
+
         groups = dim_ad_groups.data.select("ad_group_id", "campaign_id")
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:

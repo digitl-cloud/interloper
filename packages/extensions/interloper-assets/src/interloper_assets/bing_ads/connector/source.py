@@ -1,12 +1,16 @@
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 import interloper as il
-import pandas as pd
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.bing_ads import constants
 from interloper_assets.bing_ads.connection import BingAdsConnection
 from interloper_assets.bing_ads.connector.schemas import Accounts, AdGroups, Ads, AdsStats, Campaigns
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 @il.source(

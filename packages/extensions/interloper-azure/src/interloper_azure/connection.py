@@ -4,14 +4,16 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from functools import cached_property
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx2
-from azure.identity import ClientSecretCredential
 from interloper.connection import Connection, connection
 from interloper.resource import InputField, SecretField, fetch_field_provider
 from interloper.rest import JSONCursorPaginator, RESTClient
 from pydantic_settings import SettingsConfigDict
+
+if TYPE_CHECKING:
+    from azure.identity import ClientSecretCredential
 
 FABRIC_API = "https://api.fabric.microsoft.com/v1"
 FABRIC_SCOPE = "https://api.fabric.microsoft.com/.default"
@@ -83,6 +85,8 @@ class AzureConnection(Connection):
             The client-secret credential, cached per connection instance so
             its token cache is shared by every caller.
         """
+        from azure.identity import ClientSecretCredential
+
         return ClientSecretCredential(self.tenant_id, self.client_id, self.client_secret)
 
     def token(self, scope: str) -> str:

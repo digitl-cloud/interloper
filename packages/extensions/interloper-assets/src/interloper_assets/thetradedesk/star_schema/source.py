@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-import ibis
+from typing import TYPE_CHECKING
+
 import interloper as il
 from interloper.errors import ConfigError
 from interloper_sql import ibis_view, latest, local_date, union
 
 from interloper_assets.thetradedesk.constants import REPORT_TIMEZONE
 from interloper_assets.thetradedesk.star_schema import schemas
+
+if TYPE_CHECKING:
+    import ibis
 
 REPORT_COLUMNS = (
     "date",
@@ -147,6 +151,8 @@ class TheTradeDeskStarSchema(il.Source):
         reports but carry the advertiser's currency, not the partner's, so the
         report is the only tier: every partner a fact carries has its report.
         """
+        import ibis
+
         rows = union(ad_groups_stats, "date", "partner_currency_code", account_id=_account)
         days = rows.group_by(["account_id", "date"]).aggregate(currency=rows["partner_currency_code"].max())
         accounts = days.select(
@@ -172,6 +178,7 @@ class TheTradeDeskStarSchema(il.Source):
         fact_campaign_performance: il.Upstream,
     ) -> ibis.Table:
         """One row per campaign, from its latest snapshot, else its latest report, else the facts."""
+        import ibis
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -257,6 +264,7 @@ class TheTradeDeskStarSchema(il.Source):
         fact_ad_group_performance: il.Upstream,
     ) -> ibis.Table:
         """One row per ad group with its campaign, from its latest snapshot, else its latest report, else the facts."""
+        import ibis
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data

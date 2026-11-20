@@ -8,11 +8,9 @@ import json
 import warnings
 from collections.abc import Sequence
 from functools import cached_property
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import google.auth
-import pandas as pd
-from google.cloud import bigquery
 from google.cloud.exceptions import Conflict, NotFound
 from google.oauth2 import service_account
 from interloper.destination import DatabaseDestination, Destination, IOContext, destination
@@ -23,6 +21,10 @@ from interloper.resource import FetchField, InputField, SelectField
 
 from interloper_google_cloud.bigquery.types import TIME_PARTITIONABLE, column_type, parameter_type, to_fields
 from interloper_google_cloud.connection import GoogleCloudConnection
+
+if TYPE_CHECKING:
+    import pandas as pd
+    from google.cloud import bigquery
 
 
 @destination(
@@ -64,6 +66,8 @@ class BigQueryDestination(DatabaseDestination):
         Returns:
             The client, cached per destination instance.
         """
+        from google.cloud import bigquery
+
         if self.connection and self.connection.service_account_key:
             key_info = json.loads(self.connection.service_account_key)
             credentials = service_account.Credentials.from_service_account_info(key_info)
@@ -162,6 +166,8 @@ class BigQueryDestination(DatabaseDestination):
             time_partitioning: Time partitioning spec, if the asset is partitioned.
             description: Table description (the asset's description).
         """
+        from google.cloud import bigquery
+
         bq_table = bigquery.Table(self._table_ref(table, dataset), schema=bq_schema)
         bq_table.time_partitioning = time_partitioning
         bq_table.description = description
@@ -207,6 +213,8 @@ class BigQueryDestination(DatabaseDestination):
         Args:
             dataset: The BigQuery dataset, or ``None`` for the destination's default.
         """
+        from google.cloud import bigquery
+
         ds = self._resolve_dataset(dataset)
         dataset_ref = bigquery.DatasetReference(self.project, ds)
         try:
@@ -356,6 +364,8 @@ class BigQueryDestination(DatabaseDestination):
                 load carries, so new declared columns may be added to the
                 table; defaults to ``False``.
         """
+        from google.cloud import bigquery
+
         job_config = bigquery.LoadJobConfig(write_disposition=bigquery.WriteDisposition.WRITE_APPEND)
         if time_partitioning is not None:
             job_config.time_partitioning = time_partitioning
@@ -392,6 +402,8 @@ class BigQueryDestination(DatabaseDestination):
             dataset: The BigQuery dataset, or ``None`` for the destination's default.
             where: The rows to delete; ``None`` for the whole table.
         """
+        from google.cloud import bigquery
+
         bq_table = self._get_table(table, dataset)
         if bq_table is None:
             return
@@ -420,6 +432,8 @@ class BigQueryDestination(DatabaseDestination):
         Raises:
             DataNotFoundError: If the table does not exist yet.
         """
+        from google.cloud import bigquery
+
         bq_table = self._get_table(table, dataset)
         ref = self._table_ref(table, dataset)
         if bq_table is None:
@@ -477,10 +491,10 @@ def _asset_description(asset: Any) -> str | None:
 
 # BigQuery time partitioning only supports DATE / DATETIME / TIMESTAMP columns.
 _GRANULARITY_TO_BQ_TYPE = {
-    TimeGranularity.HOUR: bigquery.TimePartitioningType.HOUR,
-    TimeGranularity.DAY: bigquery.TimePartitioningType.DAY,
-    TimeGranularity.MONTH: bigquery.TimePartitioningType.MONTH,
-    TimeGranularity.YEAR: bigquery.TimePartitioningType.YEAR,
+    TimeGranularity.HOUR: "HOUR",
+    TimeGranularity.DAY: "DAY",
+    TimeGranularity.MONTH: "MONTH",
+    TimeGranularity.YEAR: "YEAR",
 }
 
 
@@ -505,6 +519,8 @@ def _time_partitioning(
     Returns:
         A ``TimePartitioning`` at the asset's granularity, or ``None``.
     """
+    from google.cloud import bigquery
+
     if config is None:
         return None
 
@@ -554,6 +570,8 @@ def _merge_field_descriptions(
     Returns:
         The merged field list and whether anything changed.
     """
+    from google.cloud import bigquery
+
     desired_by_name = {f.name: f for f in desired}
     merged: list[bigquery.SchemaField] = []
     changed = False
@@ -620,6 +638,8 @@ def _partition_params(
     Returns:
         An array parameter named ``partition_values``.
     """
+    from google.cloud import bigquery
+
     scalars = [_partition_param(bq_table, column, value) for value in values]
     return bigquery.ArrayQueryParameter("partition_values", scalars[0].type_, [scalar.value for scalar in scalars])
 
@@ -648,6 +668,8 @@ def _partition_param(
     Returns:
         A scalar parameter with the matching type.
     """
+    from google.cloud import bigquery
+
     field = next((f for f in bq_table.schema if f.name == column), None)
     if field is not None:
         param_type = parameter_type(field.field_type)

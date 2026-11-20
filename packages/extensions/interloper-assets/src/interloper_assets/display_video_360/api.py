@@ -10,7 +10,6 @@ from time import monotonic
 from typing import Any
 
 import interloper as il
-import pandas as pd
 
 from interloper_assets.display_video_360.constants import (
     BID_MANAGER_URL,
@@ -213,6 +212,8 @@ class DisplayVideo360Api:
         Returns:
             The rows, keyed by column header, a ``-`` read as missing.
         """
+        import pandas as pd
+
         lines = []
         for line in text.split("\n"):
             if line.startswith(","):

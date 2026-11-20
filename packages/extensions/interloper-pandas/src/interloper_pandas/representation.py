@@ -10,14 +10,17 @@ import datetime
 import json
 import logging
 import numbers
+import sys
 from decimal import Decimal, InvalidOperation
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
-import pandas as pd
 from interloper.errors import SchemaError
 from interloper.representation import Representation, iso_label
 from interloper.schema import FieldSpec, Schema
 from pydantic import create_model
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -32,15 +35,20 @@ class DataFrameRepresentation(Representation):
     key: ClassVar[str] = "dataframe"
 
     def matches(self, data: Any) -> bool:
-        """Return whether *data* is a pandas ``DataFrame``.
+        """Return whether *data* is a pandas ``DataFrame``, without importing pandas.
+
+        Every asset's output is tested here, so pandas is read from the loaded
+        modules: while it was never imported, no value can be a DataFrame.
 
         Args:
             data: The value to test.
 
         Returns:
-            ``True`` for DataFrames.
+            ``True`` for DataFrames, ``False`` for anything else and whenever
+            pandas is not loaded.
         """
-        return isinstance(data, pd.DataFrame)
+        pandas = sys.modules.get("pandas")
+        return pandas is not None and isinstance(data, pandas.DataFrame)
 
     def to_rows(self, data: pd.DataFrame) -> list[dict[str, Any]]:
         """Return the DataFrame as null-safe rows (``NaN``/``NaT`` → ``None``).
@@ -66,6 +74,8 @@ class DataFrameRepresentation(Representation):
         Returns:
             A pandas ``DataFrame``.
         """
+        import pandas as pd
+
         df = pd.DataFrame(rows, dtype=object)
         integers = {
             column: pd.array(df[column].tolist(), dtype="Int64")
@@ -139,6 +149,8 @@ class DataFrameRepresentation(Representation):
                 required non-nullable column is missing, or a non-nullable
                 column contains nulls.
         """
+        import pandas as pd
+
         data = _encode_json_str_columns(data, schema)
         if strict:
             schema.validate_rows(dataframe_to_rows(data), strict=True)
@@ -195,6 +207,8 @@ class DataFrameRepresentation(Representation):
         Returns:
             One frame.
         """
+        import pandas as pd
+
         return pd.concat(tables, ignore_index=True)
 
 
@@ -211,6 +225,8 @@ def _dtype_to_py_type(series: pd.Series) -> Any:
         The resolved Python type, or ``Any`` when unknown (e.g. an all-null
         object column).
     """
+    import pandas as pd
+
     dtype = series.dtype
     if pd.api.types.is_bool_dtype(dtype):
         return bool
@@ -241,6 +257,8 @@ def _to_integers(series: pd.Series) -> pd.Series:
     Returns:
         The ``Int64`` Series.
     """
+    import pandas as pd
+
     if pd.api.types.is_numeric_dtype(series) or pd.api.types.is_bool_dtype(series):
         return series.astype("Int64")
     values = [None if pd.api.types.is_scalar(value) and pd.isna(value) else _exact_integer(value) for value in series]
@@ -293,6 +311,8 @@ def _to_datetime(series: pd.Series) -> pd.Series:
     Returns:
         The parsed Series, in UTC when the input mixed offsets or precision.
     """
+    import pandas as pd
+
     try:
         return pd.to_datetime(series, errors="raise")
     except ValueError as error:
@@ -370,6 +390,8 @@ def _cast_series(series: pd.Series, spec: FieldSpec) -> pd.Series:
         SchemaError: If the values cannot be cast to the declared type, or a
             datetime or date column holds numbers.
     """
+    import pandas as pd
+
     # Nested / repeated / unknown types pass through untouched.
     if spec.repeated or spec.fields is not None or spec.type is Any:
         return series
@@ -417,4 +439,6 @@ def dataframe_to_rows(data: pd.DataFrame) -> list[dict[str, Any]]:
     Returns:
         Rows as a list of dicts with ``None`` for missing values.
     """
+    import pandas as pd
+
     return data.astype(object).where(pd.notna(data), None).to_dict("records")

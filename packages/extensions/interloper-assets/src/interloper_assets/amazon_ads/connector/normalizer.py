@@ -1,8 +1,12 @@
-import json
-from typing import Any
+from __future__ import annotations
 
-import pandas as pd
+import json
+from typing import TYPE_CHECKING, Any
+
 from interloper_pandas import DataFrameNormalizer
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 class AmazonAdsNormalizer(DataFrameNormalizer):
@@ -23,6 +27,8 @@ class AmazonAdsNormalizer(DataFrameNormalizer):
         Returns:
             The normalized frame, ``tags`` as a JSON string where a row has it.
         """
+        import pandas as pd
+
         records = data.to_dict("records") if isinstance(data, pd.DataFrame) else data
         rows = [
             {**row, "tags": json.dumps(row["tags"])} if isinstance(row.get("tags"), dict) else row for row in records
@@ -55,6 +61,8 @@ class SponsoredDisplayEntityNormalizer(AmazonAdsNormalizer):
         Returns:
             The normalized frame, ids as strings and ``start_date``/``end_date`` as dates.
         """
+        import pandas as pd
+
         records = data.to_dict("records") if isinstance(data, pd.DataFrame) else data
         rows = [
             {key: str(value) if key in _DISPLAY_IDS and pd.notna(value) else value for key, value in row.items()}

@@ -8,9 +8,8 @@ import math
 import uuid
 import warnings
 from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import pandas as pd
 from interloper.destination import DatabaseDestination, IOContext, destination
 from interloper.errors import ConfigError, DataNotFoundError
 from interloper.partitioning import Partition, PartitionConfig, PartitionFilter, TimePartition
@@ -22,6 +21,9 @@ from interloper.utils import is_empty, json_default, replace_non_finite
 from interloper_clickhouse.connection import ClickHouseConnection
 from interloper_clickhouse.partitioning import partition_key, same_key
 from interloper_clickhouse.types import STRING, base_type, column_type, is_json, is_nullable
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 DEFAULT_DATABASE = "default"
 

@@ -250,3 +250,12 @@ Every class reachable through a manifest's `components` section becomes a catalo
 its `definition()`. Nothing is inferred or registered at import time: installation is
 registration, and the catalog contains exactly what was declared. See
 [Catalog](../guide/catalog.md) and [Extensions & registries](extensions.md).
+
+Every process that builds a catalog imports every declared class, including the API and the MCP
+server, which describe components and never run them. Keep what only a run needs (pandas, ibis, a
+vendor SDK) out of the module's top level: import it inside the function that uses it, and name
+its types in annotations under `TYPE_CHECKING`. An asset's relations are read from its `data()`
+parameters alone, so its return annotation may name a type the module never imports. Import a
+library the same way at every call site, through its package (`import pandas as pd`, never one
+submodule here and another there): on Python 3.14, two threads lazily importing one package
+through different submodules can deadlock.

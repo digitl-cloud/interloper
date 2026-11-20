@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import boto3
 from interloper.connection import Connection, connection
 from interloper.resource import InputField, SecretField, fetch_field_provider
 from pydantic_settings import SettingsConfigDict
+
+if TYPE_CHECKING:
+    import boto3
 
 
 @connection(
@@ -59,6 +61,8 @@ class AWSConnection(Connection):
         Returns:
             The session, cached per connection instance.
         """
+        import boto3
+
         return boto3.session.Session(
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.secret_access_key,

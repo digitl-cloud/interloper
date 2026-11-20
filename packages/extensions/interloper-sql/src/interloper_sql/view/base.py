@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
-import ibis
 from interloper.asset import Output, Upstream, View
 from interloper.destination import TableReference
 from interloper.errors import ConfigError
@@ -13,6 +12,7 @@ from interloper.errors import ConfigError
 from interloper_sql.view.types import IBIS_DIALECTS, ibis_schema
 
 if TYPE_CHECKING:
+    import ibis
     from interloper.asset import Asset
     from interloper.partitioning import PartitionWindow
 
@@ -40,6 +40,8 @@ class IbisDefinition:
         Raises:
             ConfigError: If the dialect has no Ibis counterpart.
         """
+        import ibis
+
         if dialect not in IBIS_DIALECTS:
             raise ConfigError(f"No Ibis dialect for '{dialect}'")
         return str(ibis.to_sql(self.expression, dialect=IBIS_DIALECTS[dialect]))
@@ -72,6 +74,8 @@ class IbisView(View):
         Raises:
             ConfigError: If the upstream declares no schema, or its reference is not a table.
         """
+        import ibis
+
         upstream = await super()._upstream(name, target, window, metadata)
         reference = upstream.data
         if not isinstance(reference, TableReference):
@@ -100,6 +104,8 @@ class IbisView(View):
                 declares no schema, or the expression's columns differ from
                 the declared ones.
         """
+        import ibis
+
         if not isinstance(result, ibis.Table):
             raise ConfigError(f"View '{self.qualified_key}' returned {type(result).__name__}, not an Ibis table")
         if self.schema is None:
@@ -137,6 +143,8 @@ def union(upstreams: Sequence[Upstream], *columns: str, **stamps: Callable[[Upst
     Raises:
         ConfigError: If no upstream is bound; a view over nothing has no columns.
     """
+    import ibis
+
     if not upstreams:
         raise ConfigError("no upstream bound: a view needs at least one")
     names = list(columns or upstreams[0].data.columns)
@@ -169,6 +177,8 @@ def latest(rows: ibis.Table, key: str, *order: ibis.Expr) -> ibis.Table:
     Returns:
         The kept rows, without the ranking column.
     """
+    import ibis
+
     rows = rows.filter(rows[key].notnull())
     ranked = rows.mutate(rank=ibis.row_number().over(group_by=key, order_by=list(order)))
     return ranked.filter(ranked["rank"] == 0).drop("rank")

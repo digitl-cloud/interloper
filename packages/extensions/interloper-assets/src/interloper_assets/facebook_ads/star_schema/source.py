@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-import ibis
-import ibis.expr.types as ir
+from typing import TYPE_CHECKING
+
 import interloper as il
 from interloper.errors import ConfigError
 from interloper_sql import ibis_view, latest, union
 
 from interloper_assets.facebook_ads import constants
 from interloper_assets.facebook_ads.star_schema import schemas
+
+if TYPE_CHECKING:
+    import ibis
+    import ibis.expr.types as ir
 
 CAMPAIGN_REPORT_COLUMNS = (
     "date_start",
@@ -79,6 +83,8 @@ def _local_date(column: ir.StringValue) -> ir.Value:
     Returns:
         A date column.
     """
+    import ibis
+
     return column.nullif(ibis.literal("")).substr(0, 10).cast("date")
 
 
@@ -94,6 +100,8 @@ def _budget_type(table: ibis.Table) -> ir.Value:
     Returns:
         A string column.
     """
+    import ibis
+
     lifetime = ibis.ifelse(table["lifetime_budget"] > 0, "lifetime", ibis.null("string"))
     return ibis.ifelse(table["daily_budget"] > 0, "daily", lifetime)
 
@@ -111,6 +119,8 @@ def _minor_budget(table: ibis.Table) -> ir.Value:
     Returns:
         An integer column, NULL when neither budget is set.
     """
+    import ibis
+
     lifetime = ibis.ifelse(table["lifetime_budget"] > 0, table["lifetime_budget"], ibis.null("int64"))
     return ibis.ifelse(table["daily_budget"] > 0, table["daily_budget"], lifetime)
 
@@ -131,6 +141,8 @@ def _budget(rows: ibis.Table, dim_accounts: il.Upstream) -> ibis.Table:
     Returns:
         The rows with ``budget`` in place of ``minor_budget``.
     """
+    import ibis
+
     accounts = dim_accounts.data
     offsets = accounts.select(
         offset_account_id=accounts["account_id"],
@@ -259,6 +271,7 @@ class FacebookAdsStarSchema(il.Source):
 
         Each account comes from its entity row, else the campaign report, else the facts.
         """
+        import ibis
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -317,6 +330,7 @@ class FacebookAdsStarSchema(il.Source):
         self, campaigns: list[il.Upstream], fact_campaign_performance: il.Upstream, dim_accounts: il.Upstream
     ) -> ibis.Table:
         """One row per campaign, from its latest entity row, else its latest report, else the facts."""
+        import ibis
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -406,6 +420,7 @@ class FacebookAdsStarSchema(il.Source):
         dim_accounts: il.Upstream,
     ) -> ibis.Table:
         """One row per ad set with its schedule and status: its entity row, else the ad report, else the facts."""
+        import ibis
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -487,6 +502,7 @@ class FacebookAdsStarSchema(il.Source):
         self, ads: list[il.Upstream], ads_stats: list[il.Upstream], fact_ad_performance: il.Upstream
     ) -> ibis.Table:
         """One row per ad with its ad set and campaign: its latest entity row, else the ad report, else the facts."""
+        import ibis
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data

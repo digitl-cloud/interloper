@@ -1,8 +1,12 @@
-import json
-from typing import Any
+from __future__ import annotations
 
-import pandas as pd
+import json
+from typing import TYPE_CHECKING, Any
+
 from interloper_pandas import DataFrameNormalizer
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 # camelCase money object -> (amount key, currency key); both snake-case onto the schema.
 _MONEY_FIELDS = {

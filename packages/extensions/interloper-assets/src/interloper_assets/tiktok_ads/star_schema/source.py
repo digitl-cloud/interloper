@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-import ibis
+from typing import TYPE_CHECKING
+
 import interloper as il
 from interloper.errors import ConfigError
 from interloper_sql import ibis_view, latest, local_date, union
 
 from interloper_assets.tiktok_ads.star_schema import schemas
+
+if TYPE_CHECKING:
+    import ibis
 
 REPORT_COLUMNS = (
     "stat_time_day",
@@ -138,6 +142,7 @@ class TiktokAdsStarSchema(il.Source):
     )
     def dim_accounts(self, advertisers: list[il.Upstream], fact_campaign_performance: il.Upstream) -> ibis.Table:
         """One row per advertiser with its name, currency and timezone: its latest snapshot, else the facts."""
+        import ibis
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -180,6 +185,7 @@ class TiktokAdsStarSchema(il.Source):
         self, campaigns: list[il.Upstream], ads_stats: list[il.Upstream], fact_campaign_performance: il.Upstream
     ) -> ibis.Table:
         """One row per campaign: its latest snapshot, else its latest report name, else the facts."""
+        import ibis
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -276,6 +282,8 @@ class TiktokAdsStarSchema(il.Source):
         dim_accounts: il.Upstream,
     ) -> ibis.Table:
         """One row per ad group with its schedule: its latest snapshot, else its latest report name, else the facts."""
+        import ibis
+
         timezones = dim_accounts.data.select(zone_account_id="account_id", timezone="timezone")
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
@@ -375,6 +383,7 @@ class TiktokAdsStarSchema(il.Source):
         self, ads: list[il.Upstream], ads_stats: list[il.Upstream], fact_ad_performance: il.Upstream
     ) -> ibis.Table:
         """One row per ad: its latest snapshot, else its latest report name, else the facts."""
+        import ibis
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data

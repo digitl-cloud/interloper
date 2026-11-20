@@ -8,10 +8,8 @@ import warnings
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
-import duckdb
-import pandas as pd
 from interloper.destination import DatabaseDestination, Destination, IOContext, destination
 from interloper.errors import DataNotFoundError
 from interloper.partitioning import PartitionFilter
@@ -22,6 +20,10 @@ from pydantic import PrivateAttr
 
 from interloper_duckdb.connection import DuckDBConnection
 from interloper_duckdb.types import column_type
+
+if TYPE_CHECKING:
+    import duckdb
+    import pandas as pd
 
 DEFAULT_SCHEMA = "main"
 

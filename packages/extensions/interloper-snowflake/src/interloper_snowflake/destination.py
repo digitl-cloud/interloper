@@ -10,9 +10,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import pandas as pd
 from interloper.destination import DatabaseDestination, IOContext, destination
 from interloper.errors import ConfigError, DataNotFoundError
 from interloper.partitioning import PartitionFilter
@@ -21,11 +20,14 @@ from interloper.resource import FetchField, InputField
 from interloper.schema import FieldSpec
 from interloper.utils import RLock, ThreadLocal, is_empty
 from pydantic import PrivateAttr
-from snowflake.connector import SnowflakeConnection as Session
-from snowflake.connector.cursor import SnowflakeCursor
 
 from interloper_snowflake.connection import SnowflakeConnection
 from interloper_snowflake.types import column_type
+
+if TYPE_CHECKING:
+    import pandas as pd
+    from snowflake.connector import SnowflakeConnection as Session
+    from snowflake.connector.cursor import SnowflakeCursor
 
 _STAGE = "interloper_load"
 

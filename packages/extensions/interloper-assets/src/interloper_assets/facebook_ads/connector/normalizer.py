@@ -1,8 +1,12 @@
-import re
-from typing import Any
+from __future__ import annotations
 
-import pandas as pd
+import re
+from typing import TYPE_CHECKING, Any
+
 from interloper_pandas import DataFrameNormalizer
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 # Insight columns whose cells are lists of ``{action_type, value}``; each is
 # pivoted into one column per action type (``actions`` -> ``actions_link_click``).
@@ -58,6 +62,8 @@ def _pivot_cell(column: str, cell: Any) -> dict[str, float]:
         One summed value per action type, keyed ``<column>_<action_type>``; an
         entry without an action type or a numeric value is skipped.
     """
+    import pandas as pd
+
     out: dict[str, float] = {}
     if isinstance(cell, list):
         for entry in cell:
@@ -91,6 +97,8 @@ class FacebookActionsNormalizer(DataFrameNormalizer):
         Returns:
             The normalized frame.
         """
+        import pandas as pd
+
         df = data if isinstance(data, pd.DataFrame) else pd.DataFrame(data)
         if df.empty:
             return df

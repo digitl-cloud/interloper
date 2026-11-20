@@ -5,10 +5,12 @@ from __future__ import annotations
 import datetime as dt
 import random
 import string
-from typing import Any, get_args, get_origin
+from typing import TYPE_CHECKING, Any, get_args, get_origin
 
-import pandas as pd
 from interloper.schema import Schema
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 def _fake_value(annotation: Any) -> Any:
@@ -60,6 +62,8 @@ def fake_data(
     Returns:
         A DataFrame populated with random data matching the schema field types.
     """
+    import pandas as pd
+
     n_rows = random.randint(1, 10)
     rows: list[dict[str, Any]] = []
     for _ in range(n_rows):

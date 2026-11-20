@@ -47,7 +47,7 @@ class TestClient:
         )
         with (
             patch.object(gcs_module.service_account.Credentials, "from_service_account_info") as from_info,
-            patch.object(gcs_module.storage, "Client") as client_cls,
+            patch("google.cloud.storage.Client") as client_cls,
         ):
             assert dest.client is client_cls.return_value
         from_info.assert_called_once_with(json.loads(_SA_KEY))
@@ -63,7 +63,7 @@ class TestClient:
         credentials = MagicMock()
         with (
             patch.object(gcs_module.google.auth, "default", return_value=(credentials, "ambient-proj")),
-            patch.object(gcs_module.storage, "Client") as client_cls,
+            patch("google.cloud.storage.Client") as client_cls,
         ):
             assert dest.client is client_cls.return_value
         client_cls.assert_called_once_with(project="ambient-proj", credentials=credentials)

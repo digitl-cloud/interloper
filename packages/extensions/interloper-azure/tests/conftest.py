@@ -63,7 +63,7 @@ def credential(monkeypatch: pytest.MonkeyPatch) -> type[FakeCredential]:
     Returns:
         The fake credential class.
     """
-    monkeypatch.setattr(connection_module, "ClientSecretCredential", FakeCredential)
+    monkeypatch.setattr("azure.identity.ClientSecretCredential", FakeCredential)
     return FakeCredential
 
 

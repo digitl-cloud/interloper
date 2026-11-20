@@ -5,15 +5,18 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from functools import cached_property
+from typing import TYPE_CHECKING
 
 import google.auth
-from google.cloud import storage
 from google.cloud.exceptions import NotFound
 from google.oauth2 import service_account
 from interloper.destination import ObjectStoreDestination, StoredObject, destination
 from interloper.resource import FetchField
 
 from interloper_google_cloud.connection import GoogleCloudConnection
+
+if TYPE_CHECKING:
+    from google.cloud import storage
 
 
 @destination(
@@ -53,6 +56,8 @@ class GCSDestination(ObjectStoreDestination):
         Returns:
             The client, cached per destination instance.
         """
+        from google.cloud import storage
+
         if self.connection and self.connection.service_account_key:
             key_info = json.loads(self.connection.service_account_key)
             credentials = service_account.Credentials.from_service_account_info(key_info)

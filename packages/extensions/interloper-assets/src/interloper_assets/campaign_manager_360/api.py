@@ -10,7 +10,6 @@ from time import monotonic
 from typing import Any
 
 import interloper as il
-import pandas as pd
 
 from interloper_assets.campaign_manager_360.constants import MAX_RETRY_INTERVAL, MIN_RETRY_INTERVAL, REPORT_TIMEOUT
 
@@ -189,6 +188,8 @@ class CampaignManager360Api:
         Returns:
             The rows under the file's headers; ``-`` reads as missing.
         """
+        import pandas as pd
+
         for line in file:
             if b"Report Fields" in line:
                 break

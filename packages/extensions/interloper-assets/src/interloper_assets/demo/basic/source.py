@@ -1,8 +1,13 @@
+from __future__ import annotations
+
 import datetime as dt
 import logging
+from typing import TYPE_CHECKING
 
 import interloper as il
-import pandas as pd
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +35,8 @@ class DemoSource(il.Source):
     def _do(self, context: il.ExecutionContext, name: str) -> pd.DataFrame:
         import random
         import time
+
+        import pandas as pd
 
         context.logger.info(f"Hello {self.hello} from {name}")
 

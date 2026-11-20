@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from functools import cached_property
+from typing import TYPE_CHECKING
 
-import duckdb
 from interloper.connection import Connection, connection
 from interloper.resource import InputField, SecretField, fetch_field_provider
 from pydantic_settings import SettingsConfigDict
+
+if TYPE_CHECKING:
+    import duckdb
 
 _SYSTEM_SCHEMAS = ("information_schema", "pg_catalog")
 
@@ -59,6 +62,8 @@ class DuckDBConnection(Connection):
         Returns:
             The connection, cached per connection instance.
         """
+        import duckdb
+
         config = {"TimeZone": "UTC"}
         if self.motherduck_token:
             config["motherduck_token"] = self.motherduck_token

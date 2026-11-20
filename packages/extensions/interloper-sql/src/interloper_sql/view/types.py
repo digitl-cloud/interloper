@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import datetime as dt
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import ibis
 from interloper.schema import Schema
+
+if TYPE_CHECKING:
+    import ibis
 
 IBIS_TYPES: dict[Any, str] = {
     str: "string",
@@ -43,4 +45,6 @@ def ibis_schema(schema: type[Schema]) -> ibis.Schema:
     Returns:
         The Ibis schema, in declaration order.
     """
+    import ibis
+
     return ibis.schema({spec.name: IBIS_TYPES.get(spec.type, "string") for spec in schema.field_specs()})

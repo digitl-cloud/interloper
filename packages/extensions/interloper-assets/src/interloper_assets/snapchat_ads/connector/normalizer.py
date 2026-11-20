@@ -1,7 +1,11 @@
-from typing import Any
+from __future__ import annotations
 
-import pandas as pd
+from typing import TYPE_CHECKING, Any
+
 from interloper_pandas import DataFrameNormalizer
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 class SnapchatStatsNormalizer(DataFrameNormalizer):
@@ -22,6 +26,8 @@ class SnapchatStatsNormalizer(DataFrameNormalizer):
         Returns:
             The normalized frame.
         """
+        import pandas as pd
+
         records = data.to_dict("records") if isinstance(data, pd.DataFrame) else data
         df = pd.json_normalize(records, sep="_")
         if df.empty:

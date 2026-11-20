@@ -6,7 +6,6 @@ import pytest
 from botocore.exceptions import ClientError
 
 from interloper_aws import AWSConnection
-from interloper_aws import connection as connection_module
 
 _AWS_ENV = ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_REGION")
 
@@ -55,7 +54,7 @@ class TestSession:
             session_token="token-placeholder",
             region="eu-west-1",
         )
-        with patch.object(connection_module.boto3.session, "Session") as session_cls:
+        with patch("boto3.session.Session") as session_cls:
             assert conn.session is session_cls.return_value
         session_cls.assert_called_once_with(
             aws_access_key_id="AKIAEXAMPLE",
@@ -65,7 +64,7 @@ class TestSession:
         )
 
     def test_without_keys_defers_to_the_default_chain(self):
-        with patch.object(connection_module.boto3.session, "Session") as session_cls:
+        with patch("boto3.session.Session") as session_cls:
             _ = AWSConnection().session
         session_cls.assert_called_once_with(
             aws_access_key_id=None,
@@ -76,7 +75,7 @@ class TestSession:
 
     def test_is_cached(self):
         conn = AWSConnection()
-        with patch.object(connection_module.boto3.session, "Session") as session_cls:
+        with patch("boto3.session.Session") as session_cls:
             assert conn.session is conn.session
         session_cls.assert_called_once()
 

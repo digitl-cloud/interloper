@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -30,6 +31,44 @@ from interloper_api.routes import websocket as websocket_module
 from interloper_api.settings import ApiSettings
 
 _ORG = "00000000-0000-0000-0000-000000000000"
+
+_RUN_DEPENDENCIES = (
+    "pandas",
+    "numpy",
+    "pyarrow",
+    "ibis",
+    "sqlglot",
+    "google.cloud.bigquery",
+    "google.cloud.storage",
+    "snowflake",
+    "clickhouse_connect",
+    "databricks",
+    "duckdb",
+    "boto3",
+    "azure",
+    "mssql_python",
+    "bingads",
+    "facebook_business",
+    "google.ads",
+    "googleapiclient",
+)
+
+
+def test_describing_every_installed_component_loads_none_of_what_a_run_needs():
+    # A fresh interpreter: this test session has loaded those libraries already.
+    probe = (
+        "import sys\n"
+        "import interloper_api.app\n"
+        "from interloper.catalog import Catalog\n"
+        "from interloper.representation.base import REPRESENTATIONS\n"
+        "Catalog.discover()\n"
+        "REPRESENTATIONS.values()\n"
+        f"print(sorted(name for name in {_RUN_DEPENDENCIES!r} if name in sys.modules))\n"
+    )
+
+    completed = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, check=True)
+
+    assert completed.stdout.strip() == "[]"
 
 
 def test_a_plain_http_external_url_mounts_no_authorization_server(

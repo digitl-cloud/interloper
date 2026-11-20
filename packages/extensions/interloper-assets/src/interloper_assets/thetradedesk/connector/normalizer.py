@@ -1,7 +1,11 @@
-from typing import Any
+from __future__ import annotations
 
-import pandas as pd
+from typing import TYPE_CHECKING, Any
+
 from interloper_pandas import DataFrameNormalizer
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 def _decimal_comma_to_float(value: Any) -> Any:
@@ -38,6 +42,8 @@ class TheTradeDeskNormalizer(DataFrameNormalizer):
         Returns:
             The normalized frame.
         """
+        import pandas as pd
+
         df = super().normalize(data)
         if df.empty:
             return df

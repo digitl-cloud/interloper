@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-import ibis
-import ibis.expr.types as ir
+from typing import TYPE_CHECKING
+
 import interloper as il
 from interloper.errors import ConfigError
 from interloper_sql import ibis_view, latest, local_date, union
 
 from interloper_assets.snapchat_ads.star_schema import schemas
+
+if TYPE_CHECKING:
+    import ibis
+    import ibis.expr.types as ir
 
 REPORT_COLUMNS = ("date", "id", "impressions", "swipes", "spend", "conversion_purchases", "conversion_purchases_value")
 CAMPAIGN_ENTITY_COLUMNS = (
@@ -76,6 +80,8 @@ def _performance(reports: list[il.Upstream], ad_accounts: list[il.Upstream]) -> 
     Returns:
         date, account_id, id and the summed measures, with currency.
     """
+    import ibis
+
     rows = union(reports, *REPORT_COLUMNS, account_id=_account)
     rows = rows.filter(rows["id"].notnull())
     summed = rows.group_by(["date", "account_id", "id"]).aggregate(
@@ -106,6 +112,8 @@ def _budget(table: ibis.Table, lifetime: str) -> dict[str, ir.Value]:
     Returns:
         The two columns, ready to splice into a select.
     """
+    import ibis
+
     is_daily = table["daily_budget_micro"] > 0
     lifetime_type = ibis.ifelse(table[lifetime].notnull(), "lifetime", ibis.null("string"))
     return {
@@ -203,6 +211,7 @@ class SnapchatAdsStarSchema(il.Source):
     )
     def dim_accounts(self, ad_accounts: list[il.Upstream], fact_campaign_performance: il.Upstream) -> ibis.Table:
         """One row per ad account with its name, currency and timezone: its latest snapshot, else the facts."""
+        import ibis
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -242,6 +251,8 @@ class SnapchatAdsStarSchema(il.Source):
         self, campaigns: list[il.Upstream], fact_campaign_performance: il.Upstream, dim_accounts: il.Upstream
     ) -> ibis.Table:
         """One row per campaign, from its latest snapshot, else the facts."""
+        import ibis
+
         timezones = _timezones(dim_accounts)
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
@@ -327,6 +338,7 @@ class SnapchatAdsStarSchema(il.Source):
         self, ads: list[il.Upstream], fact_ad_performance: il.Upstream, dim_ad_groups: il.Upstream
     ) -> ibis.Table:
         """One row per ad with its ad squad and campaign, from its latest snapshot, else the facts."""
+        import ibis
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data

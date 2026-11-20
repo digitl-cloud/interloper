@@ -6,7 +6,6 @@ from collections.abc import Iterator
 from functools import cached_property
 from typing import Any
 
-from botocore.exceptions import ClientError
 from interloper.destination import ObjectStoreDestination, StoredObject, destination
 from interloper.resource import FetchField
 
@@ -81,6 +80,8 @@ class S3Destination(ObjectStoreDestination):
         Raises:
             ClientError: For any S3 error other than a missing key.
         """
+        from botocore.exceptions import ClientError
+
         try:
             response = self.client.get_object(Bucket=self.bucket, Key=name)
         except ClientError as error:

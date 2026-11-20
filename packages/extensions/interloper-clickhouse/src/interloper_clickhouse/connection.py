@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from functools import cached_property
+from typing import TYPE_CHECKING
 
-import clickhouse_connect
-from clickhouse_connect.driver.client import Client
 from interloper.connection import Connection, connection
 from interloper.resource import InputField, SecretField, fetch_field_provider
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
+
+if TYPE_CHECKING:
+    from clickhouse_connect.driver.client import Client
 
 _SYSTEM_DATABASES = ("INFORMATION_SCHEMA", "information_schema", "system")
 
@@ -48,6 +50,8 @@ class ClickHouseConnection(Connection):
         Returns:
             The client, cached per connection instance.
         """
+        import clickhouse_connect
+
         return clickhouse_connect.get_client(
             host=self.host,
             port=self.port,

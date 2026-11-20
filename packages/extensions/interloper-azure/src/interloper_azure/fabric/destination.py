@@ -10,9 +10,8 @@ import warnings
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import mssql_python
 from interloper.destination import DatabaseDestination, IOContext, destination
 from interloper.errors import DataNotFoundError
 from interloper.partitioning import PartitionFilter
@@ -24,6 +23,9 @@ from pydantic import PrivateAttr
 
 from interloper_azure.connection import AzureConnection
 from interloper_azure.fabric.types import column_type
+
+if TYPE_CHECKING:
+    import mssql_python
 
 DEFAULT_SCHEMA = "dbo"
 
@@ -104,6 +106,8 @@ class FabricWarehouseDestination(DatabaseDestination):
         Returns:
             The new driver connection.
         """
+        import mssql_python
+
         return mssql_python.connect(
             f"Server={_odbc(self.server)};Database={_odbc(self.warehouse)};Encrypt=yes;TrustServerCertificate=no",
             autocommit=True,
