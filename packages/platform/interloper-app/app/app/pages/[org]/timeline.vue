@@ -119,9 +119,6 @@ onUnmounted(() => timelineStore.$reset())
                                             label-title="Target"
                                             empty-message="No runs in this window"
                                             @bar-click="onBarClick" />
-                    <template #footer>
-                        <ChartTimelineLegend />
-                    </template>
                 </UCard>
             </template>
         </template>

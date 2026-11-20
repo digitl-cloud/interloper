@@ -430,9 +430,9 @@ function labelTooltip(row: TimelineRow): string {
     return row.kind ? `${row.name} · ${row.kind}` : row.name
 }
 
-/** Row name, the execution's own context, then how long it took. */
+/** Row name, its status (the key to the bar's colour), the execution's own context, then how long it took. */
 function barTooltip(row: TimelineRow, layout: LayoutBar): string {
-    const parts = [row.name]
+    const parts = [row.name, statusMeta(layout.bar.status).label]
     if (layout.bar.detail) parts.push(layout.bar.detail)
     if (props.axis === 'clock') parts.push(formatDate(new Date(layout.bar.start)))
     parts.push(formatElapsed(new Date(layout.bar.start), layout.bar.end ? new Date(layout.bar.end) : null))
