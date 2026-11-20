@@ -30,6 +30,7 @@ from interloper_assets.impact.constants import BASE_URL
 DAY = dt.date(2026, 6, 10)
 ACCOUNT = f"{BASE_URL}/Advertisers/SID"
 WINDOW = {"StartDate": "2026-06-10T00:00:00Z", "EndDate": "2026-06-10T23:59:59Z"}
+EVENT_WINDOW = {"ActionDateStart": "2026-06-10T00:00:00Z", "ActionDateEnd": "2026-06-10T23:59:59Z"}
 
 
 def _source() -> Any:
@@ -107,20 +108,22 @@ async def _run(key: str, handler: Callable[[httpx2.Request], httpx2.Response]) -
 
 class TestRequests:
     @pytest.mark.parametrize(
-        ("key", "path", "records_key"),
+        ("key", "path", "records_key", "window"),
         [
-            ("actions", "/Actions", "Actions"),
-            ("action_updates", "/ActionUpdates", "ActionUpdates"),
-            ("action_inquiries", "/ActionInquiries", "ActionInquiries"),
+            ("actions", "/Actions", "Actions", EVENT_WINDOW),
+            ("action_updates", "/ActionUpdates", "ActionUpdates", WINDOW),
+            ("action_inquiries", "/ActionInquiries", "ActionInquiries", WINDOW),
         ],
     )
-    async def test_a_list_reads_every_page_of_the_programs_day(self, key: str, path: str, records_key: str):
+    async def test_a_list_reads_every_page_of_the_programs_day(
+        self, key: str, path: str, records_key: str, window: dict[str, str]
+    ):
         server = _ImpactServer(records_key)
 
         rows = await _run(key, server)
 
         assert rows == [{"Id": "1", "date": DAY}, {"Id": "2", "date": DAY}]
-        query = {"CampaignId": "123", **WINDOW}
+        query = {"CampaignId": "123", **window}
         assert server.sent() == [
             ("GET", f"{ACCOUNT}{path}", {**query, "Page": "1"}, "application/json"),
             ("GET", f"{ACCOUNT}{path}", {**query, "Page": "2"}, "application/json"),

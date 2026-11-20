@@ -26,9 +26,11 @@ class ImpactApi:
     ``QueuedUri``, the job is polled until it completes, and its results are
     downloaded as JSON, paged like a list.
 
-    ``rows`` and ``report`` take a day and send it as Impact's ``StartDate``
-    and ``EndDate`` window over it, in UTC; an endpoint that names its day
-    otherwise gets it from the caller with its other parameters.
+    ``rows`` and ``report`` take a day and send it as a window over it, in
+    UTC: Impact's ``StartDate`` and ``EndDate``, or the pair a list names for
+    another of its dates (``ActionDateStart`` and ``ActionDateEnd``). An
+    endpoint that names its day otherwise gets it from the caller with its
+    other parameters.
     """
 
     def __init__(self, client: il.AsyncRESTClient) -> None:
@@ -40,20 +42,30 @@ class ImpactApi:
         """
         self.client = client
 
-    async def rows(self, path: str, key: str, day: dt.date | None = None, **params: Any) -> list[dict[str, Any]]:
+    async def rows(
+        self,
+        path: str,
+        key: str,
+        day: dt.date | None = None,
+        window: tuple[str, str] = ("StartDate", "EndDate"),
+        **params: Any,
+    ) -> list[dict[str, Any]]:
         """Read every record of a paged list.
 
         Args:
             path: The endpoint, relative to the account's URL, such as ``/Actions``.
             key: The key a page holds its records under, such as ``Actions``.
-            day: The day the list covers, sent as Impact's window over it; ``None`` sends no window.
+            day: The day the list covers, sent as a window over it; ``None`` sends no window.
+            window: The parameters the window's first and last second go in: Impact's ``StartDate``
+                and ``EndDate`` by default, or the pair that filters another of the list's dates,
+                such as ``("ActionDateStart", "ActionDateEnd")`` for an action's event date.
             **params: The query parameters.
 
         Returns:
             The records of every page, in page order.
         """
-        window = self._window(day) if day is not None else {}
-        return await self._records(path, key, {**params, **window})
+        bounds = self._window(day, *window) if day is not None else {}
+        return await self._records(path, key, {**params, **bounds})
 
     async def export(self, path: str, key: str, **params: Any) -> list[dict[str, Any]]:
         """Export records as a job: queue it, wait for it, then download every page of its results.
@@ -155,13 +167,15 @@ class ImpactApi:
             await sleep(constants.JOB_POLL_INTERVAL)
 
     @staticmethod
-    def _window(day: dt.date) -> dict[str, str]:
-        """Encode a day as Impact's ``StartDate`` and ``EndDate`` window over it.
+    def _window(day: dt.date, start: str = "StartDate", end: str = "EndDate") -> dict[str, str]:
+        """Encode a day as Impact's window over it.
 
         Args:
             day: The day to cover.
+            start: The parameter the window's first second goes in.
+            end: The parameter the window's last second goes in.
 
         Returns:
             The window's first and last second of the day, in UTC.
         """
-        return {"StartDate": day.strftime("%Y-%m-%dT00:00:00Z"), "EndDate": day.strftime("%Y-%m-%dT23:59:59Z")}
+        return {start: day.strftime("%Y-%m-%dT00:00:00Z"), end: day.strftime("%Y-%m-%dT23:59:59Z")}

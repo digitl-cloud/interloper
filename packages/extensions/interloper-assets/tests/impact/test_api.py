@@ -118,6 +118,20 @@ class TestRows:
         assert await _api(handler).rows("/Actions", "Actions", DAY, CampaignId="123") == [{"Id": "A1"}]
         assert _sent(requests) == [("GET", f"{ACCOUNT}/Actions", {"CampaignId": "123", **WINDOW, "Page": "1"})]
 
+    async def test_a_day_is_sent_as_the_window_an_endpoint_names(self):
+        requests: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            return httpx2.Response(200, json={"@numpages": "1", "Actions": [{"Id": "A1"}]})
+
+        api = _api(handler)
+        rows = await api.rows("/Actions", "Actions", DAY, window=("ActionDateStart", "ActionDateEnd"), CampaignId="123")
+
+        assert rows == [{"Id": "A1"}]
+        window = {"ActionDateStart": WINDOW["StartDate"], "ActionDateEnd": WINDOW["EndDate"]}
+        assert _sent(requests) == [("GET", f"{ACCOUNT}/Actions", {"CampaignId": "123", **window, "Page": "1"})]
+
     async def test_a_refusal_on_a_later_page_raises(self):
         def handler(request: httpx2.Request) -> httpx2.Response:
             if request.url.params["Page"] == "2":
