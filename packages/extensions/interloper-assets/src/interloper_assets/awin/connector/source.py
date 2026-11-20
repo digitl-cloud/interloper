@@ -36,7 +36,13 @@ class Awin(il.Source):
         normalizer=AwinTransactionsNormalizer(),
     )
     async def transactions(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-        """Advertiser transactions including commissions, sales amounts, and click attribution."""
+        """Advertiser transactions including commissions, sales amounts, and click attribution, by transaction day.
+
+        A transaction's commission status (pending, approved, declined) changes days to weeks after
+        that day, when it is validated. A partition keeps the statuses its last run read, so a job
+        whose lookback spans the program's validation period re-reads recent days and picks the
+        changes up.
+        """
         rows = await self.connection.api.rows(
             f"/advertisers/{self.advertiser_id}/transactions/",
             context.partition_date,
