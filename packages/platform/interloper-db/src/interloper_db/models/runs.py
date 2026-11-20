@@ -122,6 +122,11 @@ class Run(SQLModel, table=True):
     work into a stack and is the run's own id for a first attempt, so stack
     membership is one indexed predicate rather than a recursive walk. A stack
     is a linear chain: each attempt number is held by exactly one run.
+    ``retried`` is set on a run in the transaction that queues its next
+    attempt and never cleared, so a stack's latest attempt is the one run of
+    it not retried, read off the row rather than probed for on every listing.
+    A retry may re-run only what failed, so an earlier attempt's successes
+    still stand: retried says the stack went on, not that the run was undone.
     ``scheduled_for`` is the earliest instant the queue may claim the run,
     which is how a retry's backoff is served without a second status.
 
@@ -154,6 +159,15 @@ class Run(SQLModel, table=True):
     __tablename__: ClassVar[str] = "runs"
     __table_args__: ClassVar[tuple[Any, ...]] = (
         Index("ix_runs_org_id_created_at", "org_id", "created_at"),
+        Index("ix_runs_org_id_completed_at", "org_id", "completed_at"),
+        Index("ix_runs_component_id_created_at", "component_id", "created_at"),
+        Index(
+            "ix_runs_last_success",
+            "component_id",
+            "completed_at",
+            postgresql_where=text("status = 'success'"),
+            sqlite_where=text("status = 'success'"),
+        ),
         Index("ix_runs_backfill_id_status", "backfill_id", "status"),
         Index("ix_runs_root_run_id_attempt", "root_run_id", "attempt", unique=True),
         Index(
@@ -171,7 +185,7 @@ class Run(SQLModel, table=True):
     )
     component_id: UUID | None = SQLField(
         default=None,
-        sa_column=Column(ForeignKey("components.id", ondelete="SET NULL"), index=True),
+        sa_column=Column(ForeignKey("components.id", ondelete="SET NULL")),
     )
     org_id: UUID
     backfill_id: UUID | None = SQLField(default=None, foreign_key="backfills.id")
@@ -182,6 +196,7 @@ class Run(SQLModel, table=True):
         sa_column=Column(ForeignKey("runs.id", ondelete="SET NULL"), index=True),
     )
     attempt: int = 1
+    retried: bool = SQLField(default=False, sa_column_kwargs={"server_default": text("false")})
     retry_scope: str | None = None
     root_run_id: UUID = SQLField(
         default=None,
@@ -248,11 +263,12 @@ class Run(SQLModel, table=True):
             return Overdue("timeout", f"Timed out after {timeout}s")
         return None
 
-    def supersede(self) -> None:
-        """Settle a failed run's hooks once a retry supersedes it: its failure is not the stack's verdict.
+    def mark_retried(self) -> None:
+        """Record that the run's next attempt is queued, and settle its hooks: its failure is not the stack's verdict.
 
         A failure whose hooks already ran stays stamped as it was.
         """
+        self.retried = True
         if self.hooks_evaluated_at is None:
             self.hooks_evaluated_at = datetime.now(UTC)
 

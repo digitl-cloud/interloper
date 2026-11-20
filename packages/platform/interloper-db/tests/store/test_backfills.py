@@ -470,6 +470,7 @@ class TestRunCounts:
         with Session(store.engine) as session:
             first = session.exec(select(Run).where(Run.backfill_id == backfill.id)).one()
             first.status = RunStatus.FAILED
+            first.mark_retried()
             session.add(first)
             session.add(
                 Run(
@@ -499,6 +500,10 @@ class TestFailedPartitions:
         healed = by_partition["2026-01-03"]
         store.runs.fail(healed.id, "failed")
         with Session(store.engine) as session:
+            retried = session.get(Run, healed.id)
+            assert retried is not None
+            retried.mark_retried()
+            session.add(retried)
             session.add(
                 Run(
                     org_id=_ORG_ID,
