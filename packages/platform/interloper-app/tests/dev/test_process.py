@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import signal
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+import pytest
 
 from interloper_app.dev.process import ProcessGroup
 
@@ -31,6 +34,20 @@ def test_stop_ends_the_whole_group_and_is_idempotent():
 
     assert group.running is False
     group.stop()
+
+
+def test_stop_returns_once_what_outlives_the_command_has_ended_too(tmp_path: Path):
+    child = tmp_path / "child.pid"
+    group = ProcessGroup()
+    lingering = "trap 'sleep 0.5; exit 0' TERM; while :; do sleep 0.05; done"
+    group.start(["sh", "-c", f'sh -c "{lingering}" & echo $! > {child}; wait'])
+    while not (child.exists() and child.read_text().strip()):
+        time.sleep(0.05)
+
+    group.stop(timeout=5)
+
+    with pytest.raises(ProcessLookupError):
+        os.kill(int(child.read_text()), 0)
 
 
 def test_nothing_started_waits_for_nothing():

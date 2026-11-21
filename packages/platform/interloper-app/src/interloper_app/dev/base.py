@@ -25,7 +25,7 @@ from watchfiles import watch
 from interloper_app.dev.nuxt import NuxtServer
 from interloper_app.dev.platform import Platform, PlatformSpec
 from interloper_app.dev.port import Port
-from interloper_app.dev.project import DevProject
+from interloper_app.dev.project import MANIFEST, DevProject
 from interloper_app.dev.signin import SignIn
 from interloper_app.dev.vite import ViteServer
 
@@ -124,7 +124,7 @@ class DevCommand(Command):
             if nuxt is not None:
                 nuxt.ui_entries = platform.spec.ui_entries
                 nuxt.start()
-            self._serve(project, platform, nuxt, link=sign_in.link(port.number), browser=not args.no_browser)
+            self._serve(project, platform, nuxt, uis, link=sign_in.link(port.number), browser=not args.no_browser)
         except KeyboardInterrupt:
             print("\nStopping.", flush=True)
         finally:
@@ -169,7 +169,14 @@ class DevCommand(Command):
 
     @classmethod
     def _serve(
-        cls, project: DevProject, platform: Platform, nuxt: NuxtServer | None, *, link: str, browser: bool
+        cls,
+        project: DevProject,
+        platform: Platform,
+        nuxt: NuxtServer | None,
+        uis: list[ViteServer],
+        *,
+        link: str,
+        browser: bool,
     ) -> None:
         """Run the platform, then restart it on every watched edit, until interrupted.
 
@@ -183,6 +190,9 @@ class DevCommand(Command):
             platform: The platform process.
             nuxt: The Nuxt dev server serving the app, when the project holds
                 its source.
+            uis: The Vite servers of the held UIs, kept in step with the
+                manifests: a UI added or removed while ``dev`` runs starts or
+                stops its server.
             link: The sign-in link.
             browser: Whether to open the link once the platform first answers.
 
@@ -199,8 +209,54 @@ class DevCommand(Command):
                 continue
             edited = ", ".join(sorted({str(Path(path).relative_to(project.root)) for _, path in changes}))
             print(f"\n  {edited} changed: restarting the platform.\n", flush=True)
+            if any(Path(path).name == MANIFEST for _, path in changes):
+                cls._refresh_uis(project, platform, nuxt, uis)
             platform.restart()
             browser = cls._announce(platform, link, browser=browser)
+
+    @staticmethod
+    def _refresh_uis(project: DevProject, platform: Platform, nuxt: NuxtServer | None, uis: list[ViteServer]) -> None:
+        """Start the Vite server of each UI a manifest now declares, and stop those no manifest declares any more.
+
+        A UI whose server fails to start (its install fails, Node is missing)
+        is left out, and ``dev`` keeps serving the rest. A manifest that does
+        not read, a save caught mid-edit, changes nothing until one that does.
+
+        Args:
+            project: The project.
+            platform: The platform process, whose spec carries the UI entries.
+            nuxt: The Nuxt dev server, restarted with the new entries when the
+                set changed.
+            uis: The running Vite servers, updated in place.
+        """
+        if unread := project.unread():
+            print(f"  The manifest of {', '.join(unread)} does not read: its UI stays as it is.", flush=True)
+            return
+        declared = {
+            extension.key: directory
+            for extension in project.extensions()
+            if (directory := extension.ui_directory) is not None
+        }
+        running = {ui.key for ui in uis}
+        for ui in [ui for ui in uis if ui.key not in declared]:
+            ui.stop()
+            uis.remove(ui)
+        for key in declared.keys() - running:
+            ui = ViteServer(key, declared[key], pnpm=project.pnpm_workspace)
+            try:
+                ui.start()
+            except SystemExit as error:
+                print(f"  {error} The next save of its manifest tries again.", flush=True)
+                continue
+            uis.append(ui)
+        entries = {ui.key: ui.entry for ui in uis}
+        if entries == platform.spec.ui_entries:
+            return
+        platform.spec.ui_entries = entries
+        if nuxt is not None:
+            nuxt.ui_entries = entries
+            nuxt.stop()
+            nuxt.start()
 
     @staticmethod
     def _announce(platform: Platform, link: str, *, browser: bool) -> bool:

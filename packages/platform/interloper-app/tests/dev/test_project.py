@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 import pytest
+from interloper.extension import ExtensionFailure
 from watchfiles import Change
 
 from interloper_app.dev import project as project_module
@@ -125,12 +126,31 @@ class TestExtensions:
             SimpleNamespace(key=None, package="broken"),
         ]
         manifests.entries.return_value = [SimpleNamespace(package="acme_interloper")]
-        monkeypatch.setattr(project_module, "MANIFESTS", manifests)
+        monkeypatch.setattr(project_module, "Manifests", lambda: manifests)
 
         held = DevProject.discover(root).extensions()
 
         assert held == [HeldExtension("acme", "acme_interloper", root.resolve(), declares_ui=True)]
         manifests.entries.assert_called_once_with("ui")
+
+    def test_a_held_manifest_or_ui_section_that_does_not_read_is_named(self, tmp_path: Path, monkeypatch, installed):
+        root = _pyproject(tmp_path / "acme", '[project]\nname = "acme"\n')
+        installed.append(_distribution(root.as_uri()))
+        locations = {"acme_interloper": root / "src" / "acme_interloper", "beta": root / "src" / "beta"}
+        monkeypatch.setattr(DevProject, "_location", staticmethod(lambda package: locations.get(package)))
+        manifests = mock.Mock()
+        manifests.failures = (
+            ExtensionFailure("acme_interloper", None, None, "mapping values are not allowed here"),
+            ExtensionFailure("beta", "ui", None, "'ui' takes one entry"),
+            ExtensionFailure("beta", "components", None, "a list of entries"),
+            ExtensionFailure("beta", "ui", "UI", "cannot import name 'UI'"),
+            ExtensionFailure("installed_elsewhere", None, None, "mapping values are not allowed here"),
+        )
+        monkeypatch.setattr(project_module, "Manifests", lambda: manifests)
+
+        unread = DevProject.discover(root).unread()
+
+        assert unread == ["acme_interloper", "beta"]
 
     def test_a_nested_extension_belongs_to_its_own_directory(self, tmp_path: Path, monkeypatch, installed):
         root = _pyproject(tmp_path / "acme", '[project]\nname = "acme"\n')
@@ -140,7 +160,7 @@ class TestExtensions:
         manifests = mock.Mock()
         manifests.extensions.return_value = [SimpleNamespace(key="example", package="interloper_example")]
         manifests.entries.return_value = []
-        monkeypatch.setattr(project_module, "MANIFESTS", manifests)
+        monkeypatch.setattr(project_module, "Manifests", lambda: manifests)
 
         (held,) = DevProject.discover(root).extensions()
 
