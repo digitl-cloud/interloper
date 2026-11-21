@@ -14,6 +14,7 @@ from sqlalchemy.exc import OperationalError
 from interloper_app.dev import base as base_module
 from interloper_app.dev.base import DevCommand
 from interloper_app.dev.platform import PlatformSpec
+from interloper_app.dev.port import Port
 from interloper_app.dev.project import DevProject, HeldExtension
 
 
@@ -27,7 +28,7 @@ def _args(
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DevProject:
     project = DevProject(tmp_path, "Weather", tmp_path / "interloper.yaml", held=())
     monkeypatch.setattr(DevProject, "discover", classmethod(lambda cls, directory, files=(): project))
-    monkeypatch.setattr(base_module.DevServer, "port_in_use", staticmethod(lambda port: False))
+    monkeypatch.setattr(base_module.Port, "in_use", property(lambda self: False))
     monkeypatch.setattr(DevCommand, "_check_database", staticmethod(lambda: None))
     for signal_number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         monkeypatch.setattr(base_module.signal, "signal", mock.Mock())
@@ -65,7 +66,7 @@ def test_windows_is_refused(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_a_busy_port_is_refused_by_name(project: DevProject, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(base_module.DevServer, "port_in_use", staticmethod(lambda port: True))
+    monkeypatch.setattr(base_module.Port, "in_use", property(lambda self: True))
 
     with pytest.raises(SystemExit, match="port 3100 is already in use"):
         DevCommand().run(_args())
@@ -171,3 +172,46 @@ def test_spec_files_reach_the_platform_absolute(project: DevProject, served, mon
     DevCommand().run(_args(files=["collection.yaml"]))
 
     assert built[0].files == [str(spec_file.resolve())]
+
+
+def test_the_repository_serves_the_app_from_nuxt_in_front_of_the_api(
+    project: DevProject, served, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    built, _, opened = served
+    monkeypatch.setattr(DevProject, "extensions", lambda self: [])
+    monkeypatch.setattr(DevProject, "app_source", property(lambda self: tmp_path / "app"))
+    monkeypatch.setattr(base_module.Port, "free", classmethod(lambda cls: cls(45678)))
+    nuxt = mock.Mock(running=True)
+    made: list[dict[str, object]] = []
+
+    def make_nuxt(directory: Path, **kwargs: object) -> mock.Mock:
+        made.append({"directory": directory, **kwargs})
+        return nuxt
+
+    monkeypatch.setattr(base_module, "NuxtServer", make_nuxt)
+
+    DevCommand().run(_args())
+
+    (spec,) = built
+    assert (spec.port, spec.spa, spec.public_url) == (45678, False, "http://127.0.0.1:3100")
+    assert made == [{"directory": tmp_path / "app", "port": Port(3100), "api_port": Port(45678), "ui_entries": {}}]
+    assert opened == [spec.sign_in.link(3100)]
+    nuxt.start.assert_called_once_with()
+    nuxt.stop.assert_called_once_with()
+
+
+def test_a_nuxt_server_that_stops_stops_dev(
+    project: DevProject, served, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    _, platform, _ = served
+    monkeypatch.setattr(DevProject, "extensions", lambda self: [])
+    monkeypatch.setattr(DevProject, "app_source", property(lambda self: tmp_path / "app"))
+    monkeypatch.setattr(base_module.Port, "free", classmethod(lambda cls: cls(45678)))
+    nuxt = mock.Mock(running=False)
+    monkeypatch.setattr(base_module, "NuxtServer", lambda directory, **kwargs: nuxt)
+    monkeypatch.setattr(base_module, "watch", lambda *args, **kwargs: iter([set()]))
+
+    with pytest.raises(SystemExit, match="Nuxt dev server stopped"):
+        DevCommand().run(_args())
+    platform.stop.assert_called_once_with()
+    nuxt.stop.assert_called_once_with()

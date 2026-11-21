@@ -8,10 +8,12 @@
  * dev the dev server serves the shims' sources. The map naming them reaches the
  * page through `server/plugins/import-map.ts`.
  *
- * In dev, `INTERLOPER_UI_DEV` (`<key>=<entry URL>`, comma-separated) loads an
- * extension's UI from its own Vite dev server instead of its bundle. That server
- * rewrites every shared name to `<origin>/@id/<name>`, so the map names those
- * URLs too. Builds ignore the variable: no deployment imports code from elsewhere.
+ * In dev, `interloper dev` starts this server with `INTERLOPER_UI_DEV` (`<key>=<entry
+ * URL>`, comma-separated) naming the Vite dev server of each extension UI it serves,
+ * which the page then loads instead of its bundle. That server rewrites every shared
+ * name to `<origin>/@id/<name>`, so the map names those URLs too. The variable is
+ * that process's channel, not a setting: builds ignore it, so no deployment imports
+ * code from elsewhere.
  */
 import { realpathSync } from 'node:fs'
 import { posix } from 'node:path'

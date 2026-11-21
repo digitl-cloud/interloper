@@ -217,3 +217,30 @@ class TestSpecFiles:
         assert project.watches(Change.modified, str(outside)) is True
         assert project.watches(Change.modified, str(tmp_path / "dev" / "other.yaml")) is False
         assert project.watched == [tmp_path, outside.parent]
+
+
+class TestAppSource:
+    def test_the_repository_serves_the_app_from_its_source(self, tmp_path: Path, monkeypatch, installed):
+        root = _pyproject(tmp_path, '[project]\nname = "interloper-workspace"\n[tool.uv.workspace]\nmembers = ["*"]\n')
+        app = tmp_path / "interloper-app"
+        installed.append(_distribution(app.as_uri()))
+        monkeypatch.setattr(DevProject, "_location", staticmethod(lambda package: app / "src" / "interloper_app"))
+        monkeypatch.setattr(project_module, "source_dir", lambda: app / "app")
+
+        assert DevProject.discover(root).app_source == app / "app"
+
+    def test_an_installed_app_runs_as_installed(self, tmp_path: Path, monkeypatch, installed):
+        monkeypatch.setattr(DevProject, "_location", staticmethod(lambda package: tmp_path / "site" / package))
+
+        assert DevProject.discover(tmp_path).app_source is None
+
+    def test_a_held_app_without_its_source_runs_as_installed(self, tmp_path: Path, monkeypatch, installed):
+        installed.append(_distribution(tmp_path.as_uri()))
+        monkeypatch.setattr(DevProject, "_location", staticmethod(lambda package: tmp_path / "src" / package))
+
+        def no_source() -> Path:
+            raise FileNotFoundError("no checkout")
+
+        monkeypatch.setattr(project_module, "source_dir", no_source)
+
+        assert DevProject.discover(tmp_path).app_source is None

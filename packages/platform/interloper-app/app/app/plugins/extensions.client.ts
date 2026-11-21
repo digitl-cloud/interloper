@@ -24,9 +24,9 @@ interface ExtensionUI {
  * the app and the other extensions carry on. Signed out, the listing answers
  * 401 and no extension loads until the next page load after signing in.
  *
- * In dev, an extension named in `INTERLOPER_UI_DEV` loads from its own dev
- * server instead of its bundle, whether or not a bundle was built; that server
- * adds the extension's styles itself.
+ * Under `interloper dev`, an extension whose UI it serves loads from that UI's
+ * Vite dev server instead of its bundle, whether or not a bundle was built; that
+ * server adds the extension's styles itself.
  */
 export default defineNuxtPlugin({
     name: 'extensions',

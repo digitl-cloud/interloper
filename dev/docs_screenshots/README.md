@@ -13,10 +13,11 @@ cd dev
 uv run interloper db reset --yes
 uv run python seed.py
 
-# 2. The app on a non-3000 port; dummy OAuth app credentials make the sign-in tabs render
+# 2. The built app on a non-3000 port; dummy OAuth app credentials make the sign-in tabs render
+(cd .. && make build-app)
 INTERLOPER_SERVER_PORT=3100 INTERLOPER_AUTH_COOKIE_SECURE=false \
 INTERLOPER_FACEBOOK_CLIENT_ID=docs INTERLOPER_FACEBOOK_CLIENT_SECRET=docs \
-uv run interloper app --api --cron --worker --reaper --dev &
+uv run interloper app --api --cron --worker --reaper &
 
 # 3. Demo content (waits for the worker to run everything, then backdates the runs)
 uv run python docs_screenshots/populate.py

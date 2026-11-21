@@ -38,8 +38,10 @@ let _following = false
 
 function _url(orgId: string): string {
     const devApiPort = useRuntimeConfig().public.devApiPort
+    // In dev the socket skips the Nuxt proxy and reaches the API on its own port, on the page's
+    // own host: the session cookie belongs to that host, whatever its port.
     const base = devApiPort
-        ? `ws://localhost:${devApiPort}`
+        ? `ws://${window.location.hostname}:${devApiPort}`
         : window.location.origin.replace(/^http/, 'ws')
     return `${base}/api/organisations/${orgId}/ws`
 }

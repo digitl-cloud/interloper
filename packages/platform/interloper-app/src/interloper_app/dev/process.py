@@ -29,7 +29,14 @@ class ProcessGroup:
         """
         return self._process is not None and self._process.poll() is None
 
-    def start(self, command: list[str], *, cwd: Path | None = None, stdin: bytes | None = None) -> None:
+    def start(
+        self,
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        stdin: bytes | None = None,
+        environment: dict[str, str] | None = None,
+    ) -> None:
         """Start a command, after the previous one ended.
 
         Args:
@@ -37,10 +44,12 @@ class ProcessGroup:
             cwd: Where it runs; the current directory when ``None``.
             stdin: Bytes written to its standard input, which is then closed;
                 ``None`` gives it none.
+            environment: Its environment; this process's when ``None``.
         """
         self._process = subprocess.Popen(
             command,
             cwd=cwd,
+            env=environment,
             stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
             start_new_session=True,
         )

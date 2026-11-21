@@ -1,10 +1,9 @@
 """``interloper app``: the API, the scheduler's services and the frontend together, in one process.
 
-The all-in-one command for local development and single-process deployments;
-containers run each role through its own command (``interloper api``,
-``interloper scheduler``). ``SIGINT``, ``SIGTERM`` and ``SIGHUP`` stop it
-gracefully, and so does the death of any service, the dev server and the
-parent watchdog included.
+The command for single-process deployments; containers run each role
+through its own command (``interloper api``, ``interloper scheduler``), and
+local work runs through ``interloper dev``. ``SIGINT``, ``SIGTERM`` and
+``SIGHUP`` stop it gracefully, and so does the death of any service.
 """
 
 from __future__ import annotations
@@ -54,12 +53,6 @@ class AppCommand(Command):
             help="Run the reaper (timed-out run cleanup; singleton)",
         )
         parser.add_argument(
-            "--dev",
-            action="store_true",
-            default=False,
-            help="Run Nuxt dev server instead of serving built static assets",
-        )
-        parser.add_argument(
             "--no-create-tables",
             action="store_true",
             default=False,
@@ -70,7 +63,7 @@ class AppCommand(Command):
         """Run the application services together until a signal or a service's death.
 
         Args:
-            args: The parsed command line: the service toggles, ``host``, ``port``, ``dev`` and
+            args: The parsed command line: the service toggles, ``host``, ``port`` and
                 ``no_create_tables``.
         """
         self._activate_flags(args)
@@ -97,8 +90,6 @@ class AppCommand(Command):
             cron=scheduler_settings.cron.enabled,
             worker=scheduler_settings.worker.enabled,
             reaper=scheduler_settings.reaper.enabled,
-            dev=args.dev,
-            port=args.port,
         ).run()
 
     def _activate_flags(self, args: argparse.Namespace) -> None:

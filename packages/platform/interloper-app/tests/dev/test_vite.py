@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import socket
 from pathlib import Path
 
 import pytest
 
+from interloper_app.dev.port import Port
 from interloper_app.dev.process import ProcessGroup
 from interloper_app.dev.vite import ViteServer
 
@@ -39,13 +39,13 @@ class _Group:
 def _server(tmp_path: Path, group: _Group, monkeypatch: pytest.MonkeyPatch, *, answers: bool = True) -> ViteServer:
     server = ViteServer("acme", tmp_path, pnpm=False)
     monkeypatch.setattr(server, "_group", group)
-    monkeypatch.setattr(ViteServer, "_answers", lambda self: answers)
+    monkeypatch.setattr(Port, "answers", property(lambda self: answers))
     return server
 
 
 def test_npm_runs_vite_on_the_loopback_without_clearing_the_terminal(tmp_path: Path):
     server = ViteServer("acme", tmp_path, pnpm=False)
-    server.port = 5173
+    server.port = Port(5173)
 
     assert server.install_command() == ["npm", "install", "--no-audit", "--no-fund"]
     assert server.command() == [
@@ -100,16 +100,6 @@ def test_dev_waits_until_the_server_answers(tmp_path: Path, monkeypatch: pytest.
     server = ViteServer("acme", tmp_path, pnpm=False)
     monkeypatch.setattr(server, "_group", _Group())
     answers = iter([False, True])
-    monkeypatch.setattr(ViteServer, "_answers", lambda self: next(answers))
+    monkeypatch.setattr(Port, "answers", property(lambda self: next(answers)))
 
     server.start()
-
-
-def test_a_server_answers_once_it_listens(tmp_path: Path):
-    server = ViteServer("acme", tmp_path, pnpm=False)
-    with socket.socket() as listener:
-        listener.bind(("127.0.0.1", 0))
-        listener.listen()
-        server.port = listener.getsockname()[1]
-        assert server._answers() is True
-    assert server._answers() is False

@@ -71,7 +71,6 @@ class TestArguments:
         # None (not False) so settings, not the parser, decide the default.
         assert (args.api, args.cron, args.worker, args.reaper) == (None, None, None, None)
         assert (args.host, args.port) == (None, None)
-        assert args.dev is False
         assert args.no_create_tables is False
 
     def test_negated_toggles_are_supported(self) -> None:
@@ -142,7 +141,7 @@ class TestRun:
             False,
             False,
         )
-        assert (wiring["app"]["dev"], wiring["app"]["port"]) == (False, None)
+        assert "dev" not in wiring["app"]
 
     def test_no_create_tables_skips_the_table_bootstrap(self, wiring: dict[str, Any]) -> None:
         cli.AppCommand().run(_parse("app", "--no-create-tables", "--worker"))
@@ -154,12 +153,10 @@ class TestRun:
         cli.AppCommand().run(_parse("app", "--port", "4321"))
 
         assert ServerSettings.get().port == 4321
-        assert wiring["app"]["port"] == 4321
 
-    def test_dev_and_an_explicit_port_reach_the_composition(self, wiring: dict[str, Any]) -> None:
-        cli.AppCommand().run(_parse("app", "--dev", "--port", "9876", "--api"))
-
-        assert (wiring["app"]["dev"], wiring["app"]["port"]) == (True, 9876)
+    def test_there_is_no_dev_mode_any_more(self) -> None:
+        with pytest.raises(SystemExit):
+            _parse("app", "--dev")
 
     def test_every_service_shares_a_store_issuing_tokens_for_the_configured_lifetimes(
         self, wiring: dict[str, Any]

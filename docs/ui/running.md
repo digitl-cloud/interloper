@@ -97,8 +97,8 @@ interloper app --api --cron --worker --reaper
 ```
 
 runs every service in one process against the configured Postgres, serving the UI on port 3000.
-It needs `interloper-app` installed. Each service can be toggled off on its own, and `--dev` runs
-the Nuxt dev server with hot reload instead of the built assets.
+It needs `interloper-app` installed. Each service can be toggled off on its own. Local work runs
+through `interloper dev` instead (below).
 
 ## Configuration
 
@@ -166,6 +166,8 @@ Python files changes; [Extensions](../extending/extensions.md#building-it-with-t
 through it.
 
 The repository ships a dev harness: `make dev` provisions a local Postgres database, seeds a
-super-admin, an organisation, the demo source and a daily job, and starts every service with the
-Nuxt dev server on port 3000. `make compose-up` does the same in Docker. The screenshots on the
-[Tour](index.md) come from that harness with a few more demo components added.
+super-admin and an organisation, and runs `interloper dev -f collection.yaml`, which serves the
+repository with the Nuxt dev server on port 3000 and declares the demo source and a daily job.
+`make compose-up` runs the roles' images in Docker instead, the seed putting the demo source and
+its job in, and nginx serving the built app. The screenshots on the [Tour](index.md) come from a
+seeded instance with a few more demo components added.

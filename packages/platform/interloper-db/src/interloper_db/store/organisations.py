@@ -111,26 +111,29 @@ class OrganisationStore:
         with session_scope(self._engine) as session:
             return Page.read(session, statement, query)
 
-    def create(self, name: str, creator_id: UUID | None = None) -> Organisation:
+    def create(self, name: str, creator_id: UUID | None = None, *, key: str | None = None) -> Organisation:
         """Create an organisation, optionally making the creator an admin.
 
-        The key is derived from the name: free and not reserved, with a number
-        appended when the name's own key is not (``acme``, ``acme-2``, ...).
-        Keys of deleted organisations stay taken.
+        The key is derived from the name, or from the key asked for: free and
+        not reserved, with a number appended when it is not (``acme``,
+        ``acme-2``, ...). Keys of deleted organisations stay taken.
 
         Args:
             name: Organisation name.
             creator_id: Profile UUID of the creating user, who becomes an
                 ``admin`` member; ``None`` (super-admin provisioning) creates
                 an organisation with no members.
+            key: The key to give it instead of the name's; ``None`` derives
+                it from the name.
 
         Returns:
             The created Organisation row.
         """
+        source = key or name
         with session_scope(self._engine) as session:
-            stem = derive_key(name)[: MAX_LENGTH - len("-99999")]
+            stem = derive_key(source)[: MAX_LENGTH - len("-99999")]
             taken = set(session.exec(select(Organisation.key).where(col(Organisation.key).like(f"{stem}%"))))
-            db_organisation = Organisation(name=name, key=unique_key(name, taken))
+            db_organisation = Organisation(name=name, key=unique_key(source, taken))
             session.add(db_organisation)
             session.flush()
             if creator_id is not None:
@@ -174,7 +177,7 @@ class OrganisationStore:
             if organisation is not None and session.get(UserOrganisation, (admin_id, organisation.id)) is None:
                 session.add(UserOrganisation(user_id=admin_id, organisation_id=organisation.id, role=Role.ADMIN.value))
                 commit(session)
-        return organisation if organisation is not None else self.create(name, creator_id=admin_id)
+        return organisation if organisation is not None else self.create(name, creator_id=admin_id, key=key)
 
     def update(self, org_id: UUID, *, name: str | None = None, key: str | None = None) -> Organisation:
         """Rename an organisation or change its key.
