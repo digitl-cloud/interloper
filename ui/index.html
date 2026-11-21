@@ -2346,25 +2346,30 @@ outcomes with hooks, and follow every run down to its events. Nothing on these s
 per connector; each page is rendered from component definitions, as
 <a href="definitions/">Generated from definitions</a> explains. This page walks through the app with the
 demo sources that ship with the framework.</p>
-<h2 id="timeline">Timeline<a class="headerlink" href="#timeline" title="Permanent link">&para;</a></h2>
-<p><img alt="Timeline" src="../assets/ui/timeline-light.png#only-light" />
-<img alt="Timeline" src="../assets/ui/timeline-dark.png#only-dark" /></p>
-<p>The landing page: one row per job and per source, one bar per run over a selectable window, green
-for success and red for failure. Hovering a bar shows the run; clicking opens it.</p>
-<h2 id="graph">Graph<a class="headerlink" href="#graph" title="Permanent link">&para;</a></h2>
-<p><img alt="Graph" src="../assets/ui/graph-light.png#only-light" />
-<img alt="Graph" src="../assets/ui/graph-dark.png#only-dark" /></p>
+<p>The sidebar opens on the Overview, then groups the pages in three sections: <strong>Data</strong> (Assets,
+Sources, Destinations, Connections), <strong>Automation</strong> (Jobs, Hooks) and <strong>Activity</strong> (Runs,
+Backfills). Its foot holds two menus: the organisation's, with its Members and Settings and the
+organisations to switch to, and yours, with your own settings, the same in every organisation. An
+installed extension's pages get a section of their own.</p>
+<h2 id="assets">Assets<a class="headerlink" href="#assets" title="Permanent link">&para;</a></h2>
+<p>Every asset in the organisation, in two views the toolbar switches between: the page opens on the
+graph, and the table is one click away. The rest of the toolbar applies to both: a search over
+names, tags, sources, connections and destinations, the sources' status, and the grouping by
+source type, by source or by asset. Selecting an asset opens a panel with its schema,
+partitioning, destinations and last runs, and the panel stays open across the two views.</p>
+<h3 id="graph">Graph<a class="headerlink" href="#graph" title="Permanent link">&para;</a></h3>
+<p><img alt="Assets graph" src="../assets/ui/graph-light.png#only-light" />
+<img alt="Assets graph" src="../assets/ui/graph-dark.png#only-dark" /></p>
 <p>The lineage of every asset in the organisation, built from the dependency relations the
 framework infers (<code>a</code> feeds <code>b</code>, <code>c</code>, <code>d</code>, which feed <code>e</code>). Nodes carry the asset's tags and its
-health; the toolbar groups by asset, by source instance or by source type, and filters by status.
-Selecting a node opens a panel with the asset's schema, partitioning, destinations and last runs.</p>
-<h2 id="collection">Collection<a class="headerlink" href="#collection" title="Permanent link">&para;</a></h2>
-<p><img alt="Collection" src="../assets/ui/collection-light.png#only-light" />
-<img alt="Collection" src="../assets/ui/collection-dark.png#only-dark" /></p>
-<p>Every source instance and its assets, grouped by source type. Columns show the last run, the
-connection, the number of upstream dependencies, the destinations and the jobs that target each
-asset. The catalog of installed but not yet configured types is reachable from the "New source"
-button.</p>
+health.</p>
+<h3 id="table">Table<a class="headerlink" href="#table" title="Permanent link">&para;</a></h3>
+<p><img alt="Assets table" src="../assets/ui/collection-light.png#only-light" />
+<img alt="Assets table" src="../assets/ui/collection-dark.png#only-dark" /></p>
+<p>Every asset as a row, under its source and source type, under its source alone, or on its own,
+as the grouping says. Columns show the last run, the connection, the number of upstream
+dependencies, the destinations and the jobs that target each asset. A new source is created from
+the Sources page.</p>
 <h2 id="sources">Sources<a class="headerlink" href="#sources" title="Permanent link">&para;</a></h2>
 <p><img alt="Sources" src="../assets/ui/sources-light.png#only-light" />
 <img alt="Sources" src="../assets/ui/sources-dark.png#only-dark" /></p>
@@ -2390,6 +2395,11 @@ required key or creates one inline; the connection form is the same as on the Co
 configuration fields: the framework's own (<code>materialization_strategy</code>, <code>dataset</code>) and the
 class's (<code>hello</code>, <code>random_failure_probability</code> on the demo source), with the labels,
 descriptions and tooltips their field helpers declare.</p>
+<h2 id="destinations">Destinations<a class="headerlink" href="#destinations" title="Permanent link">&para;</a></h2>
+<p><img alt="Destinations" src="../assets/ui/destinations-light.png#only-light" />
+<img alt="Destinations" src="../assets/ui/destinations-dark.png#only-dark" /></p>
+<p>Where data lands. A destination's form comes from its configuration fields, and its connection
+relation, when it declares one, is a picker over the matching connections.</p>
 <h2 id="connections">Connections<a class="headerlink" href="#connections" title="Permanent link">&para;</a></h2>
 <p><img alt="Connections" src="../assets/ui/connections-light.png#only-light" />
 <img alt="Connections" src="../assets/ui/connections-dark.png#only-dark" /></p>
@@ -2402,11 +2412,6 @@ kind gets its own entry.</p>
 <p>A connection declaring <code>OAuthConfig</code> gets a sign-in tab when the provider's app credentials are
 configured on the server, and a manual tab showing every field. The <code>auto_renew</code> toggle appears
 because the class is renewable; a "Test connection" action appears when it implements <code>check()</code>.</p>
-<h2 id="destinations">Destinations<a class="headerlink" href="#destinations" title="Permanent link">&para;</a></h2>
-<p><img alt="Destinations" src="../assets/ui/destinations-light.png#only-light" />
-<img alt="Destinations" src="../assets/ui/destinations-dark.png#only-dark" /></p>
-<p>Where data lands. A destination's form comes from its configuration fields, and its connection
-relation, when it declares one, is a picker over the matching connections.</p>
 <h2 id="jobs">Jobs<a class="headerlink" href="#jobs" title="Permanent link">&para;</a></h2>
 <p><img alt="Jobs" src="../assets/ui/jobs-light.png#only-light" />
 <img alt="Jobs" src="../assets/ui/jobs-dark.png#only-dark" /></p>
@@ -2421,23 +2426,30 @@ how many of a firing's partitions run at once.</p>
 <p>Reactions to run and backfill outcomes: a webhook posting failures to an operations endpoint, and a trigger
 hook starting the monthly rollup when the daily job completes. The watched components and, for
 trigger hooks, the targets are relation pickers derived from the hook class's vocabulary.</p>
-<h2 id="executions">Executions<a class="headerlink" href="#executions" title="Permanent link">&para;</a></h2>
-<p><img alt="Executions" src="../assets/ui/executions-light.png#only-light" />
-<img alt="Executions" src="../assets/ui/executions-dark.png#only-dark" /></p>
+<h2 id="runs">Runs<a class="headerlink" href="#runs" title="Permanent link">&para;</a></h2>
+<h3 id="table_1">Table<a class="headerlink" href="#table_1" title="Permanent link">&para;</a></h3>
+<p><img alt="Runs table" src="../assets/ui/executions-light.png#only-light" />
+<img alt="Runs table" src="../assets/ui/executions-dark.png#only-dark" /></p>
 <p>Every run with its target, partition key, status and timings. Runs come from schedules, manual
 triggers, hooks and backfills.</p>
-<p><img alt="Backfills" src="../assets/ui/backfills-light.png#only-light" />
-<img alt="Backfills" src="../assets/ui/backfills-dark.png#only-dark" /></p>
-<p>A backfill is one run per partition over a range, dispatched newest first with a concurrency
-cap; the range is shown in the target's partition-key shape, and the Partitions column draws
-each partition's latest attempt by status, the same bar the runs table draws for a run's assets.
-Both tables filter by status, and a status still executing spins.</p>
+<h3 id="timeline">Timeline<a class="headerlink" href="#timeline" title="Permanent link">&para;</a></h3>
+<p><img alt="Runs timeline" src="../assets/ui/timeline-light.png#only-light" />
+<img alt="Runs timeline" src="../assets/ui/timeline-dark.png#only-dark" /></p>
+<p>One row per job and per source, one bar per run over a selectable window, green for success and
+red for failure. Hovering a bar shows the run; clicking opens it.</p>
 <h3 id="run-detail">Run detail<a class="headerlink" href="#run-detail" title="Permanent link">&para;</a></h3>
 <p><img alt="Run detail" src="../assets/ui/run-light.png#only-light" />
 <img alt="Run detail" src="../assets/ui/run-dark.png#only-dark" /></p>
 <p>One run: the per-asset execution timeline (or the run's graph), and the full event stream the
 framework emitted, filterable to lifecycle events, errors or the log lines assets wrote through
 <code>context.logger</code>. A stack's latest attempt, when it failed, offers "Retry failed" and "Retry all".</p>
+<h2 id="backfills">Backfills<a class="headerlink" href="#backfills" title="Permanent link">&para;</a></h2>
+<p><img alt="Backfills" src="../assets/ui/backfills-light.png#only-light" />
+<img alt="Backfills" src="../assets/ui/backfills-dark.png#only-dark" /></p>
+<p>A backfill is one run per partition over a range, dispatched newest first with a concurrency
+cap; the range is shown in the target's partition-key shape, and the Partitions column draws
+each partition's latest attempt by status, the same bar the runs table draws for a run's assets.
+Both the runs and backfills tables filter by status, and a status still executing spins.</p>
 <h2 id="search-and-switching">Search and switching<a class="headerlink" href="#search-and-switching" title="Permanent link">&para;</a></h2>
 <p>The search box (<code>⌘K</code>) opens a command palette over every page, source, job and hook, with
 aliases (typing "DAG" finds the graph). The footer switches the organisation and the user, and
