@@ -18,7 +18,7 @@ from interloper_db import Store
 from interloper_api.app import create_app
 from interloper_api.dependencies import get_caller
 from interloper_api.routes import extensions as extensions_module
-from interloper_api.routes.extensions import ExtensionResponse, UIBundle
+from interloper_api.routes.extensions import DevServerUI, ExtensionResponse, UIBundle
 from interloper_api.settings import ApiSettings
 
 ROUTES = """\
@@ -191,7 +191,9 @@ class TestServingUIBundles:
 
     @pytest.fixture
     def root(self, app: FastAPI) -> str:
-        return f"/api/ext/acme/ui/{extensions_module.UI_BUNDLES['acme'].digest}"
+        bundle = extensions_module.UI_BUNDLES["acme"]
+        assert isinstance(bundle, UIBundle)
+        return f"/api/ext/acme/ui/{bundle.digest}"
 
     def test_the_entry_is_served_to_anyone_and_cached_for_good(self, app: FastAPI, root: str):
         response = TestClient(app).get(f"{root}/assets/index-3f9a1c.js")
@@ -227,6 +229,28 @@ class TestServingUIBundles:
             },
             "plain": None,
         }
+
+
+class TestDevServerUIs:
+    ENTRY = "http://127.0.0.1:5173/src/index.ts"
+
+    @pytest.fixture
+    def app(self, install, load_extensions, fake_settings: ApiSettings, oauth_store: Store) -> FastAPI:
+        install("acme_ext", "manifest_version: 1\nkey: acme\nname: Acme\nui: acme_ext.ui:UI\n", ui=UI)
+        self.manifests = load_extensions(ui_overrides={"acme": DevServerUI(self.ENTRY)})
+        return create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings)
+
+    def test_a_ui_never_built_loads_from_its_dev_server_and_nothing_fails(self, app: FastAPI):
+        app.dependency_overrides[get_caller] = lambda: SimpleNamespace(id=uuid4(), is_super_admin=False)
+
+        (acme,) = TestClient(app).get("/api/extensions").json()
+
+        assert acme["ui"] == {"entry": self.ENTRY, "css": []}
+        assert acme["status"] == "ok"
+        assert self.manifests.failures == ()
+
+    def test_no_file_is_served_for_it(self, app: FastAPI):
+        assert not any(getattr(route, "name", "") == "ext-ui-acme" for route in app.routes)
 
 
 class TestRoutesSection:

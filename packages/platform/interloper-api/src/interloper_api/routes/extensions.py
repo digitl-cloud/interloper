@@ -160,6 +160,27 @@ class UIBundle:
         return tuple(stylesheets)
 
 
+class DevServerUI:
+    """A UI served by its own dev server instead of a build: what ``interloper dev`` registers for a held UI.
+
+    It takes the place of the manifest's entry through
+    ``UI_BUNDLES.override``, inside the process that serves the project, so
+    the entry is never imported and needs no build. The dev server adds the
+    UI's styles itself, and no file is served for it.
+
+    Attributes:
+        entry: The URL of the entry module on the dev server.
+    """
+
+    def __init__(self, entry: str) -> None:
+        """Name the dev server's entry module.
+
+        Args:
+            entry: Its absolute URL (``http://127.0.0.1:5173/src/index.ts``).
+        """
+        self.entry = entry
+
+
 class BundleFiles(StaticFiles):
     """Serve one bundle's files, each cached for good: the path they are served under carries the bundle's digest."""
 
@@ -236,7 +257,7 @@ def _adopt_bundle(name: str, loaded: Any) -> tuple[str, UIBundle]:
 
 
 EXTENSION_ROUTERS: Registry[APIRouter] = Registry("routes", adopt=_adopt_router)
-UI_BUNDLES: Registry[UIBundle] = Registry("ui", adopt=_adopt_bundle)
+UI_BUNDLES: Registry[UIBundle | DevServerUI] = Registry("ui", adopt=_adopt_bundle)
 
 
 # -- Listing -------------------------------------------------------------------
@@ -251,16 +272,19 @@ class UIBundleResponse(BaseModel):
     css: list[str]
 
     @classmethod
-    def from_bundle(cls, name: str, bundle: UIBundle) -> UIBundleResponse:
-        """Address a bundle's entry and stylesheets where the API serves them.
+    def from_bundle(cls, name: str, bundle: UIBundle | DevServerUI) -> UIBundleResponse:
+        """Address a bundle's entry and stylesheets where the API serves them, or a dev server's entry.
 
         Args:
             name: The path segment the bundle is served under.
-            bundle: The bundle.
+            bundle: The bundle, or the dev server taking its place.
 
         Returns:
-            The URLs, rooted at the host and carrying the bundle's digest.
+            The URLs, rooted at the host and carrying the bundle's digest; a
+            dev server's entry as it is, with no stylesheet.
         """
+        if isinstance(bundle, DevServerUI):
+            return cls(entry=bundle.entry, css=[])
         root = UI_PATH.format(name=name, digest=bundle.digest)
         return cls(entry=f"{root}/{bundle.entry}", css=[f"{root}/{path}" for path in bundle.css])
 

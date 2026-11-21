@@ -12,6 +12,7 @@ from sqlalchemy import Engine, inspect, text
 
 from interloper_db import Audience, ConflictError, NotFoundError
 from interloper_db.store import ProfileQuery, Store
+from interloper_db.store.profiles import LOCAL_DEVELOPER_EMAIL
 
 GOOGLE = "https://accounts.google.com"
 MICROSOFT = "https://login.microsoftonline.com/0c1ea3a1-36e3-4a64-8a3a-2b3e8b0e2a51/v2.0"
@@ -426,3 +427,18 @@ class TestMigration024:
         assert found is not None and found.id == google.id
         signed_in_by_an_old_pod = store.profiles.get_by_identity(GOOGLE, "g-old")
         assert signed_in_by_an_old_pod is not None and signed_in_by_an_old_pod.email == "old@example.com"
+
+
+class TestLocalDeveloper:
+    def test_creates_one_super_admin_and_reuses_it(self, store: Store):
+        first = store.profiles.local_developer()
+        second = store.profiles.local_developer()
+        assert first.id == second.id
+        assert second.is_super_admin
+        assert second.email == LOCAL_DEVELOPER_EMAIL
+        assert store.profiles.list(ProfileQuery(email=LOCAL_DEVELOPER_EMAIL, limit=None)).total == 1
+
+    def test_promotes_a_demoted_local_developer(self, store: Store):
+        developer = store.profiles.local_developer()
+        store.profiles.set_super_admin(developer.id, value=False)
+        assert store.profiles.local_developer().is_super_admin

@@ -160,6 +160,11 @@ startup unless `--no-create-tables` is passed.
 
 ## Local development
 
+`interloper dev` serves the project in the current directory, its own sources and extensions
+included, on `127.0.0.1` with a printed sign-in link, and restarts the platform when one of its
+Python files changes; [Extensions](../extending/extensions.md#building-it-with-the-sdk) walks
+through it.
+
 The repository ships a dev harness: `make dev` provisions a local Postgres database, seeds a
 super-admin, an organisation, the demo source and a daily job, and starts every service with the
 Nuxt dev server on port 3000. `make compose-up` does the same in Docker. The screenshots on the

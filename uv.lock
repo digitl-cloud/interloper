@@ -2094,6 +2094,7 @@ dependencies = [
     { name = "interloper-api" },
     { name = "interloper-db" },
     { name = "interloper-scheduler" },
+    { name = "watchfiles" },
 ]
 
 [package.metadata]
@@ -2101,6 +2102,7 @@ requires-dist = [
     { name = "interloper-api", editable = "packages/platform/interloper-api" },
     { name = "interloper-db", editable = "packages/platform/interloper-db" },
     { name = "interloper-scheduler", editable = "packages/platform/interloper-scheduler" },
+    { name = "watchfiles", specifier = ">=1.0" },
 ]
 
 [[package]]

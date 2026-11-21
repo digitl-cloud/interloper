@@ -9,6 +9,7 @@ import signal
 import socket
 import subprocess
 import threading
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from interloper.utils import Service, Supervisor
@@ -18,6 +19,7 @@ from interloper_scheduler import scheduler_services
 from interloper_app.assets import SpaFallback, source_dir, static_dir
 
 if TYPE_CHECKING:
+    from fastapi import APIRouter
     from interloper.catalog import Catalog
     from interloper_api.settings import ApiSettings
     from interloper_db import Store
@@ -57,6 +59,8 @@ class App:
         reaper: bool,
         dev: bool,
         port: int | None,
+        routers: Sequence[APIRouter] = (),
+        dev_origins: Sequence[str] = (),
     ) -> App:
         """Compose the enabled services.
 
@@ -76,6 +80,10 @@ class App:
             reaper: Whether to run the reaper.
             dev: Whether to run the Nuxt dev server instead of serving the built SPA.
             port: The explicit ``--port``, ``None`` when it was not given.
+            routers: Routes mounted on the API beside its own: ``interloper
+                dev``'s sign-in, which no other caller passes.
+            dev_origins: The extension UIs' Vite dev servers the built page
+                imports from, under ``interloper dev``; none otherwise.
 
         Returns:
             The composition, not yet started.
@@ -91,7 +99,15 @@ class App:
         server_port = api_settings.server.port
         api_port = cls._api_port(server_port, dev=dev, port=port)
         if api:
-            services["api"] = cls._api(api_settings, store=store, catalog=catalog, port=api_port, dev=dev)
+            services["api"] = cls._api(
+                api_settings,
+                store=store,
+                catalog=catalog,
+                port=api_port,
+                dev=dev,
+                routers=routers,
+                dev_origins=dev_origins,
+            )
         services.update(
             scheduler_services(
                 scheduler_settings, store=store, catalog=catalog, cron=cron, worker=worker, reaper=reaper
@@ -132,7 +148,16 @@ class App:
         return server_port
 
     @staticmethod
-    def _api(settings: ApiSettings, *, store: Store, catalog: Catalog, port: int, dev: bool) -> ApiServer:
+    def _api(
+        settings: ApiSettings,
+        *,
+        store: Store,
+        catalog: Catalog,
+        port: int,
+        dev: bool,
+        routers: Sequence[APIRouter],
+        dev_origins: Sequence[str],
+    ) -> ApiServer:
         """Build the API, serving the built SPA outside dev mode.
 
         Args:
@@ -141,19 +166,23 @@ class App:
             catalog: The catalog the routes describe.
             port: The port to bind.
             dev: Whether the Nuxt dev server serves the SPA instead.
+            routers: Routes mounted beside the API's own.
+            dev_origins: The Vite dev servers the built page's import map names.
 
         Returns:
             The API server.
         """
         cors_origins = [f"http://localhost:{settings.server.port}"] if dev else None
         server = ApiServer.from_settings(settings, store=store, catalog=catalog, port=port, cors_origins=cors_origins)
+        for router in routers:
+            server.app.include_router(router)
         if not dev:
             try:
                 directory = static_dir()
             except FileNotFoundError as error:
                 logger.warning("Frontend not available: %s", error)
             else:
-                server.app.add_middleware(SpaFallback, directory=directory)
+                server.app.add_middleware(SpaFallback, directory=directory, dev_origins=dev_origins)
                 logger.info("Serving frontend from %s", directory)
         return server
 
@@ -193,7 +222,7 @@ class DevServer:
         Raises:
             SystemExit: When the port is in use.
         """
-        if cls._port_in_use(port):
+        if cls.port_in_use(port):
             raise SystemExit(
                 f"Port {port} is already in use: a previous dev instance is likely still running "
                 f"(check `lsof -nP -iTCP:{port} -sTCP:LISTEN`). Stop it, or set INTERLOPER_SERVER_PORT to a free port."
@@ -256,7 +285,7 @@ class DevServer:
             pass
 
     @staticmethod
-    def _port_in_use(port: int) -> bool:
+    def port_in_use(port: int) -> bool:
         """Check whether something is already listening on localhost:``port``.
 
         Probes both loopback stacks: Nuxt dev binds only ``::1`` on macOS, so an
@@ -289,13 +318,16 @@ class ParentWatchdog:
     turns into a shutdown, instead of running on as an orphan.
     """
 
-    def __init__(self, interval: float = 1.0) -> None:
+    def __init__(self, interval: float = 1.0, parent: int | None = None) -> None:
         """Remember the parent this process started under.
 
         Args:
             interval: Seconds between two checks of the parent.
+            parent: The parent's pid, as the parent itself gave it, so a
+                parent that died before this process got here is noticed;
+                ``None`` reads it now.
         """
-        self._parent = os.getppid()
+        self._parent = os.getppid() if parent is None else parent
         self._interval = interval
         self._stopping = threading.Event()
 

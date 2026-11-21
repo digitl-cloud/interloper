@@ -359,6 +359,15 @@ extension in its own repository installs `@interloper/ui` from npm instead, and
 builds the wheel and checks that it carries the bundle; `make check-extension` runs that whole
 path in a fresh project against the SDK packed as npm publishes it, as CI does.
 
+Such an extension runs inside the real app with `uv run interloper dev`, from its project. It
+serves the platform on `127.0.0.1:3000` (`--port` to change it) against the Postgres its
+`interloper.yaml` names, and prints a sign-in link that needs no login provider: it signs in a
+local developer, super-admin of an organisation named after the project, and lands on the
+extension's page. The UI comes from its Vite dev server, built or not: a stylesheet edit
+applies in place, a `.vue` edit reloads the page, and an edit to a Python file, the manifest or
+`interloper.yaml` restarts the platform. Class paths given as arguments join the catalog, so a
+plain project serves its sources the same way (`uv run interloper dev weather.OpenMeteo`).
+
 To work on a UI with hot reload, run its dev server beside the app's and name it in
 `INTERLOPER_UI_DEV` (`<key>=<entry URL>`, several separated by commas):
 

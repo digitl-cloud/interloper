@@ -139,6 +139,17 @@ class TestManifestSection:
         with mock.patch("interloper.registry.base.MANIFESTS", _declaring(_entry("alpha", "loaded"))):
             assert registry.get("alpha") == "explicit"
 
+    def test_an_override_replaces_the_declared_entry_without_importing_it(self):
+        broken = _entry("alpha", None)
+        broken.load.side_effect = FileNotFoundError("never built")
+        registry: Registry[str] = Registry("things", adopt=lambda name, entry: (name, str(entry)))
+        registry.override("alpha", "from the dev server")
+        manifests = _declaring(broken, _entry("beta", "B"))
+        with mock.patch("interloper.registry.base.MANIFESTS", manifests):
+            assert registry.items() == (("alpha", "from the dev server"), ("beta", "B"))
+        broken.load.assert_not_called()
+        manifests.record.assert_not_called()
+
     def test_an_entry_shadowed_by_an_earlier_one_is_skipped_with_a_warning(self, caplog):
         registry: Registry[str] = Registry("things")
         declared = _declaring(_entry("alpha", "first", package="acme"), _entry("alpha", "second", package="other"))

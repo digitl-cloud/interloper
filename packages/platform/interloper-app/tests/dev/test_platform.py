@@ -1,0 +1,186 @@
+"""Tests for ``interloper_app.dev.platform``."""
+
+from __future__ import annotations
+
+import http.server
+import io
+import os
+import runpy
+import socket
+import threading
+from types import SimpleNamespace
+from typing import Any
+from unittest import mock
+
+import interloper as il
+import pytest
+from interloper.catalog import Catalog
+from interloper.settings import ServerSettings
+from interloper_api.settings import AuthSettings
+
+from interloper_app.dev import platform as platform_module
+from interloper_app.dev.platform import Platform, PlatformSpec
+from interloper_app.dev.signin import SignIn
+
+
+class Weather(il.Source):
+    """A source a plain project names as a target."""
+
+
+NOT_A_COMPONENT = "a string"
+
+
+@pytest.fixture
+def spec() -> PlatformSpec:
+    return PlatformSpec(
+        port=3100,
+        parent=os.getpid(),
+        python_path=["/work/acme"],
+        sign_in=SignIn.generate("acme", "acme"),
+        ui_entries={"acme": "http://127.0.0.1:5173/src/index.ts", "beta": "http://127.0.0.1:5173/other.ts"},
+    )
+
+
+def test_the_spec_crosses_the_process_boundary_as_json(spec: PlatformSpec):
+    assert PlatformSpec.model_validate_json(spec.model_dump_json()) == spec
+
+
+def test_each_dev_server_origin_is_named_once(spec: PlatformSpec):
+    assert spec.dev_origins == ["http://127.0.0.1:5173"]
+
+
+def test_class_targets_are_imported(spec: PlatformSpec):
+    spec.classes = [f"{__name__}.Weather"]
+
+    assert spec._classes() == [Weather]
+
+
+@pytest.mark.parametrize(
+    ("target", "message"),
+    [
+        (f"{__name__}.NOT_A_COMPONENT", "is not a component class"),
+        (f"{__name__}.Missing", "cannot import"),
+        ("no_such_module.Weather", "cannot import"),
+    ],
+)
+def test_a_target_that_is_no_component_class_stops_the_platform(spec: PlatformSpec, target: str, message: str):
+    spec.classes = [target]
+
+    with pytest.raises(SystemExit, match=message):
+        spec._classes()
+
+
+def test_main_serves_the_spec_read_from_standard_input(spec: PlatformSpec, monkeypatch: pytest.MonkeyPatch):
+    served: list[PlatformSpec] = []
+    monkeypatch.setattr(platform_module.sys, "stdin", io.StringIO(spec.model_dump_json()))
+    monkeypatch.setattr(PlatformSpec, "serve", lambda self: served.append(self))
+
+    platform_module.main()
+
+    assert served == [spec]
+
+
+class TestPlatform:
+    def test_the_child_reads_its_spec_from_standard_input(self, spec: PlatformSpec, monkeypatch: pytest.MonkeyPatch):
+        started: list[tuple[list[str], bytes | None]] = []
+        group = SimpleNamespace(start=lambda command, *, stdin=None: started.append((command, stdin)))
+        platform = Platform(spec)
+        monkeypatch.setattr(platform, "_group", group)
+
+        platform.start()
+
+        assert started == [
+            ([platform_module.sys.executable, "-m", "interloper_app.dev"], spec.model_dump_json().encode())
+        ]
+
+    def test_a_platform_that_is_not_running_is_never_ready(self, spec: PlatformSpec):
+        assert Platform(spec).wait_ready(timeout=5) is False
+
+    def test_the_health_check_never_goes_through_a_proxy(self, spec: PlatformSpec, monkeypatch: pytest.MonkeyPatch):
+        class Health(http.server.BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                self.send_response(200 if self.path == "/api/health" else 404)
+                self.end_headers()
+
+            def log_message(self, format: str, *args: object) -> None:
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Health)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        monkeypatch.setenv("http_proxy", "http://proxy.invalid:8080")
+        spec.port = server.server_address[1]
+        platform = Platform(spec)
+        monkeypatch.setattr(platform, "_group", SimpleNamespace(running=True))
+        try:
+            assert platform.wait_ready(timeout=10) is True
+        finally:
+            server.shutdown()
+
+
+class TestServe:
+    def test_it_serves_the_platform_on_the_loopback_with_dev_s_pieces(
+        self, spec: PlatformSpec, monkeypatch: pytest.MonkeyPatch
+    ):
+        overrides = mock.Mock()
+        monkeypatch.setattr(platform_module, "UI_BUNDLES", overrides)
+        monkeypatch.setattr(platform_module, "bootstrap", lambda *args, **kwargs: None)
+        monkeypatch.setattr(platform_module.Catalog, "from_settings", classmethod(lambda cls: Catalog()))
+        monkeypatch.setattr(platform_module.Store, "from_settings", classmethod(lambda cls, **kwargs: mock.Mock()))
+        monkeypatch.setattr(platform_module, "configure_console_logging", lambda *args, **kwargs: None)
+        ensured = mock.Mock(return_value=(mock.Mock(), mock.Mock()))
+        monkeypatch.setattr(SignIn, "ensure", lambda self, store: ensured(store))
+        app = SimpleNamespace(services={}, run=mock.Mock())
+        composed: dict[str, Any] = {}
+
+        def compose(*args: object, **kwargs: object) -> SimpleNamespace:
+            composed.update(kwargs)
+            return app
+
+        monkeypatch.setattr(platform_module.App, "from_settings", compose)
+        monkeypatch.setattr(platform_module.sys, "path", list(platform_module.sys.path))
+
+        spec.serve()
+
+        assert platform_module.sys.path[0] == "/work/acme"
+        assert (ServerSettings.get().host, ServerSettings.get().port) == ("127.0.0.1", 3100)
+        assert AuthSettings.get().cookie_secure is False
+        assert [call.args[0] for call in overrides.override.call_args_list] == ["acme", "beta"]
+        assert (composed["api"], composed["dev"], composed["port"]) == (True, False, 3100)
+        assert composed["dev_origins"] == ["http://127.0.0.1:5173"]
+        assert len(composed["routers"]) == 1
+        assert "parent-watchdog" in app.services
+        app.run.assert_called_once_with()
+        ensured.assert_called_once()
+
+
+class TestLifecycle:
+    def test_a_restart_stops_the_process_before_starting_another(
+        self, spec: PlatformSpec, monkeypatch: pytest.MonkeyPatch
+    ):
+        calls: list[str] = []
+        group = SimpleNamespace(
+            start=lambda command, *, stdin=None: calls.append("start"), stop=lambda: calls.append("stop")
+        )
+        platform = Platform(spec)
+        monkeypatch.setattr(platform, "_group", group)
+
+        platform.restart()
+
+        assert calls == ["stop", "start"]
+
+    def test_a_platform_that_never_answers_is_not_ready(self, spec: PlatformSpec, monkeypatch: pytest.MonkeyPatch):
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            spec.port = probe.getsockname()[1]
+        platform = Platform(spec)
+        monkeypatch.setattr(platform, "_group", SimpleNamespace(running=True))
+
+        assert platform.wait_ready(timeout=0.6) is False
+
+    def test_the_package_runs_the_platform_process(self, monkeypatch: pytest.MonkeyPatch):
+        served = mock.Mock()
+        monkeypatch.setattr(platform_module, "main", served)
+
+        runpy.run_module("interloper_app.dev", run_name="__main__")
+
+        served.assert_called_once_with()

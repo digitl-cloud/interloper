@@ -10,9 +10,11 @@
  *   Python package declares it with `UIBundle.from_vite(<outDir>)`.
  */
 import { existsSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import vue from '@vitejs/plugin-vue'
 import components from 'unplugin-vue-components/vite'
+import { normalizePath } from 'vite'
 import type { Plugin, UserConfig } from 'vite'
 
 const HOST = new URL('../dist/host.json', import.meta.url)
@@ -40,6 +42,7 @@ export function interloper({ outDir, entry = 'src/index.ts' }: InterloperOptions
         base: './',
         plugins: [
             sharedModules(host.modules),
+            reloadWithoutHmrRuntime(entry),
             vue(),
             tailwindcss(),
             components({
@@ -53,6 +56,39 @@ export function interloper({ outDir, entry = 'src/index.ts' }: InterloperOptions
             emptyOutDir: true,
             manifest: true,
             rolldownOptions: { input: entry, preserveEntrySignatures: 'strict' },
+        },
+    }
+}
+
+/**
+ * In the dev server only, reload the page on a `.vue` update the page cannot apply in place.
+ *
+ * The app a deployment builds runs Vue's production build, which has no HMR runtime, so
+ * `@vitejs/plugin-vue`'s in-place swap of a component has nothing to call. Under
+ * `interloper dev` on the built app, the entry installs a stand-in runtime whose swap
+ * reloads the page instead; under the app's own dev server, Vue's real runtime is there
+ * and components swap in place. Stylesheets update in place either way. Builds carry
+ * none of it.
+ *
+ * @param entry The entry module, relative to the project.
+ * @returns The plugin.
+ */
+function reloadWithoutHmrRuntime(entry: string): Plugin {
+    const standIn = [
+        'if (import.meta.hot && !globalThis.__VUE_HMR_RUNTIME__) {',
+        '    const reload = () => location.reload()',
+        '    globalThis.__VUE_HMR_RUNTIME__ = { createRecord: () => true, rerender: reload, reload }',
+        '}',
+    ].join('\n')
+    let entryPath = ''
+    return {
+        name: 'interloper:reload-without-hmr-runtime',
+        apply: 'serve',
+        configResolved(config) {
+            entryPath = normalizePath(resolve(config.root, entry))
+        },
+        transform(code, id) {
+            return id.split('?')[0] === entryPath ? `${code}\n${standIn}\n` : undefined
         },
     }
 }

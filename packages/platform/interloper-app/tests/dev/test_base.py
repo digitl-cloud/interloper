@@ -1,0 +1,154 @@
+"""Tests for ``interloper_app.dev.base``."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import signal
+from pathlib import Path
+from unittest import mock
+
+import pytest
+from sqlalchemy.exc import OperationalError
+
+from interloper_app.dev import base as base_module
+from interloper_app.dev.base import DevCommand
+from interloper_app.dev.platform import PlatformSpec
+from interloper_app.dev.project import DevProject, HeldExtension
+
+
+def _args(*targets: str, port: int | None = 3100, no_browser: bool = False) -> argparse.Namespace:
+    return argparse.Namespace(targets=list(targets), port=port, no_browser=no_browser)
+
+
+@pytest.fixture
+def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DevProject:
+    project = DevProject(tmp_path, "Weather", tmp_path / "interloper.yaml", held=())
+    monkeypatch.setattr(DevProject, "discover", classmethod(lambda cls, directory: project))
+    monkeypatch.setattr(base_module.DevServer, "port_in_use", staticmethod(lambda port: False))
+    monkeypatch.setattr(DevCommand, "_check_database", staticmethod(lambda: None))
+    for signal_number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        monkeypatch.setattr(base_module.signal, "signal", mock.Mock())
+    return project
+
+
+@pytest.fixture
+def served(monkeypatch: pytest.MonkeyPatch) -> tuple[list[PlatformSpec], mock.Mock, list[str]]:
+    """Stand in for the platform, the file watch and the browser.
+
+    Returns:
+        The specs platforms were built with, the platform, and the links opened.
+    """
+    platform = mock.Mock()
+    platform.wait_ready.return_value = True
+    built: list[PlatformSpec] = []
+
+    def make_platform(spec: PlatformSpec) -> mock.Mock:
+        built.append(spec)
+        platform.spec = spec
+        return platform
+
+    monkeypatch.setattr(base_module, "Platform", make_platform)
+    monkeypatch.setattr(base_module, "watch", lambda *args, **kwargs: iter([]))
+    opened: list[str] = []
+    monkeypatch.setattr(base_module.webbrowser, "open", opened.append)
+    return built, platform, opened
+
+
+def test_windows_is_refused(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(base_module.sys, "platform", "win32")
+
+    with pytest.raises(SystemExit, match="inside WSL"):
+        DevCommand().run(_args())
+
+
+def test_a_busy_port_is_refused_by_name(project: DevProject, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(base_module.DevServer, "port_in_use", staticmethod(lambda port: True))
+
+    with pytest.raises(SystemExit, match="port 3100 is already in use"):
+        DevCommand().run(_args())
+
+
+def test_an_unreachable_postgres_is_named(monkeypatch: pytest.MonkeyPatch):
+    def refuse(*args: object, **kwargs: object) -> None:
+        raise OperationalError("connect", {}, Exception("connection refused"))
+
+    monkeypatch.setattr(base_module, "bootstrap", refuse)
+
+    with pytest.raises(SystemExit, match=r"Postgres at localhost:5432 \(database 'interloper'\) does not answer"):
+        DevCommand._check_database()
+
+
+def test_it_serves_the_project_then_stops_everything(project: DevProject, served, monkeypatch: pytest.MonkeyPatch):
+    built, platform, opened = served
+    monkeypatch.setattr(DevProject, "extensions", lambda self: [])
+
+    DevCommand().run(_args("weather.OpenMeteo"))
+
+    (spec,) = built
+    assert (spec.port, spec.parent, spec.classes) == (3100, os.getpid(), ["weather.OpenMeteo"])
+    assert spec.python_path == [str(project.root)]
+    assert (spec.sign_in.organisation, spec.sign_in.extension) == ("Weather", None)
+    assert opened == [spec.sign_in.link(3100)]
+    platform.start.assert_called_once_with()
+    platform.stop.assert_called_once_with()
+
+
+def test_the_one_extension_with_a_ui_is_where_the_link_lands(
+    project: DevProject, served, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    built, _, _ = served
+    (tmp_path / "ui").mkdir()
+    (tmp_path / "ui" / "package.json").write_text("{}")
+    held = [HeldExtension("acme", "acme_interloper", tmp_path, declares_ui=True)]
+    monkeypatch.setattr(DevProject, "extensions", lambda self: held)
+    vite = mock.Mock(key="acme", entry="http://127.0.0.1:5173/src/index.ts")
+    monkeypatch.setattr(base_module, "ViteServer", lambda key, directory, pnpm: vite)
+
+    DevCommand().run(_args())
+
+    (spec,) = built
+    assert spec.sign_in.extension == "acme"
+    assert spec.ui_entries == {"acme": "http://127.0.0.1:5173/src/index.ts"}
+    vite.start.assert_called_once_with()
+    vite.stop.assert_called_once_with()
+
+
+def test_a_platform_that_fails_first_opens_the_browser_once_it_starts(
+    project: DevProject, served, monkeypatch: pytest.MonkeyPatch
+):
+    _, platform, opened = served
+    monkeypatch.setattr(DevProject, "extensions", lambda self: [])
+    platform.wait_ready.side_effect = [False, True, True]
+    edit = {(1, str(project.root / "weather.py"))}
+    monkeypatch.setattr(base_module, "watch", lambda *args, **kwargs: iter([edit, edit]))
+
+    DevCommand().run(_args())
+
+    assert len(opened) == 1
+    assert platform.restart.call_count == 2
+
+
+def test_a_termination_signal_takes_the_ctrl_c_path():
+    with pytest.raises(KeyboardInterrupt):
+        DevCommand._interrupt(signal.SIGTERM, None)
+
+
+def test_the_command_takes_targets_a_port_and_no_browser():
+    parser = argparse.ArgumentParser()
+    DevCommand().add_arguments(parser)
+
+    args = parser.parse_args(["weather.OpenMeteo", "--port", "3100", "--no-browser"])
+
+    assert (args.targets, args.port, args.no_browser) == (["weather.OpenMeteo"], 3100, True)
+
+
+def test_ctrl_c_stops_everything(project: DevProject, served, monkeypatch: pytest.MonkeyPatch, capsys):
+    _, platform, _ = served
+    monkeypatch.setattr(DevProject, "extensions", lambda self: [])
+    platform.start.side_effect = KeyboardInterrupt
+
+    DevCommand().run(_args())
+
+    assert "Stopping." in capsys.readouterr().out
+    platform.stop.assert_called_once_with()

@@ -21,6 +21,8 @@ from interloper_db.models import AuthorizationCode, Identity, Invitation, Profil
 from interloper_db.session import commit, save, session_scope
 from interloper_db.store.page import Page, PageQuery
 
+LOCAL_DEVELOPER_EMAIL = "developer@interloper.invalid"
+
 
 class ProfileQuery(PageQuery):
     """Which profiles a listing reads.
@@ -188,6 +190,22 @@ class ProfileStore:
             db_profile = Profile(email=email, name=name)
             save(session, db_profile)
             return db_profile
+
+    def local_developer(self) -> Profile:
+        """Get the local developer, the super-admin ``interloper dev`` signs in, creating it on first use.
+
+        It holds :data:`LOCAL_DEVELOPER_EMAIL`, an address under the reserved
+        ``.invalid`` domain that no login provider verifies, so no login can
+        claim it: only the sign-in link ``interloper dev`` prints reaches it.
+
+        Returns:
+            The oldest profile holding the address, a super-admin.
+        """
+        holders = self.list(ProfileQuery(email=LOCAL_DEVELOPER_EMAIL, limit=None)).items
+        profile = holders[0] if holders else self.provision(email=LOCAL_DEVELOPER_EMAIL, name="Local developer")
+        if profile.is_super_admin:
+            return profile
+        return self.set_super_admin(profile.id, value=True)
 
     def upsert(
         self,

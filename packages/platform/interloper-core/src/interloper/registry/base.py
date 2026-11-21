@@ -57,6 +57,7 @@ class Registry(Generic[T]):
         self._entries: dict[str, T] = {}
         self._loaded = section is None
         self._loaded_names: set[str] = set()
+        self._overridden: set[str] = set()
         self._failures: dict[str, str] = {}
         self._load_lock = threading.RLock()
         if section is not None:
@@ -70,6 +71,20 @@ class Registry(Generic[T]):
             entry: The object to register; ignored when the name is taken.
         """
         self._entries.setdefault(name, entry)
+
+    def override(self, name: str, entry: T) -> None:
+        """Register *entry* under *name* in place of what any manifest declares under that name.
+
+        The declared entry is then never loaded, so one that fails to import
+        (a UI never built) records no failure either.
+
+        Args:
+            name: The name the manifest entry is declared under, which is the
+                registry key unless an *adopt* renames it.
+            entry: The object to register in its place.
+        """
+        self._entries[name] = entry
+        self._overridden.add(name)
 
     def get(self, name: str) -> T | None:
         """Look up an entry by name.
@@ -191,7 +206,7 @@ class Registry(Generic[T]):
             if self._loaded or name in self._loaded_names:
                 return
             for entry in MANIFESTS.entries(self._section):
-                if entry.name in self._loaded_names or name not in (None, entry.name):
+                if entry.name in self._loaded_names | self._overridden or name not in (None, entry.name):
                     continue
                 self._load_entry(entry)
             if name is None:

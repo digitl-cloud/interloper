@@ -14,6 +14,8 @@ from typing import Any
 import interloper_api.server
 import pytest
 import sqlalchemy
+from fastapi import APIRouter
+from fastapi.testclient import TestClient
 from interloper.catalog import Catalog
 from interloper.settings import ServerSettings
 from interloper_api import ApiServer
@@ -93,7 +95,7 @@ class TestApiPort:
         port = App._api_port(3000, dev=True, port=None)
 
         assert port != 3000
-        assert DevServer._port_in_use(port) is False
+        assert DevServer.port_in_use(port) is False
 
     def test_an_explicit_port_is_honoured_in_dev_mode(self) -> None:
         # --port already moved server.port; the API must land there rather
@@ -140,6 +142,21 @@ class TestFromSettings:
 
         assert isinstance(api, ApiServer)
         assert [middleware.cls for middleware in api.app.user_middleware] == [SpaFallback]
+
+    def test_interloper_dev_mounts_its_routes_and_names_its_dev_servers(
+        self, stub_roles: dict[str, Any], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        (tmp_path / "index.html").write_text("<html>spa</html>")
+        monkeypatch.setattr(services_module, "static_dir", lambda: tmp_path)
+        router = APIRouter()
+        router.add_api_route("/api/dev/ping", lambda: {"pong": True}, methods=["GET"])
+
+        api = _app(api=True, routers=[router], dev_origins=["http://127.0.0.1:5173"]).services["api"]
+
+        assert isinstance(api, ApiServer)
+        assert TestClient(api.app).get("/api/dev/ping").json() == {"pong": True}
+        (middleware,) = api.app.user_middleware
+        assert middleware.kwargs == {"directory": tmp_path, "dev_origins": ["http://127.0.0.1:5173"]}
 
     def test_a_missing_build_is_a_warning(
         self, stub_roles: dict[str, Any], monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
@@ -339,7 +356,7 @@ class TestDevServer:
             server.bind(("127.0.0.1", 0))
             server.listen(1)
 
-            assert DevServer._port_in_use(server.getsockname()[1]) is True
+            assert DevServer.port_in_use(server.getsockname()[1]) is True
 
     def test_port_in_use_detects_an_ipv6_only_listener(self) -> None:
         """A listener bound only to ``::1`` (how Nuxt dev binds on macOS) is detected."""
@@ -347,10 +364,10 @@ class TestDevServer:
             server.bind(("::1", 0))
             server.listen(1)
 
-            assert DevServer._port_in_use(server.getsockname()[1]) is True
+            assert DevServer.port_in_use(server.getsockname()[1]) is True
 
     def test_port_in_use_free_port(self) -> None:
-        assert DevServer._port_in_use(_free_port()) is False
+        assert DevServer.port_in_use(_free_port()) is False
 
     def test_port_in_use_survives_an_unavailable_stack(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A loopback family the host does not support is skipped, not raised."""
@@ -360,7 +377,7 @@ class TestDevServer:
 
         monkeypatch.setattr(socket, "socket", unsupported)
 
-        assert DevServer._port_in_use(1) is False
+        assert DevServer.port_in_use(1) is False
 
 
 class TestParentWatchdog:
@@ -372,6 +389,15 @@ class TestParentWatchdog:
         parent_pids = iter([os.getppid(), 1, 1])
         monkeypatch.setattr(os, "getppid", lambda: next(parent_pids))
         watchdog = ParentWatchdog(interval=0.01)
+
+        thread = threading.Thread(target=watchdog.start, daemon=True)
+        thread.start()
+        thread.join(timeout=5)
+
+        assert not thread.is_alive()
+
+    def test_a_parent_gone_before_the_watchdog_was_built_is_noticed(self) -> None:
+        watchdog = ParentWatchdog(interval=0.01, parent=os.getppid() + 100_000)
 
         thread = threading.Thread(target=watchdog.start, daemon=True)
         thread.start()

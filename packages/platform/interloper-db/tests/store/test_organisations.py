@@ -29,6 +29,30 @@ from interloper_db.models import (
 from interloper_db.store import OrganisationQuery, Store
 
 
+class TestEnsure:
+    def test_creates_the_organisation_once_with_the_admin(self, store: Store):
+        admin = store.profiles.provision(email="dev@example.test")
+        first = store.organisations.ensure("Weather", key="weather", admin_id=admin.id)
+        second = store.organisations.ensure("Weather", key="weather", admin_id=admin.id)
+        assert first.id == second.id
+        assert first.key == "weather"
+        assert store.members.role(first.id, admin.id) == "admin"
+
+    def test_joins_the_organisation_holding_the_key(self, store: Store):
+        admin = store.profiles.provision(email="dev@example.test")
+        existing = store.organisations.create(name="Dev Org")
+        store.organisations.update(existing.id, key="interloper")
+        ensured = store.organisations.ensure("interloper", key="interloper", admin_id=admin.id)
+        assert ensured.id == existing.id
+        assert store.members.role(existing.id, admin.id) == "admin"
+
+    def test_finds_its_organisation_again_when_the_key_was_taken(self, store: Store):
+        admin = store.profiles.provision(email="dev@example.test")
+        first = store.organisations.ensure("Settings", key="settings", admin_id=admin.id)
+        assert first.key == "settings-2"
+        assert store.organisations.ensure("Settings", key="settings", admin_id=admin.id).id == first.id
+
+
 class TestKey:
     def test_create_derives_the_key_from_the_name(self, store: Store):
         assert store.organisations.create(name="Acme AG").key == "acme-ag"
