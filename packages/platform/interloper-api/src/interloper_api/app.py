@@ -315,6 +315,8 @@ def _mount_extensions(app: FastAPI, api: APIRouter) -> None:
         api.include_router(router, prefix=f"{ORG_PREFIX}/ext/{name}", dependencies=[Depends(require_viewer)])
         logger.info("Extension routes '%s' mounted at /api%s/ext/%s.", name, ORG_PREFIX, name)
     for name, bundle in extensions.UI_BUNDLES.items():
+        if not isinstance(bundle, extensions.UIBundle):
+            continue
         path = extensions.UI_PATH.format(name=name, digest=bundle.digest)
         app.mount(path, extensions.BundleFiles(bundle), name=f"ext-ui-{name}")
         logger.info("Extension UI '%s' served at %s.", name, path)

@@ -87,3 +87,5 @@ class InitCommand(ProjectCommand):
         print(f"Wrote {written}: {project.distribution} is the extension '{key}', declaring nothing yet.")
         print("Add what it declares, one part at a time:")
         print(f"  uv run interloper extension add <{'|'.join(PARTS)}> [name]")
+        print("Serve it in the app, signed in and reloading as you edit:")
+        print("  uv run interloper dev")

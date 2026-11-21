@@ -8,6 +8,8 @@ checkout happens to have run ``make build-app``.
 from __future__ import annotations
 
 import asyncio
+import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -133,6 +135,28 @@ class TestSpaFallback:
 
     def test_the_root_serves_index(self, client: Any) -> None:
         assert "spa" in client.get("/").text
+
+    @pytest.mark.parametrize("path", ["/", "/acme/ext/weather", "/index.html"])
+    def test_dev_origins_name_their_shared_modules_in_the_import_map(self, tmp_path: Path, path: str) -> None:
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        imports = {"vue": "/_nuxt/shared-vue.js", "pinia": "/_nuxt/shared-pinia.js"}
+        page = f'<html><head><script type="importmap">{json.dumps({"imports": imports})}</script></head></html>'
+        (tmp_path / "index.html").write_text(page)
+        app = FastAPI()
+        app.add_middleware(SpaFallback, directory=tmp_path, dev_origins=["http://127.0.0.1:5173"])
+
+        served = TestClient(app).get(path).text
+
+        import_map = re.search(r'<script type="importmap">(.*?)</script>', served)
+        assert import_map is not None
+        mapped = json.loads(import_map.group(1))["imports"]
+        assert mapped == {
+            **imports,
+            "http://127.0.0.1:5173/@id/vue": "/_nuxt/shared-vue.js",
+            "http://127.0.0.1:5173/@id/pinia": "/_nuxt/shared-pinia.js",
+        }
 
     async def test_the_api_prefix_matches_the_segment_only(self, tmp_path: Path) -> None:
         """``/api``, ``/api/...`` and the OAuth metadata reach the API; ``/apifoo`` is an SPA route."""

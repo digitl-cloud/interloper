@@ -325,15 +325,7 @@ def _sign_in(
         profile = store.profiles.set_super_admin(profile.id, value=True)
 
     response = RedirectResponse(url=_app_relative(destination), status_code=302)
-    response.set_cookie(
-        key="session_token",
-        value=store.tokens.create_session(profile.id),
-        httponly=True,
-        samesite="lax",
-        secure=auth_config.cookie_secure,
-        max_age=int(auth_config.session_expiry.total_seconds()),
-        path="/",
-    )
+    auth_config.set_session_cookie(response, store.tokens.create_session(profile.id))
     return response
 
 

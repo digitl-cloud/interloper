@@ -140,6 +140,42 @@ class OrganisationStore:
             save(session, db_organisation)
             return db_organisation
 
+    def ensure(self, name: str, *, key: str, admin_id: UUID) -> Organisation:
+        """Get the organisation a key names, creating it on first use, with a profile as its admin.
+
+        When another organisation already took the key (a deleted one, or the
+        key is reserved), the one created in its place carries a suffixed key;
+        it is found again as the oldest organisation of that name the admin
+        belongs to.
+
+        Args:
+            name: The organisation's name, used when it is created.
+            key: The key that names it.
+            admin_id: Profile UUID made an ``admin`` member when not a member yet.
+
+        Returns:
+            The organisation.
+        """
+        with session_scope(self._engine) as session:
+            organisation = session.exec(
+                select(Organisation).where(Organisation.key == key, col(Organisation.deleted_at).is_(None))
+            ).first()
+            if organisation is None:
+                memberships = select(UserOrganisation.organisation_id).where(UserOrganisation.user_id == admin_id)
+                organisation = session.exec(
+                    select(Organisation)
+                    .where(
+                        Organisation.name == name,
+                        col(Organisation.id).in_(memberships),
+                        col(Organisation.deleted_at).is_(None),
+                    )
+                    .order_by(col(Organisation.created_at), col(Organisation.id))
+                ).first()
+            if organisation is not None and session.get(UserOrganisation, (admin_id, organisation.id)) is None:
+                session.add(UserOrganisation(user_id=admin_id, organisation_id=organisation.id, role=Role.ADMIN.value))
+                commit(session)
+        return organisation if organisation is not None else self.create(name, creator_id=admin_id)
+
     def update(self, org_id: UUID, *, name: str | None = None, key: str | None = None) -> Organisation:
         """Rename an organisation or change its key.
 

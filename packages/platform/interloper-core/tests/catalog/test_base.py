@@ -138,6 +138,12 @@ class TestEnablement:
         catalog = Catalog.from_paths(["not_a_module.Nope", DemoSource.definition().path])
         assert "demo_source" in catalog.components
 
+    def test_including_adds_classes_over_the_catalog(self):
+        base = Catalog.from_paths([DemoSource.definition().path])
+        catalog = base.including([DemoDestination])
+        assert set(catalog.components) == {"demo_source", "demo_destination", "demo_connection", *_FRAMEWORK}
+        assert set(base.components) == {"demo_source", *_FRAMEWORK}
+
     def test_paths_round_trip(self):
         enabled = Catalog.from_paths([DemoDestination.definition().path])
         assert Catalog.from_paths(enabled.to_paths()).components.keys() == enabled.components.keys()

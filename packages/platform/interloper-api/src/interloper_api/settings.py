@@ -19,6 +19,7 @@ from pydantic_settings import NoDecode
 
 if TYPE_CHECKING:
     from interloper_agent.settings import AgentSettings
+    from starlette.responses import Response
 
 
 class AuthSettings(Settings):
@@ -94,6 +95,23 @@ class AuthSettings(Settings):
             ``session_expiry_days`` as a duration.
         """
         return timedelta(days=self.session_expiry_days)
+
+    def set_session_cookie(self, response: Response, token: str) -> None:
+        """Hand a browser its login session: the cookie every authenticated app request carries.
+
+        Args:
+            response: The response that signs the browser in.
+            token: The session token, from ``store.tokens.create_session``.
+        """
+        response.set_cookie(
+            key="session_token",
+            value=token,
+            httponly=True,
+            samesite="lax",
+            secure=self.cookie_secure,
+            max_age=int(self.session_expiry.total_seconds()),
+            path="/",
+        )
 
     @property
     def access_token_expiry(self) -> timedelta:

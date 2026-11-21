@@ -174,6 +174,18 @@ class Catalog(BaseModel):
             return cls.from_paths(include)
         return cls.discover()
 
+    def including(self, components: Iterable[type[Component]]) -> Catalog:
+        """Build a catalog enabling these component classes on top of this one.
+
+        Args:
+            components: The classes to add, with their dependencies.
+
+        Returns:
+            A new catalog; this one is left as it is. A class whose key this
+            catalog already holds replaces that definition.
+        """
+        return Catalog(components={**self.components, **Catalog.from_assets(components).components})
+
     # TODO: rename to from_components
     @classmethod
     def from_assets(cls, sources_or_assets: Iterable[type[Component]]) -> Catalog:

@@ -191,7 +191,7 @@ def app_state(fake_settings: ApiSettings) -> State:
 
 
 @pytest.fixture
-def load_extensions(install: Callable[..., None], monkeypatch: pytest.MonkeyPatch) -> Callable[[], Manifests]:
+def load_extensions(install: Callable[..., None], monkeypatch: pytest.MonkeyPatch) -> Callable[..., Manifests]:
     """Show the API the packages ``install`` writes as the only installed ones, their routes and UIs loaded.
 
     Only the API's own reads are pointed at them, the listing, the config
@@ -205,13 +205,18 @@ def load_extensions(install: Callable[..., None], monkeypatch: pytest.MonkeyPatc
 
     Returns:
         A function reading the installed packages' manifests and loading their
-        routes and UIs, which returns the manifests.
+        routes and UIs, which returns the manifests; the UIs it is given by
+        name override the declared ones, as ``interloper dev`` does.
     """
 
-    def load() -> Manifests:
+    def load(ui_overrides: dict[str, extensions_module.DevServerUI] | None = None) -> Manifests:
         manifests = Manifests()
         routers = Registry("routes", adopt=extensions_module._adopt_router)
-        bundles = Registry("ui", adopt=extensions_module._adopt_bundle)
+        bundles: Registry[extensions_module.UIBundle | extensions_module.DevServerUI] = Registry(
+            "ui", adopt=extensions_module._adopt_bundle
+        )
+        for name, ui in (ui_overrides or {}).items():
+            bundles.override(name, ui)
         with monkeypatch.context() as scoped:
             scoped.setattr(registry_base, "MANIFESTS", manifests)
             routers.keys()
