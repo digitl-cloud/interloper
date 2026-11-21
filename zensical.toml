@@ -60,6 +60,7 @@ nav = [
         { "Runners" = "extending/runners.md" },
         { "Operations & workloads" = "extending/operations.md" },
         { "Extensions & registries" = "extending/extensions.md" },
+        { "Writing an extension in its own repository" = "extending/own-repository.md" },
     ] },
     { "Reference" = [
         { "Settings" = "reference/settings.md" },

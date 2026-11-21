@@ -354,7 +354,8 @@ wheel carries whatever its `static/` holds, so the release runs `make build-exte
 it builds the wheels, and the loaded api image builds the `packages/extensions` UIs into the
 packages it installs.
 
-That is how the repository's own extensions build, through the workspace and the Makefile. An
+That is how the repository's own extensions build, through the workspace and the Makefile;
+[Writing an extension in its own repository](own-repository.md) walks through the other path. An
 extension in its own repository installs `@interloper/ui` from npm instead, and
 `uv run interloper extension build` runs npm in its `ui/`, type-checks and builds the UI, then
 builds the wheel and checks that it carries the bundle; `make check-extension` runs that whole
