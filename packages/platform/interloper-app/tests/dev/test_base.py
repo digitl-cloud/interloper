@@ -215,3 +215,118 @@ def test_a_nuxt_server_that_stops_stops_dev(
         DevCommand().run(_args())
     platform.stop.assert_called_once_with()
     nuxt.stop.assert_called_once_with()
+
+
+def test_a_ui_added_while_dev_runs_gets_its_vite_server(
+    project: DevProject, served, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    built, platform, _ = served
+    (tmp_path / "ui").mkdir()
+    (tmp_path / "ui" / "package.json").write_text("{}")
+    held: list[HeldExtension] = []
+    monkeypatch.setattr(DevProject, "extensions", lambda self: list(held))
+    started: list[mock.Mock] = []
+
+    def make_vite(key: str, directory: Path, pnpm: bool) -> mock.Mock:
+        started.append(mock.Mock(key=key, entry=f"http://127.0.0.1:5173/{key}.ts"))
+        return started[-1]
+
+    monkeypatch.setattr(base_module, "ViteServer", make_vite)
+    manifest = {(1, str(project.root / "src" / "acme_interloper" / "extension.yaml"))}
+
+    def watch(*args: object, **kwargs: object):
+        held.append(HeldExtension("acme", "acme_interloper", tmp_path, declares_ui=True))
+        yield manifest
+        held.clear()
+        yield manifest
+
+    monkeypatch.setattr(base_module, "watch", watch)
+
+    DevCommand().run(_args())
+
+    (vite,) = started
+    vite.start.assert_called_once_with()
+    vite.stop.assert_called_once_with()
+    assert built[0].ui_entries == {}
+    assert platform.restart.call_count == 2
+
+
+def test_a_ui_added_while_dev_runs_restarts_nuxt_with_its_entry(
+    project: DevProject, served, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    (tmp_path / "ui").mkdir()
+    (tmp_path / "ui" / "package.json").write_text("{}")
+    held: list[HeldExtension] = []
+    monkeypatch.setattr(DevProject, "extensions", lambda self: list(held))
+    monkeypatch.setattr(DevProject, "app_source", property(lambda self: tmp_path / "app"))
+    monkeypatch.setattr(base_module.Port, "free", classmethod(lambda cls: cls(45678)))
+    nuxt = mock.Mock(running=True)
+    monkeypatch.setattr(base_module, "NuxtServer", lambda directory, **kwargs: nuxt)
+    vite = mock.Mock(key="acme", entry="http://127.0.0.1:5173/acme.ts")
+    monkeypatch.setattr(base_module, "ViteServer", lambda key, directory, pnpm: vite)
+    manifest = {(1, str(project.root / "src" / "acme_interloper" / "extension.yaml"))}
+
+    def watch(*args: object, **kwargs: object):
+        held.append(HeldExtension("acme", "acme_interloper", tmp_path, declares_ui=True))
+        yield manifest
+
+    monkeypatch.setattr(base_module, "watch", watch)
+
+    DevCommand().run(_args())
+
+    assert nuxt.ui_entries == {"acme": "http://127.0.0.1:5173/acme.ts"}
+    assert nuxt.start.call_count == 2
+    assert nuxt.stop.call_count == 2
+
+
+def test_a_manifest_caught_mid_edit_leaves_the_uis_as_they_are(
+    project: DevProject, served, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    built, _, _ = served
+    (tmp_path / "ui").mkdir()
+    (tmp_path / "ui" / "package.json").write_text("{}")
+    held = [HeldExtension("acme", "acme_interloper", tmp_path, declares_ui=True)]
+    unread: list[str] = []
+    monkeypatch.setattr(DevProject, "extensions", lambda self: list(held))
+    monkeypatch.setattr(DevProject, "unread", lambda self: list(unread))
+    vite = mock.Mock(key="acme", entry="http://127.0.0.1:5173/acme.ts")
+    monkeypatch.setattr(base_module, "ViteServer", lambda key, directory, pnpm: vite)
+    manifest = {(1, str(project.root / "src" / "acme_interloper" / "extension.yaml"))}
+
+    def watch(*args: object, **kwargs: object):
+        held.clear()
+        unread.append("acme_interloper")
+        yield manifest
+
+    monkeypatch.setattr(base_module, "watch", watch)
+
+    DevCommand().run(_args())
+
+    vite.start.assert_called_once_with()
+    assert built[0].ui_entries == {"acme": "http://127.0.0.1:5173/acme.ts"}
+
+
+def test_a_ui_that_fails_to_start_while_dev_runs_is_left_out(
+    project: DevProject, served, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    built, platform, _ = served
+    (tmp_path / "ui").mkdir()
+    (tmp_path / "ui" / "package.json").write_text("{}")
+    held: list[HeldExtension] = []
+    monkeypatch.setattr(DevProject, "extensions", lambda self: list(held))
+    vite = mock.Mock(key="acme", entry="http://127.0.0.1:5173/acme.ts")
+    vite.start.side_effect = SystemExit("`npm install` failed in ui.")
+    monkeypatch.setattr(base_module, "ViteServer", lambda key, directory, pnpm: vite)
+    manifest = {(1, str(project.root / "src" / "acme_interloper" / "extension.yaml"))}
+
+    def watch(*args: object, **kwargs: object):
+        held.append(HeldExtension("acme", "acme_interloper", tmp_path, declares_ui=True))
+        yield manifest
+
+    monkeypatch.setattr(base_module, "watch", watch)
+
+    DevCommand().run(_args())
+
+    assert "`npm install` failed in ui." in capsys.readouterr().out
+    assert built[0].ui_entries == {}
+    platform.restart.assert_called_once_with()

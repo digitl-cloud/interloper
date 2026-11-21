@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import signal
 import subprocess
+import time
 from pathlib import Path
 
 
@@ -72,14 +73,36 @@ class ProcessGroup:
             timeout: Seconds the group gets to stop after ``SIGTERM``.
         """
         process, self._process = self._process, None
-        if process is None or process.poll() is not None:
+        if process is None:
             return
         self._signal(process, signal.SIGTERM)
-        try:
-            process.wait(timeout)
-        except subprocess.TimeoutExpired:
+        deadline = time.monotonic() + timeout
+        while self._alive(process) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        if self._alive(process):
             self._signal(process, signal.SIGKILL)
             process.wait()
+
+    @staticmethod
+    def _alive(process: subprocess.Popen[bytes]) -> bool:
+        """Whether the command, or anything in its group, still runs.
+
+        A child can outlive the command it was started by, and hold what the
+        command held (a port) until it ends.
+
+        Args:
+            process: The process leading the group.
+
+        Returns:
+            True while the leader runs or the group has a member left.
+        """
+        if process.poll() is None:
+            return True
+        try:
+            os.killpg(process.pid, 0)
+        except ProcessLookupError:
+            return False
+        return True
 
     @staticmethod
     def _signal(process: subprocess.Popen[bytes], signal_number: int) -> None:

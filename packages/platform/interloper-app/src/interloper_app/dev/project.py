@@ -21,7 +21,7 @@ from typing import Any
 from urllib.parse import urlsplit
 from urllib.request import url2pathname
 
-from interloper.extension import MANIFESTS
+from interloper.extension import Manifests
 from watchfiles import Change, DefaultFilter
 
 from interloper_app.assets import source_dir
@@ -155,19 +155,48 @@ class DevProject:
     def extensions(self) -> list[HeldExtension]:
         """List the extensions the project holds, read from the installed manifests without importing them.
 
+        The manifests are read afresh on every call, so a part added while
+        ``dev`` runs (``interloper extension add ui``) is found.
+
         Returns:
             Each installed extension whose package lives under a held
             directory, in the manifests' order.
         """
-        with_ui = {entry.package for entry in MANIFESTS.entries("ui")}
+        manifests = Manifests()
+        with_ui = {entry.package for entry in manifests.entries("ui")}
         held: list[HeldExtension] = []
-        for extension in MANIFESTS.extensions():
-            location = self._location(extension.package)
-            holding = [path for path in self.held if location and location.is_relative_to(path)]
-            directory = max(holding, key=lambda path: len(path.parts), default=None)
+        for extension in manifests.extensions():
+            directory = self._holder(extension.package)
             if extension.key is not None and directory is not None:
                 held.append(HeldExtension(extension.key, extension.package, directory, extension.package in with_ui))
         return held
+
+    def unread(self) -> list[str]:
+        """Name the held packages whose manifest, or its ``ui`` section, does not read: a save caught mid-edit.
+
+        Returns:
+            The packages, in the order their failures happened, each once.
+        """
+        failed = (
+            failure.package
+            for failure in Manifests().failures
+            if failure.section in (None, "ui") and failure.entry is None
+        )
+        return [package for package in dict.fromkeys(failed) if self._holder(package) is not None]
+
+    def _holder(self, package: str) -> Path | None:
+        """Find the held directory an import package lives under.
+
+        Args:
+            package: The top-level import package.
+
+        Returns:
+            The innermost held directory holding it, or ``None`` when the
+            project holds no directory it lives under.
+        """
+        location = self._location(package)
+        holding = [path for path in self.held if location and location.is_relative_to(path)]
+        return max(holding, key=lambda path: len(path.parts), default=None)
 
     def watches(self, change: Change, path: str) -> bool:
         """Say whether an edit restarts the platform: a Python file, a manifest, or the active configuration.
