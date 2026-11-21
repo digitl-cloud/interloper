@@ -1,5 +1,6 @@
 .PHONY: build docker-build docker-build-linux docker-push docker-build-push \
-        dev dev-db dev-seed dev-reset dev-up compose-up compose-down compose-seed
+        dev dev-db dev-seed dev-reset dev-up compose-up compose-down compose-seed \
+        scale-up scale-down scale-reset scale-generate scale-scheduler scale-load
 
 
 # ###############
@@ -239,3 +240,49 @@ compose-down:
 
 compose-seed:
 	cd $(DEV_DIR) && $(COMPOSE_ENV) docker compose up --build seed
+
+# ###############
+# SCALE TEST
+# ###############
+#
+# A stack shaped like production (Postgres held to its database tier, two api
+# replicas behind a proxy) to load with many organisations, browsers and runs.
+# See dev/scale/ and the "Scale test" section of AGENTS.md.
+#
+#   make scale-up                               # build the api from this checkout, start the stack
+#   make scale-generate ARGS="--orgs 20"        # add organisations with history and sessions
+#   make scale-scheduler ARGS="--live-runs 3"   # scheduler loops + pods, in one terminal
+#   make scale-load ARGS="--stages 10,25,50"    # browsers, in another
+#   make scale-down                             # stop it and drop the database
+SCALE_DIR := dev/scale
+SCALE_ENV := INTERLOPER_POSTGRES_HOST=localhost \
+             INTERLOPER_POSTGRES_PORT=5434 \
+             INTERLOPER_POSTGRES_USER=postgres \
+             INTERLOPER_POSTGRES_PASSWORD=postgres \
+             INTERLOPER_POSTGRES_DATABASE=interloper \
+             INTERLOPER_ENCRYPTION_KEY=scale-encryption-key-not-for-production
+
+scale-up:
+	cd $(SCALE_DIR) && docker compose up -d --build
+
+scale-down:
+	cd $(SCALE_DIR) && docker compose down -v
+	rm -f $(SCALE_DIR)/state/sessions.json
+
+# Drop and recreate the database; the api replicas are stopped around it, since
+# a reset cannot drop a database they are connected to.
+scale-reset:
+	cd $(SCALE_DIR) && docker compose stop api proxy
+	cd $(DEV_DIR) && $(SCALE_ENV) uv run interloper db reset --yes
+	rm -f $(SCALE_DIR)/state/sessions.json
+	cd $(SCALE_DIR) && docker compose start api proxy
+
+# The scripts run from dev/, whose interloper.yaml holds the catalog.
+scale-generate:
+	cd $(DEV_DIR) && $(SCALE_ENV) uv run python scale/generate.py $(ARGS)
+
+scale-scheduler:
+	cd $(DEV_DIR) && $(SCALE_ENV) uv run python scale/scheduler.py $(ARGS)
+
+scale-load:
+	cd $(DEV_DIR) && uv run python scale/load.py $(ARGS)

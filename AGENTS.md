@@ -90,6 +90,16 @@ Logging in needs a sign-in provider, and none is configured by default (the logi
 
 Both run against [dev/interloper.yaml](dev/interloper.yaml), which carries **only** the catalog and the agent (enabled, with the model dev chats with; the agent is opt-in and names no model by default): the `INTERLOPER_*` vars in the Makefile's `DEV_ENV` / [dev/docker-compose.yml](dev/docker-compose.yml) select the in-process launcher and the right DB, and the environment beats the config file field by field anyway. The host targets `cd dev` so that file is the active `./interloper.yaml` rather than the repo-root [interloper.yaml](interloper.yaml); compose mounts it. The compose stack lives in `dev/` too (build context is the repo root, where the dockerfile is). The dev encryption key/DB password are throwaways — never reuse them.
 
+### Scale test
+
+[dev/scale/](dev/scale/) loads a stack shaped like production to find what gives first as organisations, browsers and runs grow. Its compose stack holds Postgres to the production database tier (1 CPU, 3.75GB, `pg_stat_statements` on, port 5434) and runs two api replicas of 1GiB each, built from the checkout, behind a round-robin proxy on `:3010`. Three scripts drive it, each run from `dev/` through its `make` target:
+
+- `make scale-generate ARGS="--orgs 20"` adds organisations with demo sources, jobs, members with sessions, and months of runs, executions and events (`--sources`, `--jobs`, `--days`, `--event-days` size them). Its sessions land in the gitignored `dev/scale/state/`.
+- `make scale-scheduler ARGS="--orgs 20 --live-runs 3"` runs the scheduler's own loops, timing every pass, and keeps that many runs open per organisation. Each run executes on a simulated pod that loads its spec and posts its events through the api with the run's token, as `interloper launch` does.
+- `make scale-load ARGS="--orgs 20 --stages 10,25,50"` ramps browsers that walk the app's pages and follow the realtime socket as the app's stores do, and reports per stage each route's latency, the containers' CPU and memory, and the database's costliest statements.
+
+`make scale-up` starts the stack (rebuild after a code change), `make scale-reset` empties the database, `make scale-down` removes it. Results go to `dev/scale/state/` as JSON; figures from a client-shaped run stay out of the repository.
+
 ## Docker images
 
 Built from a single multi-target [dockerfile](dockerfile). The image catalog is defined in the [Makefile](Makefile): one image per role (`interloper-<role>`), each shipping two **variants**.
