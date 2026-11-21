@@ -310,6 +310,84 @@ class TestPartitionResults:
 
         assert [row.asset_id for row in rows] == sorted(assets)
 
+    def test_keeps_the_partitions_that_did_not_succeed(self, store: Store) -> None:
+        job, asset = uuid4(), _component("asset")
+        _execution(_run(job, partition_key="2026-07-01"), asset, "success")
+        _execution(_run(job, partition_key="2026-07-02"), asset, "failed")
+        _execution(_run(job, partition_key="2026-07-03"), asset, "running")
+        _execution(_run(job, partition_key="2026-07-04"), asset, "failed")
+        _execution(_run(asset, partition_key="2026-07-04"), asset, "success")
+        window = _window(dt.date(2026, 7, 1), dt.date(2026, 7, 31))
+
+        rows = store.insights._partition_results(_ORG, [asset], window, succeeded=False)
+
+        assert sorted((row.partition_key, row.failed) for row in rows) == [("2026-07-02", True), ("2026-07-03", False)]
+
+
+class TestPartitionSummaries:
+    """Per asset and key format: how many partitions, from which key to which."""
+
+    def test_counts_each_assets_partitions_of_the_window_by_key_format(self, store: Store) -> None:
+        job, first, second, idle = uuid4(), _component("asset"), _component("asset"), _component("asset")
+        for key in ("2026-06-30", "2026-07-01", "2026-07-02", "2026-07-04", "2026-07", "eu"):
+            _execution(_run(job, partition_key=key), first, "success")
+        _execution(_run(job, partition_key="2026-07-03"), second, "failed")
+        _execution(_run(job, partition_key="2026-07-03", org_id=uuid4()), second, "failed")
+        window = _window(dt.date(2026, 7, 1), dt.date(2026, 7, 31))
+
+        summaries = store.insights._partition_summaries(_ORG, [first, second, idle], window)
+
+        assert sorted(summaries, key=lambda summary: (summary.asset_id != first, summary.first_key)) == [
+            (first, 1, "2026-07", "2026-07"),
+            (first, 3, "2026-07-01", "2026-07-04"),
+            (second, 1, "2026-07-03", "2026-07-03"),
+        ]
+
+    def test_assets_beyond_one_statement_are_read_in_several(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(insights_base, "MAX_ASSETS_PER_READ", 2)
+        assets = [_component("asset") for _ in range(5)]
+        run = _run(uuid4(), partition_key="2026-07-01")
+        for asset in assets:
+            _execution(run, asset, "success")
+
+        summaries = store.insights._partition_summaries(_ORG, assets, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 1)))
+
+        assert [summary.asset_id for summary in summaries] == sorted(assets)
+
+
+class TestCoverageByDay:
+    """The calendar reads an asset through a summary where it can, partition by partition where it cannot."""
+
+    def test_an_unbroken_asset_is_read_through_what_did_not_succeed_and_counts_the_same(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
+        unbroken, gapped = (child.id for child in sorted(source.children, key=lambda child: child.key))
+        failed_run = _run(source.id, partition_key="2026-06-02")
+        for day in ("2026-06-01", "2026-06-03", "2026-06-04"):
+            _execution(_run(source.id, partition_key=day), unbroken, "success")
+        _execution(failed_run, unbroken, "failed")
+        for day in ("2026-06-01", "2026-06-04"):
+            _execution(_run(source.id, partition_key=day), gapped, "success")
+        read: list[tuple[list[UUID], bool | None]] = []
+        partition_results = store.insights._partition_results
+
+        def _recorded(org_id: UUID, asset_ids: list[UUID], keys: list[Any], *, succeeded: bool | None = None) -> Any:
+            read.append((asset_ids, succeeded))
+            return partition_results(org_id, asset_ids, keys, succeeded=succeeded)
+
+        monkeypatch.setattr(store.insights, "_partition_results", _recorded)
+
+        [group] = store.insights.coverage_by_day(_ORG, since=dt.date(2026, 6, 1), until=dt.date(2026, 6, 4), now=_T0)
+
+        assert read == [([gapped], None), ([unbroken], False)]
+        assert group.component.id == source.id
+        assert (group.days.start, group.days.successful) == (dt.date(2026, 6, 1), [2, 0, 1, 2])
+        assert (group.days.failed, group.days.missing) == ([0, 1, 0, 0], [0, 1, 1, 0])
+        assert group.days.failed_run_ids == {1: failed_run}
+
 
 class TestAttemptedSpans:
     """Each asset's first to last attempted day, all-time."""

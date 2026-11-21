@@ -15,6 +15,7 @@ from interloper_db.store.insights.coverage import (
     GroupCoverage,
     JobCoverage,
     PartitionResult,
+    PartitionSummary,
     Period,
     Verdict,
 )
@@ -107,6 +108,7 @@ def _calendar(
     *,
     start: str | None = None,
     now: dt.datetime = _NOW,
+    series: Period | None = None,
 ) -> DayCoverage | None:
     """One standalone asset's days on the calendar, its attempted period the period of *keys*.
 
@@ -118,6 +120,8 @@ def _calendar(
         until: Last day of the window, inclusive.
         start: The asset's history start, if any.
         now: The reference instant.
+        series: The period the asset is read as a series over, its results
+            then listing only what did not succeed.
 
     Returns:
         Its days, or ``None`` when it has none in the window.
@@ -126,7 +130,15 @@ def _calendar(
     attempted = {asset.id: Period.enclosing([Period.from_key(key) for key in keys])} if keys else {}
     bound = [result._replace(asset_id=asset.id) for result in results]
     groups = GroupCoverage.from_components(
-        [asset], set(), {asset.id: partitioning}, bound, attempted, since=since, until=until, now=now
+        [asset],
+        set(),
+        {asset.id: partitioning},
+        bound,
+        attempted,
+        since=since,
+        until=until,
+        now=now,
+        series={asset.id: series} if series else None,
     )
     return groups[0].days if groups else None
 
@@ -159,6 +171,59 @@ class TestPeriod:
         assert not Period.from_key("2026-08-13").closed(_NOW)
         assert Period.from_key("2026-08-13T08").closed(_NOW)
         assert not Period.from_key("2026-08-13T09").closed(_NOW)
+
+    def test_what_other_periods_leave_of_a_period_comes_oldest_first(self):
+        august = Period.from_key("2026-08")
+        taken = [Period.from_key(key) for key in ("2026-08-20", "2026-08-03", "2026-08-04", "2026-07-31", "2026-09-01")]
+
+        left = august.without(taken)
+
+        assert [(period.first_day, period.last_day) for period in left] == [
+            (dt.date(2026, 8, 1), dt.date(2026, 8, 2)),
+            (dt.date(2026, 8, 5), dt.date(2026, 8, 19)),
+            (dt.date(2026, 8, 21), dt.date(2026, 8, 31)),
+        ]
+        assert august.without([]) == [august]
+        assert august.without([Period.from_key("2026")]) == []
+
+
+class TestPartitionSummary:
+    """Which assets a count of their partitions tells everything about but what did not succeed."""
+
+    def test_an_asset_that_attempted_every_period_from_its_first_key_to_its_last_is_a_series(self):
+        daily, monthly = uuid4(), uuid4()
+        dated = il.TimePartitionConfig(column="date")
+        summaries = [
+            PartitionSummary(daily, 12, "2026-07-30", "2026-08-10"),
+            PartitionSummary(monthly, 3, "2025-12", "2026-02"),
+        ]
+
+        series = PartitionSummary.series(summaries, {daily: dated, monthly: dated})
+
+        assert {asset: (period.first_day, period.last_day) for asset, period in series.items()} == {
+            daily: (dt.date(2026, 7, 30), dt.date(2026, 8, 10)),
+            monthly: (dt.date(2025, 12, 1), dt.date(2026, 2, 28)),
+        }
+
+    def test_a_gap_two_key_formats_hours_a_snapshot_and_an_unknown_partitioning_are_left_out(self):
+        gapped, mixed, hourly, snapshot, drifted = (uuid4() for _ in range(5))
+        dated = il.TimePartitionConfig(column="date")
+        summaries = [
+            PartitionSummary(gapped, 11, "2026-07-30", "2026-08-10"),
+            PartitionSummary(mixed, 2, "2026-08-09", "2026-08-10"),
+            PartitionSummary(mixed, 1, "2026-08", "2026-08"),
+            PartitionSummary(hourly, 3, "2026-08-10T00", "2026-08-10T02"),
+            PartitionSummary(snapshot, 2, "2026-08-09", "2026-08-10"),
+            PartitionSummary(drifted, 2, "2026-08-09", "2026-08-10"),
+        ]
+        partitionings = {
+            gapped: dated,
+            mixed: dated,
+            hourly: il.TimePartitionConfig(column="date", granularity=il.TimeGranularity.HOUR),
+            snapshot: il.SnapshotPartitionConfig(column="date"),
+        }
+
+        assert PartitionSummary.series(summaries, partitionings) == {}
 
 
 class TestDatedVerdict:
@@ -262,11 +327,31 @@ class TestAssetPartitions:
 
         partitions = AssetPartitions.from_results([orders, refunds, idle], {}, results)
 
-        assert [(p.asset.key, [r.partition_key for _, r in p.results]) for p in partitions] == [
+        assert [(p.asset.key, [str(r.period.first_day) for r in p.results]) for p in partitions] == [
             ("refunds", ["2026-08-10"]),
             ("orders", ["2026-08-10", "2026-08-11"]),
             ("idle", []),
         ]
+
+    def test_a_series_reads_the_stretches_between_its_listed_results_as_runs_of_successes(self):
+        orders, refunds = _asset("orders"), _asset("refunds")
+        results = [_result(orders.id, "2026-08-05", "failed"), _result(orders.id, "2026-08-08", "open")]
+        span = Period.enclosing([Period.from_key("2026-08-03"), Period.from_key("2026-08-10")])
+        series = {orders.id: span, refunds.id: span}
+
+        partitions = AssetPartitions.from_results([orders, refunds], {}, results, series)
+
+        runs = {
+            partition.asset.key: sorted(
+                (result.period.first_day.day, result.period.last_day.day, result.succeeded)
+                for result in partition.results
+            )
+            for partition in partitions
+        }
+        assert runs == {
+            "orders": [(3, 4, True), (5, 5, False), (6, 7, True), (8, 8, False), (9, 10, True)],
+            "refunds": [(3, 10, True)],
+        }
 
     def test_results_not_grouped_by_asset_are_refused(self):
         orders, refunds = _asset("orders"), _asset("refunds")
@@ -377,6 +462,32 @@ class TestGroupCoverage:
             missed=[0, 0, 0],
             failed_run_ids={1: failed_run},
         )
+
+    @pytest.mark.parametrize(
+        ("granularity", "keys", "unsucceeded"),
+        [
+            (DAY, [f"2026-08-{day:02d}" for day in range(3, 13)], {"2026-08-05": "failed", "2026-08-08": "open"}),
+            (DAY, [f"2026-08-{day:02d}" for day in range(3, 13)], {}),
+            (il.TimeGranularity.MONTH, ["2026-05", "2026-06", "2026-07", "2026-08"], {"2026-06": "failed"}),
+            (il.TimeGranularity.YEAR, ["2025", "2026"], {"2025": "open"}),
+        ],
+    )
+    def test_an_asset_read_as_a_series_counts_as_one_read_partition_by_partition(
+        self, granularity: il.TimeGranularity, keys: list[str], unsucceeded: dict[str, str]
+    ):
+        dated = il.TimePartitionConfig(column="date", granularity=granularity)
+        failed_run = uuid4()
+        every = [_result(uuid4(), key, unsucceeded.get(key, "success"), failed_run) for key in keys]
+        listed = [result for result in every if not result.succeeded]
+        series = Period.enclosing([Period.from_key(keys[0]), Period.from_key(keys[-1])])
+        window = (dt.date(2026, 6, 15), dt.date(2026, 8, 31))
+
+        for start in (None, "2026-08-06"):
+            by_partition = _calendar(dated, keys, every, *window, start=start)
+            as_series = _calendar(dated, keys, listed, *window, start=start, series=series)
+
+            assert by_partition is not None
+            assert as_series == by_partition
 
     def test_an_hourly_asset_counts_the_hours_elapsed_today(self):
         results = [_result(uuid4(), "2026-08-12T05", "success"), _result(uuid4(), "2026-08-13T01", "success")]
