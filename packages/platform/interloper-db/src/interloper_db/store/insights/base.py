@@ -11,7 +11,7 @@ to land.
 from __future__ import annotations
 
 import datetime as dt
-from collections.abc import Iterator, Sequence
+from collections.abc import Collection, Iterator, Sequence
 from typing import Any
 from uuid import UUID
 
@@ -41,7 +41,7 @@ from interloper_db.models import (
 from interloper_db.session import session_scope
 from interloper_db.store.backfills import BackfillQuery, BackfillStore
 from interloper_db.store.components import ComponentStore
-from interloper_db.store.executions import ExecutionQuery, ExecutionStore
+from interloper_db.store.executions import ExecutionStore
 from interloper_db.store.insights.coverage import GroupCoverage, JobCoverage, PartitionResult, Period
 from interloper_db.store.insights.failures import GROUP_KEYS, ErrorGroup, ErrorGroups, ErrorRow
 from interloper_db.store.insights.feed import ActivityEntry
@@ -111,40 +111,38 @@ class InsightStore:
             The organisation's health.
         """
         day_ago = now - dt.timedelta(hours=24)
-        components = self._rows(org_id)
-        statuses = [(component, self._components.read(component).status) for component in components]
-        job_rows = [component for component in components if component.kind == "job"]
+        outlines = self._components.outlines(org_id)
+        rows = self._rows(org_id, kinds=["job", "hook", "connection"])
+        job_rows = [row for row in rows if row.kind == "job"]
         jobs = self._job_health(org_id, job_rows, now)
         job_by_id = {job.id: job for job in job_rows}
 
-        failing_assets = {
-            execution.component_id
-            for execution in self._executions.list(org_id, ExecutionQuery(latest=True, limit=None)).items
-            if execution.status == "failed"
-        }
-        failing = {job.job.id for job in jobs if job.failing} | failing_assets
-        for component in components:
-            if component.kind == "asset" and component.id in failing_assets and component.parent_id:
-                failing.add(component.parent_id)
+        execution_failed = self._executions.latest_failed(org_id)
+        failing = {job.job.id for job in jobs if job.failing} | execution_failed
+        for outline in outlines:
+            if outline.kind == "asset" and outline.id in execution_failed and outline.parent_id:
+                failing.add(outline.parent_id)
+        for row in rows:
             if (
-                component.kind == "hook"
-                and component.state_text("last_error")
-                and (fired_at := component.state_datetime("last_fired_at"))
+                row.kind == "hook"
+                and row.state_text("last_error")
+                and (fired_at := row.state_datetime("last_fired_at"))
                 and fired_at >= now - HOOK_FAILURE_HORIZON
             ):
-                failing.add(component.id)
+                failing.add(row.id)
 
         failed = RunQuery(
             status=[RunStatus.FAILED], component_kind="job", completed_after=day_ago, completed_before=now, limit=None
         )
         failed_stacks = self._runs.list(org_id, failed).items
         errors = self.error_groups(org_id, since=day_ago, until=now, group_by=("job", "cause"))
-        connections = [component for component in components if component.kind == "connection"]
+        connections = [row for row in rows if row.kind == "connection"]
+        drifted = Attention.drifted(outlines)
         attention = [
             *Attention.from_error_groups(errors.groups, job_by_id),
             *Attention.from_connections(connections),
             *Attention.from_stacks(failed_stacks, job_by_id, day_ago, now),
-            *Attention.from_drift(statuses),
+            *Attention.from_drift(self._rows(org_id, ids=list(drifted)), drifted),
             *Attention.from_overdue(jobs),
         ]
         renewals = {item.component.id for item in attention if item.kind == "renewal_error" and item.component}
@@ -152,7 +150,7 @@ class InsightStore:
             jobs=jobs,
             failing=failing,
             attention=attention,
-            inventory=KindInventory.from_statuses(statuses, failing, renewals),
+            inventory=KindInventory.from_outlines(outlines, failing, renewals),
         )
 
     def activity(self, org_id: UUID, *, now: dt.datetime) -> Activity:
@@ -515,18 +513,21 @@ class InsightStore:
                 rows.append(ErrorRow(run.component_id, run.id, None, "run_failed", run.error or "", 1, ended, ended))
         return rows
 
-    def _rows(self, org_id: UUID, *, kinds: Sequence[str] | None = None) -> list[Component]:
+    def _rows(
+        self, org_id: UUID, *, kinds: Sequence[str] | None = None, ids: Collection[UUID] | None = None
+    ) -> list[Component]:
         """An organisation's component rows, oldest first, with their parents and no other relation.
 
-        The insights read every row of an organisation, and the relations the
-        listings load alongside (children, outgoing relations and their
-        targets) would more than double what each row holds. The parent stays:
-        an asset's qualified key, and so its status and partitioning, and its
-        inherited history start read it.
+        The insights read many rows of an organisation at once, and the
+        relations the listings load alongside (children, outgoing relations
+        and their targets) would more than double what each row holds. The
+        parent stays: an asset's qualified key, and so its status and
+        partitioning, and its inherited history start read it.
 
         Args:
             org_id: Organisation UUID.
             kinds: Keep these kinds; ``None`` keeps every kind.
+            ids: Keep these rows; ``None`` keeps every row.
 
         Returns:
             The rows, safe to read detached as far as their parents.
@@ -539,6 +540,8 @@ class InsightStore:
         )
         if kinds is not None:
             statement = statement.where(col(Component.kind).in_(kinds))
+        if ids is not None:
+            statement = statement.where(col(Component.id).in_(ids))
         with session_scope(self._engine) as session:
             return list(session.exec(statement).all())
 

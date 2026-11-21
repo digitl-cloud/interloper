@@ -23,7 +23,7 @@ from uuid import UUID
 from interloper.partitioning import TimePartitionWindow
 
 from interloper_db.models import Component, Run, RunStatus
-from interloper_db.store.components import ComponentStatus
+from interloper_db.store.components import ComponentOutline, ComponentStatus
 from interloper_db.store.insights.failures import ErrorGroup
 
 OVERDUE_AFTER = dt.timedelta(minutes=15)
@@ -168,25 +168,39 @@ class Attention:
                 )
         return items
 
-    @classmethod
-    def from_drift(cls, statuses: list[tuple[Component, ComponentStatus]]) -> list[Attention]:
-        """Flag the components whose catalog status is not ``ok``.
+    @staticmethod
+    def drifted(outlines: list[ComponentOutline]) -> dict[UUID, ComponentStatus]:
+        """The components to flag as drifted: those whose catalog status is not ``ok``.
 
         An owned asset whose source is itself drifted is left out: it drifts
         because its source does, and the source's one item covers it.
 
         Args:
-            statuses: Every component row with its status.
+            outlines: Every component's outline.
 
         Returns:
-            One item per drifted component whose parent, if any, is not drifted.
+            The status of each drifted component whose parent, if any, is not
+            drifted, by component id.
         """
-        drifted = {component.id for component, status in statuses if status is not ComponentStatus.OK}
-        return [
-            cls("drift", None, component=component, status=status)
-            for component, status in statuses
-            if status is not ComponentStatus.OK and component.parent_id not in drifted
-        ]
+        drifted = {outline.id for outline in outlines if outline.status is not ComponentStatus.OK}
+        return {
+            outline.id: outline.status
+            for outline in outlines
+            if outline.id in drifted and outline.parent_id not in drifted
+        }
+
+    @classmethod
+    def from_drift(cls, components: list[Component], statuses: dict[UUID, ComponentStatus]) -> list[Attention]:
+        """Flag the drifted components.
+
+        Args:
+            components: The rows of the components :meth:`drifted` names.
+            statuses: Their statuses, by component id.
+
+        Returns:
+            One item per row, in the rows' order.
+        """
+        return [cls("drift", None, component=component, status=statuses[component.id]) for component in components]
 
     @classmethod
     def from_overdue(cls, jobs: list[JobHealth]) -> list[Attention]:
@@ -222,13 +236,13 @@ class KindInventory:
     disabled: int
 
     @classmethod
-    def from_statuses(
-        cls, statuses: list[tuple[Component, ComponentStatus]], failing: set[UUID], attention: set[UUID]
+    def from_outlines(
+        cls, outlines: list[ComponentOutline], failing: set[UUID], attention: set[UUID]
     ) -> list[KindInventory]:
         """Count each kind's components by state, first match winning: disabled, failing, attention, healthy.
 
         Args:
-            statuses: Every component row with its status.
+            outlines: Every component's outline.
             failing: The failing components.
             attention: Components needing attention for a reason other than drift.
 
@@ -236,18 +250,18 @@ class KindInventory:
             One row per kind in :data:`INVENTORY_KINDS`, in that order.
         """
         counts: dict[str, Counter[str]] = {kind: Counter() for kind in INVENTORY_KINDS}
-        for component, status in statuses:
-            if component.kind not in counts:
+        for outline in outlines:
+            if outline.kind not in counts:
                 continue
-            if not component.enabled:
+            if not outline.enabled:
                 state = "disabled"
-            elif component.id in failing:
+            elif outline.id in failing:
                 state = "failing"
-            elif status is not ComponentStatus.OK or component.id in attention:
+            elif outline.status is not ComponentStatus.OK or outline.id in attention:
                 state = "attention"
             else:
                 state = "healthy"
-            counts[component.kind][state] += 1
+            counts[outline.kind][state] += 1
         return [
             cls(kind, tally.total(), tally["healthy"], tally["failing"], tally["attention"], tally["disabled"])
             for kind, tally in counts.items()

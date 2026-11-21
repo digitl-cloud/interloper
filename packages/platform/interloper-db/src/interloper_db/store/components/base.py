@@ -36,7 +36,8 @@ from interloper.catalog import Catalog
 from interloper.errors import CatalogKeyError, ConfigError
 from interloper.partitioning import TimeGranularity
 from sqlalchemy import Engine, or_
-from sqlalchemy.orm import selectinload
+from sqlalchemy import select as sa_select
+from sqlalchemy.orm import aliased, selectinload
 from sqlmodel import Session, col, select
 
 from interloper_db.errors import InUseError, NotFoundError
@@ -46,6 +47,9 @@ from interloper_db.store.components.hydration import Hydrator
 from interloper_db.store.page import Page, PageQuery
 from interloper_db.store.quotas import QUOTA_MAX_ASSETS_PER_SOURCE, QuotaStore
 from interloper_db.store.relations import RelationStore
+
+SENSITIVE_KINDS = tuple(kind for kind, anchor in il.KINDS.items() if anchor.sensitive)
+"""The kinds whose payload is stored encrypted, so reading a row of one has to decode it."""
 
 # Eager-load set for rows returned to API consumers: the parent, the row's
 # own relations with the rows they point at, and the children with theirs, so
@@ -110,6 +114,25 @@ class ComponentReading:
     config: dict[str, Any] | None
     public_config: dict[str, Any]
     discriminator: str | None
+
+
+@dataclass(frozen=True)
+class ComponentOutline:
+    """A component reduced to what tells its state, with no payload and no relation.
+
+    Attributes:
+        id: The component.
+        kind: Its kind.
+        parent_id: The source that owns it, for an owned asset.
+        enabled: Whether its config leaves it enabled, as ``Component.enabled`` reads it.
+        status: Its status, the one :meth:`ComponentStore.read` gives its row.
+    """
+
+    id: UUID
+    kind: str
+    parent_id: UUID | None
+    enabled: bool
+    status: ComponentStatus
 
 
 @dataclass(frozen=True)
@@ -504,7 +527,7 @@ class ComponentStore:
             The reading: status, decoded config, its public subset and the
             discriminator value.
         """
-        status = self._key_status(db_component)
+        status = self._key_status(db_component.qualified_key)
         config = self._current_config(db_component)
         if config is None and status is ComponentStatus.OK:
             status = ComponentStatus.UNREADABLE
@@ -520,20 +543,59 @@ class ComponentStore:
             discriminator=str(discriminator) if discriminator else None,
         )
 
-    def _key_status(self, db_component: Component) -> ComponentStatus:
-        """Whether a row's key resolves here, exists only in the installed code, or is gone.
+    def outlines(self, org_id: UUID) -> builtins.list[ComponentOutline]:
+        """Outline every component of an organisation without loading its rows.
+
+        The catalog resolves each definition once, however many rows
+        instantiate it. A row is loaded only where its status depends on its
+        own content: a sensitive kind's payload has to decode.
+
+        Args:
+            org_id: Organisation UUID.
+
+        Returns:
+            One outline per component, in no particular order.
+        """
+        parent = aliased(Component)
+        statement = (
+            sa_select(
+                col(Component.id),
+                col(Component.kind),
+                col(Component.parent_id),
+                col(Component.config)["enabled"].as_boolean().is_not(False),
+                col(parent.key),
+                col(Component.key),
+            )
+            .outerjoin(parent, col(parent.id) == col(Component.parent_id))
+            .where(col(Component.org_id) == org_id)
+        )
+        sensitive = select(Component).where(Component.org_id == org_id, col(Component.kind).in_(SENSITIVE_KINDS))
+        with session_scope(self._engine) as session:
+            rows = session.connection().execute(statement).all()
+            decoded = {row.id: self.read(row).status for row in session.exec(sensitive).all()}
+        resolved: dict[il.ComponentIdentity, ComponentStatus] = {}
+        outlines = []
+        for component_id, kind, parent_id, enabled, parent_key, key in rows:
+            identity = il.ComponentIdentity(parent_key, key)
+            if identity not in resolved:
+                resolved[identity] = self._key_status(str(identity))
+            status = decoded.get(component_id, resolved[identity])
+            outlines.append(ComponentOutline(component_id, kind, parent_id, enabled, status))
+        return outlines
+
+    def _key_status(self, key: str) -> ComponentStatus:
+        """Whether a qualified key resolves here, exists only in the installed code, or is gone.
 
         An owned asset resolves by its qualified key, so a drifted source
         cascades to its assets, and an asset its source no longer declares
         reads as drifted under a live source.
 
         Args:
-            db_component: The row to resolve, its parent loaded when it has one.
+            key: The qualified key to resolve.
 
         Returns:
             ``OK``, ``DISABLED`` or ``MISSING``.
         """
-        key = db_component.qualified_key
         if self._catalog.get(key) is not None:
             return ComponentStatus.OK
         if Catalog.discover().get(key) is not None:
