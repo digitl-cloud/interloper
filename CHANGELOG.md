@@ -2,6 +2,28 @@
 
 <!-- version list -->
 
+## v0.140.1 (2026-11-21)
+
+### Chores
+
+- Add a scale test that loads a production-shaped stack
+  ([`37a1865`](https://github.com/digitl-cloud/interloper/commit/37a186522e31ee882141eeb55453cf9858c24be7))
+
+### Performance Improvements
+
+- **db**: Read an organisation's health without loading every component row
+  ([`0ac4f5f`](https://github.com/digitl-cloud/interloper/commit/0ac4f5f3d5117484255e9ccff96eb70789a9d99d))
+
+- **db**: Read coverage from a partitions table folded from executions
+  ([`63e50ce`](https://github.com/digitl-cloud/interloper/commit/63e50ce5aafb24279cc8ac29382c15b6ea7a43fc))
+
+- **db**: Read the coverage calendar from a count per asset and what did not succeed
+  ([`d275f22`](https://github.com/digitl-cloud/interloper/commit/d275f22880dfffe60b10a4087df129c0830ca62b))
+
+- **db**: Store on a run that it was retried, and index the runs reads
+  ([`e7d1843`](https://github.com/digitl-cloud/interloper/commit/e7d184347de399def674486fbcee8d9db4a2cd8b))
+
+
 ## v0.140.0 (2026-11-21)
 
 ### Bug Fixes
