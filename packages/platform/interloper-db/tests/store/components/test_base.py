@@ -18,7 +18,7 @@ from interloper_db import ComponentDriftError, HydrationError, InUseError, NotFo
 from interloper_db.models import Component, table_of
 from interloper_db.settings import QuotaSettings
 from interloper_db.store import ComponentQuery, RelationQuery, Store
-from interloper_db.store.components import ComponentStatus
+from interloper_db.store.components import ComponentOutline, ComponentStatus
 
 _ORG = uuid4()
 
@@ -1070,6 +1070,108 @@ class TestReading:
         assert reading.status is ComponentStatus.MISSING
         assert reading.config == {"cron": "0 * * * *"}
         assert reading.public_config == {}
+
+
+class TestOutlines:
+    """Every component of an organisation as ``read`` tells its state, without loading its row."""
+
+    @pytest.fixture
+    def installed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Hold the installed code to the two demo sources, of which a store's catalog exposes one."""
+        code = il.Catalog.from_assets([DemoSource, DemoMonthlySource])
+        monkeypatch.setattr(il.Catalog, "discover", classmethod(lambda cls: code))
+
+    @staticmethod
+    def _rows(engine: Engine, org_id: UUID) -> list[Component]:
+        """Seed an organisation with live, drifted and disabled rows.
+
+        Args:
+            engine: The database to write to.
+            org_id: The organisation owning the rows.
+
+        Returns:
+            The rows, their parents loaded.
+        """
+        live = Component(org_id=org_id, kind="source", key=DemoSource.key)
+        twin = Component(org_id=org_id, kind="source", key=DemoSource.key, config={"enabled": False})
+        gone = Component(org_id=org_id, kind="source", key="gone_source", config={})
+        rows = [
+            live,
+            twin,
+            gone,
+            Component(org_id=org_id, kind="asset", key="a", parent=live, config={"enabled": True}),
+            Component(org_id=org_id, kind="asset", key="a", parent=twin, config={"enabled": None}),
+            Component(org_id=org_id, kind="asset", key="renamed_away", parent=live),
+            Component(org_id=org_id, kind="asset", key="a", parent=gone, config={"enabled": False}),
+            Component(org_id=org_id, kind="source", key=DemoMonthlySource.key),
+        ]
+        with Session(engine, expire_on_commit=False) as session:
+            session.add_all(rows)
+            session.commit()
+        return rows
+
+    def test_each_outline_tells_what_reading_the_row_tells(self, component_db: Engine, installed: None):
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        rows = self._rows(component_db, _ORG)
+        live, twin, gone, owned, _, stray, orphan, hidden = rows
+
+        outlines = {outline.id: outline for outline in store.components.outlines(_ORG)}
+
+        assert outlines == {
+            row.id: ComponentOutline(row.id, row.kind, row.parent_id, row.enabled, store.components.read(row).status)
+            for row in rows
+        }
+        assert {outlines[row.id].status for row in (live, twin, owned)} == {ComponentStatus.OK}
+        assert {outlines[row.id].status for row in (gone, stray, orphan)} == {ComponentStatus.MISSING}
+        assert outlines[hidden.id].status is ComponentStatus.DISABLED
+        assert [row.key for row in rows if not outlines[row.id].enabled] == [DemoSource.key, "a"]
+        assert outlines[owned.id].parent_id == live.id
+
+    def test_the_catalog_resolves_each_definition_once(self, component_db: Engine, monkeypatch: pytest.MonkeyPatch):
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        with Session(component_db) as session:
+            for _ in range(3):
+                source = Component(org_id=_ORG, kind="source", key=DemoSource.key)
+                session.add_all([source, Component(org_id=_ORG, kind="asset", key="a", parent=source)])
+            session.commit()
+        resolved: list[str] = []
+        lookup = il.Catalog.get
+
+        def _get(catalog: il.Catalog, key: str) -> Any:
+            resolved.append(key)
+            return lookup(catalog, key)
+
+        monkeypatch.setattr(il.Catalog, "get", _get)
+
+        outlines = store.components.outlines(_ORG)
+
+        assert len(outlines) == 6
+        assert sorted(resolved) == ["demo_source", "demo_source.a"]
+
+    def test_a_payload_that_does_not_decode_is_unreadable(self, component_db: Engine):
+        catalog = il.Catalog(components={PublicToggleConnection.key: PublicToggleConnection.definition()})
+        written = Store(catalog=catalog, encrypt=lambda b: b[::-1], decrypt=lambda b: b[::-1])
+        row = written.components.create(
+            _ORG, kind="connection", key=PublicToggleConnection.key, config={"api_key": "s3cret"}
+        )
+
+        def _wrong_key(_data: bytes) -> bytes:
+            raise InvalidToken
+
+        rotated = Store(catalog=catalog, encrypt=lambda b: b[::-1], decrypt=_wrong_key)
+
+        assert [(outline.id, outline.status) for outline in written.components.outlines(_ORG)] == [
+            (row.id, ComponentStatus.OK)
+        ]
+        assert [(outline.id, outline.status, outline.enabled) for outline in rotated.components.outlines(_ORG)] == [
+            (row.id, ComponentStatus.UNREADABLE, True)
+        ]
+
+    def test_another_organisations_components_stay_out(self, component_db: Engine):
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        self._rows(component_db, uuid4())
+
+        assert store.components.outlines(_ORG) == []
 
 
 class TestConfigWriteBack:

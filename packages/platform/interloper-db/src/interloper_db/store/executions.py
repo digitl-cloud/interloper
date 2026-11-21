@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from typing import Any, Literal
 from uuid import UUID
 
+import interloper as il
 from sqlalchemy import Engine, and_
 from sqlmodel import col, func, select
 
@@ -20,6 +21,9 @@ from interloper_db.store.page import Page, PageQuery
 
 ExecutionSort = Literal["created_at", "-created_at"]
 """An executions listing's sort: a column, ``-``-prefixed for descending."""
+
+OPERATION_KINDS = tuple(kind for kind, anchor in il.KINDS.items() if issubclass(anchor, il.Operation))
+"""The kinds a run executes: only a component of one of them ever has an execution."""
 
 
 class ExecutionQuery(PageQuery):
@@ -63,10 +67,10 @@ class ExecutionStore:
         if query.latest and run_id is None:
             newest = and_(
                 col(Execution.component_id) == col(Component.id),
-                col(Execution.run_id) == self._newest_run(org_id),
+                col(Execution.run_id) == self._newest(org_id, Execution.run_id),
             )
             statement = select(Execution).select_from(Component).join(Execution, newest)
-            statement = statement.where(Component.org_id == org_id)
+            statement = statement.where(Component.org_id == org_id, col(Component.kind).in_(OPERATION_KINDS))
         else:
             statement = select(Execution).where(Execution.org_id == org_id)
             if run_id is not None:
@@ -78,22 +82,43 @@ class ExecutionStore:
         with session_scope(self._engine) as session:
             return Page.read(session, statement.order_by(*order), query)
 
-    @staticmethod
-    def _newest_run(org_id: UUID) -> Any:
-        """The run of a component's newest execution, correlated to the component being read.
+    def latest_failed(self, org_id: UUID) -> set[UUID]:
+        """The components whose newest execution failed.
 
-        One index probe per component the listing reads, so the cost follows
-        the organisation's components rather than its history; a component
-        that was deleted no longer has a newest execution.
+        Only the newest status of each component is read, so the answer loads
+        no execution row and costs one index probe per component that executes.
 
         Args:
             org_id: Organisation UUID.
 
         Returns:
+            The components' ids.
+        """
+        statement = select(Component.id).where(
+            Component.org_id == org_id,
+            col(Component.kind).in_(OPERATION_KINDS),
+            self._newest(org_id, Execution.status) == "failed",
+        )
+        with session_scope(self._engine) as session:
+            return set(session.exec(statement).all())
+
+    @staticmethod
+    def _newest(org_id: UUID, column: Any) -> Any:
+        """A column of a component's newest execution, correlated to the component being read.
+
+        One index probe per component the statement reads, so the cost follows
+        the organisation's components rather than its history; a component
+        that was deleted no longer has a newest execution.
+
+        Args:
+            org_id: Organisation UUID.
+            column: The execution column to read.
+
+        Returns:
             The correlated scalar subquery.
         """
         return (
-            select(Execution.run_id)
+            select(column)
             .where(Execution.org_id == org_id, col(Execution.component_id) == col(Component.id))
             .order_by(col(Execution.created_at).desc())
             .limit(1)

@@ -50,16 +50,17 @@ def _seed(executions: list[Execution]) -> None:
         session.commit()
 
 
-def _components(*component_ids: UUID, org_id: UUID = _ORG_ID) -> None:
+def _components(*component_ids: UUID, org_id: UUID = _ORG_ID, kind: str = "asset") -> None:
     """Persist the component rows a latest read starts from.
 
     Args:
         *component_ids: The components' ids.
         org_id: The organisation owning them.
+        kind: Their kind.
     """
     with Session(engine_module.get_engine()) as session:
         session.add_all(
-            Component(id=component_id, org_id=org_id, kind="asset", key=f"asset_{index}")
+            Component(id=component_id, org_id=org_id, kind=kind, key=f"{kind}_{index}")
             for index, component_id in enumerate(component_ids)
         )
         session.commit()
@@ -218,6 +219,21 @@ class TestList:
         assert [row.component_id for row in page.items] == [kept]
         assert len(store.executions.list(_ORG_ID, ExecutionQuery(limit=None)).items) == 2
 
+    def test_latest_reads_every_kind_a_run_executes(self, store: Store) -> None:
+        asset, connection = uuid4(), uuid4()
+        _seed(
+            [
+                Execution(run_id=uuid4(), component_id=component, org_id=_ORG_ID, status="success")
+                for component in (asset, connection)
+            ]
+        )
+        _components(asset)
+        _components(connection, kind="connection")
+
+        page = store.executions.list(_ORG_ID, ExecutionQuery(latest=True, limit=None))
+
+        assert {row.component_id for row in page.items} == {asset, connection}
+
     def test_latest_within_a_run_is_the_runs_executions(self, store: Store) -> None:
         run_id, other_run, asset = uuid4(), uuid4(), uuid4()
         t0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -238,6 +254,45 @@ class TestList:
         page = store.executions.list(_ORG_ID, ExecutionQuery(latest=True, limit=None), run_id=run_id)
 
         assert [(row.run_id, row.status) for row in page.items] == [(run_id, "failed")]
+
+
+class TestLatestFailed:
+    """The components whose newest execution failed, read without their rows."""
+
+    def test_the_newest_execution_alone_decides(self, store: Store) -> None:
+        recovered, broke, never_ran, renewal = uuid4(), uuid4(), uuid4(), uuid4()
+        t0 = datetime(2026, 1, 1, tzinfo=UTC)
+        rows = [
+            (recovered, "failed", t0),
+            (recovered, "success", t0 + timedelta(hours=1)),
+            (broke, "success", t0),
+            (broke, "failed", t0 + timedelta(hours=1)),
+            (renewal, "failed", t0),
+        ]
+        _seed(
+            [
+                Execution(run_id=uuid4(), component_id=component, org_id=_ORG_ID, status=status, created_at=at)
+                for component, status, at in rows
+            ]
+        )
+        _components(recovered, broke, never_ran)
+        _components(renewal, kind="connection")
+
+        assert store.executions.latest_failed(_ORG_ID) == {broke, renewal}
+
+    def test_other_organisations_and_deleted_components_stay_out(self, store: Store) -> None:
+        other_org = uuid4()
+        foreign, deleted = uuid4(), uuid4()
+        _seed(
+            [
+                Execution(run_id=uuid4(), component_id=foreign, org_id=other_org, status="failed"),
+                Execution(run_id=uuid4(), component_id=deleted, org_id=_ORG_ID, status="failed"),
+            ]
+        )
+        _components(foreign, org_id=other_org)
+
+        assert store.executions.latest_failed(_ORG_ID) == set()
+        assert store.executions.latest_failed(other_org) == {foreign}
 
 
 class TestCounts:

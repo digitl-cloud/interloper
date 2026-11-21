@@ -2,6 +2,7 @@
 
 from interloper_db.store.components.base import (
     COMPONENT_LOAD_OPTIONS,
+    ComponentOutline,
     ComponentQuery,
     ComponentReading,
     ComponentStatus,
@@ -12,6 +13,7 @@ from interloper_db.store.components.hydration import Hydrator
 
 __all__ = [
     "COMPONENT_LOAD_OPTIONS",
+    "ComponentOutline",
     "ComponentQuery",
     "ComponentReading",
     "ComponentStatus",
