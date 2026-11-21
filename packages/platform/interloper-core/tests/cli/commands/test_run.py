@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -74,6 +75,23 @@ def _write_spec(tmp_path: Path, body: str) -> Path:
     path = tmp_path / "run.yaml"
     path.write_text(body)
     return path
+
+
+class TestImportPaths:
+    """Positional targets name classes or instances, imported as ``python -m`` would import them."""
+
+    def test_a_module_beside_the_command_is_importable(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (tmp_path / "beside_the_command.py").write_text(
+            f"from {FakeRunSource.__module__} import FakeRunSource\n\nparis = FakeRunSource()\n"
+        )
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(sys, "path", [entry for entry in sys.path if entry not in ("", str(tmp_path))])
+
+        RunCommand().run(_args(target=["beside_the_command.paris"], dry_run=True))
+
+        assert "1. fake_run_source.one" in capsys.readouterr().out
 
 
 class TestRunSpecFileMode:
@@ -347,12 +365,12 @@ class TestRunPathsMode:
         with pytest.raises(SystemExit, match="failed to import"):
             RunCommand().run(_args(target=[f"{FakeRunSource.__module__}.NotDefinedHere"]))
 
-    def test_a_non_class_target_is_rejected(self) -> None:
-        with pytest.raises(SystemExit, match="is not a Source or Asset class"):
+    def test_a_target_that_is_no_workload_is_rejected(self) -> None:
+        with pytest.raises(SystemExit, match="is neither a Source or Asset class nor an instance of one"):
             RunCommand().run(_args(target=[f"{FakeRunSource.__module__}.SOURCE_PATH"]))
 
     def test_an_unrelated_class_is_rejected(self) -> None:
-        with pytest.raises(SystemExit, match="is not a Source or Asset class"):
+        with pytest.raises(SystemExit, match="is neither a Source or Asset class nor an instance of one"):
             RunCommand().run(_args(target=f"{argparse.__name__}.Namespace".split(",")))
 
 

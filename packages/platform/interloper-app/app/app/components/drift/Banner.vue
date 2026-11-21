@@ -19,7 +19,9 @@ const cleaningUp = ref(false)
 const isSource = computed(() => props.kind === 'source')
 const missing = computed(() => missingOf(props.kind))
 const assetCount = computed(() => (isSource.value ? missingAssetCount.value : 0))
-const visible = computed(() => missing.value.length > 0 || assetCount.value > 0)
+// Only someone who may change the collection cleans up its drift; one served from files is cleaned up in those files.
+const canEdit = useCanEdit()
+const visible = computed(() => canEdit.value && (missing.value.length > 0 || assetCount.value > 0))
 const singular = computed(() => props.kind.charAt(0).toUpperCase() + props.kind.slice(1))
 
 function counted(n: number, kind: string): string {

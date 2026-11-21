@@ -17,7 +17,7 @@ const emit = defineEmits<{ select: [date: string] }>()
 
 const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
-const editor = useCanEdit()
+const editor = useCanRun()
 const { ui, icons } = useAppConfig()
 
 /** A window's partitions by state, summed over its days; missed snapshots are counted apart, never among them. */

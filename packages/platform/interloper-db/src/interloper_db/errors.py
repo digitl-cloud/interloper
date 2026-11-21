@@ -53,6 +53,15 @@ class InUseError(ConflictError):
         self.referrers = referrers or []
 
 
+class ReadOnlyError(ConflictError):
+    """The collection is served from files, so the app cannot change it.
+
+    Raised by the store layer for a change asked of a collection ``interloper
+    dev`` serves from spec files or Python instances; the API answers HTTP
+    409, naming the files.
+    """
+
+
 class QuotaExceededError(InterloperError):
     """An organisation quota does not allow the requested operation.
 

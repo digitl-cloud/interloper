@@ -15,6 +15,7 @@ const destinations = computed(() => componentsStore.byKind('destination'))
 const stepperRef = ref<any>(null)
 const toast = useToast()
 const appConfig = useAppConfig()
+const canEdit = useCanEdit()
 
 const {
     open: drawerOpen,
@@ -79,7 +80,9 @@ const typeKey = useQueryParam('type', null)
         </template>
         <template #body>
             <DriftBanner kind="destination" />
-            <DataTable :active-filters="typeKey === null ? 0 : 1"
+            <DataTable :no-actions="!canEdit"
+                       :no-row-click="!canEdit"
+                       :active-filters="typeKey === null ? 0 : 1"
                        :columns="columns"
                        fill
                        :data="destinations"
@@ -98,7 +101,8 @@ const typeKey = useQueryParam('type', null)
                 </template>
 
                 <template #empty>
-                    <div class="flex flex-col gap-4 sm:gap-6">
+                    <div v-if="canEdit"
+                         class="flex flex-col gap-4 sm:gap-6">
                         <UEmpty :icon="appConfig.icons.destination"
                                 title="No destinations yet"
                                 description="A destination is wherever Interloper materializes your typed assets — a warehouse, a database, or plain files, all running on infrastructure you control. Pick one from the catalog below to start landing data."
@@ -121,8 +125,13 @@ const typeKey = useQueryParam('type', null)
                                          @click="handleCreateFromCatalog(def.key)" />
                         </div>
                     </div>
+                    <UEmpty v-else
+                            variant="outline"
+                            :icon="appConfig.icons.destination"
+                            title="No destinations yet"
+                            :description="componentsStore.servedFrom ? `${componentsStore.servedFrom} declares none.` : undefined" />
                 </template>
-                <template #actions>
+                <template v-if="canEdit" #actions>
                     <UButton :icon="appConfig.ui.icons.plus"
                              label="New destination"
                              @click="handleCreate" />

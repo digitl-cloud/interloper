@@ -48,6 +48,7 @@ const navItems = computed<NavigationMenuItem[][]>(() => sections.value.map(secti
 
                 <template #footer="{ collapsed }">
                     <div class="flex w-full flex-col gap-1">
+                        <NavServed :collapsed="collapsed" />
                         <NavOrganisation :collapsed="collapsed" />
                         <NavUser :collapsed="collapsed" />
                     </div>

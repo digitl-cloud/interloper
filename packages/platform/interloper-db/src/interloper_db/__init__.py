@@ -8,6 +8,7 @@ from interloper_db.errors import (
     InUseError,
     NotFoundError,
     QuotaExceededError,
+    ReadOnlyError,
 )
 from interloper_db.models import (
     ACTIVE_BACKFILL_STATUSES,
@@ -91,6 +92,7 @@ __all__ = [
     "ProfileQuery",
     "Quota",
     "QuotaExceededError",
+    "ReadOnlyError",
     "RelationQuery",
     "Role",
     "Run",

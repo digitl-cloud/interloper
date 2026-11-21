@@ -32,6 +32,7 @@ from interloper_api.routes import (
     apps,
     auth,
     backfills,
+    collection,
     components,
     executions,
     extensions,
@@ -72,6 +73,7 @@ _ROUTERS: tuple[APIRouter, ...] = (
 _ORG_ROUTERS: tuple[APIRouter, ...] = (
     organisations.org_router,
     catalog_routes.org_router,
+    collection.org_router,
     components.org_router,
     relations.org_router,
     runs.org_router,

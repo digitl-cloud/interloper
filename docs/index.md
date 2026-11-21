@@ -114,11 +114,11 @@ Pick another runner, or tune concurrency and failure handling, as described in
 
 ## Run from the command line
 
-Anything importable can be run with the CLI. Save the source as `shop.py`, make its directory
-importable, and print the plan:
+Anything importable can be run with the CLI. Save the source as `shop.py` and, from its
+directory, print the plan:
 
 ```sh
-PYTHONPATH=. interloper run shop.Shop --dry-run
+interloper run shop.Shop --dry-run
 ```
 
 An import path instantiates the class with its defaults, so a source whose assets depend on each
@@ -134,7 +134,7 @@ init:
 ```
 
 ```sh
-PYTHONPATH=. interloper run -f shop.yaml
+interloper run -f shop.yaml
 ```
 
 See [CLI](guide/cli.md) and [Specs and serialization](guide/specs.md).

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Callable, Iterator
+from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -20,6 +21,29 @@ from interloper_toolkit.models import (
     ConnectionSetup,
     ToolError,
 )
+
+
+class TestServedCollection:
+    """A collection ``interloper dev`` serves from files refuses the write tools with a message the model reads."""
+
+    def test_the_write_tools_say_the_collection_is_served_from_files(
+        self, ctx: ToolkitContext, store: Store, create_source: Callable[[UUID, str], Component]
+    ):
+        source = create_source(ctx.org_id, "shop_source")
+        bq = store.components.create(ctx.org_id, kind="destination", key="bq")
+        served_store = Store(
+            catalog=store._catalog, encrypt=lambda b: b, decrypt=lambda b: b, served_from="collection.yaml"
+        )
+        served = dataclasses.replace(ctx, store=served_store)
+
+        results = [
+            collection.delete_component(served, str(bq.id)),
+            collection.bind_relation(served, str(source.id), "destinations", str(bq.id)),
+            collection.unbind_relation(served, str(source.id), "destinations", str(bq.id)),
+        ]
+
+        assert all(isinstance(result, ToolError) for result in results)
+        assert all("served from collection.yaml" in cast(ToolError, result).error for result in results)
 
 
 class TestBindRelation:

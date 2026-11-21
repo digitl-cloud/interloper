@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 from typing import Any, ClassVar
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 import interloper as il
 import pytest
@@ -14,11 +14,12 @@ from interloper.partitioning import TimeGranularity
 from sqlalchemy import Engine, event
 from sqlmodel import Session, select
 
-from interloper_db import ComponentDriftError, HydrationError, InUseError, NotFoundError
+from interloper_db import ComponentDriftError, HydrationError, InUseError, NotFoundError, ReadOnlyError
 from interloper_db.models import Component, table_of
 from interloper_db.settings import QuotaSettings
 from interloper_db.store import ComponentQuery, RelationQuery, Store
 from interloper_db.store.components import ComponentOutline, ComponentStatus
+from interloper_db.store.components.declaration import Declaration
 
 _ORG = uuid4()
 
@@ -210,14 +211,8 @@ class DiscriminatedSource(il.Source):
             return []
 
 
-@pytest.fixture
-def store(component_db: Engine) -> Store:
-    """A store whose catalog carries every class declared in this module.
-
-    Returns:
-        A store reading and writing the fixture database.
-    """
-    catalog = il.Catalog.from_assets(
+def _catalog() -> il.Catalog:
+    return il.Catalog.from_assets(
         [
             GuardUpstream,
             GuardRequired,
@@ -230,7 +225,26 @@ def store(component_db: Engine) -> Store:
             DiscriminatedSource,
         ]
     )
-    return Store(catalog=catalog)
+
+
+@pytest.fixture
+def store(component_db: Engine) -> Store:
+    """A store whose catalog carries every class declared in this module.
+
+    Returns:
+        A store reading and writing the fixture database.
+    """
+    return Store(catalog=_catalog())
+
+
+@pytest.fixture
+def served(component_db: Engine) -> Store:
+    """The same store, for a collection served from ``collection.yaml``.
+
+    Returns:
+        A store refusing the app's changes to the collection.
+    """
+    return Store(catalog=_catalog(), served_from="collection.yaml")
 
 
 @pytest.fixture
@@ -471,6 +485,195 @@ class TestCrud:
             "wire_connection",
             connection.name,
         )
+
+
+class TestServedCollection:
+    @staticmethod
+    def _source(account: str = "acme", handle: str = "source") -> Declaration:
+        source_id = uuid5(_ORG, handle)
+        return Declaration(
+            id=source_id,
+            kind="source",
+            key="discriminated_source",
+            config={"account_id": account},
+            children=[
+                Declaration(
+                    id=Declaration.child_id(source_id, "discriminated_rows"), kind="asset", key="discriminated_rows"
+                )
+            ],
+        )
+
+    @staticmethod
+    def _job(cron: str) -> Declaration:
+        return Declaration(id=uuid5(_ORG, "job"), kind="job", key="cron_job", config={"cron": cron})
+
+    @staticmethod
+    def _wired(
+        *,
+        consumer_reads_rows: bool = True,
+        up_assets: tuple[str, ...] = ("rows", "totals"),
+        down: tuple[str, str] = ("wire_down_optional_source", "reader"),
+    ) -> list[Declaration]:
+        up_id, down_id = uuid5(_ORG, "up"), uuid5(_ORG, "down")
+        rows_id = Declaration.child_id(up_id, "rows")
+        up = Declaration(
+            id=up_id,
+            kind="source",
+            key="wire_up_source",
+            children=[
+                Declaration(
+                    id=Declaration.child_id(up_id, key),
+                    kind="asset",
+                    key=key,
+                    relations={"rows": [rows_id]} if key == "totals" and "rows" in up_assets else {},
+                )
+                for key in up_assets
+            ],
+        )
+        down_key, down_asset = down
+        downstream = Declaration(
+            id=down_id,
+            kind="source",
+            key=down_key,
+            children=[
+                Declaration(
+                    id=Declaration.child_id(down_id, down_asset),
+                    kind="asset",
+                    key=down_asset,
+                    relations={"rows": [rows_id]} if consumer_reads_rows else {},
+                )
+            ],
+        )
+        return [up, downstream]
+
+    def test_a_declaration_creates_its_rows_with_their_ids(self, store: Store):
+        source = self._source()
+
+        applied = store.components.apply(_ORG, [source])
+
+        assert (applied.written, applied.created, applied.deleted) == (1, [source.id], [])
+        row = store.components.get(source.id)
+        assert row.config == {"account_id": "acme"}
+        assert [child.id for child in row.children] == [uuid5(source.id, "discriminated_rows")]
+
+    def test_an_unchanged_declaration_is_not_written_again(self, store: Store):
+        store.components.apply(_ORG, [self._source()])
+        store.components.merge_config(self._source().id, {"renewed": True})
+
+        applied = store.components.apply(_ORG, [self._source()])
+
+        assert (applied.written, applied.created, applied.deleted) == (1, [], [])
+        assert store.components.get(self._source().id).config == {"account_id": "acme", "renewed": True}
+
+    def test_an_edited_declaration_is_written_as_the_file_says(self, store: Store):
+        store.components.apply(_ORG, [self._source("acme")])
+        store.components.merge_config(self._source().id, {"renewed": True})
+
+        store.components.apply(_ORG, [self._source("globex")])
+
+        assert store.components.get(self._source().id).config == {"account_id": "globex"}
+
+    def test_an_edited_job_is_rescheduled_from_what_the_file_says_now(self, store: Store):
+        store.components.apply(_ORG, [self._job("0 6 * * *")])
+        store.components.stamp_state(self._job("").id, next_run_at="2026-11-22T06:00:00+00:00")
+
+        store.components.apply(_ORG, [self._job("0 7 * * *")])
+
+        assert (store.components.get(self._job("").id).state or {}).get("next_run_at") is None
+
+    def test_an_unchanged_job_keeps_its_next_run(self, store: Store):
+        store.components.apply(_ORG, [self._job("0 6 * * *")])
+        store.components.stamp_state(self._job("").id, next_run_at="2026-11-22T06:00:00+00:00")
+
+        store.components.apply(_ORG, [self._job("0 6 * * *")])
+
+        assert (store.components.get(self._job("").id).state or {})["next_run_at"] == "2026-11-22T06:00:00+00:00"
+
+    def test_what_the_files_no_longer_declare_is_deleted_with_what_refers_to_it(self, store: Store):
+        upstream = Declaration(id=uuid5(_ORG, "upstream"), kind="asset", key="guard_upstream")
+        reader = Declaration(
+            id=uuid5(_ORG, "reader"), kind="asset", key="guard_required", relations={"up": [upstream.id]}
+        )
+        store.components.apply(_ORG, [upstream, reader, self._source()])
+
+        applied = store.components.apply(_ORG, [self._source()])
+
+        assert sorted(applied.deleted) == sorted([upstream.id, reader.id])
+        for deleted in (upstream.id, reader.id):
+            with pytest.raises(NotFoundError):
+                store.components.get(deleted)
+
+    def test_a_relation_the_file_does_not_bind_is_left_empty(self, store: Store):
+        upstream = Declaration(id=uuid5(_ORG, "upstream"), kind="asset", key="guard_upstream")
+        reader = Declaration(
+            id=uuid5(_ORG, "reader"), kind="asset", key="guard_optional", relations={"up": [upstream.id]}
+        )
+        store.components.apply(_ORG, [upstream, reader])
+
+        store.components.apply(_ORG, [upstream, Declaration(id=reader.id, kind="asset", key="guard_optional")])
+
+        assert store.relations.list(_ORG, RelationQuery(name="up", limit=None)).items == []
+
+    def test_an_asset_s_relation_to_another_source_s_asset_is_bound_and_cleared_with_the_file(self, store: Store):
+        up, down = self._wired()
+        assert up.children and down.children
+        reader_id, rows_id = down.children[0].id, up.children[0].id
+
+        store.components.apply(_ORG, [up, down])
+        bound = store.relations.list(_ORG, RelationQuery(name="rows", limit=None)).items
+        store.components.apply(_ORG, self._wired(consumer_reads_rows=False))
+        left = store.relations.list(_ORG, RelationQuery(name="rows", limit=None)).items
+
+        assert (reader_id, rows_id) in {(edge.src_id, edge.dst_id) for edge in bound}
+        assert reader_id not in {edge.src_id for edge in left}
+
+    def test_an_asset_dropped_with_what_requires_it_applies_at_once(self, store: Store):
+        up, down = self._wired(down=("wire_down_source", "consumer"))
+        store.components.apply(_ORG, [up, down])
+
+        (narrowed, _) = self._wired(up_assets=("totals",), down=("wire_down_source", "consumer"))
+        applied = store.components.apply(_ORG, [narrowed])
+
+        assert applied.deleted == [down.id]
+        assert [child.key for child in store.components.get(up.id).children] == ["totals"]
+
+    def test_a_new_handle_for_the_same_source_swaps_the_rows(self, store: Store):
+        store.components.apply(_ORG, [self._source()])
+
+        applied = store.components.apply(_ORG, [self._source(handle="paris")])
+
+        assert (applied.created, applied.deleted) == ([self._source(handle="paris").id], [self._source().id])
+
+    def test_a_source_made_in_the_app_gets_fresh_asset_ids(self, store: Store):
+        source = store.components.create(_ORG, kind="source", key="discriminated_source", config={"account_id": "a"})
+
+        assert [child.id for child in source.children] != [uuid5(source.id, "discriminated_rows")]
+
+    def test_a_served_collection_refuses_every_change_the_app_asks_for(self, served: Store):
+        upstream = Declaration(id=uuid5(_ORG, "upstream"), kind="asset", key="guard_upstream")
+        reader = Declaration(id=uuid5(_ORG, "reader"), kind="asset", key="guard_optional")
+        served.components.apply(_ORG, [upstream, reader])
+
+        refusal = r"served from collection\.yaml: change it there"
+        with pytest.raises(ReadOnlyError, match=refusal):
+            served.components.create(_ORG, kind="asset", key="guard_upstream")
+        with pytest.raises(ReadOnlyError, match=refusal):
+            served.components.update(reader.id, name="Renamed")
+        with pytest.raises(ReadOnlyError, match=refusal):
+            served.components.delete(reader.id)
+        with pytest.raises(ReadOnlyError, match=refusal):
+            served.relations.add(reader.id, name="up", dst_id=upstream.id)
+        with pytest.raises(ReadOnlyError, match=refusal):
+            served.relations.delete(reader.id, name="up", dst_id=upstream.id)
+
+    def test_a_served_collection_takes_the_platform_s_own_writes(self, served: Store):
+        served.components.apply(_ORG, [self._job("0 6 * * *")])
+
+        served.components.stamp_state(self._job("").id, next_run_at="2026-11-22T06:00:00+00:00")
+        served.components.merge_config(self._job("").id, {"renewed": True})
+
+        row = served.components.get(self._job("").id)
+        assert ((row.state or {})["next_run_at"], (row.config or {})["renewed"]) == ("2026-11-22T06:00:00+00:00", True)
 
 
 class TestDeleteInUseGuard:

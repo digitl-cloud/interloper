@@ -247,11 +247,12 @@ print(result.status, result.failed_ids)
 
 ## 9. The CLI
 
-With the source saved in `weather.py`, inspect the plan without writing a driver script. The
-module must be importable, so either install your package or put its directory on the path:
+With the source saved in `weather.py`, inspect the plan without writing a driver script, from
+the directory that holds it (a module there imports as with `python -m`; an installed package
+works from anywhere):
 
 ```sh
-PYTHONPATH=. interloper run weather.OpenMeteo --date 2026-01-15 --dry-run
+interloper run weather.OpenMeteo --date 2026-01-15 --dry-run
 ```
 
 Import paths instantiate the class with its defaults, which here means no destinations, and
@@ -270,7 +271,7 @@ init:
 ```
 
 ```sh
-PYTHONPATH=. interloper run -f weather.yaml --date 2026-01-15
+interloper run -f weather.yaml --date 2026-01-15
 ```
 
 The CLI also takes `--start-date` and `--end-date`, but that is a **single run** covering the

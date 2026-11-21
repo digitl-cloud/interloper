@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import builtins
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
 from typing import Any
@@ -40,9 +40,10 @@ from sqlalchemy import select as sa_select
 from sqlalchemy.orm import aliased, selectinload
 from sqlmodel import Session, col, select
 
-from interloper_db.errors import InUseError, NotFoundError
+from interloper_db.errors import InUseError, NotFoundError, ReadOnlyError
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.session import commit, save, session_scope
+from interloper_db.store.components.declaration import Declaration
 from interloper_db.store.components.hydration import Hydrator
 from interloper_db.store.page import Page, PageQuery
 from interloper_db.store.quotas import QUOTA_MAX_ASSETS_PER_SOURCE, QuotaStore
@@ -121,6 +122,10 @@ class ComponentReading:
     discriminator: str | None
 
 
+#: The state key holding the digest of what a file last declared for a row.
+DECLARED_DIGEST = "declared_digest"
+
+
 @dataclass(frozen=True)
 class ComponentOutline:
     """A component reduced to what names it and tells its state, with no payload and no relation.
@@ -190,6 +195,21 @@ class DeleteImpact:
         return cls(blocking=refs(blocking), detaching=refs(detaching))
 
 
+@dataclass
+class Applied:
+    """What applying the files' declarations did, for ``interloper dev`` to report.
+
+    Attributes:
+        written: How many components the files declare, each written.
+        created: Ids of the rows created.
+        deleted: Ids of the rows the files no longer declare, deleted.
+    """
+
+    written: int = 0
+    created: list[UUID] = field(default_factory=list)
+    deleted: list[UUID] = field(default_factory=list)
+
+
 class ComponentStore:
     """Store methods for component rows: CRUD, reading, and live components through the hydrator."""
 
@@ -202,6 +222,8 @@ class ComponentStore:
         decrypt: Callable[[bytes], bytes] | None,
         quotas: QuotaStore,
         relations: RelationStore,
+        *,
+        served_from: str | None = None,
     ) -> None:
         """Bind the facet to what it works through.
 
@@ -213,6 +235,10 @@ class ComponentStore:
             decrypt: Callable decrypting a sensitive payload, or None when no key is configured.
             quotas: Quota gates it enforces through.
             relations: Relation facet it wires component edges through.
+            served_from: The files the collection is served from, which
+                refuses every create, update and delete the app asks for,
+                ``apply`` being their one writer; ``None`` for a collection
+                the app edits.
         """
         self._engine = engine
         self._catalog = catalog
@@ -221,6 +247,7 @@ class ComponentStore:
         self._decrypt = decrypt
         self._quotas = quotas
         self._relations = relations
+        self._served_from = served_from
 
     # -- CRUD ------------------------------------------------------------------
 
@@ -257,6 +284,7 @@ class ComponentStore:
         Raises:
             ConfigError: If ``children`` is passed for a kind that has none.
         """
+        self._refuse_served()
         with session_scope(self._engine) as session:
             self._quotas.admit_component(org_id, kind)
             db_component = Component(org_id=org_id, kind=kind, key=key, name=name)
@@ -373,6 +401,7 @@ class ComponentStore:
         Raises:
             ConfigError: If ``children`` is passed for a kind that has none.
         """
+        self._refuse_served()
         with session_scope(self._engine) as session:
             db_component = self._lock(component_id)
             if name is not None:
@@ -420,6 +449,7 @@ class ComponentStore:
             ConfigError: If the component is source-owned (delete or update
                 the parent source instead).
         """
+        self._refuse_served()
         with session_scope(self._engine) as session:
             db_component = self._lock(component_id)
             if db_component.parent_id is not None:
@@ -517,6 +547,140 @@ class ComponentStore:
         for component_id in blocking:
             detaching.pop(component_id, None)
         return DeleteImpact.from_referrers(blocking.values(), detaching.values())
+
+    # -- Served collection -----------------------------------------------------
+
+    def apply(self, org_id: UUID, declarations: Sequence[Declaration]) -> Applied:
+        """Make an organisation's components exactly what its files declare, as the one writer of a served collection.
+
+        Every declaration is written under its id, created or rewritten in
+        place, its assets with it: name, configuration and relations exactly
+        as the file says, a relation name the file does not bind left empty.
+        A declaration unchanged since the last apply (its digest, kept in the
+        row's state) is not written again, so what the platform wrote into it
+        since (renewed credentials) stays. Every component the files no longer
+        declare is deleted, its runs kept and unlinked, before any asset is
+        removed, so an edit that drops an asset together with what reads it
+        applies at once. A job whose configuration changed has its cached next
+        run cleared, as an edit in the app would. A required relation the
+        file leaves unbound is accepted: the component then fails its run as
+        any incomplete one does. One transaction: a failure leaves everything
+        as it was.
+
+        Args:
+            org_id: Organisation UUID, the one the files fill.
+            declarations: What the files declare, every row after the rows it binds.
+
+        Returns:
+            What changed.
+        """
+        applied = Applied(written=len(declarations))
+        declared = {declaration.id for declaration in declarations}
+        with session_scope(self._engine) as session:
+            changed: builtins.list[tuple[Component, Declaration]] = []
+            for declaration in declarations:
+                row = session.get(Component, declaration.id)
+                if row is None:
+                    row = self._insert_declared(session, org_id, declaration)
+                    applied.created.append(row.id)
+                elif (row.state or {}).get(DECLARED_DIGEST) == declaration.digest:
+                    continue
+                else:
+                    self._rewrite_declared(row, declaration)
+                changed.append((row, declaration))
+            session.flush()
+            for row in session.exec(
+                select(Component).where(Component.org_id == org_id, col(Component.parent_id).is_(None))
+            ).all():
+                if row.id not in declared:
+                    session.delete(row)
+                    applied.deleted.append(row.id)
+            session.flush()
+            for row, declaration in changed:
+                self._clear_unbound(session, row.id, declaration)
+                for child in declaration.children or []:
+                    self._clear_unbound(session, child.id, child)
+            for row, declaration in changed:
+                if declaration.children is not None:
+                    self._declare_children(row, declaration)
+            for row, declaration in changed:
+                for bound in (declaration, *(declaration.children or [])):
+                    target = session.get(Component, bound.id)
+                    if target is not None and bound.relations:
+                        self._relations.sync(target, bound.relations)
+                row.stamp_state(**{DECLARED_DIGEST: declaration.digest})
+                if declaration.children is not None:
+                    self._check_source_collision(row)
+            commit(session)
+        return applied
+
+    def _insert_declared(self, session: Session, org_id: UUID, declaration: Declaration) -> Component:
+        """Create a declared row without its assets or relations, which apply adds once every row exists.
+
+        Args:
+            session: The open session.
+            org_id: Organisation UUID.
+            declaration: What it declares.
+
+        Returns:
+            The row.
+        """
+        self._quotas.admit_component(org_id, declaration.kind)
+        row = Component(id=declaration.id, org_id=org_id, kind=declaration.kind, key=declaration.key)
+        row.write_config(declaration.config, encrypt=self._encrypt, encrypted=None)
+        row.name = self._derived_name(row, declaration.config)
+        session.add(row)
+        return row
+
+    def _rewrite_declared(self, row: Component, declaration: Declaration) -> None:
+        """Rewrite a declared row's name and configuration as its file says now, its id and history kept.
+
+        Args:
+            row: The row.
+            declaration: What it declares now.
+        """
+        spec_changed = declaration.config != (self._current_config(row) or {})
+        row.write_config(declaration.config, encrypt=self._encrypt, encrypted=None)
+        row.name = self._derived_name(row, declaration.config)
+        if row.kind == "job" and spec_changed:
+            row.stamp_state(next_run_at=None)
+
+    def _clear_unbound(self, session: Session, row_id: UUID, declaration: Declaration) -> None:
+        """Empty every relation name a row holds that its declaration does not bind.
+
+        Args:
+            session: The open session.
+            row_id: The row, which may not exist yet (an asset still to create).
+            declaration: What it declares.
+        """
+        row = session.get(Component, row_id)
+        if row is None:
+            return
+        bound = set(session.exec(select(ComponentRelation.name).where(ComponentRelation.src_id == row_id)))
+        if unbound := sorted(bound - set(declaration.relations)):
+            self._relations.clear(row, unbound)
+
+    def _declare_children(self, row: Component, declaration: Declaration) -> None:
+        """Keep a declared source's assets to the ones it declares, each with its own configuration.
+
+        Args:
+            row: The source row.
+            declaration: What it declares.
+        """
+        children = {child.key: child for child in declaration.children or []}
+        self._sync_children(row, builtins.list(children), child_id=Declaration.child_id)
+        with session_scope(self._engine) as session:
+            for child in session.exec(select(Component).where(Component.parent_id == row.id)).all():
+                child.write_config(children[child.key].config, encrypt=self._encrypt, encrypted=None)
+
+    def _refuse_served(self) -> None:
+        """Refuse a change the app asks of a collection its files serve.
+
+        Raises:
+            ReadOnlyError: If the collection is served from files.
+        """
+        if self._served_from is not None:
+            raise ReadOnlyError(f"The collection is served from {self._served_from}: change it there")
 
     # -- Reading ---------------------------------------------------------------
 
@@ -837,7 +1001,13 @@ class ComponentStore:
                     f"Configure a distinct discriminator (or dataset) so the two don't overwrite each other's data."
                 )
 
-    def _sync_children(self, db_source: Component, child_keys: Sequence[str] | None) -> None:
+    def _sync_children(
+        self,
+        db_source: Component,
+        child_keys: Sequence[str] | None,
+        *,
+        child_id: Callable[[UUID, str], UUID] | None = None,
+    ) -> None:
         """Sync a source's child asset rows to match the desired set.
 
         When ``child_keys`` is provided, only those assets will exist —
@@ -853,6 +1023,9 @@ class ComponentStore:
             db_source: The source row whose children are synced.
             child_keys: The exact asset keys to keep enabled, or ``None`` to
                 enable every asset the catalog class declares.
+            child_id: Derives a new asset's id from its source's and its key,
+                for a file that refers to it before it exists; ``None`` for a
+                fresh id.
 
         Raises:
             CatalogKeyError: If the source key does not resolve in the catalog.
@@ -869,7 +1042,7 @@ class ComponentStore:
             )
 
         with session_scope(self._engine) as session:
-            self._sync_children_in(session, db_source, source_cls, all_keys, child_keys)
+            self._sync_children_in(session, db_source, source_cls, all_keys, child_keys, child_id)
 
     def _sync_children_in(
         self,
@@ -878,6 +1051,7 @@ class ComponentStore:
         source_cls: type[il.Source],
         all_keys: set[str],
         child_keys: Sequence[str] | None,
+        child_id: Callable[[UUID, str], UUID] | None,
     ) -> None:
         """Reshape the child rows in the session :meth:`_sync_children` opened.
 
@@ -887,6 +1061,7 @@ class ComponentStore:
             source_cls: The source's catalog class.
             all_keys: Every asset key the class declares.
             child_keys: The exact asset keys to keep enabled, or ``None`` for all.
+            child_id: Derives a new asset's id, or ``None`` for a fresh one.
 
         Raises:
             InUseError: If a removed asset is referenced from outside the source.
@@ -925,8 +1100,11 @@ class ComponentStore:
 
         children = {key: child for key, child in existing.items() if key in target}
         for key in to_create:
-            children[key] = Component(org_id=db_source.org_id, kind="asset", key=key, parent_id=db_source.id)
-            session.add(children[key])
+            child = Component(org_id=db_source.org_id, kind="asset", key=key, parent_id=db_source.id)
+            if child_id is not None:
+                child.id = child_id(db_source.id, key)
+            children[key] = child
+            session.add(child)
         session.flush()
 
         self._relations.bind_siblings(source_cls, children)

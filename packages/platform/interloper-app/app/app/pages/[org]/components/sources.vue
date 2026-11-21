@@ -15,6 +15,7 @@ const sources = computed(() => componentsStore.byKind('source'))
 const stepperRef = ref<any>(null)
 const toast = useToast()
 const appConfig = useAppConfig()
+const canEdit = useCanEdit()
 
 const {
     open: drawerOpen,
@@ -27,13 +28,15 @@ const {
 
 componentsStore.fetchAll(['source'])
 
-// Deep link (command palette): /sources?new=1 opens the create wizard.
+// Deep link (command palette): /sources?new=1 opens the create wizard, once
+// the collection is known to be editable here.
 const route = useRoute()
 const router = useRouter()
-watchEffect(() => {
+watchEffect(async () => {
     if (route.query.new === undefined) return
-    handleCreate()
     router.replace({ query: { ...route.query, new: undefined } })
+    await componentsStore.fetchServedFrom()
+    if (canEdit.value) handleCreate()
 })
 
 // ── Run now ─────────────────────────────────────────────────────
@@ -129,7 +132,9 @@ const typeKey = useQueryParam('type', null)
         </template>
         <template #body>
             <DriftBanner />
-            <DataTable :active-filters="typeKey === null ? 0 : 1"
+            <DataTable :no-actions="!canEdit"
+                       :no-row-click="!canEdit"
+                       :active-filters="typeKey === null ? 0 : 1"
                        :columns="columns"
                        fill
                        :data="sources"
@@ -149,10 +154,16 @@ const typeKey = useQueryParam('type', null)
                 </template>
 
                 <template #empty>
-                    <SourcesEmptyState @create="handleCreate"
+                    <SourcesEmptyState v-if="canEdit"
+                                       @create="handleCreate"
                                        @create-type="handleCreateFromCatalog" />
+                    <UEmpty v-else
+                            variant="outline"
+                            :icon="appConfig.icons.source"
+                            title="No sources yet"
+                            :description="componentsStore.servedFrom ? `${componentsStore.servedFrom} declares none.` : undefined" />
                 </template>
-                <template #actions>
+                <template v-if="canEdit" #actions>
                     <UButton :icon="appConfig.ui.icons.plus"
                              label="New source"
                              @click="handleCreate" />

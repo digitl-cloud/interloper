@@ -16,6 +16,7 @@ const catalogStore = useCatalogStore()
 const runsStore = useRunsStore()
 const executionsStore = useExecutionsStore()
 const appConfig = useAppConfig()
+const canEdit = useCanEdit()
 const toast = useToast()
 
 const { view } = usePageView(useAssetViews())
@@ -190,9 +191,14 @@ function closePane() {
             <AppNavbar title="Assets" />
         </template>
         <template #body>
-            <SourcesEmptyState v-if="showEmpty"
+            <SourcesEmptyState v-if="showEmpty && canEdit"
                                @create="onCreateSource"
                                @create-type="onCreateSourceFromCatalog" />
+            <UEmpty v-else-if="showEmpty"
+                    variant="outline"
+                    :icon="appConfig.icons.source"
+                    title="No sources yet"
+                    :description="componentsStore.servedFrom ? `${componentsStore.servedFrom} declares none.` : undefined" />
 
             <template v-else>
                 <LoadError v-if="componentsStore.error"
@@ -224,7 +230,8 @@ function closePane() {
                         <UCard v-else
                                class="w-full"
                                :ui="CANVAS_CARD_UI">
-                            <GraphAssetGraph :group-by="groupBy"
+                            <GraphAssetGraph :readonly="!canEdit"
+                                             :group-by="groupBy"
                                              :status-filter="statusFilter"
                                              :asset-ids="matchingAssetIds"
                                              :show-new-source-button="false"

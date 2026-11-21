@@ -15,6 +15,7 @@ const timelineStore = useTimelineStore()
 const organisationStore = useOrganisationStore()
 const componentsStore = useComponentsStore()
 const appConfig = useAppConfig()
+const canEdit = useCanEdit()
 
 const { runs, rangeStart, rangeEnd, loading, error, total, truncated } = storeToRefs(timelineStore)
 
@@ -71,11 +72,11 @@ onUnmounted(() => timelineStore.$reset())
             :icon="appConfig.icons.timeline"
             title="Nothing scheduled yet"
             description="The timeline lays every job's runs out on a wall-clock axis, so you can see what ran when, what overlapped, and what took longer than it should."
-            :actions="[{
+            :actions="canEdit ? [{
                 label: 'New job',
                 icon: appConfig.ui.icons.plus,
                 to: { path: organisationStore.path(kindPath('job')), query: { new: '1' } },
-            }]" />
+            }] : undefined" />
 
     <template v-else>
         <UCard>

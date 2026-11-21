@@ -14,9 +14,10 @@ interloper run my_package.sources.Shop
 interloper run my_package.sources.Shop my_package.sources.Finance
 ```
 
-Each path resolves to a source or asset class, which is instantiated with its defaults and
-handed to `DAG(*items)`. The module must be importable from the current environment: an
-installed package, or a directory added with `PYTHONPATH`. Because defaults rarely include
+Each path resolves to a source or asset class, instantiated with its defaults, or to a
+configured instance (`interloper run weather.paris`), and is handed to `DAG(*items)`. The module
+must be importable: an installed package, or a module in the working directory, as with
+`python -m`. Because defaults rarely include
 destinations, a DAG with dependencies usually needs a spec file instead; a `paths` run is most
 useful with `--dry-run` or for sources that declare destinations in code.
 

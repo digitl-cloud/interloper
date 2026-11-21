@@ -9,25 +9,22 @@ import runpy
 import socket
 import threading
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from unittest import mock
+from uuid import uuid4
 
-import interloper as il
 import pytest
 from interloper.catalog import Catalog
 from interloper.settings import ServerSettings
 from interloper_api.settings import AuthSettings
+from interloper_db.settings import PostgresSettings
+from interloper_db.store.components import Applied
 
 from interloper_app.dev import platform as platform_module
 from interloper_app.dev.platform import Platform, PlatformSpec
 from interloper_app.dev.signin import SignIn
 
-
-class Weather(il.Source):
-    """A source a plain project names as a target."""
-
-
-NOT_A_COMPONENT = "a string"
+ORG = uuid4()
 
 
 @pytest.fixture
@@ -35,7 +32,7 @@ def spec() -> PlatformSpec:
     return PlatformSpec(
         port=3100,
         parent=os.getpid(),
-        python_path=["/work/acme"],
+        root="/work/acme",
         sign_in=SignIn.generate("acme", "acme"),
         ui_entries={"acme": "http://127.0.0.1:5173/src/index.ts", "beta": "http://127.0.0.1:5173/other.ts"},
     )
@@ -47,27 +44,6 @@ def test_the_spec_crosses_the_process_boundary_as_json(spec: PlatformSpec):
 
 def test_each_dev_server_origin_is_named_once(spec: PlatformSpec):
     assert spec.dev_origins == ["http://127.0.0.1:5173"]
-
-
-def test_class_targets_are_imported(spec: PlatformSpec):
-    spec.classes = [f"{__name__}.Weather"]
-
-    assert spec._classes() == [Weather]
-
-
-@pytest.mark.parametrize(
-    ("target", "message"),
-    [
-        (f"{__name__}.NOT_A_COMPONENT", "is not a component class"),
-        (f"{__name__}.Missing", "cannot import"),
-        ("no_such_module.Weather", "cannot import"),
-    ],
-)
-def test_a_target_that_is_no_component_class_stops_the_platform(spec: PlatformSpec, target: str, message: str):
-    spec.classes = [target]
-
-    with pytest.raises(SystemExit, match=message):
-        spec._classes()
 
 
 def test_main_serves_the_spec_read_from_standard_input(spec: PlatformSpec, monkeypatch: pytest.MonkeyPatch):
@@ -118,17 +94,38 @@ class TestPlatform:
 
 
 class TestServe:
-    def test_it_serves_the_platform_on_the_loopback_with_dev_s_pieces(
-        self, spec: PlatformSpec, monkeypatch: pytest.MonkeyPatch
-    ):
-        overrides = mock.Mock()
-        monkeypatch.setattr(platform_module, "UI_BUNDLES", overrides)
-        monkeypatch.setattr(platform_module, "bootstrap", lambda *args, **kwargs: None)
+    @staticmethod
+    def _serve(
+        spec: PlatformSpec, monkeypatch: pytest.MonkeyPatch, declared: list[Any] | None = None
+    ) -> tuple[dict[str, Any], dict[str, Any], mock.Mock, SimpleNamespace]:
+        """Serve the spec with every outside piece replaced, recording what it was handed.
+
+        Returns:
+            What the app was composed with, what the store was built with, the
+            store, and the app.
+        """
+        monkeypatch.setattr(platform_module, "UI_BUNDLES", mock.Mock())
+        bootstrapped: dict[str, Any] = {}
+        monkeypatch.setattr(platform_module, "bootstrap", lambda dsn, **kwargs: bootstrapped.update(kwargs))
         monkeypatch.setattr(platform_module.Catalog, "from_settings", classmethod(lambda cls: Catalog()))
-        monkeypatch.setattr(platform_module.Store, "from_settings", classmethod(lambda cls, **kwargs: mock.Mock()))
+        store = mock.Mock()
+        store.components.apply.return_value = Applied()
+        built: dict[str, Any] = {"bootstrapped": bootstrapped}
+
+        def build(cls: object, **kwargs: object) -> mock.Mock:
+            built.update(kwargs)
+            return store
+
+        monkeypatch.setattr(platform_module.Store, "from_settings", classmethod(build))
+        monkeypatch.setattr(
+            platform_module,
+            "Targets",
+            lambda root, paths, files: SimpleNamespace(
+                classes=[], declares=declared is not None, declarations=lambda *a: declared or []
+            ),
+        )
         monkeypatch.setattr(platform_module, "configure_console_logging", lambda *args, **kwargs: None)
-        ensured = mock.Mock(return_value=(mock.Mock(), mock.Mock()))
-        monkeypatch.setattr(SignIn, "ensure", lambda self, store: ensured(store))
+        monkeypatch.setattr(SignIn, "ensure", lambda self, store: (mock.Mock(), mock.Mock()))
         app = SimpleNamespace(services={}, run=mock.Mock())
         composed: dict[str, Any] = {}
 
@@ -138,19 +135,52 @@ class TestServe:
 
         monkeypatch.setattr(platform_module.App, "from_settings", compose)
         monkeypatch.setattr(platform_module.sys, "path", list(platform_module.sys.path))
-
         spec.serve()
+        return composed, built, store, app
+
+    def test_it_serves_the_platform_on_the_loopback_with_dev_s_pieces(
+        self, spec: PlatformSpec, monkeypatch: pytest.MonkeyPatch
+    ):
+        composed, _, _, app = self._serve(spec, monkeypatch)
 
         assert platform_module.sys.path[0] == "/work/acme"
         assert (ServerSettings.get().host, ServerSettings.get().port) == ("127.0.0.1", 3100)
         assert AuthSettings.get().cookie_secure is False
-        assert [call.args[0] for call in overrides.override.call_args_list] == ["acme", "beta"]
+        overrides = cast(mock.Mock, platform_module.UI_BUNDLES).override
+        assert [call.args[0] for call in overrides.call_args_list] == ["acme", "beta"]
         assert (composed["api"], composed["dev"], composed["port"]) == (True, False, 3100)
         assert composed["dev_origins"] == ["http://127.0.0.1:5173"]
         assert len(composed["routers"]) == 1
         assert "parent-watchdog" in app.services
         app.run.assert_called_once_with()
-        ensured.assert_called_once()
+
+    def test_without_files_the_app_edits_the_configured_database(
+        self, spec: PlatformSpec, monkeypatch: pytest.MonkeyPatch
+    ):
+        configured = PostgresSettings.get().database
+
+        _, built, store, _ = self._serve(spec, monkeypatch)
+
+        assert PostgresSettings.get().database == configured
+        assert built["bootstrapped"]["create_tables"] is False
+        assert built["served_from"] is None
+        store.components.apply.assert_not_called()
+
+    def test_files_serve_the_collection_from_a_database_of_their_own(
+        self, spec: PlatformSpec, monkeypatch: pytest.MonkeyPatch
+    ):
+        configured = PostgresSettings.get()
+        declared: list[Any] = [SimpleNamespace(file="collection.yaml", rows=["row"], classes=[])]
+
+        try:
+            _, built, store, _ = self._serve(spec, monkeypatch, declared)
+
+            assert PostgresSettings.get().database == spec._served_database(configured)
+        finally:
+            PostgresSettings.activate(configured)
+        assert built["bootstrapped"]["create_tables"] is True
+        assert built["served_from"] == "collection.yaml"
+        store.components.apply.assert_called_once_with(mock.ANY, ["row"])
 
 
 class TestLifecycle:
@@ -184,3 +214,44 @@ class TestLifecycle:
         runpy.run_module("interloper_app.dev", run_name="__main__")
 
         served.assert_called_once_with()
+
+
+class TestApply:
+    def test_the_files_components_are_written_and_what_changed_is_logged(self, caplog: pytest.LogCaptureFixture):
+        store = mock.Mock()
+        store.components.apply.return_value = Applied(written=3, created=[uuid4()], deleted=[uuid4(), uuid4()])
+        declared: list[Any] = [
+            SimpleNamespace(file="collection.yaml", rows=["source", "job"]),
+            SimpleNamespace(file="weather.py", rows=["paris"]),
+        ]
+        caplog.set_level("INFO")
+
+        PlatformSpec._apply(store, ORG, declared, "collection.yaml, weather.py")
+
+        store.components.apply.assert_called_once_with(ORG, ["source", "job", "paris"])
+        assert "collection.yaml, weather.py: 3 components, 1 new, 2 removed" in caplog.text
+
+    def test_declarations_the_store_refuses_stop_the_platform_naming_the_files(self):
+        store = mock.Mock()
+        store.components.apply.side_effect = ValueError("'demo' collides")
+
+        with pytest.raises(SystemExit, match=r"collection\.yaml: 'demo' collides"):
+            PlatformSpec._apply(store, ORG, [], "collection.yaml")
+
+
+def test_each_checkout_serves_its_files_from_a_database_of_its_own(spec: PlatformSpec):
+    postgres = PostgresSettings(database="interloper")
+    other = spec.model_copy(update={"root": "/work/acme-worktree"})
+
+    database = spec._served_database(postgres)
+
+    assert database.startswith("interloper_files_")
+    assert database == spec._served_database(postgres)
+    assert database != other._served_database(postgres)
+
+
+def test_a_long_configured_name_keeps_the_served_database_within_postgres_s_limit(spec: PlatformSpec):
+    database = spec._served_database(PostgresSettings(database="d" * 70))
+
+    assert len(database) == 63
+    assert database.endswith(spec._served_database(PostgresSettings(database="d"))[-15:])

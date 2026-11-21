@@ -171,6 +171,7 @@ class TestWatches:
             ("ui/src/pages/Greeting.vue", False),
             ("docs/interloper.yaml", False),
             ("README.md", False),
+            (".!72622!weather.py", False),
             (".venv/lib/python3.13/site-packages/vue.py", False),
             ("ui/node_modules/thing/index.py", False),
             ("src/acme_interloper/__pycache__/routes.cpython-313.pyc", False),
@@ -204,3 +205,15 @@ class TestLocation:
 
     def test_a_missing_package_is_nowhere(self):
         assert DevProject._location("no_such_package_anywhere") is None
+
+
+class TestSpecFiles:
+    def test_a_spec_file_restarts_the_platform_wherever_it_is(self, tmp_path: Path, tmp_path_factory):
+        inside = tmp_path / "dev" / "collection.yaml"
+        outside = tmp_path_factory.mktemp("elsewhere") / "spec.yaml"
+        project = DevProject(tmp_path, "acme", tmp_path / "interloper.yaml", held=(), files=(inside, outside))
+
+        assert project.watches(Change.modified, str(inside)) is True
+        assert project.watches(Change.modified, str(outside)) is True
+        assert project.watches(Change.modified, str(tmp_path / "dev" / "other.yaml")) is False
+        assert project.watched == [tmp_path, outside.parent]
