@@ -2,6 +2,88 @@
 
 <!-- version list -->
 
+## v0.140.0 (2026-11-21)
+
+### Bug Fixes
+
+- **assets**: Check an AdUp connection by reading its advertiser
+  ([`0bfd675`](https://github.com/digitl-cloud/interloper/commit/0bfd6752547b8d21c0c25bc35ef533384d8248d5))
+
+- **assets**: Check Search Ads 360 connections and repeat a search page Google failed to serve
+  ([`0080d9f`](https://github.com/digitl-cloud/interloper/commit/0080d9f39bf09bcd2dcc864a0932fc2abf974385))
+
+- **assets**: Fail an Impact export job on a refused poll
+  ([`8181998`](https://github.com/digitl-cloud/interloper/commit/8181998370f77326ec7106f06e21c0f3b16eebc8))
+
+- **assets**: Fail the Google Ads check with Google's reason, and on credentials that reach no
+  customer
+  ([`84ffa70`](https://github.com/digitl-cloud/interloper/commit/84ffa70f3ec5d5914770a8a9f1c0ed1f853b95d9))
+
+- **assets**: Raise a Criteo answer that carries errors beside its data
+  ([`2ec38c3`](https://github.com/digitl-cloud/interloper/commit/2ec38c3a5c26e88d1864498ac700e7546e042336))
+
+- **assets**: Read Campaign Manager 360 and Display & Video 360 report files as text
+  ([`0f71bcc`](https://github.com/digitl-cloud/interloper/commit/0f71bcc680fa7832e263fcd7bee4d383dbabe331))
+
+- **assets**: Read Google Ads ads_stats per ad, day and device
+  ([`b652b7d`](https://github.com/digitl-cloud/interloper/commit/b652b7ded1d9f2437b218c31114e62616362c95f))
+
+- **assets**: Read Impact actions by the day they happened
+  ([`c9c891e`](https://github.com/digitl-cloud/interloper/commit/c9c891e7de1cdadafdcc77ea6e5d8f5778935aca))
+
+- **assets**: Read Pinterest Ads campaigns, ad groups and ads of every status
+  ([`338827b`](https://github.com/digitl-cloud/interloper/commit/338827b89cb821fcb843043effef0750e4501d2e))
+
+- **assets**: Report Pinterest's own reason when it refuses a connection check
+  ([`d329123`](https://github.com/digitl-cloud/interloper/commit/d329123d097476ffb651e4b5bdcbe9a38a9de9b7))
+
+- **assets**: Say Awin transactions and Impact actions change status later
+  ([`ede97cc`](https://github.com/digitl-cloud/interloper/commit/ede97ccb20849e8a7cf94772c07b69620aa33705))
+
+- **assets**: Send the Brandwatch key as apikey and check it
+  ([`5c7f039`](https://github.com/digitl-cloud/interloper/commit/5c7f0390c73a2ee54a4c86749b54be51b63510cc))
+
+- **assets**: Stop Search Ads 360 search paging on a repeated page token
+  ([`ae42de4`](https://github.com/digitl-cloud/interloper/commit/ae42de440cb28cf5a71f78842c275941562a261a))
+
+### Features
+
+- **app**: Drop the timeline legend and name the status in a bar's tooltip
+  ([`ea09ecb`](https://github.com/digitl-cloud/interloper/commit/ea09ecb22e373ec0f59f86c1c9a7c89e54b1c0dd))
+
+- **app**: Group the sidebar in sections and merge the twin asset and run pages
+  ([`3a4e959`](https://github.com/digitl-cloud/interloper/commit/3a4e9593963171c9fb03b10a27eacda6edaabb16))
+
+- **app**: Open options menus from the vertical ellipsis
+  ([`e1d4c03`](https://github.com/digitl-cloud/interloper/commit/e1d4c030358fb61214957f1f5aa2e5c603fa012a))
+
+- **app**: Show statuses as badges again
+  ([`ae7eaf7`](https://github.com/digitl-cloud/interloper/commit/ae7eaf75486eef73318eff22b4fc8f01b46a1865))
+
+- **assets**: Offer Google Ads client accounts reached through a manager
+  ([`27b9c8e`](https://github.com/digitl-cloud/interloper/commit/27b9c8eefff865794af4d86345d576e10a236e43))
+
+- **core**: Add HttpRetryPolicy, a REST client's retry policy
+  ([`b885186`](https://github.com/digitl-cloud/interloper/commit/b8851866d3776e530214e913fd3904f7bf47ff9a))
+
+- **core**: Send each REST request once unless the client declares a retry policy
+  ([`9ba29f6`](https://github.com/digitl-cloud/interloper/commit/9ba29f6f3ba446bb224f0c51036d08aa07d7cd74))
+
+### Refactoring
+
+- **assets**: Read Google Ads over its REST API through one client
+  ([`820059d`](https://github.com/digitl-cloud/interloper/commit/820059d5e55cc29045de4dc3e2f34d162c0aa06e))
+
+### Breaking Changes
+
+- **assets**: Google Ads ads_stats loses segments_click_type, segments_keyword_ad_group_criterion,
+  segments_keyword_info_match_type and segments_keyword_info_text, and its rows are no longer split
+  by click type or keyword.
+
+- **assets**: Interloper-assets has no google extra any more. It held only google-ads, which nothing
+  needs now; drop google from ASSETS_EXTRAS and from interloper-assets[...] installs.
+
+
 ## v0.139.0 (2026-11-20)
 
 ### Bug Fixes
