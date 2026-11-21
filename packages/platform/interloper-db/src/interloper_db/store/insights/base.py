@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import datetime as dt
 from collections.abc import Collection, Iterator, Sequence
+from itertools import chain
 from typing import Any
 from uuid import UUID
 
@@ -42,7 +43,13 @@ from interloper_db.session import session_scope
 from interloper_db.store.backfills import BackfillQuery, BackfillStore
 from interloper_db.store.components import ComponentStore
 from interloper_db.store.executions import ExecutionStore
-from interloper_db.store.insights.coverage import GroupCoverage, JobCoverage, PartitionResult, Period
+from interloper_db.store.insights.coverage import (
+    GroupCoverage,
+    JobCoverage,
+    PartitionResult,
+    PartitionSummary,
+    Period,
+)
 from interloper_db.store.insights.failures import GROUP_KEYS, ErrorGroup, ErrorGroups, ErrorRow
 from interloper_db.store.insights.feed import ActivityEntry
 from interloper_db.store.insights.health import (
@@ -239,6 +246,11 @@ class InsightStore:
     def coverage_by_day(self, org_id: UUID, *, since: dt.date, until: dt.date, now: dt.datetime) -> list[GroupCoverage]:
         """Per source and day, the asset-partitions successful, failed, missing and missed over a window.
 
+        Each asset's partitions of the window are first counted. An asset that
+        attempted every period from its first key to its last is then read
+        through its partitions that did not succeed alone; only the others are
+        read partition by partition.
+
         Args:
             org_id: Organisation UUID.
             since: First day of the window.
@@ -251,16 +263,25 @@ class InsightStore:
         """
         components = self._rows(org_id, kinds=["source", "asset"])
         assets = [component for component in components if component.kind == "asset"]
+        partitionings = self._components.asset_partitionings(assets)
         window = partition_keys_overlapping(col(Partition.partition_key), since, min(until, now.date()))
+        summaries = self._partition_summaries(org_id, list(partitionings), [window])
+        series = PartitionSummary.series(summaries, partitionings)
+        listed = {summary.asset_id for summary in summaries} - series.keys()
+        results = chain(
+            self._partition_results(org_id, list(listed), [window]),
+            self._partition_results(org_id, list(series), [window], succeeded=False),
+        )
         return GroupCoverage.from_components(
             components,
             self._targeted(org_id),
-            self._components.asset_partitionings(assets),
-            self._partition_results(org_id, [asset.id for asset in assets], [window]),
+            partitionings,
+            results,
             self._attempted_spans(org_id),
             since=since,
             until=until,
             now=now,
+            series=series,
         )
 
     def coverage_by_key(
@@ -562,8 +583,40 @@ class InsightStore:
         with session_scope(self._engine) as session:
             return {target for job, target in session.exec(statement).all() if job.enabled}
 
-    def _partition_results(
+    def _partition_summaries(
         self, org_id: UUID, asset_ids: Sequence[UUID], keys: Sequence[Any]
+    ) -> list[PartitionSummary]:
+        """Per asset and key format, how many partitions it holds, from which key to which.
+
+        The same pass over the ``partitions`` key as :meth:`_partition_results`,
+        counted in the database instead of returned row by row. Keys of one
+        length share a format, so each count is over one granularity's keys.
+
+        Args:
+            org_id: Organisation UUID.
+            asset_ids: The assets to read, of the organisation.
+            keys: Filters over ``partitions.partition_key`` selecting the
+                partitions to count.
+
+        Returns:
+            One summary per asset and key format with a selected partition.
+        """
+        key = col(Partition.partition_key)
+        ordered = sorted(asset_ids)
+        summaries: list[PartitionSummary] = []
+        with session_scope(self._engine) as session:
+            for start in range(0, len(ordered), MAX_ASSETS_PER_READ):
+                named = col(Partition.component_id).in_(ordered[start : start + MAX_ASSETS_PER_READ])
+                statement = (
+                    sa_select(col(Partition.component_id), func.count(), func.min(key), func.max(key))
+                    .where(col(Partition.org_id) == org_id, named, *keys)
+                    .group_by(col(Partition.component_id), func.length(key))
+                )
+                summaries += [PartitionSummary._make(row) for row in session.connection().execute(statement)]
+        return summaries
+
+    def _partition_results(
+        self, org_id: UUID, asset_ids: Sequence[UUID], keys: Sequence[Any], *, succeeded: bool | None = None
     ) -> Iterator[PartitionResult]:
         """Per asset and time partition, whether any execution of it succeeded or failed, grouped by asset.
 
@@ -580,11 +633,14 @@ class InsightStore:
             asset_ids: The assets to read, of the organisation.
             keys: Filters over ``partitions.partition_key`` selecting the
                 partitions to read.
+            succeeded: Keep the partitions that succeeded, or those that did
+                not; ``None`` keeps both.
 
         Yields:
             One row per asset and selected partition key that executed at
             least once, an asset's rows consecutive.
         """
+        filters = [*keys] if succeeded is None else [*keys, col(Partition.succeeded).is_(succeeded)]
         # Ids come back as text and an asset's is parsed once: a UUID per row costs more than the roll-up.
         asset = cast(col(Partition.component_id), String())
         failed_run = cast(col(Partition.failed_run_id), String())
@@ -595,15 +651,15 @@ class InsightStore:
                 named = col(Partition.component_id).in_(ordered[start : start + MAX_ASSETS_PER_READ])
                 statement = (
                     select(asset, col(Partition.partition_key), col(Partition.succeeded), failed_run)
-                    .where(Partition.org_id == org_id, named, *keys)
+                    .where(Partition.org_id == org_id, named, *filters)
                     .order_by(col(Partition.component_id))
                     .execution_options(yield_per=10_000)
                 )
-                for asset_text, partition_key, succeeded, failed in session.exec(statement):
+                for asset_text, partition_key, success, failed in session.exec(statement):
                     yield PartitionResult(
                         parsed.get(asset_text) or parsed.setdefault(asset_text, UUID(asset_text)),
                         partition_key,
-                        succeeded=bool(succeeded),
+                        succeeded=bool(success),
                         failed=failed is not None,
                         failed_run_id=UUID(failed) if failed else None,
                     )

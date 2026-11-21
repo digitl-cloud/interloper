@@ -19,17 +19,22 @@ at all.
 Two views read each asset's partitions (`AssetPartitions`), each over periods
 of its own: the calendar by day (`GroupCoverage`, `DayCoverage`), one job's
 range by partition key (`JobCoverage`, `KeyCoverage`).
+
+The calendar reads a window of every asset, most of which succeeded day after
+day. An asset that attempted every period from its first key to its last is
+read as a count (`PartitionSummary`) and its partitions that did not succeed:
+what lies between them is a run of successes, counted as one long period.
 """
 
 from __future__ import annotations
 
 import datetime as dt
 from bisect import bisect_right
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from functools import cached_property
+from functools import cached_property, lru_cache
 from itertools import groupby
 from operator import attrgetter
 from typing import NamedTuple
@@ -74,8 +79,12 @@ class Period(NamedTuple):
     end: dt.datetime
 
     @classmethod
+    @lru_cache(maxsize=4096)
     def from_key(cls, key: str) -> Period:
         """Parse a time partition key of any granularity into its period.
+
+        A read meets the same few keys once per asset, so a key is parsed once
+        and remembered.
 
         Args:
             key: The partition key.
@@ -111,6 +120,27 @@ class Period(NamedTuple):
         """
         return cls(min(period.start for period in periods), max(period.end for period in periods))
 
+    def without(self, periods: Iterable[Period]) -> list[Period]:
+        """What is left of the period once several periods are taken out of it.
+
+        Args:
+            periods: The periods to take out, in any order; they may overlap
+                each other and reach outside this one.
+
+        Returns:
+            The stretches left, oldest first.
+        """
+        left = []
+        start = self.start
+        for period in sorted(periods):
+            end = min(period.start, self.end)
+            if start < end:
+                left.append(Period(start, end))
+            start = max(start, period.end)
+        if start < self.end:
+            left.append(Period(start, self.end))
+        return left
+
     @property
     def first_day(self) -> dt.date:
         """The day the period starts on."""
@@ -131,6 +161,103 @@ class Period(NamedTuple):
             True once the period's end is at or before *now*.
         """
         return self.end <= coerce_to_datetime(now)
+
+
+class PartitionSummary(NamedTuple):
+    """One asset's partitions of one key format over a window, counted rather than listed.
+
+    Attributes:
+        asset_id: The asset.
+        count: How many of them the window holds, whatever they came to.
+        first_key: The earliest of them.
+        last_key: The latest of them.
+    """
+
+    asset_id: UUID
+    count: int
+    first_key: str
+    last_key: str
+
+    @classmethod
+    def series(
+        cls, summaries: list[PartitionSummary], partitionings: Mapping[UUID, TimePartitionConfig]
+    ) -> dict[UUID, Period]:
+        """The assets a summary tells everything about but which of their partitions did not succeed.
+
+        Such an asset attempted every period from its first key to its last,
+        so those that did not succeed leave runs of successes between them and
+        none of its other partitions has to be read. An asset is left out when
+        its keys leave a gap or come in two formats, and when a run of its
+        periods cannot be counted as one: hourly keys, of which a day holds
+        several, and a snapshot, whose verdict depends on which of the periods
+        it observed is still current.
+
+        Args:
+            summaries: The summaries read, one per asset and key format.
+            partitionings: Each partitioned asset's partitioning by id.
+
+        Returns:
+            The period each such asset's partitions span, by asset id.
+        """
+        formats = Counter(summary.asset_id for summary in summaries)
+        spans: dict[tuple[int, str, str], Period | None] = {}
+        series = {}
+        for summary in summaries:
+            partitioning = partitionings.get(summary.asset_id)
+            if partitioning is None or not partitioning.windowed or formats[summary.asset_id] > 1:
+                continue
+            if summary[1:] not in spans:
+                spans[summary[1:]] = summary._span()
+            span = spans[summary[1:]]
+            if span is not None:
+                series[summary.asset_id] = span
+        return series
+
+    def _span(self) -> Period | None:
+        """The period the partitions span when they are every period, of at least a day, from the first to the last.
+
+        Returns:
+            The period from the first key's start to the last key's end, or
+            ``None`` when the keys leave a gap or name hours.
+        """
+        first, last = TimePartition.from_key(self.first_key), TimePartition.from_key(self.last_key)
+        if first.granularity is TimeGranularity.HOUR:
+            return None
+        if first.granularity.periods_between(first.value, last.value) + 1 != self.count:
+            return None
+        return Period.enclosing([Period.from_key(self.first_key), Period.from_key(self.last_key)])
+
+
+class PeriodResult(NamedTuple):
+    """What an asset's partitions came to over one period.
+
+    The period is one partition's, or a run of consecutive successful
+    partitions read as one long period, the way a monthly partition is one
+    period of many days.
+
+    Attributes:
+        period: The period.
+        succeeded: Whether its partitions succeeded.
+        failed: Whether one of them failed, whether or not it also succeeded.
+        failed_run_id: The greatest id among the runs that failed it, or ``None``.
+    """
+
+    period: Period
+    succeeded: bool
+    failed: bool
+    failed_run_id: UUID | None
+
+    @classmethod
+    def from_partition(cls, result: PartitionResult) -> PeriodResult:
+        """Read one partition's result over its key's period.
+
+        Args:
+            result: The partition's result.
+
+        Returns:
+            The result over the period.
+        """
+        return cls(Period.from_key(result.partition_key), result.succeeded, result.failed, result.failed_run_id)
 
 
 class Verdict(StrEnum):
@@ -162,7 +289,7 @@ class AssetPartitions:
         self,
         asset: Component,
         partitioning: TimePartitionConfig | None,
-        results: list[tuple[Period, PartitionResult]],
+        results: list[PeriodResult],
     ) -> None:
         """Bind an asset to its results.
 
@@ -170,7 +297,7 @@ class AssetPartitions:
             asset: The asset row, its parent loaded.
             partitioning: The asset's partitioning, time or snapshot, from its
                 catalog definition; ``None`` when the catalog has none for it.
-            results: The asset's results, each with its key's period, in any order.
+            results: The asset's results, in any order, none overlapping another.
         """
         self.asset = asset
         self.partitioning = partitioning
@@ -183,18 +310,26 @@ class AssetPartitions:
         assets: list[Component],
         partitionings: Mapping[UUID, TimePartitionConfig],
         results: Iterable[PartitionResult],
+        series: Mapping[UUID, Period] | None = None,
     ) -> Iterator[AssetPartitions]:
-        """Give each asset its own results, one asset at a time, each distinct partition key parsed once.
+        """Give each asset its own results, one asset at a time.
 
         The results come grouped by asset, as the store reads them, so only
         one asset's are held at a time however much history was read: the
         assets with results come in the order of their results, then the
         assets without any, in the order of *assets*.
 
+        An asset of *series* attempted every period of the one it is given
+        (see `PartitionSummary.series`), and its results list only the
+        partitions that did not succeed: each stretch they leave is a run of
+        successes, read as one result.
+
         Args:
             assets: The asset rows, their parents loaded.
             partitionings: Each partitioned asset's partitioning by id.
             results: The results read, of these assets and any other, grouped by asset.
+            series: The period of each asset read as a series, by asset id;
+                ``None`` when every asset's results list all its partitions.
 
         Yields:
             One entry per asset of *assets*.
@@ -203,8 +338,8 @@ class AssetPartitions:
             ValueError: If an asset's results come back after another asset's.
         """
         pending = {asset.id: asset for asset in assets}
+        spans = series or {}
         read: set[UUID] = set()
-        periods: dict[str, Period] = {}
         for asset_id, owned in groupby(results, key=attrgetter("asset_id")):
             if asset_id in read:
                 raise ValueError(f"Partition results are not grouped by asset: {asset_id} comes back after another")
@@ -212,25 +347,37 @@ class AssetPartitions:
             asset = pending.pop(asset_id, None)
             if asset is None:
                 continue
-            bound = []
-            for result in owned:
-                period = periods.get(result.partition_key)
-                if period is None:
-                    period = periods[result.partition_key] = Period.from_key(result.partition_key)
-                bound.append((period, result))
-            yield cls(asset, partitionings.get(asset_id), bound)
+            bound = [PeriodResult.from_partition(result) for result in owned]
+            yield cls(asset, partitionings.get(asset_id), bound + cls._successes(spans.get(asset_id), bound))
         for asset in pending.values():
-            yield cls(asset, partitionings.get(asset.id), [])
+            yield cls(asset, partitionings.get(asset.id), cls._successes(spans.get(asset.id), []))
+
+    @staticmethod
+    def _successes(span: Period | None, listed: list[PeriodResult]) -> list[PeriodResult]:
+        """The runs of successes a series leaves between its partitions that did not succeed.
+
+        Args:
+            span: The period the series spans; ``None`` for an asset whose
+                results list all its partitions.
+            listed: The partitions of the series that did not succeed.
+
+        Returns:
+            One successful result per stretch of the period the listed
+            partitions leave; none without a series.
+        """
+        if span is None:
+            return []
+        return [PeriodResult(run, True, False, None) for run in span.without(result.period for result in listed)]
 
     @cached_property
-    def _ordered(self) -> list[tuple[Period, PartitionResult]]:
+    def _ordered(self) -> list[PeriodResult]:
         """The results, oldest period first."""
-        return sorted(self.results, key=lambda pair: pair[0].start)
+        return sorted(self.results, key=lambda result: result.period.start)
 
     @cached_property
     def _starts(self) -> list[dt.datetime]:
         """The start of each result's period, oldest first, for bisecting."""
-        return [period.start for period, _ in self._ordered]
+        return [result.period.start for result in self._ordered]
 
     @property
     def windowed(self) -> bool:
@@ -260,7 +407,7 @@ class AssetPartitions:
             return self._observed(period, now)
         if self._start is not None and period.end <= self._start:
             return None
-        overlapping = [result for _, result in self._overlapping(period)]
+        overlapping = self._overlapping(period)
         if any(result.succeeded for result in overlapping):
             return Verdict.SUCCESSFUL, None
         failed_runs = [result.failed_run_id for result in overlapping if result.failed]
@@ -281,9 +428,9 @@ class AssetPartitions:
             it was observed and no period since the history start ended in it.
         """
         overlapping = self._overlapping(period)
-        if any(result.succeeded for _, result in overlapping):
+        if any(result.succeeded for result in overlapping):
             return Verdict.SUCCESSFUL, None
-        current = [result for observed, result in overlapping if not observed.closed(now)]
+        current = [result for result in overlapping if not result.period.closed(now)]
         if any(result.failed for result in current):
             failed_runs = [result.failed_run_id for result in current if result.failed_run_id is not None]
             return Verdict.FAILED, max(failed_runs, default=None)
@@ -293,19 +440,19 @@ class AssetPartitions:
             return Verdict.MISSED, None
         return None
 
-    def _overlapping(self, period: Period) -> list[tuple[Period, PartitionResult]]:
+    def _overlapping(self, period: Period) -> list[PeriodResult]:
         """The asset's results whose periods overlap a period, oldest first.
 
         Args:
             period: The period, of any granularity.
 
         Returns:
-            The overlapping results, each with its period.
+            The overlapping results.
         """
         index = max(bisect_right(self._starts, period.start) - 1, 0)
-        overlapping: list[tuple[Period, PartitionResult]] = []
-        while index < len(self._ordered) and self._ordered[index][0].start < period.end:
-            if self._ordered[index][0].end > period.start:
+        overlapping: list[PeriodResult] = []
+        while index < len(self._ordered) and self._ordered[index].period.start < period.end:
+            if self._ordered[index].period.end > period.start:
                 overlapping.append(self._ordered[index])
             index += 1
         return overlapping
@@ -370,10 +517,11 @@ class DayCoverage:
 
         A dated asset counts on each day the partitions it holds, at least
         the day's :meth:`_slots`: a monthly or yearly key counts toward every
-        day it spans, an hourly one toward its day. A snapshot's day takes the
-        verdict of the periods overlapping it (see `AssetPartitions.verdict`).
-        The failed run kept for a day is the greatest id among its failed
-        runs, so the pick does not depend on row order.
+        day it spans, as does a run of successes, and an hourly key toward its
+        day. A snapshot's day takes the verdict of the periods overlapping it
+        (see `AssetPartitions.verdict`). The failed run kept for a day is the
+        greatest id among its failed runs, so the pick does not depend on row
+        order.
 
         Args:
             asset: The asset with its partitions.
@@ -393,8 +541,8 @@ class DayCoverage:
                     days._count(i, *verdict)
             return days
         attempted = [0] * length
-        for period, result in asset.results:
-            first_day, last_day = period.first_day, period.last_day
+        for result in asset.results:
+            first_day, last_day = result.period.first_day, result.period.last_day
             if last_day < first or first_day > last:
                 continue
             for i in range((max(first_day, first) - first).days, (min(last_day, last) - first).days + 1):
@@ -507,6 +655,7 @@ class GroupCoverage:
         since: dt.date,
         until: dt.date,
         now: dt.datetime,
+        series: Mapping[UUID, Period] | None = None,
     ) -> list[GroupCoverage]:
         """Roll each partitioned asset's days up by group, keeping only the groups with a day in the window.
 
@@ -519,12 +668,16 @@ class GroupCoverage:
             partitionings: Each partitioned asset's partitioning by id; an
                 asset absent from it (unpartitioned, drifted) is left out.
             results: The results read for the window, from runs of any
-                target, grouped by asset.
+                target, grouped by asset: every partition of an asset, or only
+                those that did not succeed for an asset of *series*.
             attempted: The period each asset's attempted partitions span,
                 all-time; an asset absent from it was never attempted.
             since: First day of the window.
             until: Last day of the window, inclusive.
             now: The reference instant, aware UTC.
+            series: The period of each asset read as a series (see
+                `PartitionSummary.series`), by asset id; ``None`` when every
+                asset's results list all its partitions.
 
         Returns:
             The groups, by name then id, each with its days summed over its assets.
@@ -533,7 +686,7 @@ class GroupCoverage:
         assets = [asset for asset in components if asset.kind == "asset" and asset.id in partitionings]
         groups: dict[UUID, Component] = {}
         days: dict[UUID, DayCoverage] = {}
-        for asset in AssetPartitions.from_results(assets, partitionings, results):
+        for asset in AssetPartitions.from_results(assets, partitionings, results, series):
             group = by_id[asset.asset.parent_id] if asset.asset.parent_id else asset.asset
             scheduled = asset.asset.id in targeted or asset.asset.parent_id in targeted
             span = cls._span(asset, group, scheduled, attempted.get(asset.asset.id), now)
