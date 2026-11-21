@@ -6,11 +6,10 @@ Vite's to apply, a Python edit is the platform's.
 
 from __future__ import annotations
 
-import socket
 import time
 from pathlib import Path
 
-from interloper_app.dev.platform import HOST
+from interloper_app.dev.port import Port
 from interloper_app.dev.process import ProcessGroup
 
 
@@ -21,7 +20,7 @@ class ViteServer:
         key: The extension's key, which the API lists the UI under.
         directory: The UI's source, holding its ``package.json``.
         pnpm: Whether the UI belongs to a pnpm workspace; npm runs it otherwise.
-        port: The port it serves on, set when it starts.
+        port: The port it serves on, picked when it starts.
     """
 
     def __init__(self, key: str, directory: Path, *, pnpm: bool) -> None:
@@ -35,7 +34,7 @@ class ViteServer:
         self.key = key
         self.directory = directory
         self.pnpm = pnpm
-        self.port = 0
+        self.port = Port(0)
         self._group = ProcessGroup()
 
     @property
@@ -45,7 +44,7 @@ class ViteServer:
         Returns:
             ``http://127.0.0.1:<port>``.
         """
-        return f"http://{HOST}:{self.port}"
+        return self.port.origin
 
     @property
     def entry(self) -> str:
@@ -74,7 +73,17 @@ class ViteServer:
             The command, Vite run through the UI's own package manager.
         """
         runner = ["pnpm", "exec"] if self.pnpm else ["npm", "exec", "--no", "--"]
-        return [*runner, "vite", "--host", HOST, "--port", str(self.port), "--strictPort", "--clearScreen", "false"]
+        return [
+            *runner,
+            "vite",
+            "--host",
+            Port.HOST,
+            "--port",
+            str(self.port.number),
+            "--strictPort",
+            "--clearScreen",
+            "false",
+        ]
 
     def start(self, timeout: float = 60.0) -> None:
         """Install the dependencies when missing, start the server and wait until it answers.
@@ -90,10 +99,10 @@ class ViteServer:
             self._start(self.install_command())
             if self._group.wait() != 0:
                 raise SystemExit(f"`{' '.join(self.install_command())}` failed in {self.directory}.")
-        self.port = self._free_port()
+        self.port = Port.free()
         self._start(self.command())
         deadline = time.monotonic() + timeout
-        while not self._answers():
+        while not self.port.answers:
             if not self._group.running or time.monotonic() > deadline:
                 self.stop()
                 raise SystemExit(f"The {self.key} UI's Vite dev server did not start (see its output above).")
@@ -118,24 +127,3 @@ class ViteServer:
             self._group.start(command, cwd=self.directory)
         except FileNotFoundError as error:
             raise SystemExit(f"The {self.key} UI needs Node.js: {command[0]} was not found.") from error
-
-    def _answers(self) -> bool:
-        """Check whether the server accepts connections.
-
-        Returns:
-            True once it listens.
-        """
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-            probe.settimeout(0.5)
-            return probe.connect_ex((HOST, self.port)) == 0
-
-    @staticmethod
-    def _free_port() -> int:
-        """Pick a port nothing listens on.
-
-        Returns:
-            The port.
-        """
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-            probe.bind((HOST, 0))
-            return probe.getsockname()[1]

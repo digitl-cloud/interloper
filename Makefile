@@ -142,12 +142,18 @@ docker-build-push:
 # DEV INSTANCE
 # ###############
 #
-# Stand up a running interloper instance with the DB migrated and seeded with a
-# minimal dataset (one super-admin + org + the demo source). Host path:
+# Stand up a running interloper instance: `interloper dev` serves the
+# repository, the app from the Nuxt dev server with hot reload, signed in through
+# the link it prints, and declares the demo source and its daily job from
+# dev/collection.yaml. Host path:
 #
-#   make dev      reset + seed + run the app (full bootstrap, one command).
-#   make dev-up   just run the app against the existing DB (no reset/seed).
-#   make dev-reset  reset + seed, no server.
+#   make dev      reset + seed + run (full bootstrap, one command).
+#   make dev-up   just run against the existing DB (no reset/seed).
+#   make dev-reset  reset + seed (the dev user and organisation), no server.
+#
+# Pass `interloper dev`'s own flags through DEV_ARGS; agent sessions take
+# another port and print the link without opening a browser:
+#   make dev-up DEV_ARGS="--port 3100 --no-browser"
 #
 # docker-compose path (Postgres + api + scheduler + frontend in containers, no
 # host Postgres/Python needed): make compose-up. See dev/seed.py.
@@ -171,10 +177,11 @@ INTERLOPER_DEV_USER_EMAIL ?= admin@dev.local
 
 # The app login's providers (the /auth flow), Google and Microsoft. Put each
 # client id + secret in .env (they're secrets). A provider's client must list
-# <INTERLOPER_SERVER_EXTERNAL_URL>/api/auth/<provider>/callback, so
-# http://localhost:3000/api/auth/google/callback (or .../microsoft/callback)
-# here, as a redirect URI; cookie_secure=false lets the session cookie stick
-# over local http. e.g. in .env:
+# <the app's URL>/api/auth/<provider>/callback as a redirect URI:
+# http://127.0.0.1:3000/api/auth/google/callback (or .../microsoft/callback)
+# for `make dev-up`, whose `interloper dev` serves 127.0.0.1, and
+# http://localhost:3000/... for compose; cookie_secure=false lets the session
+# cookie stick over local http. e.g. in .env:
 #   INTERLOPER_AUTH_GOOGLE_CLIENT_ID=...apps.googleusercontent.com
 #   INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET=...
 INTERLOPER_AUTH_GOOGLE_CLIENT_ID ?=
@@ -191,7 +198,6 @@ DEV_ENV := INTERLOPER_POSTGRES_HOST=localhost \
            INTERLOPER_LAUNCHER_TYPE=in_process \
            INTERLOPER_RUNNER_TYPE=async \
            INTERLOPER_ENCRYPTION_KEY=dev-encryption-key-not-for-production \
-           INTERLOPER_SERVER_EXTERNAL_URL=http://localhost:$(or $(INTERLOPER_SERVER_PORT),3000) \
            INTERLOPER_DEV_USER_EMAIL=$(INTERLOPER_DEV_USER_EMAIL) \
            INTERLOPER_AUTH_GOOGLE_CLIENT_ID=$(INTERLOPER_AUTH_GOOGLE_CLIENT_ID) \
            INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET=$(INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET) \
@@ -203,22 +209,16 @@ dev-db:
 	cd $(DEV_DIR) && $(DEV_ENV) uv run interloper db reset --yes
 
 dev-seed:
-	cd $(DEV_DIR) && $(DEV_ENV) uv run python seed.py
+	cd $(DEV_DIR) && $(DEV_ENV) uv run python seed.py --no-demo
 
 dev-reset: dev-db dev-seed
 
-# --dev runs the Nuxt dev server (hot reload) on :3000 and moves the API to a
-# free port it proxies to — so the app is at http://localhost:3000 with no SPA
-# build needed. It runs `pnpm dev`, so install the app deps first if missing.
-APP_DEPS := packages/platform/interloper-app/app/node_modules
+DEV_ARGS ?=
 
-$(APP_DEPS):
-	cd packages/platform/interloper-app/app && pnpm install
-
-# Run the app only — non-destructive, so it keeps your data/session across
-# restarts. Use `make dev` (or dev-reset) when you want a fresh seeded DB.
-dev-up: $(APP_DEPS)
-	cd $(DEV_DIR) && $(DEV_ENV) uv run interloper app --api --cron --worker --reaper --dev
+# Non-destructive: keeps your data and sessions across restarts. Use `make dev`
+# (or dev-reset) when you want a fresh database.
+dev-up:
+	cd $(DEV_DIR) && $(DEV_ENV) uv run interloper dev -f collection.yaml $(DEV_ARGS)
 
 # Full bootstrap: reset + seed + run.
 dev: dev-reset dev-up

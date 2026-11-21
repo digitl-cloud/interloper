@@ -46,6 +46,16 @@ class TestEnsure:
         assert ensured.id == existing.id
         assert store.members.role(existing.id, admin.id) == "admin"
 
+    def test_a_new_organisation_takes_the_key_asked_for_not_its_name_s(self, store: Store):
+        admin = store.profiles.provision(email="dev@example.test")
+
+        ensured = store.organisations.ensure("Dev Org", key="interloper-workspace", admin_id=admin.id)
+
+        assert (ensured.name, ensured.key) == ("Dev Org", "interloper-workspace")
+        assert store.organisations.ensure("interloper-workspace", key="interloper-workspace", admin_id=admin.id).id == (
+            ensured.id
+        )
+
     def test_finds_its_organisation_again_when_the_key_was_taken(self, store: Store):
         admin = store.profiles.provision(email="dev@example.test")
         first = store.organisations.ensure("Settings", key="settings", admin_id=admin.id)

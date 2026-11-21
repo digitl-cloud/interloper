@@ -382,19 +382,13 @@ environment references), since nothing made in the app joins a collection served
 Without them, `dev` serves the collection you build in the app. `uv run interloper run
 weather.paris` runs the same instance in the terminal.
 
-To work on a UI with hot reload, run its dev server beside the app's and name it in
-`INTERLOPER_UI_DEV` (`<key>=<entry URL>`, several separated by commas):
-
-```sh
-pnpm --filter @interloper/example dev       # http://localhost:5173
-INTERLOPER_UI_DEV=example=http://localhost:5173/src/index.ts make dev-up
-```
-
-The app then imports the extension's entry from its dev server instead of its bundle, built
-or not, and an edit to a page, a class or a stylesheet applies in place. Only the app's dev
-server reads the variable, so no deployment can be made to import code from elsewhere. The
-Python package is installed as for any other run (`uv pip install -e examples/extension` for
-the example, which is not a workspace package and is never published).
+To work on a UI with hot reload, install its Python package editable and run `make dev-up`:
+`interloper dev` serves every extension UI the project holds from its own Vite dev server
+(`uv pip install -e examples/extension` for the example, which is not a workspace package and is
+never published). The app then imports the extension's entry from that server instead of its
+bundle, built or not, and an edit to a page, a class or a stylesheet applies in place. Only the
+processes `interloper dev` starts learn the servers' URLs, so no deployment can be made to import
+code from elsewhere.
 
 ## The installed packages
 

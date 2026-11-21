@@ -33,6 +33,7 @@ def spec() -> PlatformSpec:
         port=3100,
         parent=os.getpid(),
         root="/work/acme",
+        public_url="http://127.0.0.1:3100",
         sign_in=SignIn.generate("acme", "acme"),
         ui_entries={"acme": "http://127.0.0.1:5173/src/index.ts", "beta": "http://127.0.0.1:5173/other.ts"},
     )
@@ -148,7 +149,8 @@ class TestServe:
         assert AuthSettings.get().cookie_secure is False
         overrides = cast(mock.Mock, platform_module.UI_BUNDLES).override
         assert [call.args[0] for call in overrides.call_args_list] == ["acme", "beta"]
-        assert (composed["api"], composed["dev"], composed["port"]) == (True, False, 3100)
+        assert (composed["api"], composed["spa"], composed["port"]) == (True, True, 3100)
+        assert ServerSettings.get().external_url == "http://127.0.0.1:3100"
         assert composed["dev_origins"] == ["http://127.0.0.1:5173"]
         assert len(composed["routers"]) == 1
         assert "parent-watchdog" in app.services

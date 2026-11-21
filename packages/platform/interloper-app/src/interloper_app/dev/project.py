@@ -24,6 +24,8 @@ from urllib.request import url2pathname
 from interloper.extension import MANIFESTS
 from watchfiles import Change, DefaultFilter
 
+from interloper_app.assets import source_dir
+
 CONFIG = "interloper.yaml"
 MANIFEST = "extension.yaml"
 
@@ -123,6 +125,23 @@ class DevProject:
         """
         outside = [file.parent for file in self.files if not file.is_relative_to(self.root)]
         return list(dict.fromkeys([self.root, *outside]))
+
+    @property
+    def app_source(self) -> Path | None:
+        """The app's own Nuxt source, when the project holds interloper-app: the platform's repository.
+
+        Returns:
+            The ``app/`` beside the interloper-app package installed editable
+            from under the root, or ``None`` when interloper-app runs as
+            installed.
+        """
+        location = self._location("interloper_app")
+        if location is None or not any(location.is_relative_to(path) for path in self.held):
+            return None
+        try:
+            return source_dir()
+        except FileNotFoundError:
+            return None
 
     @property
     def pnpm_workspace(self) -> bool:

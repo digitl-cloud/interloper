@@ -90,13 +90,13 @@ export default defineNuxtConfig({
         server: {
             proxy: {
                 '/api': {
-                    target: `http://localhost:${process.env.INTERLOPER_API_PORT || 3000}`,
+                    target: `http://127.0.0.1:${process.env.INTERLOPER_API_PORT || 3000}`,
                     changeOrigin: true,
                     autoRewrite: true,
                 },
                 // The OAuth authorization server's metadata sits at the host root, outside /api.
                 '/.well-known/oauth-authorization-server': {
-                    target: `http://localhost:${process.env.INTERLOPER_API_PORT || 3000}`,
+                    target: `http://127.0.0.1:${process.env.INTERLOPER_API_PORT || 3000}`,
                     changeOrigin: true,
                 },
             },

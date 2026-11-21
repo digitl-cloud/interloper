@@ -34,12 +34,11 @@ from interloper_db.store.components.declaration import Declarations
 from interloper_scheduler.settings import SchedulerSettings
 from pydantic import BaseModel
 
+from interloper_app.dev.port import Port
 from interloper_app.dev.process import ProcessGroup
 from interloper_app.dev.signin import SignIn
 from interloper_app.dev.targets import Targets
 from interloper_app.services import App, ParentWatchdog
-
-HOST = "127.0.0.1"
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +57,11 @@ class PlatformSpec(BaseModel):
         sign_in: The sign-in link's route.
         ui_entries: Each held extension UI's entry on its Vite dev server, by
             extension key.
+        spa: Whether the API serves the built SPA; off when the Nuxt dev
+            server serves the app in front of it.
+        public_url: Where the browser reaches the app, ``http://127.0.0.1:<port>``:
+            the platform's external URL, which OAuth flows send the browser
+            back to, so the session cookie of that host comes along.
     """
 
     port: int
@@ -67,6 +71,8 @@ class PlatformSpec(BaseModel):
     files: list[str] = []
     sign_in: SignIn
     ui_entries: dict[str, str] = {}
+    spa: bool = True
+    public_url: str
 
     @property
     def dev_origins(self) -> list[str]:
@@ -94,7 +100,9 @@ class PlatformSpec(BaseModel):
             logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s", log_format=LogSettings.get().format
         )
         ServerSettings.activate(
-            ServerSettings.get().model_copy(update={"host": HOST, "port": self.port, "enabled": True})
+            ServerSettings.get().model_copy(
+                update={"host": Port.HOST, "port": self.port, "enabled": True, "external_url": self.public_url}
+            )
         )
         # Plain HTTP on the loopback: a cookie marked secure would never come back.
         AuthSettings.activate(AuthSettings.get().model_copy(update={"cookie_secure": False}))
@@ -134,8 +142,8 @@ class PlatformSpec(BaseModel):
             cron=scheduler_settings.cron.enabled,
             worker=scheduler_settings.worker.enabled,
             reaper=scheduler_settings.reaper.enabled,
-            dev=False,
             port=self.port,
+            spa=self.spa,
             routers=[self.sign_in.router()],
             dev_origins=self.dev_origins,
         )
@@ -225,7 +233,7 @@ class Platform:
             True once ``GET /api/health`` answers 200; False when the process
             exits first or the timeout passes.
         """
-        url = f"http://{HOST}:{self.spec.port}/api/health"
+        url = f"{Port(self.spec.port).origin}/api/health"
         deadline = time.monotonic() + timeout
         while self.running and time.monotonic() < deadline:
             try:

@@ -8,7 +8,6 @@ served from source and reloads; everything else runs as installed.
 from __future__ import annotations
 
 import argparse
-import itertools
 import os
 import signal
 import sys
@@ -23,21 +22,24 @@ from interloper_db.settings import PostgresSettings
 from sqlalchemy.exc import OperationalError
 from watchfiles import watch
 
+from interloper_app.dev.nuxt import NuxtServer
 from interloper_app.dev.platform import Platform, PlatformSpec
+from interloper_app.dev.port import Port
 from interloper_app.dev.project import DevProject
 from interloper_app.dev.signin import SignIn
 from interloper_app.dev.vite import ViteServer
-from interloper_app.services import DevServer
 
 
 class DevCommand(Command):
     """Serve the project in this directory on 127.0.0.1, signed in, restarting on edits.
 
-    Classes named as targets join the catalog. Instances named as targets, or
-    spec files passed with -f, put dev in file mode: the collection is served
-    from them alone, read-only in the app, from a database of its own;
-    without them, the collection is the one made in the app. The extensions
-    the project holds are served from source, their UIs from their Vite dev
+    When the project holds the app's own source (the platform's repository),
+    the app is served from the Nuxt dev server, with hot reload. Classes
+    named as targets join the catalog. Instances named as targets, or spec
+    files passed with -f, put dev in file mode: the collection is served from
+    them alone, read-only in the app, from a database of its own; without
+    them, the collection is the one made in the app. The extensions the
+    project holds are served from source, their UIs from their Vite dev
     servers. The platform restarts when a Python file, a manifest, a spec file
     or interloper.yaml changes; open the printed link to sign in.
     """
@@ -84,9 +86,9 @@ class DevCommand(Command):
         if missing := [str(file) for file in files if not file.is_file()]:
             raise SystemExit(f"Error: no such spec file: {', '.join(missing)}")
         project = DevProject.discover(Path.cwd(), files)
-        port = args.port or ServerSettings.get().port
-        if DevServer.port_in_use(port):
-            raise SystemExit(f"Error: port {port} is already in use. Stop what listens on it, or pass --port.")
+        port = Port(args.port or ServerSettings.get().port)
+        if port.in_use:
+            raise SystemExit(f"Error: port {port.number} is already in use. Stop what listens on it, or pass --port.")
         self._check_database()
         extensions = [extension for extension in project.extensions() if extension.ui_directory is not None]
         uis = [
@@ -95,9 +97,17 @@ class DevCommand(Command):
             if (directory := extension.ui_directory) is not None
         ]
         sign_in = SignIn.generate(project.name, extensions[0].key if len(extensions) == 1 else None)
+        app_source = project.app_source
+        nuxt = None
+        api_port = port
+        if app_source is not None:
+            api_port = Port.free()
+            nuxt = NuxtServer(app_source, port=port, api_port=api_port, ui_entries={})
         platform = Platform(
             PlatformSpec(
-                port=port,
+                port=api_port.number,
+                spa=nuxt is None,
+                public_url=port.origin,
                 parent=os.getpid(),
                 root=str(project.root),
                 targets=args.targets,
@@ -111,13 +121,18 @@ class DevCommand(Command):
             for ui in uis:
                 ui.start()
             platform.spec.ui_entries = {ui.key: ui.entry for ui in uis}
-            self._serve(project, platform, link=sign_in.link(port), browser=not args.no_browser)
+            if nuxt is not None:
+                nuxt.ui_entries = platform.spec.ui_entries
+                nuxt.start()
+            self._serve(project, platform, nuxt, link=sign_in.link(port.number), browser=not args.no_browser)
         except KeyboardInterrupt:
             print("\nStopping.", flush=True)
         finally:
             # A second Ctrl-C must not cut the stop short and leave a server running.
             signal.signal(signal.SIGINT, signal.SIG_IGN)
             platform.stop()
+            if nuxt is not None:
+                nuxt.stop()
             for ui in uis:
                 ui.stop()
 
@@ -152,31 +167,57 @@ class DevCommand(Command):
                 f"answer. Start it, or point the postgres section of interloper.yaml at one you run.\n{error.orig}"
             ) from error
 
-    @staticmethod
-    def _serve(project: DevProject, platform: Platform, *, link: str, browser: bool) -> None:
+    @classmethod
+    def _serve(
+        cls, project: DevProject, platform: Platform, nuxt: NuxtServer | None, *, link: str, browser: bool
+    ) -> None:
         """Run the platform, then restart it on every watched edit, until interrupted.
 
         A platform that fails to start (an error in a held file) leaves
         ``dev`` running: the next edit starts it again. The browser opens the
-        first time the platform answers.
+        first time the platform answers. A Nuxt dev server that stops stops
+        ``dev``: nothing would serve the app any more.
 
         Args:
             project: The project, which says which edits restart the platform.
             platform: The platform process.
+            nuxt: The Nuxt dev server serving the app, when the project holds
+                its source.
             link: The sign-in link.
             browser: Whether to open the link once the platform first answers.
+
+        Raises:
+            SystemExit: When the Nuxt dev server stops.
         """
         print(f"\n  interloper dev is serving {project.name} from {project.root}\n", flush=True)
         platform.start()
-        for changes in itertools.chain([set()], watch(*project.watched, watch_filter=project.watches)):
-            if changes:
-                edited = ", ".join(sorted({str(Path(path).relative_to(project.root)) for _, path in changes}))
-                print(f"\n  {edited} changed: restarting the platform.\n", flush=True)
-                platform.restart()
-            if not platform.wait_ready():
-                print("\n  The platform did not start; fix the error above and save to restart.\n", flush=True)
+        browser = cls._announce(platform, link, browser=browser)
+        for changes in watch(*project.watched, watch_filter=project.watches, yield_on_timeout=True, rust_timeout=2000):
+            if nuxt is not None and not nuxt.running:
+                raise SystemExit("Error: the app's Nuxt dev server stopped (see its output above).")
+            if not changes:
                 continue
-            print(f"\n  Ready. Sign in: {link}\n", flush=True)
-            if browser:
-                webbrowser.open(link)
-                browser = False
+            edited = ", ".join(sorted({str(Path(path).relative_to(project.root)) for _, path in changes}))
+            print(f"\n  {edited} changed: restarting the platform.\n", flush=True)
+            platform.restart()
+            browser = cls._announce(platform, link, browser=browser)
+
+    @staticmethod
+    def _announce(platform: Platform, link: str, *, browser: bool) -> bool:
+        """Wait for the platform to answer, print the sign-in link, and open it the first time.
+
+        Args:
+            platform: The platform process.
+            link: The sign-in link.
+            browser: Whether the link is still to be opened.
+
+        Returns:
+            Whether it is still to be opened: until the platform first answers.
+        """
+        if not platform.wait_ready():
+            print("\n  The platform did not start; fix the error above and save to restart.\n", flush=True)
+            return browser
+        print(f"\n  Ready. Sign in: {link}\n", flush=True)
+        if browser:
+            webbrowser.open(link)
+        return False
