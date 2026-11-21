@@ -545,25 +545,28 @@ class DAG:
 
     @classmethod
     def from_paths(cls, paths: list[str]) -> DAG:
-        """Build a DAG from dotted import paths, one Source or Asset class each.
+        """Build a DAG from dotted import paths, each a Source or Asset class or a configured instance of one.
 
         Args:
-            paths: Dotted (or composite ``module:Class``) import paths.
+            paths: Dotted (or composite ``module:Class``) import paths: a class
+                (``weather.OpenMeteo``) runs one default instance of it, an
+                instance (``weather.paris``) runs as configured.
 
         Returns:
-            The DAG over one default instance of each class.
+            The DAG over the named workloads.
 
         Raises:
-            DAGError: If a path fails to import, or names something other than a Source or Asset class.
+            DAGError: If a path fails to import, or names neither a Source or
+                Asset class nor an instance of one.
         """
-        workloads: list[type[Workload]] = []
+        workloads: list[Workload | type[Workload]] = []
         for path in paths:
             try:
                 imported = import_from_path(path)
             except (ImportError, AttributeError) as error:
                 raise DAGError(f"failed to import '{path}': {error}") from error
-            if not (isinstance(imported, type) and issubclass(imported, Workload)):
-                raise DAGError(f"'{path}' is not a Source or Asset class")
+            if not (isinstance(imported, Workload) or (isinstance(imported, type) and issubclass(imported, Workload))):
+                raise DAGError(f"'{path}' is neither a Source or Asset class nor an instance of one")
             workloads.append(imported)
         return cls(*workloads)
 

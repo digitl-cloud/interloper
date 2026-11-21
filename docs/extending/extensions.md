@@ -368,6 +368,19 @@ applies in place, a `.vue` edit reloads the page, and an edit to a Python file, 
 `interloper.yaml` restarts the platform. Class paths given as arguments join the catalog, so a
 plain project serves its sources the same way (`uv run interloper dev weather.OpenMeteo`).
 
+The collection can come from files instead of the app. An instance path (`uv run interloper
+dev weather.paris`) declares that instance and what it binds, and `-f collection.yaml`
+(repeatable) declares each document of a spec file, the format `interloper run -f` reads.
+Either puts `dev` in file mode: the collection is served from those files alone, from a database
+of its own beside the configured one (one per checkout), and the app shows it read-only, saying
+which files serve it. Runs, backfills and cancels work as usual. Every start writes the files'
+components as they are: an edit updates a component in place, its id and run history kept (give
+a spec component an `id` to keep them across a reordering of the file), and a component the
+files stop declaring is deleted. The files hold everything, credentials included (as
+environment references), since nothing made in the app joins a collection served from files.
+Without them, `dev` serves the collection you build in the app. `uv run interloper run
+weather.paris` runs the same instance in the terminal.
+
 To work on a UI with hot reload, run its dev server beside the app's and name it in
 `INTERLOPER_UI_DEV` (`<key>=<entry URL>`, several separated by commas):
 

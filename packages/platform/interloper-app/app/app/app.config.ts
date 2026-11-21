@@ -309,6 +309,7 @@ export default defineAppConfig({
     signOut: 'i-lucide-log-out',
     options: 'i-lucide-ellipsis-vertical',
     edit: 'i-lucide-pencil',
+    served: 'i-lucide-file-lock',
     delete: 'i-lucide-trash-2',
     refresh: 'i-lucide-refresh-cw',
     cancel: 'i-lucide-ban',

@@ -25,6 +25,7 @@ const componentsStore = useComponentsStore()
 const toast = useToast()
 const confirmDeleteSource = useConfirmDeleteSource()
 const appConfig = useAppConfig()
+const canEdit = useCanEdit()
 const { loading } = storeToRefs(componentsStore)
 const { filterByCategory } = useAssetWarnings()
 const { statusBadge } = useDrift()
@@ -142,6 +143,7 @@ async function deleteSource(sourceId: string) {
 }
 
 function buildSourceActions(sourceId: string): DropdownMenuItem[][] {
+    if (!canEdit.value) return []
     return [[
         {
             label: 'Edit',
@@ -472,7 +474,7 @@ function onRowClick(row: any) {
 
             <!-- Actions (source and asset rows) -->
             <template #actions-cell="{ row }">
-                <div v-if="headsSourceOrAsset(row)"
+                <div v-if="headsSourceOrAsset(row) && (tierOf(row) !== 'source_id' || canEdit)"
                      class="flex justify-end">
                     <UDropdownMenu :items="tierOf(row) === 'source_id'
                         ? buildSourceActions(row.original.sourceId)

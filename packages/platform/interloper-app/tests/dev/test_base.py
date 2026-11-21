@@ -17,14 +17,16 @@ from interloper_app.dev.platform import PlatformSpec
 from interloper_app.dev.project import DevProject, HeldExtension
 
 
-def _args(*targets: str, port: int | None = 3100, no_browser: bool = False) -> argparse.Namespace:
-    return argparse.Namespace(targets=list(targets), port=port, no_browser=no_browser)
+def _args(
+    *targets: str, port: int | None = 3100, no_browser: bool = False, files: list[str] | None = None
+) -> argparse.Namespace:
+    return argparse.Namespace(targets=list(targets), port=port, no_browser=no_browser, files=files or [])
 
 
 @pytest.fixture
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DevProject:
     project = DevProject(tmp_path, "Weather", tmp_path / "interloper.yaml", held=())
-    monkeypatch.setattr(DevProject, "discover", classmethod(lambda cls, directory: project))
+    monkeypatch.setattr(DevProject, "discover", classmethod(lambda cls, directory, files=(): project))
     monkeypatch.setattr(base_module.DevServer, "port_in_use", staticmethod(lambda port: False))
     monkeypatch.setattr(DevCommand, "_check_database", staticmethod(lambda: None))
     for signal_number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
@@ -86,8 +88,8 @@ def test_it_serves_the_project_then_stops_everything(project: DevProject, served
     DevCommand().run(_args("weather.OpenMeteo"))
 
     (spec,) = built
-    assert (spec.port, spec.parent, spec.classes) == (3100, os.getpid(), ["weather.OpenMeteo"])
-    assert spec.python_path == [str(project.root)]
+    assert (spec.port, spec.parent, spec.targets) == (3100, os.getpid(), ["weather.OpenMeteo"])
+    assert (spec.root, spec.files) == (str(project.root), [])
     assert (spec.sign_in.organisation, spec.sign_in.extension) == ("Weather", None)
     assert opened == [spec.sign_in.link(3100)]
     platform.start.assert_called_once_with()
@@ -152,3 +154,20 @@ def test_ctrl_c_stops_everything(project: DevProject, served, monkeypatch: pytes
 
     assert "Stopping." in capsys.readouterr().out
     platform.stop.assert_called_once_with()
+
+
+def test_a_missing_spec_file_is_refused_by_name(tmp_path: Path):
+    with pytest.raises(SystemExit, match="no such spec file"):
+        DevCommand().run(_args(files=[str(tmp_path / "missing.yaml")]))
+
+
+def test_spec_files_reach_the_platform_absolute(project: DevProject, served, monkeypatch: pytest.MonkeyPatch):
+    built, _, _ = served
+    monkeypatch.setattr(DevProject, "extensions", lambda self: [])
+    spec_file = project.root / "collection.yaml"
+    spec_file.write_text("key: demo_source\n")
+    monkeypatch.chdir(project.root)
+
+    DevCommand().run(_args(files=["collection.yaml"]))
+
+    assert built[0].files == [str(spec_file.resolve())]

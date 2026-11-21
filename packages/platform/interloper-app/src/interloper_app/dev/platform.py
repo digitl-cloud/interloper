@@ -11,32 +11,37 @@ Run as ``python -m interloper_app.dev``, which only ``dev`` does.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import sys
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from interloper.catalog import Catalog
 from interloper.cli.console import configure_console_logging
-from interloper.component import Component
 from interloper.settings import LogSettings, ServerSettings
-from interloper.utils.imports import import_from_path
 from interloper_api import DevServerUI
 from interloper_api.routes.extensions import UI_BUNDLES
 from interloper_api.settings import ApiSettings, AuthSettings
 from interloper_db import Store
 from interloper_db.provision import bootstrap
 from interloper_db.settings import PostgresSettings
+from interloper_db.store.components.declaration import Declarations
 from interloper_scheduler.settings import SchedulerSettings
 from pydantic import BaseModel
 
 from interloper_app.dev.process import ProcessGroup
 from interloper_app.dev.signin import SignIn
+from interloper_app.dev.targets import Targets
 from interloper_app.services import App, ParentWatchdog
 
 HOST = "127.0.0.1"
+
+logger = logging.getLogger(__name__)
 
 
 class PlatformSpec(BaseModel):
@@ -45,8 +50,11 @@ class PlatformSpec(BaseModel):
     Attributes:
         port: The port it binds on ``127.0.0.1``.
         parent: The ``dev`` process's pid: the platform stops when it is gone.
-        python_path: Directories put first on the import path: the project's root.
-        classes: Import paths of the component classes added to the catalog.
+        root: The project root, which declaring files are named relative to;
+            put first on the import path.
+        targets: Import paths of the component classes added to the catalog
+            and of the component instances applied to the dev organisation.
+        files: The spec files applied to the dev organisation, absolute.
         sign_in: The sign-in link's route.
         ui_entries: Each held extension UI's entry on its Vite dev server, by
             extension key.
@@ -54,8 +62,9 @@ class PlatformSpec(BaseModel):
 
     port: int
     parent: int
-    python_path: list[str]
-    classes: list[str] = []
+    root: str
+    targets: list[str] = []
+    files: list[str] = []
     sign_in: SignIn
     ui_entries: dict[str, str] = {}
 
@@ -72,11 +81,15 @@ class PlatformSpec(BaseModel):
     def serve(self) -> None:
         """Run the platform this spec describes, in this process, until a signal, a service's death or dev's.
 
-        A class target that is not a component class exits the process with
-        its error before anything is served.
+        In file mode (an instance target or a spec file), the platform uses a
+        database of its own beside the configured one, one per checkout, and
+        before anything is served the files' components are written to its dev
+        organisation, which they then fill alone, read-only in the app. A
+        target that does not import or build exits the process with its error.
         """
         watchdog = ParentWatchdog(parent=self.parent)
-        sys.path[:0] = self.python_path
+        root = Path(self.root)
+        sys.path.insert(0, self.root)
         configure_console_logging(
             logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s", log_format=LogSettings.get().format
         )
@@ -87,18 +100,31 @@ class PlatformSpec(BaseModel):
         AuthSettings.activate(AuthSettings.get().model_copy(update={"cookie_secure": False}))
         for key, entry in self.ui_entries.items():
             UI_BUNDLES.override(key, DevServerUI(entry))
+        targets = Targets(root, self.targets, self.files)
+        if targets.declares:
+            PostgresSettings.activate(
+                PostgresSettings.get().model_copy(update={"database": self._served_database(PostgresSettings.get())})
+            )
         postgres = PostgresSettings.get()
-        bootstrap(postgres.dsn, statement_timeout=postgres.statement_timeout, create_tables=False)
+        # dev brought the configured database up; file mode's own is brought up here.
+        bootstrap(postgres.dsn, statement_timeout=postgres.statement_timeout, create_tables=targets.declares)
         api_settings = ApiSettings.get()
         scheduler_settings = SchedulerSettings.get()
-        catalog = Catalog.from_settings().including(self._classes())
+        _, organisation = self.sign_in.ensure(Store.from_settings())
+        declared = targets.declarations(organisation.id, Catalog.from_settings().including(targets.classes))
+        catalog = Catalog.from_settings().including(
+            [*targets.classes, *(cls for declarations in declared for cls in declarations.classes)]
+        )
+        served_from = ", ".join(declarations.file for declarations in declared) if targets.declares else None
         store = Store.from_settings(
             catalog=catalog,
             session_expiry=api_settings.auth.session_expiry,
             access_token_expiry=api_settings.auth.access_token_expiry,
             refresh_token_expiry=api_settings.auth.refresh_token_expiry,
+            served_from=served_from,
         )
-        self.sign_in.ensure(store)
+        if served_from is not None:
+            self._apply(store, organisation.id, declared, served_from)
         app = App.from_settings(
             api_settings,
             scheduler_settings,
@@ -118,25 +144,39 @@ class PlatformSpec(BaseModel):
 
     # -- Internals -------------------------------------------------------------
 
-    def _classes(self) -> list[type[Component]]:
-        """Import the class targets.
+    def _served_database(self, postgres: PostgresSettings) -> str:
+        """Name the database file mode uses: its own, one per checkout, so the files never touch the configured one.
+
+        Args:
+            postgres: The configured Postgres settings.
 
         Returns:
-            The component classes, in the targets' order.
+            The configured database's name, cut so the whole stays within
+            Postgres's 63-byte identifiers, suffixed with a digest of the
+            project root.
+        """
+        return f"{postgres.database[:48]}_files_{hashlib.sha256(self.root.encode()).hexdigest()[:8]}"
+
+    @staticmethod
+    def _apply(store: Store, org_id: UUID, declared: list[Declarations], served_from: str) -> None:
+        """Write what the files declare to the dev organisation, logging what changed.
+
+        Args:
+            store: The store the rows are written through.
+            org_id: The dev organisation.
+            declared: What each file declares.
+            served_from: The files, as the log names them.
 
         Raises:
-            SystemExit: When a target fails to import or names no component class.
+            SystemExit: When the declarations cannot be written.
         """
-        classes: list[type[Component]] = []
-        for path in self.classes:
-            try:
-                loaded = import_from_path(path)
-            except (ImportError, AttributeError) as error:
-                raise SystemExit(f"Error: cannot import '{path}': {error}") from error
-            if not (isinstance(loaded, type) and issubclass(loaded, Component)):
-                raise SystemExit(f"Error: '{path}' is not a component class, which a target must be")
-            classes.append(loaded)
-        return classes
+        try:
+            applied = store.components.apply(org_id, [row for declarations in declared for row in declarations.rows])
+        except Exception as error:
+            raise SystemExit(f"Error: {served_from}: {error}") from error
+        changes = {"new": applied.created, "removed": applied.deleted}
+        summary = "".join(f", {len(ids)} {verb}" for verb, ids in changes.items() if ids)
+        logger.info("%s: %d components%s", served_from, applied.written, summary)
 
 
 class Platform:

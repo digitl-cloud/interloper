@@ -22,7 +22,7 @@ const props = defineProps<{
     rowActions?: (item: TData) => DropdownMenuItem[][]
     /** When true, suppresses the built-in Edit and Delete items; the row menus carry only `rowActions`. */
     noActions?: boolean
-    /** When true, rows are read-only: no pointer cursor, since clicking one leads nowhere. */
+    /** When true, rows are read-only: clicking one emits no `edit`, and no pointer cursor says it would. */
     noRowClick?: boolean
     /**
      * Single-table page: the card fills the panel, its header row sticks and
@@ -226,7 +226,7 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
                     :sticky="fill"
                     :ui="{ tr: noRowClick ? '' : 'cursor-pointer' }"
                     :class="fill && 'flex-1 min-h-0'"
-                    @select="(_e: Event, row: any) => emit('edit', row.original)"
+                    :on-select="noRowClick ? undefined : (_e: Event, row: any) => emit('edit', row.original)"
                     @contextmenu="onRowContextMenu">
                 <template #actions-cell="{ row }">
                     <div class="flex justify-end">

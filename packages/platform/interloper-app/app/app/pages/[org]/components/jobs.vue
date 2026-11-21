@@ -14,6 +14,7 @@ const { statusBadge } = useDrift()
 const catalogStore = useCatalogStore()
 const toast = useToast()
 const appConfig = useAppConfig()
+const canEdit = useCanEdit()
 
 const jobs = computed(() => componentsStore.byKind('job'))
 
@@ -36,14 +37,16 @@ function openRun(job: ComponentRecord) {
 }
 
 // Deep links: /jobs?new opens the create wizard (the empty overview and
-// timeline point here); /jobs?run=<id> opens the run modal for that job as
-// soon as it lands in the store.
+// timeline point here) once the collection is known to be editable here;
+// /jobs?run=<id> opens the run modal for that job as soon as it lands in the
+// store.
 const route = useRoute()
 const router = useRouter()
-watchEffect(() => {
+watchEffect(async () => {
     if (route.query.new === undefined) return
-    handleCreate()
     router.replace({ query: { ...route.query, new: undefined } })
+    await componentsStore.fetchServedFrom()
+    if (canEdit.value) handleCreate()
 })
 watchEffect(() => {
     const id = route.query.run
@@ -136,7 +139,7 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
         }, [
             h(USwitch, {
                 modelValue: jobEnabled(row.original),
-                disabled: toggling.value.has(row.original.id),
+                disabled: !canEdit.value || toggling.value.has(row.original.id),
                 'aria-label': jobEnabled(row.original) ? 'Disable job' : 'Enable job',
                 'onUpdate:modelValue': (value: boolean) => setEnabled(row.original, value),
             }),
@@ -178,7 +181,9 @@ const enabled = useQueryParam<boolean | null>('enabled', null, booleanQuery)
         </template>
         <template #body>
             <DriftBanner kind="job" />
-            <DataTable :active-filters="enabled === null ? 0 : 1"
+            <DataTable :no-actions="!canEdit"
+                       :no-row-click="!canEdit"
+                       :active-filters="enabled === null ? 0 : 1"
                        :columns="columns"
                        fill
                        :data="jobs"
@@ -200,9 +205,9 @@ const enabled = useQueryParam<boolean | null>('enabled', null, booleanQuery)
                     <UEmpty :icon="appConfig.icons.job"
                             title="No jobs yet"
                             description="A job is a scheduled pipeline. It runs your sources on a cron schedule and materializes the results into your destination — automatically, with no manual triggering. Every run is recorded under Executions."
-                            :actions="[{ label: 'New job', icon: appConfig.ui.icons.plus, onClick: handleCreate }]" />
+                            :actions="canEdit ? [{ label: 'New job', icon: appConfig.ui.icons.plus, onClick: handleCreate }] : undefined" />
                 </template>
-                <template #actions>
+                <template v-if="canEdit" #actions>
                     <UButton :icon="appConfig.ui.icons.plus"
                              label="New job"
                              @click="handleCreate" />

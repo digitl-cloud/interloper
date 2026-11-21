@@ -12,6 +12,7 @@ const { statusBadge } = useDrift()
 const catalogStore = useCatalogStore()
 const toast = useToast()
 const appConfig = useAppConfig()
+const canEdit = useCanEdit()
 
 const hooks = computed(() => componentsStore.byKind('hook'))
 
@@ -98,7 +99,9 @@ function matchesFilters(hook: ComponentRecord): boolean {
         </template>
         <template #body>
             <DriftBanner kind="hook" />
-            <DataTable :active-filters="Number(typeKey !== null) + Number(enabled !== null)"
+            <DataTable :no-actions="!canEdit"
+                       :no-row-click="!canEdit"
+                       :active-filters="Number(typeKey !== null) + Number(enabled !== null)"
                        :columns="columns"
                        fill
                        :data="hooks"
@@ -121,9 +124,9 @@ function matchesFilters(hook: ComponentRecord): boolean {
                     <UEmpty :icon="appConfig.icons.hook"
                             title="No hooks yet"
                             description="A hook reacts to what your pipelines do. Watch a source, asset, or job and trigger downstream runs or notify an external system when runs complete or fail."
-                            :actions="[{ label: 'New hook', icon: appConfig.ui.icons.plus, onClick: handleCreate }]" />
+                            :actions="canEdit ? [{ label: 'New hook', icon: appConfig.ui.icons.plus, onClick: handleCreate }] : undefined" />
                 </template>
-                <template #actions>
+                <template v-if="canEdit" #actions>
                     <UButton :icon="appConfig.ui.icons.plus"
                              label="New hook"
                              @click="handleCreate" />

@@ -13,7 +13,8 @@
  * additionally land under the form fields via `SchemaForm.setErrors`; any
  * edit resets the button. The created connection becomes the tool call's
  * output, and the agent continues with it; a call already answered
- * (`answer`) renders locked.
+ * (`answer`) renders locked. Only someone who may change the collection
+ * creates; a collection served from files names them instead.
  */
 import type { FormError } from '@nuxt/ui'
 import type { ConnectionSetupRequest, ConnectionSetupResult } from '~/types/agent'
@@ -40,8 +41,9 @@ const componentsStore = useComponentsStore()
 const { apiFetch } = useOrgApi()
 const toast = useToast()
 const appConfig = useAppConfig()
+const canEdit = useCanEdit()
 
-const defn = computed(() => catalogStore.catalog[props.request.connection_key])
+const defn =computed(() => catalogStore.catalog[props.request.connection_key])
 const icon = computed(() => componentIcon(props.request.connection_key, appConfig.icons.connection))
 const schema = computed(() => (defn.value as any)?.config_schema ?? null)
 
@@ -59,7 +61,7 @@ watch(defn, (d) => {
     if (d && !name.value) name.value = `My ${d.name} Connection`
 }, { immediate: true })
 
-const canSubmit = computed(() => !!name.value.trim() && (formValid.value || !schema.value))
+const canSubmit = computed(() => canEdit.value && !!name.value.trim() && (formValid.value || !schema.value))
 
 const button = computed(() => {
     switch (state.value) {
@@ -157,6 +159,18 @@ async function submit() {
             <UIcon :name="appConfig.ui.icons.success"
                    class="size-5 shrink-0 text-success" />
         </template>
+    </AgentCard>
+
+    <!-- Served from files: the connection is declared there -->
+    <AgentCard v-else-if="componentsStore.servedFrom"
+               :icon="icon"
+               :title="defn.name"
+               description="New connection">
+        <p class="flex items-center gap-2 text-sm text-muted">
+            <UIcon :name="appConfig.icons.served"
+                   class="size-4 shrink-0" />
+            Read-only collection: declare the connection in {{ componentsStore.servedFrom }}.
+        </p>
     </AgentCard>
 
     <!-- Setup form -->

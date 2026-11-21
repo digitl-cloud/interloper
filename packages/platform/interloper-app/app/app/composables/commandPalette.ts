@@ -18,6 +18,7 @@ export function useCommandPalette() {
     const organizationViews = useOrganizationViews()
     const assetNames = useAssetDisplayName()
     const assetIcons = useAssetIcon()
+    const canEdit = useCanEdit()
 
     const open = ref(false)
     const searchTerm = ref('')
@@ -48,7 +49,9 @@ export function useCommandPalette() {
         const toItem = (page: NavPage): CommandPaletteItem => ({ ...page, onSelect: close })
 
         const actionItems: CommandPaletteItem[] = [
-            toItem({ label: 'New source…', icon: appConfig.ui.icons.plus, to: `${orgStore.path(kindPath('source'))}?new=1` }),
+            ...(canEdit.value
+                ? [toItem({ label: 'New source…', icon: appConfig.ui.icons.plus, to: `${orgStore.path(kindPath('source'))}?new=1` })]
+                : []),
             ...componentsStore.byKind('job').map(job =>
                 toItem({ label: `Run job: ${job.name ?? job.key}`, icon: icons.run, to: `${orgStore.path(kindPath('job'))}?run=${job.id}` })),
             {

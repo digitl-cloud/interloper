@@ -1187,6 +1187,9 @@ def test_the_incompatible_partitioning_message_names_both_partitionings():
         il.DAG(upstream, downstream)
 
 
+CONFIGURED = FakeAsset()
+
+
 class TestFromPaths:
     """A DAG built from dotted import paths."""
 
@@ -1199,6 +1202,12 @@ class TestFromPaths:
         with pytest.raises(DAGError, match=r"failed to import 'nowhere\.Missing'"):
             DAG.from_paths(["nowhere.Missing"])
 
+    def test_builds_from_a_configured_instance(self):
+        dag = DAG.from_paths([f"{__name__}.CONFIGURED"])
+
+        assert [operation.key for operation in dag.operations] == ["fake_asset"]
+        assert dag.operations[0] is CONFIGURED
+
     def test_a_non_workload_is_a_dag_error(self):
-        with pytest.raises(DAGError, match="not a Source or Asset"):
+        with pytest.raises(DAGError, match="neither a Source or Asset class nor an instance of one"):
             DAG.from_paths(["interloper.MemoryDestination"])

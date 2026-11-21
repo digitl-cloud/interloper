@@ -13,6 +13,7 @@ import importlib.metadata
 import importlib.util
 import json
 import tomllib
+from collections.abc import Sequence
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
@@ -68,9 +69,11 @@ class DevProject:
             directory ``dev`` runs from.
         held: The directories of the distributions installed editable from
             under the root.
+        files: The spec files ``dev`` applies, absolute; watched wherever
+            they are.
     """
 
-    def __init__(self, root: Path, name: str, config: Path, held: tuple[Path, ...]) -> None:
+    def __init__(self, root: Path, name: str, config: Path, held: tuple[Path, ...], files: Sequence[Path] = ()) -> None:
         """Describe a project.
 
         Args:
@@ -78,20 +81,23 @@ class DevProject:
             name: Its name.
             config: The active ``interloper.yaml``, existing or not.
             held: Its editable distributions' directories.
+            files: The spec files ``dev`` applies, absolute.
         """
         self.root = root
         self.name = name
         self.config = config
         self.held = held
+        self.files = tuple(files)
         self._default_filter = DefaultFilter()
         self._apart: dict[Path, bool] = {}
 
     @classmethod
-    def discover(cls, directory: Path) -> DevProject:
+    def discover(cls, directory: Path, files: Sequence[Path] = ()) -> DevProject:
         """Find the project a directory belongs to and what it holds.
 
         Args:
             directory: The directory ``dev`` runs from.
+            files: The spec files ``dev`` applies, absolute.
 
         Returns:
             The project.
@@ -106,7 +112,17 @@ class DevProject:
             (path for path, pyproject in declared.items() if cls._workspace_holds(path, pyproject, nearest)), nearest
         )
         name = declared.get(root, {}).get("project", {}).get("name") or root.name
-        return cls(root, name, directory / CONFIG, cls._editable_under(root))
+        return cls(root, name, directory / CONFIG, cls._editable_under(root), files)
+
+    @property
+    def watched(self) -> list[Path]:
+        """The directories whose edits restart the platform: the root, and those of the spec files outside it.
+
+        Returns:
+            Each directory once.
+        """
+        outside = [file.parent for file in self.files if not file.is_relative_to(self.root)]
+        return list(dict.fromkeys([self.root, *outside]))
 
     @property
     def pnpm_workspace(self) -> bool:
@@ -153,6 +169,10 @@ class DevProject:
         if not self._default_filter(change, path):
             return False
         edited = Path(path)
+        if edited in self.files:
+            return True
+        if edited.name.startswith("."):
+            return False
         if not (edited.suffix == ".py" or edited.name == MANIFEST or edited == self.config):
             return False
         return not any(self._kept_apart(parent) for parent in edited.parents if parent.is_relative_to(self.root))

@@ -25,6 +25,12 @@ export const useComponentsStore = defineStore('components', () => {
     const listings = new Map<string, Promise<void> | null>()
     /** The relations listing, the same way; `undefined` until asked for. */
     let relationsListing: Promise<void> | null | undefined
+    /**
+     * The files `interloper dev` serves the collection from, which makes it
+     * read-only here; `null` when the app edits it, `undefined` until known.
+     */
+    const servedFrom = ref<string | null | undefined>(undefined)
+    let servedFromRequest: Promise<void> | null = null
 
     /**********************
      * Getters
@@ -334,12 +340,32 @@ export const useComponentsStore = defineStore('components', () => {
     async function reload() {
         const kinds = [...listings.keys()]
         const withRelations = relationsListing !== undefined
+        const withServedFrom = servedFromRequest !== null
         listings.clear()
         relationsListing = undefined
+        // `servedFrom` keeps its answer until the new one replaces it, so the edit actions don't flicker.
+        servedFromRequest = null
         await Promise.all([
             kinds.includes(ALL_KINDS) ? fetchAll() : kinds.length ? fetchAll(kinds) : undefined,
             withRelations ? fetchRelations() : undefined,
+            withServedFrom ? fetchServedFrom() : undefined,
         ])
+    }
+
+    /**
+     * Learn, once per organisation, whether files serve the collection. A
+     * failed answer is toasted rather than kept as the store's `error` (no
+     * listing failed), and taken as editable until a reload asks again: the
+     * API refuses the writes of a collection served from files either way.
+     */
+    function fetchServedFrom(): Promise<void> {
+        servedFromRequest ??= apiFetch<{ served_from: string | null }>('/collection')
+            .then((collection) => { servedFrom.value = collection.served_from })
+            .catch((e) => {
+                servedFrom.value = null
+                toast.add(errorToast(e, "Couldn't tell whether the collection is read-only"))
+            })
+        return servedFromRequest
     }
 
     function $reset() {
@@ -348,6 +374,8 @@ export const useComponentsStore = defineStore('components', () => {
         error.value = null
         listings.clear()
         relationsListing = undefined
+        servedFrom.value = undefined
+        servedFromRequest = null
     }
 
     /**********************
@@ -403,6 +431,8 @@ export const useComponentsStore = defineStore('components', () => {
         upstreams,
         loading,
         error,
+        servedFrom,
+        fetchServedFrom,
         fetchAll,
         fetchOne,
         create,

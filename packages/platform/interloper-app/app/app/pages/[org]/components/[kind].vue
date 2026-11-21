@@ -18,6 +18,7 @@ const catalogStore = useCatalogStore()
 const organisationStore = useOrganisationStore()
 const componentsStore = useComponentsStore()
 const appConfig = useAppConfig()
+const canEdit = useCanEdit()
 const { statusBadge } = useDrift()
 
 const kind = computed(() => kindFromSlug(route.params.kind as string))
@@ -48,24 +49,27 @@ watch(kind, () => componentsStore.fetchAll([kind.value]))
 // Deep link: `?new` opens the create wizard; `?new=<definition key>&name=<name>`
 // opens it on that type with the name prefilled (the connection setup hand-off
 // an MCP tool returns). `?edit=<id>` opens the edit wizard for that component
-// (the overview's Reconnect link); an empty `?edit=` opens nothing. The query
-// is consumed so a reload does not reopen it.
+// (the overview's Reconnect link); an empty `?edit=` opens nothing, and neither
+// does any while the collection is read-only here. The query is consumed so a
+// reload does not reopen it.
 const router = useRouter()
-watchEffect(() => {
+watchEffect(async () => {
     const key = route.query.new
     const edit = route.query.edit
+    const name = typeof route.query.name === 'string' ? route.query.name : undefined
     if (key === undefined && edit === undefined) return
+    router.replace({ query: { ...route.query, new: undefined, name: undefined, edit: undefined } })
+    await componentsStore.fetchServedFrom()
+    if (!canEdit.value) return
     if (typeof edit === 'string' && edit) {
         componentsStore.fetchOne(edit)
             .then(handleEdit)
             .catch(e => toast.add(errorToast(e, "Couldn't open the connection")))
     }
     else if (edit === undefined) {
-        const name = typeof route.query.name === 'string' ? route.query.name : undefined
         if (typeof key === 'string' && key) handleCreateFromCatalog(key, name)
         else handleCreate()
     }
-    router.replace({ query: { ...route.query, new: undefined, name: undefined, edit: undefined } })
 })
 
 /**
@@ -207,7 +211,9 @@ const typeKey = useQueryParam('type', null)
         </template>
         <template #body>
             <DriftBanner :kind="kind" />
-            <DataTable :active-filters="typeKey === null ? 0 : 1"
+            <DataTable :no-actions="!canEdit"
+                       :no-row-click="!canEdit"
+                       :active-filters="typeKey === null ? 0 : 1"
                        :columns="columns"
                        fill
                        :data="resources"
@@ -227,7 +233,8 @@ const typeKey = useQueryParam('type', null)
                 </template>
 
                 <template #empty>
-                    <div class="flex flex-col gap-4 sm:gap-6">
+                    <div v-if="canEdit"
+                         class="flex flex-col gap-4 sm:gap-6">
                         <UEmpty :icon="resourceKindIcon(kind)"
                                 :title="`No ${pageTitle.toLowerCase()} yet`"
                                 :description="emptyCopy.hero"
@@ -261,8 +268,13 @@ const typeKey = useQueryParam('type', null)
                                     to: organisationStore.path(kindPath('source')),
                                 }]" />
                     </div>
+                    <UEmpty v-else
+                            variant="outline"
+                            :icon="resourceKindIcon(kind)"
+                            :title="`No ${pageTitle.toLowerCase()} yet`"
+                            :description="componentsStore.servedFrom ? `${componentsStore.servedFrom} declares none.` : undefined" />
                 </template>
-                <template #actions>
+                <template v-if="canEdit" #actions>
                     <UButton :icon="appConfig.ui.icons.plus"
                              :label="`New ${kind}`"
                              @click="handleCreate" />

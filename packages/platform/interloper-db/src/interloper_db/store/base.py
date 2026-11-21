@@ -72,6 +72,7 @@ class Store:
         session_expiry: timedelta = timedelta(days=30),
         access_token_expiry: timedelta = timedelta(minutes=60),
         refresh_token_expiry: timedelta = timedelta(days=30),
+        served_from: str | None = None,
     ) -> None:
         """Initialize the store.
 
@@ -89,12 +90,16 @@ class Store:
                 60 minutes by default.
             refresh_token_expiry: How long an OAuth refresh token stays valid,
                 30 days by default.
+            served_from: The files the collection is served from, which makes
+                it read-only to every writer but their apply; ``None`` for a
+                collection the app edits.
         """
         self._catalog = catalog
         self._engine = engine or get_engine()
         self._encrypt = encrypt
         self._decrypt = decrypt
         self._quota_defaults = quota_defaults
+        self._served_from = served_from
 
         # Each facet is handed what it works through, so its dependencies read
         # off its constructor and nothing reaches back into the store.
@@ -105,7 +110,7 @@ class Store:
         self.tokens = TokenStore(self._engine, session_expiry=session_expiry, access_token_expiry=access_token_expiry)
         self.oauth = OAuthStore(self._engine, self.tokens, refresh_token_expiry=refresh_token_expiry)
         self.conversations = ConversationStore(self._engine)
-        self.relations = RelationStore(self._engine, catalog)
+        self.relations = RelationStore(self._engine, catalog, served_from=served_from)
         self.quotas = QuotaStore(self._engine, lambda: self._quota_defaults)
         self.usage = UsageStore(self._engine)
         self.events = EventStore(self._engine)
@@ -129,6 +134,7 @@ class Store:
             decrypt,
             self.quotas,
             self.relations,
+            served_from=served_from,
         )
         self.insights = InsightStore(self._engine, catalog, self.components, self.runs, self.backfills, self.executions)
 
@@ -140,6 +146,7 @@ class Store:
         session_expiry: timedelta = timedelta(days=30),
         access_token_expiry: timedelta = timedelta(minutes=60),
         refresh_token_expiry: timedelta = timedelta(days=30),
+        served_from: str | None = None,
     ) -> Store:
         """Build a Store with connection and encryption wired from runtime settings.
 
@@ -167,6 +174,8 @@ class Store:
                 60 minutes by default.
             refresh_token_expiry: How long an OAuth refresh token stays valid,
                 30 days by default.
+            served_from: The files the collection is served from, which makes
+                it read-only; ``None`` for a collection the app edits.
 
         Returns:
             A configured Store.
@@ -190,6 +199,7 @@ class Store:
                 session_expiry=session_expiry,
                 access_token_expiry=access_token_expiry,
                 refresh_token_expiry=refresh_token_expiry,
+                served_from=served_from,
             )
 
         from interloper_db.crypto import make_cipher
@@ -204,7 +214,18 @@ class Store:
             session_expiry=session_expiry,
             access_token_expiry=access_token_expiry,
             refresh_token_expiry=refresh_token_expiry,
+            served_from=served_from,
         )
+
+    @property
+    def served_from(self) -> str | None:
+        """The files the collection is served from, which makes it read-only.
+
+        Returns:
+            The files, comma-separated as given; ``None`` for a collection the
+            app edits.
+        """
+        return self._served_from
 
     # -- Session policy --------------------------------------------------------
 

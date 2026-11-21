@@ -33,10 +33,13 @@ from interloper_app.services import DevServer
 class DevCommand(Command):
     """Serve the project in this directory on 127.0.0.1, signed in, restarting on edits.
 
-    Classes named as targets join the catalog. The extensions the project
-    holds are served from source, their UIs from their Vite dev servers. The
-    platform restarts when a Python file, a manifest or interloper.yaml
-    changes; open the printed link to sign in.
+    Classes named as targets join the catalog. Instances named as targets, or
+    spec files passed with -f, put dev in file mode: the collection is served
+    from them alone, read-only in the app, from a database of its own;
+    without them, the collection is the one made in the app. The extensions
+    the project holds are served from source, their UIs from their Vite dev
+    servers. The platform restarts when a Python file, a manifest, a spec file
+    or interloper.yaml changes; open the printed link to sign in.
     """
 
     def add_arguments(self, parser: argparse.ArgumentParser) -> None:
@@ -46,7 +49,20 @@ class DevCommand(Command):
             parser: The command's own parser.
         """
         parser.add_argument(
-            "targets", nargs="*", metavar="CLASS", help="Component class to add to the catalog (module.Class)"
+            "targets",
+            nargs="*",
+            metavar="TARGET",
+            help="A component class to add to the catalog (weather.OpenMeteo), or a component instance to serve "
+            "the collection from, read-only in the app (weather.paris)",
+        )
+        parser.add_argument(
+            "-f",
+            "--file",
+            dest="files",
+            action="append",
+            default=[],
+            metavar="FILE",
+            help="A spec file to serve the collection from, read-only in the app (repeatable)",
         )
         parser.add_argument("--port", type=int, default=None, help="Port on 127.0.0.1 (default: server.port, 3000)")
         parser.add_argument(
@@ -64,7 +80,10 @@ class DevCommand(Command):
         """
         if sys.platform == "win32":
             raise SystemExit("Error: interloper dev runs on macOS and Linux; on Windows, run it inside WSL.")
-        project = DevProject.discover(Path.cwd())
+        files = [Path(file).resolve() for file in args.files]
+        if missing := [str(file) for file in files if not file.is_file()]:
+            raise SystemExit(f"Error: no such spec file: {', '.join(missing)}")
+        project = DevProject.discover(Path.cwd(), files)
         port = args.port or ServerSettings.get().port
         if DevServer.port_in_use(port):
             raise SystemExit(f"Error: port {port} is already in use. Stop what listens on it, or pass --port.")
@@ -78,7 +97,12 @@ class DevCommand(Command):
         sign_in = SignIn.generate(project.name, extensions[0].key if len(extensions) == 1 else None)
         platform = Platform(
             PlatformSpec(
-                port=port, parent=os.getpid(), python_path=[str(project.root)], classes=args.targets, sign_in=sign_in
+                port=port,
+                parent=os.getpid(),
+                root=str(project.root),
+                targets=args.targets,
+                files=[str(file) for file in files],
+                sign_in=sign_in,
             )
         )
         for signal_number in (signal.SIGTERM, signal.SIGHUP):
@@ -144,7 +168,7 @@ class DevCommand(Command):
         """
         print(f"\n  interloper dev is serving {project.name} from {project.root}\n", flush=True)
         platform.start()
-        for changes in itertools.chain([set()], watch(project.root, watch_filter=project.watches)):
+        for changes in itertools.chain([set()], watch(*project.watched, watch_filter=project.watches)):
             if changes:
                 edited = ", ".join(sorted({str(Path(path).relative_to(project.root)) for _, path in changes}))
                 print(f"\n  {edited} changed: restarting the platform.\n", flush=True)

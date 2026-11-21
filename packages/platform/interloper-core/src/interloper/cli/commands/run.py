@@ -4,7 +4,9 @@ What to execute
 ---------------
 
 * import paths (positional, the default): dotted paths to Source or Asset
-  classes, built into a DAG by `DAG.from_paths`.
+  classes or configured instances, built into a DAG by `DAG.from_paths`. A
+  module in the working directory imports without being installed, as with
+  ``python -m``.
 * ``--file/-f <spec.yaml>``: a component spec document (`Spec`,
   ``{key|path, init}``) for any **runnable** component: the run is literally
   "reconstruct the component and run its DAG". A Job spec is the composite
@@ -41,6 +43,8 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import logging
+import os
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -187,6 +191,8 @@ def _build_dag(args: argparse.Namespace) -> DAG:
     from interloper.dag import DAG, DAGSpec
     from interloper.errors import DAGError, SpecError
 
+    if (working_directory := os.getcwd()) not in sys.path:
+        sys.path.insert(0, working_directory)
     if args.file is not None:
         if args.target:
             raise SystemExit("Error: --file cannot be combined with positional targets.")

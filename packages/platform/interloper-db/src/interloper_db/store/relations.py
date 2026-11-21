@@ -29,7 +29,7 @@ from interloper.errors import ConfigError
 from sqlalchemy import Engine
 from sqlmodel import Session, col, select
 
-from interloper_db.errors import NotFoundError
+from interloper_db.errors import NotFoundError, ReadOnlyError
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.session import commit, session_scope
 from interloper_db.store.page import Page, PageQuery
@@ -57,15 +57,19 @@ class RelationQuery(PageQuery):
 class RelationStore:
     """Store methods for validated relation reads and writes."""
 
-    def __init__(self, engine: Engine, catalog: Catalog) -> None:
+    def __init__(self, engine: Engine, catalog: Catalog, *, served_from: str | None = None) -> None:
         """Bind the facet to what it works through.
 
         Args:
             engine: Engine the facet opens its sessions on.
             catalog: Catalog its relation vocabulary resolves against.
+            served_from: The files the collection is served from, which
+                refuses every relation the app asks to add or remove; ``None``
+                for a collection the app edits.
         """
         self._engine = engine
         self._catalog = catalog
+        self._served_from = served_from
 
     # -- Public API ------------------------------------------------------------
 
@@ -116,6 +120,7 @@ class RelationStore:
             The relation row (created, repointed, or already present).
         """
         with session_scope(self._engine) as session:
+            self._refuse_served()
             src = self._lock(component_id)
             relation = self._relation(src, name)
             dst = self._resolve(src, relation, name, dst_id)
@@ -154,6 +159,7 @@ class RelationStore:
                 relation, which may be repointed but not emptied.
         """
         with session_scope(self._engine) as session:
+            self._refuse_served()
             src = self._lock(component_id)
             rows = self._rows(src.id, name)
             row = next((candidate for candidate in rows if candidate.dst_id == dst_id), None)
@@ -167,6 +173,24 @@ class RelationStore:
                 )
             session.delete(row)
             commit(session)
+
+    def clear(self, src: Component, names: Sequence[str]) -> None:
+        """Remove every edge filed under these names, required or not, whatever the collection's mode.
+
+        Part of the caller's transaction. It bypasses the read-only refusal
+        and the guard on a required relation, so it serves only the writer of
+        a collection served from files, which binds every relation exactly as
+        the file says.
+
+        Args:
+            src: Source component whose edges are removed.
+            names: The relation names to empty.
+        """
+        with session_scope(self._engine) as session:
+            for name in names:
+                for row in self._rows(src.id, name):
+                    session.delete(row)
+            session.flush()
 
     def bind_siblings(self, source_cls: type[il.Source], children_by_key: dict[str, Component]) -> None:
         """Top up the intra-source edges a source class binds between its own assets.
@@ -303,6 +327,15 @@ class RelationStore:
         return relation.on_delete == "detach"
 
     # -- Internals -------------------------------------------------------------
+
+    def _refuse_served(self) -> None:
+        """Refuse a relation change the app asks of a collection its files serve.
+
+        Raises:
+            ReadOnlyError: If the collection is served from files.
+        """
+        if self._served_from is not None:
+            raise ReadOnlyError(f"The collection is served from {self._served_from}: change it there")
 
     def _vocabulary(self, row: Component) -> dict[str, il.Relation]:
         """The relation vocabulary governing a component row.
