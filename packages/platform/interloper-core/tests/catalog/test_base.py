@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from types import ModuleType
 from unittest import mock
 
@@ -147,6 +148,29 @@ class TestEnablement:
     def test_paths_round_trip(self):
         enabled = Catalog.from_paths([DemoDestination.definition().path])
         assert Catalog.from_paths(enabled.to_paths()).components.keys() == enabled.components.keys()
+
+
+class TestDocument:
+    """A catalog serialises itself once, and its digest names what it holds."""
+
+    def test_the_document_is_the_dump_as_json(self):
+        catalog = Catalog.from_paths([DemoSource.definition().path])
+        assert json.loads(catalog.document) == catalog.dump()
+
+    def test_the_document_is_serialised_once(self):
+        catalog = Catalog.from_paths([DemoSource.definition().path])
+        with mock.patch.object(Catalog, "dump", wraps=catalog.dump) as dump:
+            first, second = catalog.document, catalog.document
+        assert first is second
+        assert dump.call_count == 1
+
+    def test_catalogs_holding_the_same_definitions_share_a_digest(self):
+        paths = [DemoSource.definition().path]
+        assert Catalog.from_paths(paths).digest == Catalog.from_paths(paths).digest
+
+    def test_another_definition_changes_the_digest(self):
+        base = Catalog.from_paths([DemoSource.definition().path])
+        assert base.including([DemoDestination]).digest != base.digest
 
 
 class TestGroups:

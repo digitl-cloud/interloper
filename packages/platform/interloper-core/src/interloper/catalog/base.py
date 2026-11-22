@@ -33,9 +33,11 @@ catalog = il.Catalog.discover()        # the declared universe
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from collections.abc import Iterable
-from functools import cache
+from functools import cache, cached_property
 from types import ModuleType
 from typing import Any
 
@@ -128,6 +130,29 @@ class Catalog(BaseModel):
             Mapping from component key to serialized definition.
         """
         return {key: definition.model_dump(mode="json") for key, definition in self.components.items()}
+
+    @cached_property
+    def document(self) -> bytes:
+        """The catalog as compact JSON, serialised once.
+
+        A catalog is built when its process starts and its definitions do not
+        change afterwards, so these bytes stand for it as long as it lives.
+        Serialising every definition again for each reader is what this
+        spares.
+
+        Returns:
+            What `dump` returns, as UTF-8 JSON.
+        """
+        return json.dumps(self.dump(), ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode()
+
+    @cached_property
+    def digest(self) -> str:
+        """The name of this catalog's content: two catalogs holding the same definitions share it.
+
+        Returns:
+            The SHA-256 of `document`, in hexadecimal.
+        """
+        return hashlib.sha256(self.document).hexdigest()
 
     # -- Construction ----------------------------------------------------------
 

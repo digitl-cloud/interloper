@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from unittest import mock
 from uuid import uuid4
 
 import httpx2
@@ -97,6 +98,55 @@ def test_the_catalog_is_served_whole():
 
     assert response.status_code == 200
     assert response.json() == catalog.dump()
+    assert response.content == catalog.document
+    assert response.headers["content-type"] == "application/json"
+
+
+def _catalog_client(catalog: il.Catalog) -> TestClient:
+    app = _app()
+    app.dependency_overrides[get_catalog] = lambda: catalog
+    app.dependency_overrides[require_viewer] = lambda: None
+    return TestClient(app, base_url=_BASE_URL)
+
+
+def test_the_catalog_is_named_by_its_digest_and_asked_about_before_each_reuse():
+    catalog = il.Catalog.from_assets([AdsSource])
+
+    response = _catalog_client(catalog).get("/catalog")
+
+    assert response.headers["etag"] == f'"{catalog.digest}"'
+    assert response.headers["cache-control"] == "private, no-cache"
+
+
+@pytest.mark.parametrize("held", ['"{digest}"', 'W/"{digest}"', '"another", W/"{digest}"'])
+def test_a_caller_holding_this_catalog_is_sent_nothing(held: str):
+    catalog = il.Catalog.from_assets([AdsSource])
+
+    response = _catalog_client(catalog).get("/catalog", headers={"If-None-Match": held.format(digest=catalog.digest)})
+
+    assert response.status_code == 304
+    assert response.content == b""
+    assert response.headers["etag"] == f'"{catalog.digest}"'
+
+
+def test_a_caller_holding_another_catalog_is_sent_this_one():
+    catalog = il.Catalog.from_assets([AdsSource])
+    other = il.Catalog(components={})
+
+    response = _catalog_client(catalog).get("/catalog", headers={"If-None-Match": f'"{other.digest}"'})
+
+    assert response.status_code == 200
+    assert response.content == catalog.document
+
+
+def test_the_catalog_is_not_serialised_again_for_each_request():
+    catalog = il.Catalog.from_assets([AdsSource])
+    client = _catalog_client(catalog)
+
+    assert client.get("/catalog").content is not None
+    with mock.patch.object(il.Catalog, "dump") as dump:
+        assert client.get("/catalog").content == catalog.document
+    dump.assert_not_called()
 
 
 def test_resource_kinds_are_the_kinds_anchored_under_resource():
