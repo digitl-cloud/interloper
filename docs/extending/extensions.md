@@ -9,7 +9,9 @@ present.
 
 In a project made with `uv init --lib`, with `interloper-app` installed, `uv run interloper
 extension init` writes both, the manifest declaring no section yet, and `uv run interloper
-extension add <part>` adds each part below, its code and its entry.
+extension add <part>` adds each part below, its code and its entry. `init` also sets the
+project's `requires-python` to the Pythons `interloper-core` supports: `uv init` declares the
+newest Python on your machine, and the wheel would refuse to install on an older one.
 
 A package names its import package under the `interloper.extensions` entry point, the one entry
 point interloper reads, and ships the manifest inside that package so it lands in the wheel:

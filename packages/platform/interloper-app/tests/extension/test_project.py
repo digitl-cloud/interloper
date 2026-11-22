@@ -88,6 +88,26 @@ class TestEdits:
 
         assert pyproject.read_text() == before
 
+    def test_the_python_floor_is_replaced_on_its_own_line(self, library, tmp_path):
+        project = Project.from_directory(library())
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(pyproject.read_text().replace('">=3.11"', '">=3.15"'))
+        before = pyproject.read_text()
+
+        replaced = project.require_python(">=3.11")
+
+        assert replaced == ">=3.15"
+        assert pyproject.read_text() == before.replace('requires-python = ">=3.15"', 'requires-python = ">=3.11"')
+
+    def test_a_project_declaring_no_python_floor_is_left_as_written(self, library, tmp_path):
+        library()
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(pyproject.read_text().replace('requires-python = ">=3.11"\n', ""))
+        before = pyproject.read_text()
+
+        assert Project.from_directory(tmp_path).require_python(">=3.11") is None
+        assert pyproject.read_text() == before
+
     def test_a_manifest_declares_the_extension(self, library, tmp_path):
         project = Project.from_directory(library())
 

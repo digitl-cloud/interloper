@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import secrets
+from importlib.metadata import metadata
 
 from interloper.extension import MANIFESTS
 
@@ -22,9 +23,11 @@ class InitCommand(ProjectCommand):
 
     Run it in a project made with uv init --lib. It writes the package's extension.yaml with the extension's key,
     name and description and no section, names the package under the interloper.extensions entry point in
-    pyproject.toml, adds interloper-core, and writes interloper.yaml, the local instance's configuration, with an
-    encryption key of its own, gitignored. It refuses when the project is an extension already or when a file it
-    would write exists. Add what the extension declares with interloper extension add.
+    pyproject.toml, sets its requires-python to the Pythons interloper-core supports (uv init --lib declares the
+    newest one installed, which a deployment may not run), adds interloper-core, and writes interloper.yaml, the
+    local instance's configuration, with an encryption key of its own, gitignored. It refuses when the project is an
+    extension already or when a file it would write exists. Add what the extension declares with interloper
+    extension add.
     """
 
     def add_arguments(self, parser: argparse.ArgumentParser) -> None:
@@ -51,7 +54,8 @@ class InitCommand(ProjectCommand):
             ExtensionError: If the project declares an extension already, the
                 key is not snake_case or another installed package holds it
                 (the loader would skip one of the two manifests), a file to
-                write exists, or ``uv add`` fails after the files were written.
+                write exists, ``requires-python`` cannot be rewritten, or
+                ``uv add`` fails after the files were written.
         """
         if project.declares_extension:
             raise ExtensionError(
@@ -75,6 +79,8 @@ class InitCommand(ProjectCommand):
         existing = [path for path in files if path.exists()]
         if existing:
             raise ExtensionError(f"{project.relative(existing)} exists already; move it away to start the extension")
+        python = metadata("interloper-core")["Requires-Python"]
+        replaced = project.require_python(python)
         project.add_entry_point(key)
         for path, text in files.items():
             path.write_text(text, encoding="utf-8")
@@ -85,6 +91,11 @@ class InitCommand(ProjectCommand):
         except ExtensionError as error:
             raise ExtensionError(f"wrote {written}, but {error}") from error
         print(f"Wrote {written}: {project.distribution} is the extension '{key}', declaring nothing yet.")
+        if replaced is not None:
+            print(
+                f"requires-python is {python} now (it was {replaced}): the Pythons interloper-core supports, "
+                "so the extension installs beside any platform. Raise it if the extension needs a newer one."
+            )
         print("Add what it declares, one part at a time:")
         print(f"  uv run interloper extension add <{'|'.join(PARTS)}> [name]")
         print("Serve it in the app, signed in and reloading as you edit:")
