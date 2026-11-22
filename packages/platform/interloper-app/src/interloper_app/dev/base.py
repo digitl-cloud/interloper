@@ -40,7 +40,9 @@ class DevCommand(Command):
     them, the collection is the one made in the app. The extensions the
     project holds are served from source, their UIs from their Vite dev
     servers. The platform restarts when a Python file, a manifest, a spec file
-    or interloper.yaml changes; open the printed link to sign in.
+    or interloper.yaml changes; open the printed link to sign in. Its state is
+    kept in SQLite files in .interloper/, unless interloper.yaml or the
+    environment configures a Postgres.
     """
 
     def add_arguments(self, parser: argparse.ArgumentParser) -> None:
@@ -77,7 +79,7 @@ class DevCommand(Command):
             args: The parsed command line: ``targets``, ``port`` and ``no_browser``.
 
         Raises:
-            SystemExit: On Windows, when the port is taken or Postgres does not answer.
+            SystemExit: On Windows, when the port is taken or the database cannot be brought up.
         """
         from interloper_app.dev.platform import Platform, PlatformSpec
         from interloper_app.dev.signin import SignIn
@@ -91,7 +93,7 @@ class DevCommand(Command):
         port = Port(args.port or ServerSettings.get().port)
         if port.in_use:
             raise SystemExit(f"Error: port {port.number} is already in use. Stop what listens on it, or pass --port.")
-        self._check_database()
+        self._check_database(project.root)
         extensions = [extension for extension in project.extensions() if extension.ui_directory is not None]
         uis = [
             ViteServer(extension.key, directory, pnpm=project.pnpm_workspace)
@@ -154,24 +156,15 @@ class DevCommand(Command):
         raise KeyboardInterrupt
 
     @staticmethod
-    def _check_database() -> None:
-        """Bring the configured database up, its tables created, or say where Postgres was looked for.
+    def _check_database(root: Path) -> None:
+        """Bring the app's database up, its tables created, or say where it was looked for.
 
-        Raises:
-            SystemExit: When Postgres does not answer.
+        Args:
+            root: The project root, whose ``.interloper/`` holds the database when no Postgres is configured.
         """
-        from interloper_db.provision import bootstrap
-        from interloper_db.settings import PostgresSettings
-        from sqlalchemy.exc import OperationalError
+        from interloper_app.dev.database import DevDatabase
 
-        postgres = PostgresSettings.get()
-        try:
-            bootstrap(postgres.dsn, statement_timeout=postgres.statement_timeout)
-        except OperationalError as error:
-            raise SystemExit(
-                f"Error: Postgres at {postgres.host}:{postgres.port} (database '{postgres.database}') does not "
-                f"answer. Start it, or point the postgres section of interloper.yaml at one you run.\n{error.orig}"
-            ) from error
+        DevDatabase.from_settings(root).bootstrap()
 
     @classmethod
     def _serve(

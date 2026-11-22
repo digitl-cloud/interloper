@@ -1,10 +1,5 @@
 # The local instance's configuration, read by every interloper command run in this directory.
-# Point postgres at a database you own. The key encrypts what the instance stores, so this file stays out of git.
-postgres:
-  host: localhost
-  port: 5432
-  user: postgres
-  password: postgres
-  database: interloper
+# interloper dev keeps the instance's state in .interloper/; add a postgres section to keep it in a Postgres you run.
+# The key encrypts what the instance stores, so this file stays out of git.
 encryption:
   key: "$key"

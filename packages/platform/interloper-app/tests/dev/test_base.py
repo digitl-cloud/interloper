@@ -10,10 +10,10 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from sqlalchemy.exc import OperationalError
 
 from interloper_app.dev import base as base_module
 from interloper_app.dev.base import DevCommand
+from interloper_app.dev.database import DevDatabase
 from interloper_app.dev.platform import PlatformSpec
 from interloper_app.dev.port import Port
 from interloper_app.dev.project import DevProject, HeldExtension
@@ -30,7 +30,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DevProject:
     project = DevProject(tmp_path, "Weather", tmp_path / "interloper.yaml", held=())
     monkeypatch.setattr(DevProject, "discover", classmethod(lambda cls, directory, files=(): project))
     monkeypatch.setattr(base_module.Port, "in_use", property(lambda self: False))
-    monkeypatch.setattr(DevCommand, "_check_database", staticmethod(lambda: None))
+    monkeypatch.setattr(DevCommand, "_check_database", staticmethod(lambda root: None))
     for signal_number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         monkeypatch.setattr(base_module.signal, "signal", mock.Mock())
     return project
@@ -79,14 +79,13 @@ def test_a_busy_port_is_refused_by_name(project: DevProject, monkeypatch: pytest
         DevCommand().run(_args())
 
 
-def test_an_unreachable_postgres_is_named(monkeypatch: pytest.MonkeyPatch):
-    def refuse(*args: object, **kwargs: object) -> None:
-        raise OperationalError("connect", {}, Exception("connection refused"))
+def test_the_project_s_database_is_brought_up(monkeypatch: pytest.MonkeyPatch):
+    brought_up: list[Path] = []
+    monkeypatch.setattr(DevDatabase, "bootstrap", lambda self, files=False: brought_up.append(self.root))
 
-    monkeypatch.setattr("interloper_db.provision.bootstrap", refuse)
+    DevCommand._check_database(Path("/work/acme"))
 
-    with pytest.raises(SystemExit, match=r"Postgres at localhost:5432 \(database 'interloper'\) does not answer"):
-        DevCommand._check_database()
+    assert brought_up == [Path("/work/acme")]
 
 
 def test_it_serves_the_project_then_stops_everything(project: DevProject, served, monkeypatch: pytest.MonkeyPatch):

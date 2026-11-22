@@ -9,8 +9,6 @@ installed.
 ## What you need
 
 - [uv](https://docs.astral.sh/uv/), which runs every command below.
-- A PostgreSQL you can create a database in: the app keeps its state there, also on your machine.
-  `docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres` is enough.
 - Node.js and npm, for a UI only.
 - macOS or Linux. On Windows, work inside WSL.
 
@@ -32,9 +30,10 @@ uv run interloper extension init
   `interloper-core` as a dependency;
 - `src/acme_interloper/extension.yaml` is the manifest: the extension's key (`acme`), its name and
   description, and later every part it declares;
-- `interloper.yaml` is the configuration every `interloper` command run in this directory reads:
-  the Postgres to use and a key that encrypts what the local instance stores. It holds that key,
-  so `init` adds it to `.gitignore`. Point its `postgres` section at your database.
+- `interloper.yaml` is the configuration every `interloper` command run in this directory reads,
+  with a key that encrypts what the local instance stores. It holds that key, so `init` adds it
+  to `.gitignore`. The local instance keeps its state in SQLite files in `.interloper/`, which
+  ignores itself; add a `postgres` section to keep it in a Postgres you run instead.
 
 ## Add what it declares
 

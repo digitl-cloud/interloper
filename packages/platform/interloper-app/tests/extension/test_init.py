@@ -36,23 +36,17 @@ class TestInit:
         assert "uv run interloper extension add <source|connection|settings|command|routes|ui> [name]" in out
         assert "uv run interloper dev" in out
 
-    def test_the_local_configuration_points_at_a_local_database_with_a_key_of_its_own(
+    def test_the_local_configuration_holds_a_key_of_its_own_and_no_database(
         self, acme, library, tmp_path, uv, extension, monkeypatch
     ):
+        # Without a postgres section, interloper dev keeps the instance's state in .interloper/.
         extension("init")
         other = library(root=tmp_path / "other")
         monkeypatch.chdir(other)
         extension("init")
 
         config = yaml.safe_load((acme / "interloper.yaml").read_text())
-        assert config["postgres"] == {
-            "host": "localhost",
-            "port": 5432,
-            "user": "postgres",
-            "password": "postgres",
-            "database": "interloper",
-        }
-        assert set(config) == {"postgres", "encryption"}
+        assert set(config) == {"encryption"}
         assert len(config["encryption"]["key"]) >= 32
         assert (
             yaml.safe_load((other / "interloper.yaml").read_text())["encryption"]["key"] != config["encryption"]["key"]
