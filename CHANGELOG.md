@@ -2,6 +2,78 @@
 
 <!-- version list -->
 
+## v0.141.0 (2026-11-22)
+
+### Bug Fixes
+
+- **app**: Let an extension install on every Python the platform supports
+  ([`66202f8`](https://github.com/digitl-cloud/interloper/commit/66202f8a5283478fd106c5b09939938fd32a9f56))
+
+### Chores
+
+- Give the scale test production's database round trip and one replica per browser
+  ([`bc96942`](https://github.com/digitl-cloud/interloper/commit/bc96942da78a7172000e93d2adb237ebca64d128))
+
+### Documentation
+
+- Walk through writing an extension in its own repository
+  ([`e07c1c3`](https://github.com/digitl-cloud/interloper/commit/e07c1c3b111905c1dfbaeb44df0d2056a210cb28))
+
+### Features
+
+- **app**: Serve a project with interloper dev
+  ([`51527be`](https://github.com/digitl-cloud/interloper/commit/51527be1f63856e2f89c481cbf57d777c0a62436))
+
+- **app**: Serve the collection from files with interloper dev -f
+  ([`c343092`](https://github.com/digitl-cloud/interloper/commit/c3430926fbdcfbfcdbc9bf8e2c3b0e637670fb3a))
+
+- **app**: Serve the repository with interloper dev and retire app --dev
+  ([`0701f60`](https://github.com/digitl-cloud/interloper/commit/0701f601634670123e44a12f6983a89d0cb81f75))
+
+- **app**: Start the Vite server of a UI added while interloper dev runs
+  ([`58a7198`](https://github.com/digitl-cloud/interloper/commit/58a7198f4dcbe2c5bfaed1d37600587885b68cf9))
+
+- **chart**: Autoscale the api and spread its pods
+  ([`76c91d7`](https://github.com/digitl-cloud/interloper/commit/76c91d7b9cb26c65a6347907c44c7194daef1dec))
+
+### Performance Improvements
+
+- Compress what the api and the frontend send
+  ([`9bf6307`](https://github.com/digitl-cloud/interloper/commit/9bf630728514c110350b78fb3dc1fc6fdaa22977))
+
+- Read the coverage calendar level by level
+  ([`e9d37ba`](https://github.com/digitl-cloud/interloper/commit/e9d37bada509fa2e12cd7b3ed697e62069d4f172))
+
+- **api**: Serve the catalog from bytes serialised once, and send nothing to a caller that holds it
+  ([`f0f3d47`](https://github.com/digitl-cloud/interloper/commit/f0f3d47d47f0e7c398abaee5eaff339db61887c8))
+
+- **api**: Share one database session per read request and authorise it in one statement
+  ([`f52b502`](https://github.com/digitl-cloud/interloper/commit/f52b5021c25c8b18cede4ae5c755c436ef6411e4))
+
+- **app**: Load the components listing once per organisation
+  ([`933eb89`](https://github.com/digitl-cloud/interloper/commit/933eb898cd580ef8056250935ddf2d3115d1de8b))
+
+- **core**: Print the command list and each command's help without loading the platform
+  ([`7ce6c10`](https://github.com/digitl-cloud/interloper/commit/7ce6c10cbae372ae4fabd96a07e2874fb30335b3))
+
+- **db**: Load the components listing's relation targets and parents once
+  ([`582f05c`](https://github.com/digitl-cloud/interloper/commit/582f05c18fb6c04974b26a45fca783c59c7ebf24))
+
+### Refactoring
+
+- **db**: Fold the migrations into the three that hold what the models cannot say
+  ([`e62d6dc`](https://github.com/digitl-cloud/interloper/commit/e62d6dcc72b7552c1c45fa5592d33fd1e47b20e0))
+
+- **db**: The serving commands never write the schema
+  ([`c1d1da1`](https://github.com/digitl-cloud/interloper/commit/c1d1da190e43c90e7d4b182aab2ee5cfdaee49b6))
+
+### Breaking Changes
+
+- **db**: `--no-create-tables` is gone, and `interloper api`, `scheduler` and `app` no longer create
+  or migrate the schema: run `interloper db init` first (a single container runs `interloper db init
+  && interloper app`).
+
+
 ## v0.140.1 (2026-11-21)
 
 ### Chores
