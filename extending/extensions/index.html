@@ -2933,6 +2933,18 @@ extension's page. The UI comes from its Vite dev server, built or not: a stylesh
 applies in place, a <code>.vue</code> edit reloads the page, and an edit to a Python file, the manifest or
 <code>interloper.yaml</code> restarts the platform. Class paths given as arguments join the catalog, so a
 plain project serves its sources the same way (<code>uv run interloper dev weather.OpenMeteo</code>).</p>
+<p>The collection can come from files instead of the app. An instance path (<code>uv run interloper
+dev weather.paris</code>) declares that instance and what it binds, and <code>-f collection.yaml</code>
+(repeatable) declares each document of a spec file, the format <code>interloper run -f</code> reads.
+Either puts <code>dev</code> in file mode: the collection is served from those files alone, from a database
+of its own beside the configured one (one per checkout), and the app shows it read-only, saying
+which files serve it. Runs, backfills and cancels work as usual. Every start writes the files'
+components as they are: an edit updates a component in place, its id and run history kept (give
+a spec component an <code>id</code> to keep them across a reordering of the file), and a component the
+files stop declaring is deleted. The files hold everything, credentials included (as
+environment references), since nothing made in the app joins a collection served from files.
+Without them, <code>dev</code> serves the collection you build in the app. <code>uv run interloper run
+weather.paris</code> runs the same instance in the terminal.</p>
 <p>To work on a UI with hot reload, run its dev server beside the app's and name it in
 <code>INTERLOPER_UI_DEV</code> (<code>&lt;key&gt;=&lt;entry URL&gt;</code>, several separated by commas):</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>pnpm<span class="w"> </span>--filter<span class="w"> </span>@interloper/example<span class="w"> </span>dev<span class="w">       </span><span class="c1"># http://localhost:5173</span>

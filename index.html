@@ -2481,9 +2481,9 @@ The source instance arrives as <code>self</code>, so assets can share configurat
 Pick another runner, or tune concurrency and failure handling, as described in
 <a href="guide/execution/">Execution</a>.</p>
 <h2 id="run-from-the-command-line">Run from the command line<a class="headerlink" href="#run-from-the-command-line" title="Permanent link">&para;</a></h2>
-<p>Anything importable can be run with the CLI. Save the source as <code>shop.py</code>, make its directory
-importable, and print the plan:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>interloper<span class="w"> </span>run<span class="w"> </span>shop.Shop<span class="w"> </span>--dry-run
+<p>Anything importable can be run with the CLI. Save the source as <code>shop.py</code> and, from its
+directory, print the plan:</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>interloper<span class="w"> </span>run<span class="w"> </span>shop.Shop<span class="w"> </span>--dry-run
 </span></code></pre></div>
 <p>An import path instantiates the class with its defaults, so a source whose assets depend on each
 other needs destinations to read them back from. Those come from a spec file:</p>
@@ -2494,7 +2494,7 @@ other needs destinations to read them back from. Those come from a spec file:</p
 </span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper.destination.csv.CSVDestination</span>
 </span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">      </span><span class="nt">init</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> base_path</span><span class="p">:</span><span class="w"> </span><span class="nv">./data</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </span></code></pre></div>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>interloper<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>shop.yaml
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>interloper<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>shop.yaml
 </span></code></pre></div>
 <p>See <a href="guide/cli/">CLI</a> and <a href="guide/specs/">Specs and serialization</a>.</p>
 <h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>

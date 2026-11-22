@@ -2545,6 +2545,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#interloper_db.errors.ReadOnlyError" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-class"></code>&nbsp;ReadOnlyError
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#interloper_db.errors.QuotaExceededError" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -4104,6 +4115,57 @@ mappings; <code>None</code> is stored as an empty list.</p>
           </tr>
       </tbody>
     </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="interloper_db.errors.ReadOnlyError" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>            <span class="doc doc-object-name doc-class-name">ReadOnlyError</span>
+
+
+<a href="#interloper_db.errors.ReadOnlyError" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;ConflictError&lt;/span&gt; (&lt;code&gt;interloper_db.errors.ConflictError&lt;/code&gt;)" href="./#interloper_db.errors.ConflictError">ConflictError</a></code></p>
+
+
+
+        <p>The collection is served from files, so the app cannot change it.</p>
+<p>Raised by the store layer for a change asked of a collection <code>interloper
+dev</code> serves from spec files or Python instances; the API answers HTTP
+409, naming the files.</p>
 
 
 

@@ -2786,10 +2786,13 @@ enabled.</p>
 </table>
 <h2 id="interloper-dev"><code>interloper dev</code><a class="headerlink" href="#interloper-dev" title="Permanent link">&para;</a></h2>
 <p>Serve the project in this directory on 127.0.0.1, signed in, restarting on edits.</p>
-<p>Classes named as targets join the catalog. The extensions the project
-holds are served from source, their UIs from their Vite dev servers. The
-platform restarts when a Python file, a manifest or interloper.yaml
-changes; open the printed link to sign in.</p>
+<p>Classes named as targets join the catalog. Instances named as targets, or
+spec files passed with -f, put dev in file mode: the collection is served
+from them alone, read-only in the app, from a database of its own;
+without them, the collection is the one made in the app. The extensions
+the project holds are served from source, their UIs from their Vite dev
+servers. The platform restarts when a Python file, a manifest, a spec file
+or interloper.yaml changes; open the printed link to sign in.</p>
 <table>
 <thead>
 <tr>
@@ -2800,7 +2803,11 @@ changes; open the printed link to sign in.</p>
 <tbody>
 <tr>
 <td><code>targets ...</code></td>
-<td>Component class to add to the catalog (module.Class)</td>
+<td>A component class to add to the catalog (weather.OpenMeteo), or a component instance to serve the collection from, read-only in the app (weather.paris)</td>
+</tr>
+<tr>
+<td><code>-f, --file FILE</code></td>
+<td>A spec file to serve the collection from, read-only in the app (repeatable) Default <code>[]</code>.</td>
 </tr>
 <tr>
 <td><code>--port PORT</code></td>

@@ -2621,9 +2621,10 @@ from sync code, drive them with <code>il.run</code>:</p>
 <p><code>on_event</code> streams the run's lifecycle events through the logging stack. See
 <a href="../guide/execution/">Execution</a> and <a href="../guide/events/">Events and logging</a>.</p>
 <h2 id="9-the-cli">9. The CLI<a class="headerlink" href="#9-the-cli" title="Permanent link">&para;</a></h2>
-<p>With the source saved in <code>weather.py</code>, inspect the plan without writing a driver script. The
-module must be importable, so either install your package or put its directory on the path:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>interloper<span class="w"> </span>run<span class="w"> </span>weather.OpenMeteo<span class="w"> </span>--date<span class="w"> </span><span class="m">2026</span>-01-15<span class="w"> </span>--dry-run
+<p>With the source saved in <code>weather.py</code>, inspect the plan without writing a driver script, from
+the directory that holds it (a module there imports as with <code>python -m</code>; an installed package
+works from anywhere):</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>interloper<span class="w"> </span>run<span class="w"> </span>weather.OpenMeteo<span class="w"> </span>--date<span class="w"> </span><span class="m">2026</span>-01-15<span class="w"> </span>--dry-run
 </span></code></pre></div>
 <p>Import paths instantiate the class with its defaults, which here means no destinations, and
 <code>daily_summary</code> needs <code>forecast</code> to have been written somewhere. Destinations and configuration
@@ -2637,7 +2638,7 @@ for a CLI run live in a <strong>spec file</strong>, a YAML document reconstructi
 </span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper.destination.csv.CSVDestination</span>
 </span><span id="__span-16-8"><a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="w">      </span><span class="nt">init</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> base_path</span><span class="p">:</span><span class="w"> </span><span class="nv">./data</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </span></code></pre></div>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>interloper<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>weather.yaml<span class="w"> </span>--date<span class="w"> </span><span class="m">2026</span>-01-15
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>interloper<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>weather.yaml<span class="w"> </span>--date<span class="w"> </span><span class="m">2026</span>-01-15
 </span></code></pre></div>
 <p>The CLI also takes <code>--start-date</code> and <code>--end-date</code>, but that is a <strong>single run</strong> covering the
 whole window, which only assets declaring <code>allow_window=True</code> accept. For one run per day, loop

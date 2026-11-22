@@ -2541,9 +2541,10 @@ is loaded when <code>python-dotenv</code> is installed, and telemetry is initial
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>interloper<span class="w"> </span>run<span class="w"> </span>my_package.sources.Shop
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>interloper<span class="w"> </span>run<span class="w"> </span>my_package.sources.Shop<span class="w"> </span>my_package.sources.Finance
 </span></code></pre></div>
-<p>Each path resolves to a source or asset class, which is instantiated with its defaults and
-handed to <code>DAG(*items)</code>. The module must be importable from the current environment: an
-installed package, or a directory added with <code>PYTHONPATH</code>. Because defaults rarely include
+<p>Each path resolves to a source or asset class, instantiated with its defaults, or to a
+configured instance (<code>interloper run weather.paris</code>), and is handed to <code>DAG(*items)</code>. The module
+must be importable: an installed package, or a module in the working directory, as with
+<code>python -m</code>. Because defaults rarely include
 destinations, a DAG with dependencies usually needs a spec file instead; a <code>paths</code> run is most
 useful with <code>--dry-run</code> or for sources that declare destinations in code.</p>
 <h3 id="from-a-spec-file">From a spec file<a class="headerlink" href="#from-a-spec-file" title="Permanent link">&para;</a></h3>
