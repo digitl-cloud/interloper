@@ -27,6 +27,7 @@ from interloper_app.extension.manifest import ManifestFile
 
 ENTRY_POINT_GROUP = "interloper.extensions"
 _REQUIREMENT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+_REQUIRES_PYTHON = re.compile(r"""^(\s*requires-python\s*=\s*)(["']).*?\2""", re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -165,6 +166,42 @@ class Project:
                     f"{self.relative([clash])} exists, and would share its import name with "
                     f"{self.relative([path])}; pick another name"
                 )
+
+    def require_python(self, specifier: str) -> str | None:
+        """Make ``[project].requires-python`` the given Pythons, the line rewritten in place.
+
+        A project that declares no ``requires-python`` is left as written: it
+        installs on any Python.
+
+        Args:
+            specifier: The Pythons the project supports (``>=3.11``).
+
+        Returns:
+            The value it replaced, or ``None`` when the project declared the
+            specifier already or declares none.
+
+        Raises:
+            ExtensionError: If the file would not read back with the specifier,
+                as when the value is a multi-line string.
+        """
+        declared = self._pyproject.get("project", {}).get("requires-python")
+        if declared is None or declared == specifier:
+            return None
+        path = self.root / "pyproject.toml"
+        text = _REQUIRES_PYTHON.sub(
+            lambda match: f'{match.group(1)}"{specifier}"', path.read_bytes().decode("utf-8"), count=1
+        )
+        try:
+            written = tomllib.loads(text)["project"]["requires-python"]
+        except (tomllib.TOMLDecodeError, KeyError, TypeError):
+            written = None
+        if written != specifier:
+            raise ExtensionError(
+                "requires-python cannot be rewritten in pyproject.toml; "
+                f'set it by hand: requires-python = "{specifier}"'
+            )
+        path.write_bytes(text.encode("utf-8"))
+        return declared
 
     def add_entry_point(self, key: str) -> None:
         """Name the import package under the ``interloper.extensions`` entry point.

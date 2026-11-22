@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import tomllib
-from importlib.metadata import version
+from importlib.metadata import metadata, version
 
 import pytest
 import yaml
@@ -57,6 +57,37 @@ class TestInit:
         assert (
             yaml.safe_load((other / "interloper.yaml").read_text())["encryption"]["key"] != config["encryption"]["key"]
         )
+
+    def test_a_newer_python_floor_is_lowered_to_the_one_interloper_core_declares(self, acme, uv, extension, capsys):
+        # uv init --lib declares the newest Python on the author's machine, which a deployment may not run.
+        pyproject = acme / "pyproject.toml"
+        pyproject.write_text(pyproject.read_text().replace('">=3.11"', '">=3.15"'))
+
+        extension("init")
+
+        floor = metadata("interloper-core")["Requires-Python"]
+        assert tomllib.loads(pyproject.read_text())["project"]["requires-python"] == floor
+        assert f"requires-python is {floor} now (it was >=3.15)" in capsys.readouterr().out
+
+    def test_the_python_floor_is_set_before_uv_add_resolves(self, acme, extension, monkeypatch):
+        # Below interloper-core's floor, uv add could not resolve interloper-core at all.
+        pyproject = acme / "pyproject.toml"
+        pyproject.write_text(pyproject.read_text().replace('">=3.11"', '">=3.10"'))
+        resolved_for = []
+        monkeypatch.setattr(
+            Project,
+            "_uv",
+            lambda project, *args: resolved_for.append(project._pyproject["project"]["requires-python"]),
+        )
+
+        extension("init")
+
+        assert resolved_for == [metadata("interloper-core")["Requires-Python"]]
+
+    def test_a_python_floor_that_is_interloper_cores_already_is_not_mentioned(self, acme, uv, extension, capsys):
+        extension("init")
+
+        assert "requires-python" not in capsys.readouterr().out
 
     def test_a_description_yaml_would_misread_is_kept_as_written(self, acme, uv, extension):
         pyproject = acme / "pyproject.toml"
@@ -134,6 +165,22 @@ class TestRefusals:
 
         assert exit_info.value.code == 1
         assert "interloper.yaml exists already" in capsys.readouterr().err
+        assert tree(acme) == before
+        assert uv == []
+
+    def test_a_python_floor_it_cannot_rewrite_is_refused_before_anything_is_written(
+        self, acme, uv, extension, tree, capsys
+    ):
+        pyproject = acme / "pyproject.toml"
+        pyproject.write_text(pyproject.read_text().replace('">=3.11"', '""">=3.15"""'))
+        before = tree(acme)
+
+        with pytest.raises(SystemExit) as exit_info:
+            extension("init")
+
+        assert exit_info.value.code == 1
+        floor = metadata("interloper-core")["Requires-Python"]
+        assert f'set it by hand: requires-python = "{floor}"' in capsys.readouterr().err
         assert tree(acme) == before
         assert uv == []
 
