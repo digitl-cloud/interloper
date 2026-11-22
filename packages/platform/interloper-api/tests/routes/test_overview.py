@@ -32,6 +32,7 @@ from interloper_db.models import (
     Profile,
     Quota,
     Run,
+    Token,
     Usage,
     UserOrganisation,
     table_of,
@@ -42,7 +43,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
 
 from interloper_api.app import ORG_PREFIX, install_error_handlers
-from interloper_api.dependencies import get_caller, get_store
+from interloper_api.dependencies import get_store
 from interloper_api.routes import overview as overview_module
 
 NOW = dt.datetime(2026, 8, 13, 9, 14, tzinfo=dt.UTC)
@@ -152,6 +153,7 @@ def engine() -> Iterator[Engine]:
         Identity,
         Organisation,
         UserOrganisation,
+        Token,
         Component,
         ComponentRelation,
         Backfill,
@@ -202,21 +204,22 @@ def member(store: Store) -> SimpleNamespace:
 
 @pytest.fixture
 def client(store: Store, member: SimpleNamespace) -> TestClient:
-    """A client over the overview router, authenticated as *member*.
+    """A client over the overview router, signed in as *member*.
 
     Args:
         store: The store the routes read.
-        member: The authenticated viewer.
+        member: The signed-in viewer.
 
     Returns:
-        The test client.
+        The test client, carrying the member's session cookie.
     """
     app = FastAPI()
     install_error_handlers(app)
     app.include_router(overview_module.org_router, prefix=ORG_PREFIX)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_caller] = lambda: member
-    return TestClient(app, base_url=f"http://testserver/organisations/{member.org_id}")
+    client = TestClient(app, base_url=f"http://testserver/organisations/{member.org_id}")
+    client.cookies.set("session_token", store.tokens.create_session(member.id))
+    return client
 
 
 def _overview(client: TestClient) -> dict[str, Any]:

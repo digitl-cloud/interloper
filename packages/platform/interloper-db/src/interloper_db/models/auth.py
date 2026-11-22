@@ -109,6 +109,21 @@ class Profile(SQLModel, table=True):
         link_model=UserOrganisation, sa_relationship_kwargs={"viewonly": True}
     )
 
+    def acting_role(self, membership: str | None) -> str | None:
+        """The role this profile acts with in a live organisation, given what its membership there holds.
+
+        A super-admin acts as ``admin`` in every organisation, a member or
+        not; anyone else with their membership's role.
+
+        Args:
+            membership: The role the profile's membership in the organisation
+                holds, ``None`` when it is not a member.
+
+        Returns:
+            The role name, or ``None`` when the profile cannot act in the organisation.
+        """
+        return Role.ADMIN.value if self.is_super_admin else membership
+
 
 class Identity(SQLModel, table=True):
     """A way a profile signs in: the subject an identity provider names the person by.

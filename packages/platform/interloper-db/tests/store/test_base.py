@@ -9,9 +9,10 @@ from uuid import uuid4
 import interloper as il
 import pytest
 from cryptography.fernet import Fernet
-from sqlalchemy import Engine
+from sqlalchemy import Engine, event
 from sqlmodel import Session, select
 
+from interloper_db import NotFoundError
 from interloper_db.models import Component
 from interloper_db.store import Store
 from interloper_db.store import base as base_module
@@ -94,6 +95,29 @@ class TestTransaction:
                 _make(store, "b")
             raise RuntimeError("boom")
         assert _count(component_db) == 0
+
+
+class TestSharedSession:
+    """Store calls in the block share one transaction, each still committing its own writes."""
+
+    def test_reads_share_one_transaction(self, store: Store, component_db: Engine):
+        created = _make(store, "a")
+        begun: list[object] = []
+        event.listen(component_db, "begin", begun.append)
+
+        with store.shared_session():
+            store.components.get(created.id)
+            store.components.get(created.id)
+
+        assert len(begun) == 1
+
+    def test_a_write_survives_a_later_call_failing(self, store: Store, component_db: Engine):
+        with store.shared_session():
+            _make(store, "a")
+            with pytest.raises(NotFoundError):
+                store.components.get(uuid4())
+
+        assert _count(component_db) == 1
 
 
 class TestFromSettings:

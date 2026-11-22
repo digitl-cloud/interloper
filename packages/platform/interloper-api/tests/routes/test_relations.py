@@ -3,20 +3,33 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper_db import Page, RelationQuery
+from interloper_db import Organisation, Page, Profile, RelationQuery, Token
 
 from interloper_api.app import ORG_PREFIX, install_error_handlers
-from interloper_api.dependencies import get_caller, get_store
+from interloper_api.dependencies import CallerCredential, OrgScope, get_org_scope, get_store
 from interloper_api.routes import relations as relations_module
 
 _ORG_ID = uuid4()
 _BASE_URL = f"http://testserver/organisations/{_ORG_ID}"
+
+
+def _viewer_scope(org_id: UUID) -> OrgScope:
+    """Stand in for ``get_org_scope``: the caller is a viewer of the path's organisation.
+
+    Args:
+        org_id: The organisation the path names.
+
+    Returns:
+        The scope.
+    """
+    caller = CallerCredential(user=cast(Profile, SimpleNamespace(id=uuid4())), token=cast(Token, SimpleNamespace()))
+    return OrgScope(credential=caller, organisation=cast(Organisation, SimpleNamespace(id=org_id)), role="viewer")
 
 
 def _relation(name: str, src_kind: str, dst_kind: str) -> SimpleNamespace:
@@ -31,8 +44,6 @@ class RelationStore:
         self.rows: list[Any] = []
         self.listed: list[tuple[UUID, RelationQuery]] = []
         self.relations = SimpleNamespace(list=self._list)
-        self.members = SimpleNamespace(role_of=lambda org_id, user: "viewer")
-        self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
 
     def _list(self, org_id: UUID, query: RelationQuery) -> Page[Any]:
         self.listed.append((org_id, query))
@@ -66,12 +77,11 @@ def client(store: RelationStore) -> TestClient:
     Returns:
         A client for the probe app.
     """
-    user = SimpleNamespace(id=uuid4(), email="ada@example.com", is_super_admin=False)
     app = FastAPI()
     install_error_handlers(app)
     app.include_router(relations_module.org_router, prefix=ORG_PREFIX)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_caller] = lambda: user
+    app.dependency_overrides[get_org_scope] = _viewer_scope
     return TestClient(app, base_url=_BASE_URL)
 
 

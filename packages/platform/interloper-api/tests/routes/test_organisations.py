@@ -65,11 +65,13 @@ class FakeStore:
     """In-memory stand-in exposing only the store facets these routes reach for.
 
     The caller (``_USER_ID``) is an admin of ``_ORG_ID`` unless a test
-    changes ``roles``; ``_OTHER_ORG_ID`` exists but the caller is not in it.
+    changes ``roles`` or ``caller``; ``_OTHER_ORG_ID`` exists but the caller
+    is not in it. Whatever credential is presented stands for ``caller``.
     """
 
     def __init__(self) -> None:
         """Set up the recorders and the default fixture data."""
+        self.caller = _profile()
         self.orgs: dict[UUID, SimpleNamespace] = {
             _ORG_ID: SimpleNamespace(id=_ORG_ID, name="Dev Org", key="dev-org", created_at=_NOW),
             _OTHER_ORG_ID: SimpleNamespace(id=_OTHER_ORG_ID, name="Other Org", key="other-org", created_at=_NOW),
@@ -100,9 +102,8 @@ class FakeStore:
             update=self._update_org,
             delete=self._delete_org,
         )
-        self.tokens = SimpleNamespace(resolve=lambda raw, audience: None)
+        self.tokens = SimpleNamespace(resolve=lambda raw, audience: None, resolve_in=self._resolve_in)
         self.members = SimpleNamespace(
-            role_of=lambda org_id, user: "admin" if user.is_super_admin else self.roles.get((org_id, user.id)),
             list=self._list_members,
             add=self._add_member,
             update=self._update_member,
@@ -114,6 +115,15 @@ class FakeStore:
             delete=self._delete_invitation,
             reissue=self._reissue_invitation,
         )
+
+    # -- tokens --
+
+    def _resolve_in(self, raw: str, audience: Any, org_id: UUID) -> tuple[Any, Any, Any, str | None]:
+        organisation = self.orgs.get(org_id)
+        role = self.roles.get((org_id, self.caller.id))
+        if self.caller.is_super_admin:
+            role = "admin"
+        return self.caller, SimpleNamespace(client_id=None), organisation, role if organisation else None
 
     # -- organisations --
 
@@ -249,8 +259,8 @@ def app(store: FakeStore, settings: SimpleNamespace) -> FastAPI:
     app.include_router(organisations_module.org_router, prefix=ORG_PREFIX)
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_settings] = lambda: settings
-    app.dependency_overrides[get_caller] = lambda: _profile()
-    app.dependency_overrides[get_session_caller] = lambda: _profile()
+    app.dependency_overrides[get_caller] = lambda: store.caller
+    app.dependency_overrides[get_session_caller] = lambda: store.caller
     return app
 
 
@@ -262,24 +272,28 @@ def client(app: FastAPI) -> TestClient:
         app: The probe app.
 
     Returns:
-        The client.
+        The client, presenting a session cookie the fake store resolves.
     """
-    return TestClient(app)
+    client = TestClient(app)
+    client.cookies.set("session_token", "cookie")
+    return client
 
 
 @pytest.fixture
-def super_client(app: FastAPI) -> TestClient:
+def super_client(app: FastAPI, store: FakeStore) -> TestClient:
     """A client calling as a super-admin who belongs to no organisation.
 
     Args:
         app: The probe app.
+        store: The fake store, whose caller becomes the super-admin.
 
     Returns:
-        The client.
+        The client, presenting a session cookie the fake store resolves.
     """
-    app.dependency_overrides[get_caller] = lambda: _super_admin()
-    app.dependency_overrides[get_session_caller] = lambda: _super_admin()
-    return TestClient(app)
+    store.caller = _super_admin()
+    client = TestClient(app)
+    client.cookies.set("session_token", "cookie")
+    return client
 
 
 def _token_client(app: FastAPI, store: FakeStore) -> TestClient:
@@ -294,7 +308,8 @@ def _token_client(app: FastAPI, store: FakeStore) -> TestClient:
     """
     app.dependency_overrides.pop(get_caller)
     app.dependency_overrides.pop(get_session_caller)
-    store.tokens = SimpleNamespace(resolve=lambda raw, audience: (_super_admin(), SimpleNamespace()))
+    store.caller = _super_admin()
+    store.tokens.resolve = lambda raw, audience: (_super_admin(), SimpleNamespace())
     return TestClient(app)
 
 
@@ -847,9 +862,9 @@ class TestInviteMember:
         assert email.logo_url == f"{_PUBLIC_URL}/logo-email.png"
 
     def test_a_nameless_inviter_is_identified_by_email(
-        self, app: FastAPI, client: TestClient, mailer: list[tuple[InvitationEmail, str]]
+        self, store: FakeStore, client: TestClient, mailer: list[tuple[InvitationEmail, str]]
     ) -> None:
-        app.dependency_overrides[get_caller] = lambda: _profile(name=None)
+        store.caller = _profile(name=None)
 
         client.post(f"/organisations/{_ORG_ID}/invitations", json={"email": "new@example.com"})
 

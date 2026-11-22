@@ -25,7 +25,7 @@ from interloper_db import (
 from starlette.concurrency import run_in_threadpool
 
 from interloper_api.auth import Login
-from interloper_api.dependencies import State, require_viewer
+from interloper_api.dependencies import State, require_viewer, share_read_session
 from interloper_api.oauth import AuthorizationServer, CrossOriginMiddleware
 from interloper_api.routes import (
     admin,
@@ -191,8 +191,10 @@ def create_app(
 
     The routes the installed packages declare mount under
     ``/api/organisations/{org_id}/ext/<name>``, their UI bundles under
-    ``/api/ext/<name>/ui/<digest>``. On startup the application promotes the
-    configured super-admins and starts the realtime listener.
+    ``/api/ext/<name>/ui/<digest>``. A read request's store calls share one
+    database session (:mod:`~interloper_api.dependencies.database`). On
+    startup the application promotes the configured super-admins and starts
+    the realtime listener.
 
     Args:
         store: The ``Store`` instance for persistence.
@@ -209,7 +211,9 @@ def create_app(
     Returns:
         The configured FastAPI application.
     """
-    app = FastAPI(title="Interloper API", lifespan=_lifespan, **kwargs)
+    # Function-scoped, so the shared session closes once the handler returns, before the response is sent.
+    read_session = Depends(share_read_session, scope="function")
+    app = FastAPI(title="Interloper API", lifespan=_lifespan, dependencies=[read_session], **kwargs)
 
     install_error_handlers(app)
 

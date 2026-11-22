@@ -25,6 +25,20 @@ class TestRole:
 
         assert store.members.role(org.id, other.id) is None
 
+    def test_a_member_acts_with_their_role(self, store: Store):
+        profile = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="ada@x")
+        other = store.profiles.upsert(issuer="https://accounts.google.com", subject="g2", email="bob@x")
+        org = store.organisations.create(name="Acme", creator_id=profile.id)
+        store.members.add(org.id, other.id, "viewer")
+
+        assert store.members.role_of(org.id, other) == "viewer"
+
+    def test_a_super_admin_acts_as_admin_where_not_a_member(self, store: Store):
+        root = store.profiles.upsert(issuer="https://accounts.google.com", subject="g1", email="root@x")
+        org = store.organisations.create(name="Acme")
+
+        assert store.members.role_of(org.id, store.profiles.set_super_admin(root.id, value=True)) == "admin"
+
 
 class TestList:
     def test_members_are_listed_with_their_roles(self, store: Store):

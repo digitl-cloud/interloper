@@ -562,18 +562,24 @@ class LastOrganisationRequest(BaseModel):
 
 
 @router.put("/me/last-organisation", status_code=204)
-def set_last_organisation(body: LastOrganisationRequest, user: SessionUserDep, store: StoreDep) -> Response:
+def set_last_organisation(
+    body: LastOrganisationRequest,
+    user: SessionUserDep,
+    store: StoreDep,
+    session_token: Annotated[str | None, Cookie()] = None,
+) -> Response:
     """Remember the organisation the caller last worked in, where the app lands them next time.
 
     Args:
         body: The organisation, one the caller can act in.
         user: The caller, authenticated by the session cookie alone.
         store: The database store.
+        session_token: The session cookie, which must also reach the organisation.
 
     Returns:
         An empty 204 response.
     """
-    get_org_scope(body.org_id, user, store)
+    get_org_scope(body.org_id, store, session_token=session_token, authorization=None)
     store.profiles.update(user.id, last_organisation_id=body.org_id)
     return Response(status_code=204)
 

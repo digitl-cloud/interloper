@@ -14,12 +14,12 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from interloper_db import NotFoundError, Organisation, Profile
+from interloper_db import NotFoundError, Organisation, Profile, Token
 
 from interloper_api.app import ORG_PREFIX
 from interloper_api.dependencies import (
+    CallerCredential,
     OrgScope,
-    get_caller,
     get_session_caller,
     get_store,
     load_authorized,
@@ -34,7 +34,7 @@ _OTHER_ORG_ID = uuid4()
 
 
 class FakeStore:
-    """Stand-in exposing ``members.role_of`` per organisation and ``organisations.get``."""
+    """Stand-in resolving the caller's credential in an organisation, with a role per organisation."""
 
     def __init__(self, roles: dict[UUID, str] | None = None) -> None:
         """Set up the fake.
@@ -43,16 +43,14 @@ class FakeStore:
             roles: The caller's role per organisation; absent means not a member.
         """
         self.asked: list[UUID] = []
+        self.caller = _profile()
         self._roles = roles or {}
-        self.members = SimpleNamespace(role_of=self._role_of)
-        self.tokens = SimpleNamespace(resolve=lambda raw, audience: None)
-        self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
+        self.tokens = SimpleNamespace(resolve=lambda raw, audience: None, resolve_in=self._resolve_in)
 
-    def _role_of(self, org_id: UUID, user: Any) -> str | None:
-        if user.is_super_admin:
-            return "admin"
+    def _resolve_in(self, raw: str, audience: Any, org_id: UUID) -> tuple[Any, Any, Any, str | None]:
         self.asked.append(org_id)
-        return self._roles.get(org_id)
+        role = "admin" if self.caller.is_super_admin else self._roles.get(org_id)
+        return self.caller, SimpleNamespace(), SimpleNamespace(id=org_id), role
 
 
 def _profile(is_super_admin: bool = False) -> Profile:
@@ -77,7 +75,8 @@ def _scope(role: str, org_id: UUID = _ORG_ID) -> OrgScope:
     Returns:
         The scope.
     """
-    return OrgScope(organisation=cast(Organisation, SimpleNamespace(id=org_id)), role=role)
+    credential = CallerCredential(user=_profile(), token=cast(Token, SimpleNamespace()))
+    return OrgScope(credential=credential, organisation=cast(Organisation, SimpleNamespace(id=org_id)), role=role)
 
 
 class TestLoadAuthorized:
@@ -136,7 +135,7 @@ def _gate_client(gate: Any, store: FakeStore, user: Profile) -> TestClient:
     Args:
         gate: The ``require_*`` dependency under test.
         store: The fake store the scope resolves roles against.
-        user: The authenticated profile.
+        user: The authenticated profile, whose session cookie the client presents.
 
     Returns:
         A client for the probe app.
@@ -149,10 +148,12 @@ def _gate_client(gate: Any, store: FakeStore, user: Profile) -> TestClient:
 
     app = FastAPI()
     app.include_router(org_router, prefix=ORG_PREFIX)
+    store.caller = user
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_caller] = lambda: user
     app.dependency_overrides[get_session_caller] = lambda: user
-    return TestClient(app)
+    client = TestClient(app)
+    client.cookies.set("session_token", "cookie")
+    return client
 
 
 class TestRoleGates:
@@ -208,7 +209,7 @@ class TestRoleGates:
         )
 
         assert response.json() == {"role": "admin"}
-        assert store.asked == []
+        assert store.asked == [_ORG_ID]
 
 
 class TestRequireSuperAdmin:

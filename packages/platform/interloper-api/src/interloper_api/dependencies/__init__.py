@@ -1,8 +1,9 @@
-"""Shared FastAPI dependencies: application state, identity, and role gates.
+"""Shared FastAPI dependencies: application state, identity, role gates, and the database session.
 
-Three concerns, one import surface. ``state`` holds what ``create_app``
+Four concerns, one import surface. ``state`` holds what ``create_app``
 installs once at startup; ``auth`` resolves the caller and the organisation
-the path names per request; ``rbac`` gates handlers on the caller's role there.
+the path names per request; ``rbac`` gates handlers on the caller's role there;
+``database`` shares one database session among a read request's store calls.
 """
 
 from interloper_api.dependencies.auth import (
@@ -11,6 +12,7 @@ from interloper_api.dependencies.auth import (
     CurrentUserDep,
     OrgDep,
     OrgScope,
+    PresentedCredential,
     SessionUserDep,
     get_caller,
     get_caller_credential,
@@ -19,6 +21,7 @@ from interloper_api.dependencies.auth import (
     require_run,
     session_user,
 )
+from interloper_api.dependencies.database import share_read_session
 from interloper_api.dependencies.rbac import (
     AdminDep,
     EditorDep,
@@ -69,6 +72,7 @@ __all__ = [
     "OfferedLoginDep",
     "OrgDep",
     "OrgScope",
+    "PresentedCredential",
     "SessionUserDep",
     "SettingsDep",
     "State",
@@ -97,4 +101,5 @@ __all__ = [
     "require_super_admin",
     "require_viewer",
     "session_user",
+    "share_read_session",
 ]

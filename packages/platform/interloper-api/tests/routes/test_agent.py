@@ -152,10 +152,10 @@ def _client(
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_catalog] = lambda: il.Catalog(components={})
     app.dependency_overrides[get_agent] = lambda: agent
+    client = TestClient(app, base_url=f"http://testserver/organisations/{org_id or member.org_id}")
     if authenticate_as_member:
-        session = Token(user_id=member.id, kind=TokenKind.SESSION, token_prefix="", token_hash="")
-        app.dependency_overrides[get_caller_credential] = lambda: CallerCredential(user=member.profile, token=session)
-    return TestClient(app, base_url=f"http://testserver/organisations/{org_id or member.org_id}")
+        client.cookies.set("session_token", store.tokens.create_session(member.id))
+    return client
 
 
 def _tools_client(store: Store, member: Member, *, authenticated: bool) -> TestClient:

@@ -5,7 +5,19 @@ from __future__ import annotations
 import pytest
 from interloper.errors import ConfigError
 
-from interloper_db.models import Role
+from interloper_db.models import Profile, Role
+
+
+class TestProfileActingRole:
+    """A profile acts with its membership's role, a super-admin as admin everywhere."""
+
+    @pytest.mark.parametrize("membership", ["viewer", None])
+    def test_a_member_acts_with_the_membership_role(self, membership: str | None) -> None:
+        assert Profile(email="ada@example.com").acting_role(membership) == membership
+
+    @pytest.mark.parametrize("membership", ["viewer", None])
+    def test_a_super_admin_acts_as_admin_member_or_not(self, membership: str | None) -> None:
+        assert Profile(email="root@example.com", is_super_admin=True).acting_role(membership) == "admin"
 
 
 class TestRoleParse:

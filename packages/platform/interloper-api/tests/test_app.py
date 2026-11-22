@@ -25,7 +25,6 @@ from interloper_db import (
 )
 
 from interloper_api.app import create_app, install_error_handlers
-from interloper_api.dependencies import get_caller
 from interloper_api.routes import websocket as websocket_module
 from interloper_api.settings import ApiSettings
 
@@ -151,11 +150,28 @@ class TestExtensionRoutes:
         oauth_store.members.add(organisation.id, profile.id, "viewer")
         return profile, organisation
 
-    def test_a_member_reaches_the_routes_under_the_organisation_and_extension_key(self, app: FastAPI, viewer):
-        profile, organisation = viewer
-        app.dependency_overrides[get_caller] = lambda: profile
+    @staticmethod
+    def _client(app: FastAPI, store: Store, profile: Profile) -> TestClient:
+        """A client signed in as *profile*.
 
-        response = TestClient(app).get(f"/api/organisations/{organisation.id}/ext/acme/scope")
+        Args:
+            app: The application.
+            store: The store the session is opened in.
+            profile: The caller.
+
+        Returns:
+            The client, carrying the profile's session cookie.
+        """
+        client = TestClient(app)
+        client.cookies.set("session_token", store.tokens.create_session(profile.id))
+        return client
+
+    def test_a_member_reaches_the_routes_under_the_organisation_and_extension_key(
+        self, app: FastAPI, viewer, oauth_store
+    ):
+        profile, organisation = viewer
+
+        response = self._client(app, oauth_store, profile).get(f"/api/organisations/{organisation.id}/ext/acme/scope")
 
         assert response.status_code == 200
         assert response.json() == {"organisation": str(organisation.id), "role": "viewer"}
@@ -163,25 +179,24 @@ class TestExtensionRoutes:
     def test_every_route_requires_membership_even_one_declaring_no_role(self, app: FastAPI, viewer, oauth_store):
         profile, _ = viewer
         other = oauth_store.organisations.create("Other")
-        app.dependency_overrides[get_caller] = lambda: profile
-        client = TestClient(app)
+        client = self._client(app, oauth_store, profile)
 
         assert client.get(f"/api/organisations/{other.id}/ext/acme/open").status_code == 404
         assert client.get(f"/api/organisations/{other.id}/ext/acme/scope").status_code == 404
 
-    def test_a_route_raising_the_floor_refuses_a_viewer(self, app: FastAPI, viewer):
+    def test_a_route_raising_the_floor_refuses_a_viewer(self, app: FastAPI, viewer, oauth_store):
         profile, organisation = viewer
-        app.dependency_overrides[get_caller] = lambda: profile
 
-        assert TestClient(app).post(f"/api/organisations/{organisation.id}/ext/acme/write").status_code == 403
+        response = self._client(app, oauth_store, profile).post(f"/api/organisations/{organisation.id}/ext/acme/write")
+
+        assert response.status_code == 403
 
     def test_an_anonymous_caller_is_refused(self, app: FastAPI):
         assert TestClient(app).get(f"/api/organisations/{_ORG}/ext/acme/open").status_code == 401
 
-    def test_a_router_that_fails_to_load_is_reported_while_the_others_serve(self, app: FastAPI, viewer):
+    def test_a_router_that_fails_to_load_is_reported_while_the_others_serve(self, app: FastAPI, viewer, oauth_store):
         profile, organisation = viewer
-        app.dependency_overrides[get_caller] = lambda: profile
-        client = TestClient(app)
+        client = self._client(app, oauth_store, profile)
 
         assert client.get(f"/api/organisations/{organisation.id}/ext/acme/open").status_code == 200
         assert client.get(f"/api/organisations/{organisation.id}/ext/broken/open").status_code == 404
