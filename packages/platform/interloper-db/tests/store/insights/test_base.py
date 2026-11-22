@@ -388,6 +388,28 @@ class TestCoverageByDay:
         assert (group.days.failed, group.days.missing) == ([0, 1, 0, 0], [0, 1, 1, 0])
         assert group.days.failed_run_ids == {1: failed_run}
 
+    def test_a_key_reads_the_groups_of_that_key_alone(self, store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
+        demo = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
+        snapshot = store.components.create(_ORG, kind="source", key="snapshot_source", name="Snapshot")
+        for source in (demo, snapshot):
+            _execution(_run(source.id, partition_key="2026-06-03"), source.children[0].id, "success")
+        read: list[list[UUID]] = []
+        partition_summaries = store.insights._partition_summaries
+
+        def _recorded(org_id: UUID, asset_ids: list[UUID], keys: list[Any]) -> Any:
+            read.append(sorted(asset_ids))
+            return partition_summaries(org_id, asset_ids, keys)
+
+        monkeypatch.setattr(store.insights, "_partition_summaries", _recorded)
+        since, until = dt.date(2026, 6, 1), dt.date(2026, 6, 4)
+
+        every = store.insights.coverage_by_day(_ORG, since=since, until=until, now=_T0)
+        [group] = store.insights.coverage_by_day(_ORG, since=since, until=until, now=_T0, key="demo_source")
+
+        assert [coverage.component.id for coverage in every] == [demo.id, snapshot.id]
+        assert group == next(coverage for coverage in every if coverage.component.id == demo.id)
+        assert read[1] == sorted(child.id for child in demo.children)
+
 
 class TestAttemptedSpans:
     """Each asset's first to last attempted day, all-time."""

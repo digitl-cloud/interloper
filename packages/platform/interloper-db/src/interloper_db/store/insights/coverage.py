@@ -17,8 +17,9 @@ set, a snapshot also misses every period since that ended with no observation
 at all.
 
 Two views read each asset's partitions (`AssetPartitions`), each over periods
-of its own: the calendar by day (`GroupCoverage`, `DayCoverage`), one job's
-range by partition key (`JobCoverage`, `KeyCoverage`).
+of its own: the calendar by day (`GroupCoverage`, summed by type in
+`TypeCoverage`, `DayCoverage`), one job's range by partition key
+(`JobCoverage`, `KeyCoverage`).
 
 The calendar reads a window of every asset, most of which succeeded day after
 day. An asset that attempted every period from its first key to its last is
@@ -31,7 +32,7 @@ from __future__ import annotations
 import datetime as dt
 from bisect import bisect_right
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import cached_property, lru_cache
@@ -44,6 +45,7 @@ from interloper.partitioning import TimeGranularity, TimePartition, TimePartitio
 from interloper.utils import coerce_to_datetime
 
 from interloper_db.models import Component
+from interloper_db.store.components import ComponentOutline
 
 
 class PartitionResult(NamedTuple):
@@ -287,14 +289,14 @@ class AssetPartitions:
 
     def __init__(
         self,
-        asset: Component,
+        asset: Component | ComponentOutline,
         partitioning: TimePartitionConfig | None,
         results: list[PeriodResult],
     ) -> None:
         """Bind an asset to its results.
 
         Args:
-            asset: The asset row, its parent loaded.
+            asset: The asset row, its parent loaded, or its outline.
             partitioning: The asset's partitioning, time or snapshot, from its
                 catalog definition; ``None`` when the catalog has none for it.
             results: The asset's results, in any order, none overlapping another.
@@ -307,7 +309,7 @@ class AssetPartitions:
     @classmethod
     def from_results(
         cls,
-        assets: list[Component],
+        assets: Sequence[Component | ComponentOutline],
         partitionings: Mapping[UUID, TimePartitionConfig],
         results: Iterable[PartitionResult],
         series: Mapping[UUID, Period] | None = None,
@@ -325,7 +327,7 @@ class AssetPartitions:
         successes, read as one result.
 
         Args:
-            assets: The asset rows, their parents loaded.
+            assets: The asset rows, their parents loaded, or their outlines.
             partitionings: Each partitioned asset's partitioning by id.
             results: The results read, of these assets and any other, grouped by asset.
             series: The period of each asset read as a series, by asset id;
@@ -583,6 +585,15 @@ class DayCoverage:
                 merged._keep_failed_run(offset + i, run_id)
         return merged
 
+    @property
+    def troubled(self) -> bool:
+        """Whether a day of the run holds a missing or a failed partition.
+
+        Returns:
+            ``True`` when one does.
+        """
+        return any(self.missing) or any(self.failed)
+
     @staticmethod
     def _slots(asset: AssetPartitions, first: dt.date, length: int, now: dt.datetime) -> list[int]:
         """How many partitions a dated asset holds on each day of a run of days.
@@ -636,17 +647,17 @@ class GroupCoverage:
     """One calendar group, a source with its assets or a standalone asset, with its days.
 
     Attributes:
-        component: The source row, or the standalone asset row.
+        component: The source, or the standalone asset: its row or its outline.
         days: The group's days, summed over its assets.
     """
 
-    component: Component
+    component: Component | ComponentOutline
     days: DayCoverage
 
     @classmethod
     def from_components(
         cls,
-        components: list[Component],
+        components: Sequence[Component | ComponentOutline],
         targeted: set[UUID],
         partitionings: Mapping[UUID, TimePartitionConfig],
         results: Iterable[PartitionResult],
@@ -663,7 +674,8 @@ class GroupCoverage:
         so what is held is the groups' days and one asset's results.
 
         Args:
-            components: The organisation's source and asset rows, their parents loaded.
+            components: The organisation's source and asset rows, their parents
+                loaded, or their outlines; an asset's source among them.
             targeted: The components an enabled job targets.
             partitionings: Each partitioned asset's partitioning by id; an
                 asset absent from it (unpartitioned, drifted) is left out.
@@ -684,7 +696,7 @@ class GroupCoverage:
         """
         by_id = {component.id: component for component in components}
         assets = [asset for asset in components if asset.kind == "asset" and asset.id in partitionings]
-        groups: dict[UUID, Component] = {}
+        groups: dict[UUID, Component | ComponentOutline] = {}
         days: dict[UUID, DayCoverage] = {}
         for asset in AssetPartitions.from_results(assets, partitionings, results, series):
             group = by_id[asset.asset.parent_id] if asset.asset.parent_id else asset.asset
@@ -706,7 +718,7 @@ class GroupCoverage:
     @staticmethod
     def _span(
         asset: AssetPartitions,
-        group: Component,
+        group: Component | ComponentOutline,
         scheduled: bool,
         attempted: Period | None,
         now: dt.datetime,
@@ -747,6 +759,49 @@ class GroupCoverage:
         if first is None or last is None:
             return None
         return first, last
+
+
+@dataclass(frozen=True)
+class TypeCoverage:
+    """One type on the calendar, the groups sharing one key, with their days summed.
+
+    A type is every source of one definition, or every standalone asset of
+    one, so the groups of a type share their own key.
+
+    Attributes:
+        key: The key its groups share.
+        days: Their days, summed, from the earliest group's first day to the latest group's last.
+        groups: How many groups it holds.
+        troubled: How many of them hold a missing or a failed partition.
+    """
+
+    key: str
+    days: DayCoverage
+    groups: int
+    troubled: int
+
+    @classmethod
+    def from_groups(cls, groups: Iterable[GroupCoverage]) -> list[TypeCoverage]:
+        """Sum the groups of each key onto one type.
+
+        Args:
+            groups: The calendar groups, in any order.
+
+        Returns:
+            One type per key, by key.
+        """
+        by_key: dict[str, list[GroupCoverage]] = defaultdict(list)
+        for group in groups:
+            by_key[group.component.key].append(group)
+        return [
+            cls(
+                key,
+                DayCoverage.from_parts([group.days for group in owned]),
+                groups=len(owned),
+                troubled=sum(group.days.troubled for group in owned),
+            )
+            for key, owned in sorted(by_key.items())
+        ]
 
 
 @dataclass(frozen=True)

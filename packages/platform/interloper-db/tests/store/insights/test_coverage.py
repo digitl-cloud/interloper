@@ -17,6 +17,7 @@ from interloper_db.store.insights.coverage import (
     PartitionResult,
     PartitionSummary,
     Period,
+    TypeCoverage,
     Verdict,
 )
 
@@ -590,3 +591,72 @@ class TestGroupCoverage:
 
         assert group.component is source
         assert (group.days.successful, group.days.failed, group.days.missing) == ([1], [1], [0])
+
+
+def _group(key: str, start: str, **days: list[int]) -> GroupCoverage:
+    """A calendar group, a source of one key, with the days given.
+
+    Args:
+        key: The source's key.
+        start: The group's first day.
+        **days: Its ``successful``, ``failed``, ``missing`` or ``missed``
+            counts, all of one length; an array not given is zeros.
+
+    Returns:
+        The group.
+    """
+    coverage = DayCoverage.empty(dt.date.fromisoformat(start), len(next(iter(days.values()))))
+    for state, counts in days.items():
+        setattr(coverage, state, counts)
+    return GroupCoverage(Component(org_id=uuid4(), kind="source", key=key, name=key), coverage)
+
+
+class TestTypeCoverage:
+    """A type on the calendar: the groups of one key, their days summed and the troubled ones counted."""
+
+    def test_a_type_sums_its_groups_days_aligned_on_their_starts(self):
+        groups = [
+            _group("ads", "2026-08-03", successful=[1, 1, 0], missing=[0, 0, 1]),
+            _group("ads", "2026-08-05", successful=[1, 0], failed=[0, 1]),
+            _group("ads", "2026-08-10", successful=[1], missed=[1]),
+        ]
+
+        [ads] = TypeCoverage.from_groups(groups)
+
+        assert ads == TypeCoverage(
+            "ads",
+            DayCoverage(
+                start=dt.date(2026, 8, 3),
+                successful=[1, 1, 1, 0, 0, 0, 0, 1],
+                failed=[0, 0, 0, 1, 0, 0, 0, 0],
+                missing=[0, 0, 1, 0, 0, 0, 0, 0],
+                missed=[0, 0, 0, 0, 0, 0, 0, 1],
+                failed_run_ids={},
+            ),
+            groups=3,
+            troubled=2,
+        )
+
+    def test_a_type_of_one_group_carries_that_groups_days(self):
+        group = _group("ads", "2026-08-03", successful=[1, 0, 1], missing=[0, 1, 0])
+
+        assert TypeCoverage.from_groups([group]) == [TypeCoverage("ads", group.days, groups=1, troubled=1)]
+
+    def test_each_key_is_a_type_of_its_own_by_key(self):
+        groups = [
+            _group("zeta", "2026-08-03", successful=[1]),
+            _group("alpha", "2026-08-04", failed=[1]),
+            _group("zeta", "2026-08-03", successful=[1]),
+        ]
+
+        types = TypeCoverage.from_groups(groups)
+
+        assert [(kind.key, kind.groups, kind.troubled, kind.days.successful) for kind in types] == [
+            ("alpha", 1, 1, [0]),
+            ("zeta", 2, 0, [2]),
+        ]
+
+    def test_a_missed_snapshot_alone_troubles_no_group(self):
+        assert not _group("ads", "2026-08-03", successful=[1, 0], missed=[0, 1]).days.troubled
+        assert _group("ads", "2026-08-03", successful=[1, 0], missing=[0, 1]).days.troubled
+        assert _group("ads", "2026-08-03", successful=[1, 0], failed=[0, 1]).days.troubled

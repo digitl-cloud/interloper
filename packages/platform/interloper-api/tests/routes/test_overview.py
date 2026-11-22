@@ -882,11 +882,11 @@ class TestAuth:
         assert body["jobs"] == {"enabled": 0, "failing": 0}
         assert body["attention"] == [] and body["upcoming"] == [] and body["recent"] == []
         assert all(row["total"] == 0 for row in body["components"])
-        assert coverage["sources"] == []
+        assert coverage["types"] == []
 
 
 class TestCoverage:
-    """Each partitioned asset's partitions, from runs of any target, roll onto days per source."""
+    """Each partitioned asset's partitions, from runs of any target, roll onto days per source, and sum per type."""
 
     def _partition_run(
         self, store: Store, member: SimpleNamespace, target: Component | None, asset: Component, key: str, status: str
@@ -916,8 +916,8 @@ class TestCoverage:
         _execution(store, run, asset, status)
         return run
 
-    def _coverage(self, client: TestClient, since: str, until: str) -> dict[str, Any]:
-        """Read the coverage window at the pinned reference instant.
+    def _types(self, client: TestClient, since: str, until: str) -> dict[str, Any]:
+        """Read the calendar's types over a window at the pinned reference instant.
 
         Args:
             client: The test client.
@@ -928,6 +928,41 @@ class TestCoverage:
             The response body.
         """
         return client.get("/overview/coverage", params={"since": since, "until": until, "now": NOW.isoformat()}).json()
+
+    def _coverage(self, client: TestClient, since: str, until: str, key: str) -> dict[str, Any]:
+        """Read the sources of one type over a window at the pinned reference instant.
+
+        Args:
+            client: The test client.
+            since: First day of the window.
+            until: Last day of the window, inclusive.
+            key: The type's key.
+
+        Returns:
+            The response body.
+        """
+        params = {"since": since, "until": until, "now": NOW.isoformat()}
+        return client.get(f"/overview/coverage/{key}", params=params).json()
+
+    def _summed(self, sources: list[dict[str, Any]]) -> dict[str, Any]:
+        """Sum sources' arrays day by day, aligned on their starts, as a type's.
+
+        Args:
+            sources: The sources, as the one-type read returns them.
+
+        Returns:
+            The first day and the four summed arrays.
+        """
+        start = min(dt.date.fromisoformat(source["start"]) for source in sources)
+        offsets = [(dt.date.fromisoformat(source["start"]) - start).days for source in sources]
+        length = max(offset + len(source["successful"]) for offset, source in zip(offsets, sources))
+        summed: dict[str, Any] = {"start": start.isoformat()}
+        for state in ("successful", "failed", "missing", "missed"):
+            summed[state] = [0] * length
+            for offset, source in zip(offsets, sources):
+                for i, count in enumerate(source[state]):
+                    summed[state][offset + i] += count
+        return summed
 
     def _days(self, body: dict[str, Any]) -> list[dict[str, Any]]:
         """Unroll each source's arrays into its days with partitions.
@@ -981,7 +1016,7 @@ class TestCoverage:
         self._partition_run(store, member, job, asset, "2026-08-10", "success")
         failed = self._partition_run(store, member, job, asset, "2026-08-11", "failed")
 
-        body = self._coverage(client, "2026-08-01", "2026-08-13")
+        body = self._coverage(client, "2026-08-01", "2026-08-13", Shop.key)
 
         assert body == {
             "since": "2026-08-01",
@@ -1011,7 +1046,7 @@ class TestCoverage:
         self._partition_run(store, member, job, asset, "2026-08-12", "failed")
         self._partition_run(store, member, asset, asset, "2026-08-12", "success")
 
-        body = self._coverage(client, "2026-08-12", "2026-08-12")
+        body = self._coverage(client, "2026-08-12", "2026-08-12", Shop.key)
 
         assert body["sources"] == [
             {
@@ -1036,7 +1071,7 @@ class TestCoverage:
         self._partition_run(store, member, source, asset, "2026-08-05", "success")
         self._partition_run(store, member, source, asset, "2026-08-08", "failed")
 
-        body = self._coverage(client, "2026-08-01", "2026-08-13")
+        body = self._coverage(client, "2026-08-01", "2026-08-13", Shop.key)
 
         assert self._counts(body) == [
             ("2026-08-05", 1, 1, 0),
@@ -1054,7 +1089,7 @@ class TestCoverage:
         self._partition_run(store, member, source, stock, "2026-08-02", "success")
         failed = self._partition_run(store, member, source, shipments, "2026-08-05", "failed")
 
-        [row] = self._coverage(client, "2026-08-01", "2026-08-13")["sources"]
+        [row] = self._coverage(client, "2026-08-01", "2026-08-13", Warehouse.key)["sources"]
 
         assert (row["key"], row["name"]) == (Warehouse.key, "warehouse")
         assert row["start"] == "2026-08-02"
@@ -1069,7 +1104,7 @@ class TestCoverage:
         self._partition_run(store, member, source, asset, "2026-07-20", "success")
         self._partition_run(store, member, source, asset, "2026-08-03", "success")
 
-        body = self._coverage(client, "2026-08-01", "2026-08-13")
+        body = self._coverage(client, "2026-08-01", "2026-08-13", Shop.key)
 
         assert self._counts(body) == [("2026-08-01", 1, 0, 0), ("2026-08-02", 1, 0, 0), ("2026-08-03", 1, 1, 0)]
 
@@ -1081,7 +1116,7 @@ class TestCoverage:
         )
         _job(store, member.org_id, "daily", targets=[source.children[0].id])
 
-        body = self._coverage(client, "2026-08-01", "2026-08-13")
+        body = self._coverage(client, "2026-08-01", "2026-08-13", Launch.key)
 
         assert self._counts(body) == [(f"2026-08-{day:02d}", 1, 0, 0) for day in range(8, 13)]
 
@@ -1095,8 +1130,11 @@ class TestCoverage:
         _job(store, member.org_id, "off", enabled=False, targets=[shop.id, launch.id])
         self._partition_run(store, member, shop, shop.children[0], "2026-08-05", "success")
 
-        body = self._coverage(client, "2026-08-01", "2026-08-13")
+        types = self._types(client, "2026-08-01", "2026-08-13")["types"]
+        body = self._coverage(client, "2026-08-01", "2026-08-13", Shop.key)
 
+        assert [kind["key"] for kind in types] == [Shop.key]
+        assert self._coverage(client, "2026-08-01", "2026-08-13", Launch.key)["sources"] == []
         assert [(source["id"], source["name"], source["kind"]) for source in body["sources"]] == [
             (str(shop.id), "shop", "source")
         ]
@@ -1110,7 +1148,7 @@ class TestCoverage:
         _job(store, member.org_id, "daily", targets=[source.id])
         self._partition_run(store, member, source, asset, "2026-08-05", "success")
 
-        body = self._coverage(client, "2026-08-01", "2026-08-13")
+        body = self._coverage(client, "2026-08-01", "2026-08-13", Shop.key)
 
         assert self._counts(body) == [("2026-08-05", 1, 1, 0)]
 
@@ -1123,7 +1161,7 @@ class TestCoverage:
         _job(store, member.org_id, "daily", targets=[asset.id])
         self._partition_run(store, member, asset, asset, "2026-08-05", "success")
 
-        body = self._coverage(client, "2026-08-01", "2026-08-13")
+        body = self._coverage(client, "2026-08-01", "2026-08-13", Shop.key)
 
         assert self._counts(body) == [("2026-08-05", 1, 1, 0)]
 
@@ -1131,7 +1169,7 @@ class TestCoverage:
         asset = store.components.create(member.org_id, kind="asset", key=visits.key, name="visits")
         self._partition_run(store, member, asset, asset, "2026-08-12", "success")
 
-        body = self._coverage(client, "2026-08-01", "2026-08-13")
+        body = self._coverage(client, "2026-08-01", "2026-08-13", visits.key)
 
         assert [(source["id"], source["name"], source["kind"]) for source in body["sources"]] == [
             (str(asset.id), "visits", "asset")
@@ -1154,7 +1192,7 @@ class TestCoverage:
         _execution(store, run, stock, "success")
         _execution(store, run, shipments, "failed")
 
-        body = self._coverage(client, "2026-08-12", "2026-08-12")
+        body = self._coverage(client, "2026-08-12", "2026-08-12", Warehouse.key)
 
         [day] = self._days(body)
         assert (day["partitions"], day["successful"], day["failed"]) == (2, 1, 1)
@@ -1169,7 +1207,7 @@ class TestCoverage:
             self._partition_run(store, member, source, source.children[0], "2026-08-11", "success")
             self._partition_run(store, member, source, source.children[0], "2026-08-12", "success")
 
-        body = self._coverage(client, "2026-08-01", "2026-08-13")
+        body = self._coverage(client, "2026-08-01", "2026-08-13", Shop.key)
 
         assert [source["name"] for source in body["sources"]] == ["alpha", "zeta"]
         assert [(day["source_id"], day["date"]) for day in self._days(body)] == [
@@ -1188,7 +1226,7 @@ class TestCoverage:
         self._partition_run(store, member, job, asset, "2026-08-11", "running")
         self._partition_run(store, member, job, asset, "2026-08-12", "canceled")
 
-        body = self._coverage(client, "2026-08-11", "2026-08-12")
+        body = self._coverage(client, "2026-08-11", "2026-08-12", Shop.key)
 
         assert self._counts(body) == [("2026-08-11", 1, 0, 0), ("2026-08-12", 1, 0, 0)]
 
@@ -1199,8 +1237,8 @@ class TestCoverage:
         self._partition_run(store, member, clicks, clicks.children[0], "2026-08-12T01", "failed")
         self._partition_run(store, member, ledger, ledger.children[0], "2026-07", "success")
 
-        body = self._coverage(client, "2026-07-30", "2026-08-13")
-        days = {(day["source_id"], day["date"]): day for day in self._days(body)}
+        bodies = [self._coverage(client, "2026-07-30", "2026-08-13", key) for key in (Clicks.key, Ledger.key)]
+        days = {(day["source_id"], day["date"]): day for body in bodies for day in self._days(body)}
 
         hour_day = days[(str(clicks.id), "2026-08-12")]
         assert (hour_day["partitions"], hour_day["successful"], hour_day["failed"]) == (24, 1, 1)
@@ -1217,7 +1255,7 @@ class TestCoverage:
         self._partition_run(store, member, source, asset, "2026-08-13T01", "success")
         self._partition_run(store, member, source, asset, "2026-08-13T08", "failed")
 
-        body = self._coverage(client, "2026-08-13", "2026-08-13")
+        body = self._coverage(client, "2026-08-13", "2026-08-13", Clicks.key)
 
         assert self._counts(body) == [("2026-08-13", 9, 2, 1)]
 
@@ -1228,7 +1266,7 @@ class TestCoverage:
         _job(store, member.org_id, "hourly", targets=[source.id], cron="0 * * * *")
         self._partition_run(store, member, source, source.children[0], "2026-08-12T23", "success")
 
-        body = self._coverage(client, "2026-08-12", "2026-08-13")
+        body = self._coverage(client, "2026-08-12", "2026-08-13", Clicks.key)
 
         assert self._counts(body) == [("2026-08-12", 24, 1, 0), ("2026-08-13", 9, 0, 0)]
 
@@ -1239,7 +1277,7 @@ class TestCoverage:
         _job(store, member.org_id, "monthly", targets=[source.id])
         self._partition_run(store, member, source, source.children[0], "2026-08", "success")
 
-        body = self._coverage(client, "2026-08-01", "2026-08-31")
+        body = self._coverage(client, "2026-08-01", "2026-08-31", Ledger.key)
 
         assert [day["date"] for day in self._days(body)] == [f"2026-08-{day:02d}" for day in range(1, 14)]
 
@@ -1250,7 +1288,7 @@ class TestCoverage:
         _job(store, member.org_id, "yearly", targets=[source.id])
         self._partition_run(store, member, source, source.children[0], "2025", "success")
 
-        body = self._coverage(client, "2025-12-30", "2026-01-02")
+        body = self._coverage(client, "2025-12-30", "2026-01-02", Annual.key)
 
         assert [(day["date"], day["successful"]) for day in self._days(body)] == [("2025-12-30", 1), ("2025-12-31", 1)]
 
@@ -1263,7 +1301,7 @@ class TestCoverage:
             self._partition_run(store, member, source, asset, f"2026-08-12T{hour:02d}", "failed") for hour in range(4)
         ]
 
-        body = self._coverage(client, "2026-08-12", "2026-08-12")
+        body = self._coverage(client, "2026-08-12", "2026-08-12", Clicks.key)
 
         assert self._days(body)[0]["failed_run_id"] == str(max(run.id for run in runs))
 
@@ -1276,9 +1314,8 @@ class TestCoverage:
             session.refresh(drifted)
         self._partition_run(store, member, source, drifted, "2026-08-12", "success")
 
-        body = self._coverage(client, "2026-08-01", "2026-08-13")
-
-        assert body["sources"] == []
+        assert self._types(client, "2026-08-01", "2026-08-13")["types"] == []
+        assert self._coverage(client, "2026-08-01", "2026-08-13", Shop.key)["sources"] == []
 
     def test_another_organisations_data_never_appears(self, client: TestClient, store: Store, member: SimpleNamespace):
         mine = store.components.create(member.org_id, kind="asset", key=visits.key, name="visits")
@@ -1299,9 +1336,92 @@ class TestCoverage:
             # Even an execution of this organisation's asset counts only for the organisation that ran it.
             _execution(store, run, asset, "failed")
 
-        body = self._coverage(client, "2026-08-01", "2026-08-13")
+        assert self._types(client, "2026-08-01", "2026-08-13")["types"] == []
+        assert self._coverage(client, "2026-08-01", "2026-08-13", visits.key)["sources"] == []
 
-        assert body["sources"] == []
+    def test_a_type_sums_its_sources_days_however_their_starts_differ(
+        self, client: TestClient, store: Store, member: SimpleNamespace
+    ):
+        alpha = store.components.create(member.org_id, kind="source", key=Shop.key, name="alpha")
+        zeta = store.components.create(member.org_id, kind="source", key=Shop.key, name="zeta", config={"x": 1})
+        warehouse = store.components.create(member.org_id, kind="source", key=Warehouse.key, name="warehouse")
+        stock = next(child for child in warehouse.children if child.key == "stock")
+        self._partition_run(store, member, alpha, alpha.children[0], "2026-08-05", "success")
+        self._partition_run(store, member, alpha, alpha.children[0], "2026-08-08", "success")
+        self._partition_run(store, member, zeta, zeta.children[0], "2026-08-10", "success")
+        self._partition_run(store, member, zeta, zeta.children[0], "2026-08-11", "success")
+        self._partition_run(store, member, warehouse, stock, "2026-08-12", "failed")
+
+        body = self._types(client, "2026-08-01", "2026-08-13")
+
+        assert body == {
+            "since": "2026-08-01",
+            "until": "2026-08-13",
+            "types": [
+                {
+                    "key": Shop.key,
+                    "start": "2026-08-05",
+                    "successful": [1, 0, 0, 1, 0, 1, 1],
+                    "failed": [0, 0, 0, 0, 0, 0, 0],
+                    "missing": [0, 1, 1, 0, 0, 0, 0],
+                    "missed": [0, 0, 0, 0, 0, 0, 0],
+                    "sources": 2,
+                    "troubled": 1,
+                },
+                {
+                    "key": Warehouse.key,
+                    "start": "2026-08-12",
+                    "successful": [0],
+                    "failed": [1],
+                    "missing": [0],
+                    "missed": [0],
+                    "sources": 1,
+                    "troubled": 1,
+                },
+            ],
+        }
+        for kind in body["types"]:
+            sources = self._coverage(client, "2026-08-01", "2026-08-13", kind["key"])["sources"]
+            summed = self._summed(sources)
+            assert summed == {state: kind[state] for state in summed}
+            assert kind["sources"] == len(sources)
+
+    def test_the_sources_of_one_type_are_read_alone(self, client: TestClient, store: Store, member: SimpleNamespace):
+        shop = store.components.create(member.org_id, kind="source", key=Shop.key, name="shop")
+        launch = store.components.create(member.org_id, kind="source", key=Launch.key, name="launch")
+        visit = store.components.create(member.org_id, kind="asset", key=visits.key, name="visits")
+        for source, asset in ((shop, shop.children[0]), (launch, launch.children[0]), (visit, visit)):
+            self._partition_run(store, member, source, asset, "2026-08-12", "success")
+
+        body = self._coverage(client, "2026-08-01", "2026-08-13", Launch.key)
+
+        assert body == {
+            "since": "2026-08-01",
+            "until": "2026-08-13",
+            "sources": [
+                {
+                    "id": str(launch.id),
+                    "key": Launch.key,
+                    "name": "launch",
+                    "kind": "source",
+                    "start": "2026-08-12",
+                    "successful": [1],
+                    "failed": [0],
+                    "missing": [0],
+                    "missed": [0],
+                    "failed_run_ids": {},
+                }
+            ],
+        }
+
+    def test_an_unknown_type_has_no_sources(self, client: TestClient, store: Store, member: SimpleNamespace):
+        source = store.components.create(member.org_id, kind="source", key=Shop.key, name="shop")
+        self._partition_run(store, member, source, source.children[0], "2026-08-12", "success")
+
+        response = client.get("/overview/coverage/nothing", params={"since": "2026-08-01", "until": "2026-08-13"})
+
+        assert response.status_code == 200
+        assert response.json()["sources"] == []
 
     def test_a_twelve_month_window_as_the_client_sends_it_is_accepted(self, client: TestClient):
         response = client.get("/overview/coverage", params={"since": "2025-09-01", "until": "2026-09-30"})
@@ -1325,6 +1445,7 @@ class TestCoverage:
         assert over_bound.status_code == 422
 
     def test_an_empty_window_is_rejected(self, client: TestClient):
-        response = client.get("/overview/coverage", params={"since": "2026-08-13", "until": "2026-08-12"})
+        params = {"since": "2026-08-13", "until": "2026-08-12"}
 
-        assert response.status_code == 422
+        assert client.get("/overview/coverage", params=params).status_code == 422
+        assert client.get(f"/overview/coverage/{Shop.key}", params=params).status_code == 422

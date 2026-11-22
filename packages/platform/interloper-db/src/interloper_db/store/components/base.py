@@ -26,7 +26,7 @@ from __future__ import annotations
 import builtins
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Any
 from uuid import UUID
@@ -118,7 +118,7 @@ class ComponentReading:
 
 @dataclass(frozen=True)
 class ComponentOutline:
-    """A component reduced to what tells its state, with no payload and no relation.
+    """A component reduced to what names it and tells its state, with no payload and no relation.
 
     Attributes:
         id: The component.
@@ -126,6 +126,10 @@ class ComponentOutline:
         parent_id: The source that owns it, for an owned asset.
         enabled: Whether its config leaves it enabled, as ``Component.enabled`` reads it.
         status: Its status, the one :meth:`ComponentStore.read` gives its row.
+        key: Its definition key.
+        source_key: The key of the source that owns it, for an owned asset.
+        name: Its name, ``None`` when it has none.
+        start: The first day its partitions are owed, as ``Component.start`` reads it.
     """
 
     id: UUID
@@ -133,6 +137,19 @@ class ComponentOutline:
     parent_id: UUID | None
     enabled: bool
     status: ComponentStatus
+    key: str
+    source_key: str | None
+    name: str | None
+    start: date | None
+
+    @property
+    def qualified_key(self) -> str:
+        """The catalog key, qualified by the owning source's key, as ``Component.qualified_key`` reads it.
+
+        Returns:
+            ``source.asset`` for an owned asset, the bare key otherwise.
+        """
+        return str(il.ComponentIdentity(self.source_key, self.key))
 
 
 @dataclass(frozen=True)
@@ -543,8 +560,8 @@ class ComponentStore:
             discriminator=str(discriminator) if discriminator else None,
         )
 
-    def outlines(self, org_id: UUID) -> builtins.list[ComponentOutline]:
-        """Outline every component of an organisation without loading its rows.
+    def outlines(self, org_id: UUID, *, kinds: Sequence[str] | None = None) -> builtins.list[ComponentOutline]:
+        """Outline the components of an organisation without loading their rows.
 
         The catalog resolves each definition once, however many rows
         instantiate it. A row is loaded only where its status depends on its
@@ -552,6 +569,7 @@ class ComponentStore:
 
         Args:
             org_id: Organisation UUID.
+            kinds: Keep these kinds; ``None`` keeps every kind.
 
         Returns:
             One outline per component, in no particular order.
@@ -565,22 +583,40 @@ class ComponentStore:
                 col(Component.config)["enabled"].as_boolean().is_not(False),
                 col(parent.key),
                 col(Component.key),
+                col(Component.name),
+                col(Component.config)["start"].as_string(),
+                col(parent.config)["start"].as_string(),
             )
             .outerjoin(parent, col(parent.id) == col(Component.parent_id))
             .where(col(Component.org_id) == org_id)
         )
-        sensitive = select(Component).where(Component.org_id == org_id, col(Component.kind).in_(SENSITIVE_KINDS))
+        sensitive_kinds = [kind for kind in SENSITIVE_KINDS if kinds is None or kind in kinds]
+        if kinds is not None:
+            statement = statement.where(col(Component.kind).in_(kinds))
+        sensitive = select(Component).where(Component.org_id == org_id, col(Component.kind).in_(sensitive_kinds))
         with session_scope(self._engine) as session:
             rows = session.connection().execute(statement).all()
             decoded = {row.id: self.read(row).status for row in session.exec(sensitive).all()}
         resolved: dict[il.ComponentIdentity, ComponentStatus] = {}
         outlines = []
-        for component_id, kind, parent_id, enabled, parent_key, key in rows:
-            identity = il.ComponentIdentity(parent_key, key)
+        for component_id, kind, parent_id, enabled, source_key, key, name, own_start, source_start in rows:
+            identity = il.ComponentIdentity(source_key, key)
             if identity not in resolved:
                 resolved[identity] = self._key_status(str(identity))
-            status = decoded.get(component_id, resolved[identity])
-            outlines.append(ComponentOutline(component_id, kind, parent_id, enabled, status))
+            start = own_start or source_start
+            outlines.append(
+                ComponentOutline(
+                    component_id,
+                    kind,
+                    parent_id,
+                    enabled,
+                    decoded.get(component_id, resolved[identity]),
+                    key=key,
+                    source_key=source_key,
+                    name=name,
+                    start=date.fromisoformat(start) if start else None,
+                )
+            )
         return outlines
 
     def _key_status(self, key: str) -> ComponentStatus:
@@ -945,7 +981,7 @@ class ComponentStore:
             )
         return granularities
 
-    def asset_partitionings(self, assets: Iterable[Component]) -> dict[UUID, il.TimePartitionConfig]:
+    def asset_partitionings(self, assets: Iterable[Component | ComponentOutline]) -> dict[UUID, il.TimePartitionConfig]:
         """The partitioning of each partitioned asset among some asset rows.
 
         Partitioning lives on the catalog definition, never on the row, which
@@ -954,7 +990,7 @@ class ComponentStore:
         disabled or missing source) is skipped, as is an unpartitioned asset.
 
         Args:
-            assets: The asset rows, their parents loaded.
+            assets: The asset rows, their parents loaded, or their outlines.
 
         Returns:
             Each time- or snapshot-partitioned asset's partitioning by row id; an asset

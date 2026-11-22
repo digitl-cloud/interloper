@@ -15,7 +15,7 @@ const calendarWindow = computed(() => coverage.value ?? coverageWindow.value)
 /** A window the user picked is loading: the calendar on screen still shows the previous one. */
 const switching = computed(() => !!coverage.value && coverageLoading.value && coverageWindow.value?.since !== coverage.value.since)
 /** No partition in the window: an all-blank calendar would read as one still loading. */
-const empty = computed(() => !!coverage.value && !coverage.value.sources.length)
+const empty = computed(() => !!coverage.value && !coverage.value.types.length)
 const SKELETON_DETAIL_ROWS = 3
 const theme = useChartTheme()
 const appConfig = useAppConfig()
@@ -33,8 +33,8 @@ const selectedLabel = computed(() => {
 
 const typeOptions = computed(() => [
     { label: 'All types', value: 'all' },
-    ...[...new Set((coverage.value?.sources ?? []).map(s => s.key))]
-        .map(key => ({ label: catalogStore.typeName(key), value: key, icon: componentIcon(key) }))
+    ...(coverage.value?.types ?? [])
+        .map(({ key }) => ({ label: catalogStore.typeName(key), value: key, icon: componentIcon(key) }))
         .sort((a, b) => a.label.localeCompare(b.label)),
 ])
 const windowItems = ([3, 6, 12] as CoverageMonths[]).map(m => ({ label: `${m}m`, value: String(m) }))
@@ -168,7 +168,7 @@ function onClick(params: any) {
 }
 
 watch(coverage, (value) => {
-    if (typeFilter.value !== 'all' && !value?.sources.some(s => s.key === typeFilter.value)) typeFilter.value = 'all'
+    if (typeFilter.value !== 'all' && !value?.types.some(type => type.key === typeFilter.value)) typeFilter.value = 'all'
 })
 
 watch(coverage, (value) => {

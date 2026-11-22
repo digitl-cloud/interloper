@@ -10,10 +10,11 @@ list on the page shares one vocabulary (see
 from __future__ import annotations
 
 import datetime as dt
+from dataclasses import dataclass
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from interloper.utils import assume_utc
 from interloper_db import ComponentStatus
 from interloper_db.store import insights
@@ -201,12 +202,110 @@ class CoverageSource(BaseModel):
         )
 
 
+class CoverageType(BaseModel):
+    """A type on the calendar, the sources of one definition or its standalone assets, with their days summed.
+
+    The arrays read as a source's do (see :class:`CoverageSource`), summed
+    over the type's sources: they run from the earliest source's first day
+    to the latest source's last. ``sources`` counts them, and ``troubled``
+    those with a missing or failed partition in the window.
+    """
+
+    key: str
+    start: dt.date
+    successful: list[int]
+    failed: list[int]
+    missing: list[int]
+    missed: list[int]
+    sources: int
+    troubled: int
+
+    @classmethod
+    def from_type(cls, coverage: insights.TypeCoverage) -> CoverageType:
+        """Word a type of the calendar, its groups counted as sources.
+
+        Args:
+            coverage: The insight type coverage.
+
+        Returns:
+            The type, with its summed days.
+        """
+        days = coverage.days
+        return cls(
+            key=coverage.key,
+            start=days.start,
+            successful=days.successful,
+            failed=days.failed,
+            missing=days.missing,
+            missed=days.missed,
+            sources=coverage.groups,
+            troubled=coverage.troubled,
+        )
+
+
 class CoverageResponse(BaseModel):
-    """The coverage calendar's data over a window of days."""
+    """The coverage calendar's types over a window of days."""
+
+    since: dt.date
+    until: dt.date
+    types: list[CoverageType]
+
+
+class CoverageSourcesResponse(BaseModel):
+    """The sources of one type of the coverage calendar over a window of days."""
 
     since: dt.date
     until: dt.date
     sources: list[CoverageSource]
+
+
+# -- Query ---------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CoverageWindow:
+    """The days a coverage read spans, and the instant it reads them at.
+
+    Attributes:
+        since: First day of the window.
+        until: Last day of the window, inclusive.
+        now: The reference instant, aware UTC, which decides which periods
+            have closed and how much of today counts.
+    """
+
+    since: dt.date
+    until: dt.date
+    now: dt.datetime
+
+    @classmethod
+    def from_query(
+        cls,
+        since: dt.date,
+        until: dt.date,
+        now: Annotated[
+            dt.datetime | None,
+            Query(description="Reference instant, a test seam for reproducible reads; defaults to the current time"),
+        ] = None,
+    ) -> CoverageWindow:
+        """Read a window of at most :data:`MAX_COVERAGE_SPAN_DAYS` days from the query.
+
+        Args:
+            since: First day of the window.
+            until: Last day of the window, inclusive.
+            now: Reference instant. A test seam: tests pin it; clients omit it.
+
+        Returns:
+            The window, its instant the current time when *now* is left out.
+
+        Raises:
+            HTTPException: 422 when the window is empty or spans more than :data:`MAX_COVERAGE_SPAN_DAYS` days.
+        """
+        if until < since or (until - since).days + 1 > MAX_COVERAGE_SPAN_DAYS:
+            raise HTTPException(status_code=422, detail=f"The window must span 1 to {MAX_COVERAGE_SPAN_DAYS} days")
+        return cls(since, until, assume_utc(now or dt.datetime.now(dt.UTC)).astimezone(dt.UTC))
+
+
+CoverageWindowDep = Annotated[CoverageWindow, Depends(CoverageWindow.from_query)]
 
 
 # -- Endpoints -----------------------------------------------------------------
@@ -253,34 +352,45 @@ def get_overview(
 
 
 @org_router.get("/coverage")
-def get_coverage(
-    scope: ViewerDep,
-    store: StoreDep,
-    since: dt.date,
-    until: dt.date,
-    now: Annotated[
-        dt.datetime | None,
-        Query(description="Reference instant, a test seam for reproducible reads; defaults to the current time"),
-    ] = None,
-) -> CoverageResponse:
-    """Read per source and day coverage over a window of at most :data:`MAX_COVERAGE_SPAN_DAYS` days.
+def get_coverage(scope: ViewerDep, store: StoreDep, window: CoverageWindowDep) -> CoverageResponse:
+    """Read per type and day coverage over a window, each type's days summed over its sources.
 
     Args:
         scope: The organisation the path names, the caller at least a viewer there.
         store: The Store instance.
-        since: First day of the window.
-        until: Last day of the window, inclusive.
-        now: Reference instant, which decides which periods have closed and
-            how much of today counts. A test seam: tests pin it; clients omit it.
+        window: The days to read, and the instant to read them at.
 
     Returns:
-        The coverage calendar's data.
-
-    Raises:
-        HTTPException: 422 when the window is empty or spans more than :data:`MAX_COVERAGE_SPAN_DAYS` days.
+        The calendar's types, by key.
     """
-    if until < since or (until - since).days + 1 > MAX_COVERAGE_SPAN_DAYS:
-        raise HTTPException(status_code=422, detail=f"The window must span 1 to {MAX_COVERAGE_SPAN_DAYS} days")
-    now = assume_utc(now or dt.datetime.now(dt.UTC)).astimezone(dt.UTC)
-    groups = store.insights.coverage_by_day(scope.organisation.id, since=since, until=until, now=now)
-    return CoverageResponse(since=since, until=until, sources=[CoverageSource.from_group(group) for group in groups])
+    groups = store.insights.coverage_by_day(
+        scope.organisation.id, since=window.since, until=window.until, now=window.now
+    )
+    types = [CoverageType.from_type(coverage) for coverage in insights.TypeCoverage.from_groups(groups)]
+    return CoverageResponse(since=window.since, until=window.until, types=types)
+
+
+@org_router.get("/coverage/{key}")
+def get_coverage_sources(
+    scope: ViewerDep, store: StoreDep, key: str, window: CoverageWindowDep
+) -> CoverageSourcesResponse:
+    """Read per source and day coverage of one type over a window.
+
+    A key with no source in the window, unknown ones included, reads as no
+    sources: the type may have left the window since the types were read.
+
+    Args:
+        scope: The organisation the path names, the caller at least a viewer there.
+        store: The Store instance.
+        key: The type's key, the definition key its sources share.
+        window: The days to read, and the instant to read them at.
+
+    Returns:
+        The type's sources, by name.
+    """
+    groups = store.insights.coverage_by_day(
+        scope.organisation.id, since=window.since, until=window.until, now=window.now, key=key
+    )
+    return CoverageSourcesResponse(
+        since=window.since, until=window.until, sources=[CoverageSource.from_group(group) for group in groups]
+    )

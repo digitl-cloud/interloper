@@ -4,6 +4,8 @@ import type { Coverage, CoverageDay, CoverageSource } from '~/types/overview'
 import type { DayAggregate } from '~/composables/coverage'
 
 const organisationStore = useOrganisationStore()
+const overviewStore = useOverviewStore()
+const { expandedTypes, typeSources } = storeToRefs(overviewStore)
 
 const props = defineProps<{
     date: string
@@ -34,8 +36,8 @@ interface SourceRow extends DayTally {
 interface TypeGroup extends DayTally {
     key: string
     name: string
-    rows: SourceRow[]
     days: (DayAggregate | undefined)[]
+    sources: number
     troubled: number
 }
 
@@ -61,54 +63,40 @@ function byTrouble(a: { failed: number, missing: number }, b: { failed: number, 
     return b.failed - a.failed || b.missing - a.missing
 }
 
-const groups = computed<TypeGroup[]>(() => {
-    const rowsByKey = new Map<string, SourceRow[]>()
-    for (const source of props.coverage.sources) {
-        if (props.typeFilter !== 'all' && source.key !== props.typeFilter) continue
-        const days = dates.value.map(date => sourceDay(source, date) ?? undefined)
-        const row = { source, days, ...tally(days) }
-        rowsByKey.set(source.key, [...(rowsByKey.get(source.key) ?? []), row])
-    }
-    return [...rowsByKey.entries()]
-        .map(([key, rows]) => {
-            const days = dates.value.map((_, i) => {
-                const present = rows.flatMap(row => row.days[i] ?? [])
-                if (!present.length) return undefined
-                return {
-                    successful: present.reduce((n, day) => n + day.successful, 0),
-                    failed: present.reduce((n, day) => n + day.failed, 0),
-                    missing: present.reduce((n, day) => n + day.missing, 0),
-                    missed: present.reduce((n, day) => n + day.missed, 0),
-                }
+const groups = computed<TypeGroup[]>(() => props.coverage.types
+    .filter(type => props.typeFilter === 'all' || type.key === props.typeFilter)
+    .map((type) => {
+        const days = dates.value.map(date => coverageDay(type, date) ?? undefined)
+        const name = catalogStore.typeName(type.key)
+        return { key: type.key, name, days, ...tally(days), sources: type.sources, troubled: type.troubled }
+    })
+    .sort((a, b) => byTrouble(a, b) || a.name.localeCompare(b.name)))
+
+/** The rows of each expanded type whose sources have arrived, the most troubled first. */
+const rowsByType = computed(() => {
+    const rows = new Map<string, SourceRow[]>()
+    for (const key of expandedTypes.value) {
+        const sources = typeSources.value[key]?.sources
+        if (!sources) continue
+        rows.set(key, sources
+            .map((source) => {
+                const days = dates.value.map(date => sourceDay(source, date) ?? undefined)
+                return { source, days, ...tally(days) }
             })
-            return {
-                key,
-                name: catalogStore.typeName(key),
-                rows: rows.sort((a, b) => byTrouble(a, b) || a.source.name.localeCompare(b.source.name)),
-                days,
-                ...tally(days),
-                troubled: rows.filter(row => row.missing || row.failed).length,
-            }
-        })
-        .sort((a, b) => byTrouble(a, b) || a.name.localeCompare(b.name))
+            .sort((a, b) => byTrouble(a, b) || a.source.name.localeCompare(b.source.name)))
+    }
+    return rows
 })
 
 const troubledGroups = computed(() => groups.value.filter(group => group.troubled))
 const completeGroups = computed(() => groups.value.filter(group => !group.troubled))
-const completeSources = computed(() => completeGroups.value.reduce((n, group) => n + group.rows.length, 0))
+const completeSources = computed(() => completeGroups.value.reduce((n, group) => n + group.sources, 0))
 const showComplete = ref(false)
 const visibleGroups = computed(() => showComplete.value ? [...troubledGroups.value, ...completeGroups.value] : troubledGroups.value)
 
-const expanded = ref(new Set<string>())
 watch(() => groups.value.map(group => group.key).join(), () => {
     showComplete.value = !troubledGroups.value.length && groups.value.length === 1
 }, { immediate: true })
-
-function toggle(key: string) {
-    const next = new Set(expanded.value)
-    if (!next.delete(key)) next.add(key)
-    expanded.value = next
-}
 
 const windowLabel = computed(() => {
     const { since, until } = props.coverage
@@ -158,12 +146,12 @@ const COL = {
                       :key="group.key">
                 <div :class="ROW">
                     <span :class="COL.toggle">
-                        <UButton :icon="expanded.has(group.key) ? ui.icons.chevronDown : ui.icons.chevronRight"
-                                 :aria-label="expanded.has(group.key) ? `Collapse ${group.name}` : `Expand ${group.name}`"
+                        <UButton :icon="expandedTypes.has(group.key) ? ui.icons.chevronDown : ui.icons.chevronRight"
+                                 :aria-label="expandedTypes.has(group.key) ? `Collapse ${group.name}` : `Expand ${group.name}`"
                                  size="sm"
                                  color="neutral"
                                  variant="ghost"
-                                 @click="toggle(group.key)" />
+                                 @click="overviewStore.toggleType(group.key)" />
                     </span>
                     <span class="flex items-center gap-2"
                           :class="COL.name">
@@ -180,8 +168,31 @@ const COL = {
                                            @select="emit('select', $event)" />
                     <span :class="COL.action" />
                 </div>
-                <template v-if="expanded.has(group.key)">
-                    <div v-for="row in group.rows"
+                <div v-if="expandedTypes.has(group.key) && typeSources[group.key]?.error"
+                     class="border-t border-default py-2">
+                    <LoadError title="Couldn't load sources"
+                               :error="typeSources[group.key]?.error"
+                               @retry="overviewStore.fetchTypeSources(group.key)" />
+                </div>
+                <template v-else-if="expandedTypes.has(group.key) && !rowsByType.has(group.key)">
+                    <div v-for="i in group.sources"
+                         :key="i"
+                         :class="ROW">
+                        <span :class="COL.toggle" />
+                        <span class="pl-2"
+                              :class="COL.name">
+                            <USkeleton class="h-4 w-40" />
+                        </span>
+                        <span :class="COL.counts">
+                            <USkeleton class="h-5 w-24" />
+                        </span>
+                        <USkeleton class="h-3.5"
+                                   :class="COL.strip" />
+                        <span :class="COL.action" />
+                    </div>
+                </template>
+                <template v-else-if="expandedTypes.has(group.key)">
+                    <div v-for="row in rowsByType.get(group.key)"
                          :key="row.source.id"
                          :class="ROW">
                         <span :class="COL.toggle" />
