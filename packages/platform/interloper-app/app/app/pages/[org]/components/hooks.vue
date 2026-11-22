@@ -69,7 +69,6 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
 ])
 
 function handleSaved() {
-    componentsStore.fetchAll(['hook'])
     drawerOpen.value = false
 }
 
@@ -111,7 +110,7 @@ function matchesFilters(hook: ComponentRecord): boolean {
                        @reset-filters="typeKey = null; enabled = null"
                        @delete="handleDelete"
                        @edit="handleEdit"
-                       @retry="componentsStore.fetchAll(['hook'])">
+                       @retry="componentsStore.reload()">
                 <template #filters>
                     <TypeFilter v-model="typeKey"
                                 :components="hooks" />

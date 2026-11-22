@@ -55,8 +55,6 @@ async function handleCleanup() {
         }
         const missingIds = missing.value.map(c => c.id)
         if (missingIds.length) await componentsStore.remove(missingIds)
-
-        await componentsStore.fetchAll([props.kind])
         toast.add({ title: 'Catalog drift cleaned up', color: 'success' })
     }
     catch (e) {

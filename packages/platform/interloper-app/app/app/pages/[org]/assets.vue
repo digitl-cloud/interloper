@@ -58,13 +58,9 @@ const shownRows = computed(() => rows.value.filter(row =>
     matchesStatusFilter(sourceStates.value.get(row.sourceId) ?? 'idle', statusFilter.value)
     && (!matchingAssetIds.value || matchingAssetIds.value.has(row.assetId))))
 
-function reload() {
-    componentsStore.fetchAll()
-    componentsStore.fetchRelations()
-}
-
 // Fired in setup so `loading` is set before the first render: the empty state never flashes.
-reload()
+componentsStore.fetchAll()
+componentsStore.fetchRelations()
 runsStore.fetch()
 executionsStore.fetchLatest()
 
@@ -88,7 +84,6 @@ function onEditSource(sourceId: string) {
 }
 
 function handleSaved() {
-    reload()
     drawerOpen.value = false
 }
 
@@ -203,7 +198,7 @@ function closePane() {
                 <LoadError v-if="componentsStore.error"
                            title="Couldn't load the assets"
                            :error="componentsStore.error"
-                           @retry="reload" />
+                           @retry="componentsStore.reload()" />
                 <DriftBanner />
                 <AssetsToolbar v-model:view="view"
                                v-model:query="query"

@@ -66,16 +66,14 @@ const instances = computed(() =>
     componentsStore.byKind(props.definition.kind).filter(r => r.key === props.definition.key),
 )
 
-/** Fetch resources if the store has none of this kind yet, then auto-select. */
+/** Hold the resources of this kind, then auto-select. */
 onMounted(async () => {
-    if (instances.value.length === 0 && !componentsStore.loading) {
-        loadingInstances.value = true
-        try {
-            await componentsStore.fetchAll([props.definition.kind])
-        }
-        finally {
-            loadingInstances.value = false
-        }
+    loadingInstances.value = true
+    try {
+        await componentsStore.fetchAll([props.definition.kind])
+    }
+    finally {
+        loadingInstances.value = false
     }
     autoSelectSingle()
 })

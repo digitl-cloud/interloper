@@ -91,10 +91,8 @@ const typeChoices = computed(() => kindParam.value
     ? componentsStore.byKind(kindParam.value)
     : componentsStore.all)
 
-onMounted(() => {
-    // The filter choices read the collection.
-    if (componentsStore.all.length === 0) componentsStore.fetchAll()
-})
+// The filter choices read the collection.
+onMounted(() => componentsStore.fetchAll())
 
 onUnmounted(runsStore.clearFilters)
 

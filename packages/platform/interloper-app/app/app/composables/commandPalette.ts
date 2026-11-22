@@ -26,11 +26,11 @@ export function useCommandPalette() {
     const recentRuns = ref<Run[]>([])
     const adminOrgs = ref<AdminOrganisation[]>([])
 
-    // Refresh data on open so search results are current, not a stale snapshot.
+    // Recent runs and organisations refresh on open; the components store keeps itself current.
     watch(open, (isOpen) => {
         if (!isOpen) return
         searchTerm.value = ''
-        if (!componentsStore.loading) componentsStore.fetchAll()
+        componentsStore.fetchAll()
         apiFetch<Page<Run>>('/runs?limit=5').then((page) => {
             recentRuns.value = page.items
         }).catch(() => {})

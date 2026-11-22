@@ -195,12 +195,10 @@ async function load() {
             eventsStore.fetchForRun(runId, eventTypesForCategory(eventCategory.value)),
             executionsStore.fetchForRun(runId),
             // Sources/assets back the Graph view (the run's target rides the run itself).
-            componentsStore.byKind('source').length === 0
-                ? componentsStore.fetchAll(['source', 'asset'])
-                : Promise.resolve(),
+            componentsStore.fetchAll(['source', 'asset']),
             // Asset-to-asset relations back the Graph view's edges; the store
             // derives them from the whole set (they carry no name of their own).
-            componentsStore.upstreams.length === 0 ? componentsStore.fetchRelations() : Promise.resolve(),
+            componentsStore.fetchRelations(),
         ])
         initialRun.value = fetchedRun
         // Seed the store so realtime updates can find and update it.
