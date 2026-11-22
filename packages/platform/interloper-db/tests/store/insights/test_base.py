@@ -78,9 +78,10 @@ def store() -> Iterator[Store]:
     """
     engine = engine_module.init_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
 
+    # The runs these tests seed name components the database does not hold, so references go unchecked.
     @event.listens_for(engine, "connect")
-    def _sqlite_uuid(dbapi_connection: Any, _record: Any) -> None:
-        dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
+    def _unchecked_references(dbapi_connection: Any, _record: Any) -> None:
+        dbapi_connection.execute("PRAGMA foreign_keys=OFF")
 
     tenant = (Organisation, Profile, Identity, UserOrganisation, Invitation, Token)
     for model in (*tenant, Component, ComponentRelation, Backfill, Run, Event, Execution, Partition, Quota, Usage):

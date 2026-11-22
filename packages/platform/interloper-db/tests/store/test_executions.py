@@ -9,10 +9,12 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
+from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session
 
@@ -35,6 +37,12 @@ def store() -> Iterator[Store]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+
+    # The rows these tests seed name runs the database does not hold, so references go unchecked.
+    @event.listens_for(engine, "connect")
+    def _unchecked_references(dbapi_connection: Any, _record: Any) -> None:
+        dbapi_connection.execute("PRAGMA foreign_keys=OFF")
+
     for model in (Component, Run, Execution):
         table_of(model).create(engine)
     try:

@@ -15,8 +15,8 @@ def init_engine(dsn: str | None = None, statement_timeout: float | None = None, 
     """Initialize the global database engine.
 
     Args:
-        dsn: SQLAlchemy URL of the database, naming its driver (``postgresql+psycopg://``). Falls back to the
-            ``DATABASE_URL`` env var.
+        dsn: SQLAlchemy URL of the database, naming its driver (``postgresql+psycopg://``), or a SQLite one
+            (``sqlite:///path``). Falls back to the ``DATABASE_URL`` env var.
         statement_timeout: Seconds after which the server cancels a running statement. Sent as the libpq
             ``statement_timeout`` connection option, merged into any ``connect_args`` passed. ``None`` leaves the
             server default; other backends (SQLite) ignore it.
@@ -24,7 +24,8 @@ def init_engine(dsn: str | None = None, statement_timeout: float | None = None, 
             connection the server or a proxy restart closed is replaced on checkout instead of failing the request.
 
     Returns:
-        The SQLAlchemy engine.
+        The SQLAlchemy engine. On SQLite, every connection it opens is set up by
+        `SQLiteConnection`.
 
     Raises:
         ConfigError: If no DSN is provided and ``DATABASE_URL`` is not set.
@@ -35,13 +36,18 @@ def init_engine(dsn: str | None = None, statement_timeout: float | None = None, 
         from interloper.errors import ConfigError
 
         raise ConfigError("Database DSN required: pass dsn= or set DATABASE_URL")
-    if statement_timeout is not None and make_url(dsn).get_backend_name() == "postgresql":
+    backend = make_url(dsn).get_backend_name()
+    if statement_timeout is not None and backend == "postgresql":
         connect_args = dict(kwargs.pop("connect_args", None) or {})
         option = f"-c statement_timeout={max(1, round(statement_timeout * 1000))}"
         connect_args["options"] = f"{connect_args['options']} {option}" if connect_args.get("options") else option
         kwargs["connect_args"] = connect_args
     kwargs.setdefault("pool_pre_ping", True)
     _engine = create_engine(dsn, **kwargs)
+    if backend == "sqlite":
+        from interloper_db.sqlite import SQLiteConnection
+
+        SQLiteConnection().install(_engine)
     return _engine
 
 

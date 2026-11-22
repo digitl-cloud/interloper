@@ -15,6 +15,7 @@ from typing import Any, Self
 
 import pytest
 import sqlalchemy
+from sqlalchemy.dialects import postgresql
 
 from interloper_db import engine as engine_module
 from interloper_db import provision as provision_module
@@ -101,7 +102,7 @@ class FakeConnection:
 
 
 class FakeEngine:
-    """Engine stand-in handing out one recording connection."""
+    """A Postgres engine stand-in handing out one recording connection."""
 
     def __init__(self, connection: FakeConnection) -> None:
         """Set up the fake.
@@ -110,6 +111,7 @@ class FakeEngine:
             connection: The connection every ``connect`` call returns.
         """
         self.connection = connection
+        self.dialect = postgresql.dialect()
         self.disposed = 0
 
     def connect(self) -> FakeConnection:
@@ -422,6 +424,14 @@ class TestEnsureDatabase:
 
         assert record == {} or "dsn" not in record
 
+    def test_a_sqlite_file_gets_its_folder_and_nothing_else(self, maintenance: Any, tmp_path: Path) -> None:
+        record = maintenance()
+
+        ensure_database(f"sqlite:///{tmp_path}/project/.interloper/interloper.db")
+
+        assert list((tmp_path / "project" / ".interloper").iterdir()) == []
+        assert "dsn" not in record
+
 
 class TestDropDatabase:
     """``DROP DATABASE`` first evicts the sessions that would block it."""
@@ -485,6 +495,17 @@ class TestBootstrap:
 
         assert provision_module.bootstrap("postgresql+psycopg://db/x", statement_timeout=30) is engine
         assert calls == [("ensure", "postgresql+psycopg://db/x"), ("init", 30), ("create", engine)]
+
+    def test_a_sqlite_database_is_brought_up_to_what_connect_serves(self, tmp_path: Path) -> None:
+        url = f"sqlite:///{tmp_path}/.interloper/interloper.db"
+        try:
+            provision_module.bootstrap(url).dispose()
+            engine = connect(url)
+            engine.dispose()
+        finally:
+            engine_module._engine = None
+
+        assert (tmp_path / ".interloper" / "interloper.db").is_file()
 
 
 class TestConnect:
