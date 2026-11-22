@@ -47,28 +47,56 @@ export interface Overview {
 }
 
 /**
- * A calendar group and its days: index `i` of each array is the day `start + i`, from the group's first to its last
- * day in the window with partitions. A day inside that run without any is a zero. A day's partitions are its
- * `successful`, `failed` and `missing` ones; `missed` counts the snapshot periods that ended without a success, which
- * are not among them and no backfill can recover.
+ * Days as parallel arrays: index `i` of each array is the day `start + i`, from the first to the last day in the
+ * window with partitions. A day inside that run without any is a zero. A day's partitions are its `successful`,
+ * `failed` and `missing` ones; `missed` counts the snapshot periods that ended without a success, which are not among
+ * them and no backfill can recover.
  */
-export interface CoverageSource {
-    id: string
-    key: string
-    name: string
-    kind: 'source' | 'asset'
+export interface CoverageDays {
     start: string
     successful: number[]
     failed: number[]
     missing: number[]
     missed: number[]
+}
+
+/** A calendar group, a source with its assets or a standalone asset, and its days. */
+export interface CoverageSource extends CoverageDays {
+    id: string
+    key: string
+    name: string
+    kind: 'source' | 'asset'
     failed_run_ids: Record<string, string>
+}
+
+/**
+ * A type on the calendar, the sources of one definition or its standalone assets, with their days summed;
+ * `troubled` counts the sources with a missing or failed partition in the window.
+ */
+export interface CoverageType extends CoverageDays {
+    key: string
+    sources: number
+    troubled: number
 }
 
 export interface Coverage {
     since: string
     until: string
+    types: CoverageType[]
+}
+
+export interface CoverageSources {
+    since: string
+    until: string
     sources: CoverageSource[]
+}
+
+/** One type's sources as the store holds them while the type is expanded. */
+export interface TypeSources {
+    /** `null` until the first answer arrives. */
+    sources: CoverageSource[] | null
+    loading: boolean
+    error: Error | null
 }
 
 /** One source's partitions on one day, unrolled from its arrays. */

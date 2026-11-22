@@ -1,5 +1,5 @@
 import type { MaybeRefOrGetter } from 'vue'
-import type { Coverage, CoverageDay, CoverageSource } from '~/types/overview'
+import type { Coverage, CoverageDay, CoverageDays, CoverageSource } from '~/types/overview'
 
 export interface DayAggregate {
     successful: number
@@ -100,22 +100,31 @@ export function windowDates(coverage: Coverage): string[] {
     return dates
 }
 
-/** A source's day on one date, unrolled from its arrays; `null` when it has neither partitions nor misses then. */
-export function sourceDay(source: CoverageSource, date: string): CoverageDay | null {
-    const i = Math.round((epochDay(date) - epochDay(source.start)) / DAY_MS)
+/** The index of a date in a run of days' arrays. */
+function dayIndex(days: CoverageDays, date: string): number {
+    return Math.round((epochDay(date) - epochDay(days.start)) / DAY_MS)
+}
+
+/** A run of days' day on one date, unrolled from its arrays; `null` when it has neither partitions nor misses then. */
+export function coverageDay(days: CoverageDays, date: string): DayAggregate | null {
+    const i = dayIndex(days, date)
     const day = {
-        date,
-        source_id: source.id,
-        successful: source.successful[i] ?? 0,
-        failed: source.failed[i] ?? 0,
-        missing: source.missing[i] ?? 0,
-        missed: source.missed[i] ?? 0,
-        failed_run_id: source.failed_run_ids[String(i)] ?? null,
+        successful: days.successful[i] ?? 0,
+        failed: days.failed[i] ?? 0,
+        missing: days.missing[i] ?? 0,
+        missed: days.missed[i] ?? 0,
     }
     return partitionCount(day) || day.missed ? day : null
 }
 
-/** Sum the days of the sources of the selected type per date. */
+/** A source's day on one date, with the run that failed it; `null` when it has neither partitions nor misses then. */
+export function sourceDay(source: CoverageSource, date: string): CoverageDay | null {
+    const day = coverageDay(source, date)
+    if (!day) return null
+    return { ...day, date, source_id: source.id, failed_run_id: source.failed_run_ids[String(dayIndex(source, date))] ?? null }
+}
+
+/** Sum the days of the selected type, or of every type, per date. */
 export function useCoverageCalendar(
     coverage: MaybeRefOrGetter<Coverage | null>,
     typeFilter: MaybeRefOrGetter<string>,
@@ -123,13 +132,13 @@ export function useCoverageCalendar(
     const byDate = computed(() => {
         const map = new Map<string, DayAggregate>()
         const filter = toValue(typeFilter)
-        for (const source of toValue(coverage)?.sources ?? []) {
-            if (filter !== 'all' && source.key !== filter) continue
-            const start = epochDay(source.start)
-            source.successful.forEach((successful, i) => {
-                const failed = source.failed[i] ?? 0
-                const missing = source.missing[i] ?? 0
-                const missed = source.missed[i] ?? 0
+        for (const type of toValue(coverage)?.types ?? []) {
+            if (filter !== 'all' && type.key !== filter) continue
+            const start = epochDay(type.start)
+            type.successful.forEach((successful, i) => {
+                const failed = type.failed[i] ?? 0
+                const missing = type.missing[i] ?? 0
+                const missed = type.missed[i] ?? 0
                 if (!successful && !failed && !missing && !missed) return
                 const date = new Date(start + i * DAY_MS).toISOString().slice(0, 10)
                 const agg = map.get(date) ?? { successful: 0, failed: 0, missing: 0, missed: 0 }

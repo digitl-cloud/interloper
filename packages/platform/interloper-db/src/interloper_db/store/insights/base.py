@@ -243,7 +243,9 @@ class InsightStore:
         kept = rows[:MAX_ERROR_ROWS]
         return ErrorGroups(ErrorGroup.merge(kept, group_by), rows=len(kept), truncated=len(rows) > MAX_ERROR_ROWS)
 
-    def coverage_by_day(self, org_id: UUID, *, since: dt.date, until: dt.date, now: dt.datetime) -> list[GroupCoverage]:
+    def coverage_by_day(
+        self, org_id: UUID, *, since: dt.date, until: dt.date, now: dt.datetime, key: str | None = None
+    ) -> list[GroupCoverage]:
         """Per source and day, the asset-partitions successful, failed, missing and missed over a window.
 
         Each asset's partitions of the window are first counted. An asset that
@@ -257,11 +259,16 @@ class InsightStore:
             until: Last day of the window, inclusive.
             now: The reference instant, aware UTC: it decides which periods
                 have closed and how much of today counts.
+            key: Read only the groups of this key, the sources of one
+                definition or its standalone assets (see `TypeCoverage`);
+                ``None`` reads every group.
 
         Returns:
             The groups with a day in the window, by name.
         """
-        components = self._rows(org_id, kinds=["source", "asset"])
+        components = self._components.outlines(org_id, kinds=["source", "asset"])
+        if key is not None:
+            components = [component for component in components if (component.source_key or component.key) == key]
         assets = [component for component in components if component.kind == "asset"]
         partitionings = self._components.asset_partitionings(assets)
         window = partition_keys_overlapping(col(Partition.partition_key), since, min(until, now.date()))

@@ -16,6 +16,7 @@ from interloper_db.store.insights.coverage import (
     KeyCoverage,
     PartitionResult,
     Period,
+    TypeCoverage,
 )
 from interloper_db.store.insights.failures import GROUP_KEYS, ErrorCause, ErrorGroup, ErrorGroups
 from interloper_db.store.insights.feed import ActivityEntry
@@ -52,4 +53,5 @@ __all__ = [
     "OrgHealth",
     "PartitionResult",
     "Period",
+    "TypeCoverage",
 ]

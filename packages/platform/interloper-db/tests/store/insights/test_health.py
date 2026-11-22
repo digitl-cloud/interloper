@@ -22,7 +22,7 @@ def _outline(
     Returns:
         The outline, under a fresh id.
     """
-    return ComponentOutline(uuid4(), kind, parent_id, enabled, status)
+    return ComponentOutline(uuid4(), kind, parent_id, enabled, status, key=kind, source_key=None, name=None, start=None)
 
 
 class TestAttention:

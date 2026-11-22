@@ -1092,7 +1092,7 @@ class TestOutlines:
         Returns:
             The rows, their parents loaded.
         """
-        live = Component(org_id=org_id, kind="source", key=DemoSource.key)
+        live = Component(org_id=org_id, kind="source", key=DemoSource.key, name="Live", config={"start": "2026-01-01"})
         twin = Component(org_id=org_id, kind="source", key=DemoSource.key, config={"enabled": False})
         gone = Component(org_id=org_id, kind="source", key="gone_source", config={})
         rows = [
@@ -1101,7 +1101,7 @@ class TestOutlines:
             gone,
             Component(org_id=org_id, kind="asset", key="a", parent=live, config={"enabled": True}),
             Component(org_id=org_id, kind="asset", key="a", parent=twin, config={"enabled": None}),
-            Component(org_id=org_id, kind="asset", key="renamed_away", parent=live),
+            Component(org_id=org_id, kind="asset", key="renamed_away", parent=live, config={"start": "2026-03-01"}),
             Component(org_id=org_id, kind="asset", key="a", parent=gone, config={"enabled": False}),
             Component(org_id=org_id, kind="source", key=DemoMonthlySource.key),
         ]
@@ -1118,7 +1118,17 @@ class TestOutlines:
         outlines = {outline.id: outline for outline in store.components.outlines(_ORG)}
 
         assert outlines == {
-            row.id: ComponentOutline(row.id, row.kind, row.parent_id, row.enabled, store.components.read(row).status)
+            row.id: ComponentOutline(
+                row.id,
+                row.kind,
+                row.parent_id,
+                row.enabled,
+                store.components.read(row).status,
+                key=row.key,
+                source_key=row.identity.source_key,
+                name=row.name,
+                start=row.start,
+            )
             for row in rows
         }
         assert {outlines[row.id].status for row in (live, twin, owned)} == {ComponentStatus.OK}
@@ -1126,6 +1136,16 @@ class TestOutlines:
         assert outlines[hidden.id].status is ComponentStatus.DISABLED
         assert [row.key for row in rows if not outlines[row.id].enabled] == [DemoSource.key, "a"]
         assert outlines[owned.id].parent_id == live.id
+        assert (outlines[owned.id].qualified_key, outlines[owned.id].start) == ("demo_source.a", dt.date(2026, 1, 1))
+        assert outlines[stray.id].start == dt.date(2026, 3, 1)
+
+    def test_kinds_keep_those_kinds_alone(self, component_db: Engine, installed: None):
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        rows = self._rows(component_db, _ORG)
+
+        outlines = store.components.outlines(_ORG, kinds=["source"])
+
+        assert sorted(outline.id for outline in outlines) == sorted(row.id for row in rows if row.kind == "source")
 
     def test_the_catalog_resolves_each_definition_once(self, component_db: Engine, monkeypatch: pytest.MonkeyPatch):
         store = Store(catalog=il.Catalog.from_assets([DemoSource]))
