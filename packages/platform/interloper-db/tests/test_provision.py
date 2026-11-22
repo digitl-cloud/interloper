@@ -141,8 +141,11 @@ class TestMigrations:
         """
         from alembic import command
 
-        recorded: dict[str, list[Any]] = {"upgrade": [], "downgrade": []}
+        recorded: dict[str, list[Any]] = {"upgrade": [], "downgrade": [], "stamp": []}
         monkeypatch.setattr(command, "upgrade", lambda config, revision: recorded["upgrade"].append((config, revision)))
+        monkeypatch.setattr(
+            command, "stamp", lambda config, revision, purge: recorded["stamp"].append((revision, purge))
+        )
         monkeypatch.setattr(
             command, "downgrade", lambda config, revision: recorded["downgrade"].append((config, revision))
         )
@@ -150,12 +153,12 @@ class TestMigrations:
 
     @pytest.fixture
     def engine(self) -> sqlalchemy.Engine:
-        """An engine the migrations are handed, never connected to.
+        """An engine the migrations are handed, read only for the revision it is at.
 
         Returns:
-            An in-memory SQLite engine.
+            An in-memory SQLite engine, one database for every connection.
         """
-        return sqlalchemy.create_engine("sqlite://")
+        return sqlalchemy.create_engine("sqlite://", poolclass=sqlalchemy.pool.StaticPool)
 
     def test_upgrade_targets_head_by_default(
         self, alembic: dict[str, list[Any]], engine: sqlalchemy.Engine, monkeypatch: pytest.MonkeyPatch
@@ -166,6 +169,29 @@ class TestMigrations:
 
         ((_config, revision),) = alembic["upgrade"]
         assert revision == "head"
+
+    def test_a_database_at_the_folded_head_is_stamped_at_the_chain_that_folded_it(
+        self, alembic: dict[str, list[Any]], engine: sqlalchemy.Engine
+    ) -> None:
+        with engine.begin() as connection:
+            connection.exec_driver_sql("CREATE TABLE alembic_version (version_num VARCHAR(32) PRIMARY KEY)")
+            connection.exec_driver_sql("INSERT INTO alembic_version VALUES ('026')")
+
+        upgrade(engine=engine)
+
+        assert alembic["stamp"] == [("0003", True)]
+        assert alembic["upgrade"][0][1] == "head"
+
+    def test_a_database_on_the_current_chain_is_not_stamped(
+        self, alembic: dict[str, list[Any]], engine: sqlalchemy.Engine
+    ) -> None:
+        with engine.begin() as connection:
+            connection.exec_driver_sql("CREATE TABLE alembic_version (version_num VARCHAR(32) PRIMARY KEY)")
+            connection.exec_driver_sql("INSERT INTO alembic_version VALUES ('0003')")
+
+        upgrade(engine=engine)
+
+        assert alembic["stamp"] == []
 
     def test_upgrade_takes_an_explicit_revision(self, alembic: dict[str, list[Any]], engine: sqlalchemy.Engine) -> None:
         upgrade(engine=engine, revision="0007")
@@ -294,19 +320,10 @@ class TestCreateAll:
         assert harness["created"]["bind"] is harness["engine"]
         assert harness["upgrades"] == [harness["engine"]]
 
-    def test_migration_owned_tables_are_left_to_alembic(self, harness: dict[str, Any]) -> None:
-        # The executions table comes with its trigger; only the migration creates both together.
+    def test_every_table_comes_from_the_models(self, harness: dict[str, Any]) -> None:
         create_all(harness["engine"])
 
-        tables = harness["created"]["tables"]
-        assert tables
-        assert all(not table.info.get("migration_owned") for table in tables)
-
-    def test_a_migration_owned_table_exists_to_be_excluded(self) -> None:
-        # Guards the filter above from silently becoming a no-op.
-        from sqlmodel import SQLModel
-
-        assert any(table.info.get("migration_owned") for table in SQLModel.metadata.sorted_tables)
+        assert harness["created"]["tables"] is None
 
     def test_the_lock_is_released_even_when_the_work_fails(
         self, harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch

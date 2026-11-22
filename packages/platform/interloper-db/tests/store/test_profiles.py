@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-import importlib
 from uuid import uuid4
 
 import pytest
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
-from sqlalchemy import Engine, inspect, text
 
 from interloper_db import Audience, ConflictError, NotFoundError
 from interloper_db.store import ProfileQuery, Store
@@ -390,43 +386,6 @@ class TestUpsertAvatar:
         store.profiles.upsert(issuer=GOOGLE, subject="g1", email="ada@x")
 
         assert store.profiles.get(profile.id).avatar_url == "https://a/1.png"
-
-
-class TestMigration024:
-    @staticmethod
-    def _migrate(auth_db: Engine, step: str) -> None:
-        """Run one step of migration 024 against the fixture database.
-
-        Args:
-            auth_db: The fixture database.
-            step: ``"upgrade"`` or ``"downgrade"``.
-        """
-        migration = importlib.import_module("interloper_db.migrations.versions.024_drop_profiles_google_id")
-        with auth_db.begin() as connection, Operations.context(MigrationContext.configure(connection)):
-            getattr(migration, step)()
-
-    def test_a_round_trip_keeps_every_google_sign_in(self, store: Store, auth_db: Engine):
-        google = store.profiles.upsert(issuer=GOOGLE, subject="g-1", email="google@example.com")
-        store.profiles.upsert(issuer="https://login.example.com", subject="s-1", email="other@example.com")
-
-        self._migrate(auth_db, "downgrade")
-        with auth_db.begin() as connection:
-            rows = connection.execute(text("SELECT email, google_id FROM profiles"))
-            assert {row.email: row.google_id for row in rows} == {
-                "google@example.com": "g-1",
-                "other@example.com": None,
-            }
-            connection.execute(text("INSERT INTO profiles (email, google_id) VALUES ('old@example.com', 'g-old')"))
-
-        self._migrate(auth_db, "upgrade")
-        self._migrate(auth_db, "upgrade")
-
-        assert "google_id" not in {column["name"] for column in inspect(auth_db).get_columns("profiles")}
-        assert "ix_profiles_google_id" not in {index["name"] for index in inspect(auth_db).get_indexes("profiles")}
-        found = store.profiles.get_by_identity(GOOGLE, "g-1")
-        assert found is not None and found.id == google.id
-        signed_in_by_an_old_pod = store.profiles.get_by_identity(GOOGLE, "g-old")
-        assert signed_in_by_an_old_pod is not None and signed_in_by_an_old_pod.email == "old@example.com"
 
 
 class TestLocalDeveloper:

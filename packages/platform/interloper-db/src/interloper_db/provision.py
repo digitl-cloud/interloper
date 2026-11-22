@@ -13,17 +13,33 @@ if TYPE_CHECKING:
 import interloper_db.models as _models  # noqa: F401 — ensure all models are registered
 from interloper_db.engine import get_engine, init_engine
 
+FOLDED_HEAD = "026"
+"""The head of the migrations folded into 0001 to 0003, which a database at it already matches."""
+FOLDED_INTO = "0003"
+"""The revision a database at :data:`FOLDED_HEAD` is stamped at, the folded chain's last."""
+
 
 def upgrade(engine: Engine | None = None, revision: str = "head") -> None:
     """Run Alembic migrations up to the given revision.
+
+    A database still at the head of the folded migrations is stamped at the
+    revision that folded them first, its schema already theirs, so it runs
+    only what came after.
 
     Args:
         engine: The engine the migrations run against. Defaults to the global engine.
         revision: Target revision (default ``"head"``).
     """
     from alembic import command
+    from alembic.runtime.migration import MigrationContext
 
-    command.upgrade(_alembic_config(engine or get_engine()), revision)
+    engine = engine or get_engine()
+    config = _alembic_config(engine)
+    with engine.connect() as connection:
+        current = MigrationContext.configure(connection).get_current_revision()
+    if current == FOLDED_HEAD:
+        command.stamp(config, FOLDED_INTO, purge=True)
+    command.upgrade(config, revision)
 
 
 def downgrade(engine: Engine | None = None, revision: str = "-1") -> None:
@@ -68,9 +84,7 @@ def create_all(engine: Engine | None = None) -> None:
         while not lock_connection.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": PROVISION_LOCK_KEY}).scalar():
             sleep(1)
         try:
-            # Tables a migration creates with database objects of their own (a trigger) are Alembic's to create.
-            tables = [table for table in SQLModel.metadata.sorted_tables if not table.info.get("migration_owned")]
-            SQLModel.metadata.create_all(eng, tables=tables)
+            SQLModel.metadata.create_all(eng)
             upgrade(engine=eng)
         finally:
             lock_connection.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": PROVISION_LOCK_KEY})

@@ -161,6 +161,7 @@ class Run(SQLModel, table=True):
         Index("ix_runs_org_id_created_at", "org_id", "created_at"),
         Index("ix_runs_org_id_completed_at", "org_id", "completed_at"),
         Index("ix_runs_component_id_created_at", "component_id", "created_at"),
+        Index("ix_runs_claim", "status", "scheduled_for", "created_at"),
         Index(
             "ix_runs_last_success",
             "component_id",
@@ -496,19 +497,16 @@ class Execution(SQLModel, table=True):
     events as they are saved: latest attempt first, then severity, then
     recency decides the status, and the timestamps span every attempt, so a
     retried operation reads as one execution from its first start to its
-    final outcome. The fold is a Postgres trigger on ``events``, so the
-    application never writes this table; migration 012 creates the table,
-    the trigger and the backfill, which is why ``create_all`` skips it (see
-    the ``migration_owned`` marker). The partition the operation's events
-    name, else its run's, is stamped on the row as it is created (migrations
-    013 and 020), so a snapshot's execution is filed under the period it
-    observed, and :class:`Partition` folds each execution under that key.
+    final outcome. The fold is a Postgres trigger on ``events`` (migration
+    0003), so the application never writes this table. The partition the
+    operation's events name, else its run's, is stamped on the row as it is
+    created, so a snapshot's execution is filed under the period it observed,
+    and :class:`Partition` folds each execution under that key.
     """
 
     __tablename__: ClassVar[str] = "executions"
     __table_args__: ClassVar[tuple[Any, ...]] = (
         Index("ix_executions_latest", "org_id", "component_id", text("created_at DESC")),
-        {"info": {"migration_owned": True}},
     )
 
     run_id: UUID = SQLField(sa_column=Column(ForeignKey("runs.id", ondelete="CASCADE"), primary_key=True))
@@ -530,7 +528,7 @@ class Partition(SQLModel, table=True):
     from ``executions``: ``succeeded`` once any execution of the pair
     succeeded, ``failed_run_id`` the greatest id among the runs whose
     execution of it failed. The fold is a Postgres trigger on ``executions``
-    (migration 025), so the application never writes this table. The primary
+    (migration 0003), so the application never writes this table. The primary
     key leads with the organisation, as every read of it is scoped to one, and
     carries both outcomes, so coverage reads an asset's partitions off the
     index, in key order, without visiting the table. Like ``executions``, the

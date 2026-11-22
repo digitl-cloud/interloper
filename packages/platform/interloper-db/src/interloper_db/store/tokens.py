@@ -55,7 +55,7 @@ class TokenStore:
         """Open a login session and return its raw secret, the cookie's value.
 
         A session is never listed or shown, so it keeps no display prefix:
-        its ``token_prefix`` is empty, as on the sessions migration 017 moved.
+        its ``token_prefix`` is empty, as on a session made before tokens had one.
 
         Args:
             user_id: Profile UUID of the user logging in.
