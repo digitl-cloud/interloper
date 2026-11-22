@@ -6,7 +6,9 @@ metadata:
   labels:
     {{- include "interloper.componentLabels" (dict "root" . "component" "api") | nindent 4 }}
 spec:
+  {{- if not .Values.api.autoscaling.enabled }}
   replicas: {{ .Values.api.replicaCount }}
+  {{- end }}
   strategy: {{- toYaml .Values.api.strategy | nindent 4 }}
   selector:
     matchLabels:
@@ -93,6 +95,9 @@ spec:
       {{- end }}
       {{- with .Values.api.affinity }}
       affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.topologySpreadConstraints }}
+      topologySpreadConstraints: {{- toYaml . | nindent 8 }}
       {{- end }}
 ---
 apiVersion: v1

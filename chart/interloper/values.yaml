@@ -68,6 +68,13 @@ api:
   enabled: true
   # Rollout safety, see "Zero-downtime rollouts" in the README.
   replicaCount: 1
+  # A HorizontalPodAutoscaler on CPU, see "Scaling the api" in the README.
+  # When enabled it owns the replica count, and `replicaCount` is ignored.
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 80
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -104,6 +111,7 @@ api:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpreadConstraints: []
   podAnnotations: {}
   extraEnv: []
   # Added after the root-level `extraEnv` / `extraEnvFrom`, for what only
