@@ -497,11 +497,12 @@ class Execution(SQLModel, table=True):
     events as they are saved: latest attempt first, then severity, then
     recency decides the status, and the timestamps span every attempt, so a
     retried operation reads as one execution from its first start to its
-    final outcome. The fold is a Postgres trigger on ``events`` (migration
-    0003), so the application never writes this table. The partition the
-    operation's events name, else its run's, is stamped on the row as it is
-    created, so a snapshot's execution is filed under the period it observed,
-    and :class:`Partition` folds each execution under that key.
+    final outcome. The fold is a trigger on ``events`` (migration 0003 on
+    Postgres, :class:`~interloper_db.sqlite.SQLiteFolds` on SQLite), so the
+    application never writes this table. The partition the operation's
+    events name, else its run's, is stamped on the row as it is created, so
+    a snapshot's execution is filed under the period it observed, and
+    :class:`Partition` folds each execution under that key.
     """
 
     __tablename__: ClassVar[str] = "executions"
@@ -527,9 +528,9 @@ class Partition(SQLModel, table=True):
     One row per organisation, asset and partition key ever attempted, folded
     from ``executions``: ``succeeded`` once any execution of the pair
     succeeded, ``failed_run_id`` the greatest id among the runs whose
-    execution of it failed. The fold is a Postgres trigger on ``executions``
-    (migration 0003), so the application never writes this table. The primary
-    key leads with the organisation, as every read of it is scoped to one, and
+    execution of it failed. The fold is a trigger on ``executions``, beside
+    :class:`Execution`'s, so the application never writes this table. The
+    primary key leads with the organisation, as every read of it is scoped to one, and
     carries both outcomes, so coverage reads an asset's partitions off the
     index, in key order, without visiting the table. Like ``executions``, the
     table keeps a deleted asset's rows: neither id is a foreign key.

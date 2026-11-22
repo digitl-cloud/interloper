@@ -16,6 +16,8 @@ import pytest
 from alembic.config import Config
 from alembic.runtime.environment import EnvironmentContext
 from alembic.script import ScriptDirectory
+from sqlalchemy import Dialect
+from sqlalchemy.dialects import postgresql, sqlite
 
 import interloper_db
 
@@ -27,9 +29,10 @@ class FakeConnection:
         """Set up the fake.
 
         Args:
-            engine: The engine whose pool takes the connection back on close.
+            engine: The engine whose pool takes the connection back on close, and whose dialect it speaks.
         """
         self.engine = engine
+        self.dialect = engine.dialect
         self.invalidated = False
 
     def exec_driver_sql(self, statement: str) -> None:
@@ -69,8 +72,13 @@ class FakeConnection:
 class FakeEngine:
     """Engine stand-in sharing one log across its connections and keeping the ones returned to it."""
 
-    def __init__(self) -> None:
-        """Set up the fake."""
+    def __init__(self, dialect: Dialect | None = None) -> None:
+        """Set up the fake.
+
+        Args:
+            dialect: The database's dialect; Postgres's when not given.
+        """
+        self.dialect = dialect or postgresql.dialect()
         self.log: list[str] = []
         self.pool: list[FakeConnection] = []
 
@@ -163,3 +171,24 @@ class TestRunMigrationsOnline:
         run_env(FakeEngine())
 
         assert configured["transaction_per_migration"] is True
+
+    def test_migrations_alter_postgres_tables_in_place(self, configured: dict[str, Any]) -> None:
+        run_env(FakeEngine())
+
+        assert configured["render_as_batch"] is False
+
+
+class TestRunMigrationsOnSQLite:
+    """SQLite has no session settings to bound, and alters a table by copying it."""
+
+    def test_no_session_setting_is_sent(self, configured: dict[str, Any]) -> None:
+        engine = FakeEngine(sqlite.dialect())
+
+        run_env(engine)
+
+        assert engine.log == ["configure", "migrate"]
+
+    def test_migrations_run_in_batch_mode(self, configured: dict[str, Any]) -> None:
+        run_env(FakeEngine(sqlite.dialect()))
+
+        assert configured["render_as_batch"] is True

@@ -1,19 +1,17 @@
 """Shared fixtures: in-memory SQLite databases carrying the tables under test.
 
 SQLite stands in for Postgres in unit tests (the models use portable types
-on purpose). Foreign keys are switched on per connection so ON DELETE
-CASCADE behaves like production.
+on purpose). The engine sets each connection up as for ``interloper dev``,
+foreign keys on, so ON DELETE CASCADE behaves like production.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Any
-from uuid import uuid4
 
 import interloper as il
 import pytest
-from sqlalchemy import Engine, event
+from sqlalchemy import Engine
 from sqlalchemy.pool import StaticPool
 
 from interloper_db import engine as engine_module
@@ -52,10 +50,6 @@ def component_db() -> Iterator[Engine]:
         poolclass=StaticPool,
     )
 
-    @event.listens_for(eng, "connect")
-    def _enable_foreign_keys(dbapi_connection: Any, _record: Any) -> None:
-        dbapi_connection.execute("PRAGMA foreign_keys=ON")
-
     for model in (Component, ComponentRelation, Quota, Usage):
         table_of(model).create(eng)
     try:
@@ -77,13 +71,6 @@ def auth_db() -> Iterator[Engine]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-
-    @event.listens_for(eng, "connect")
-    def _configure_connection(dbapi_connection: Any, _record: Any) -> None:
-        dbapi_connection.execute("PRAGMA foreign_keys=ON")
-        # The auth tables use Postgres' gen_random_uuid() as server default.
-        # Dashless hex to match how SQLAlchemy's Uuid type binds values on SQLite.
-        dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
     auth_models = (Profile, Identity, Organisation, UserOrganisation, Invitation, Token)
     oauth_models = (OAuthClient, AuthorizationCode)

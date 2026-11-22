@@ -15,6 +15,7 @@ from sqlalchemy import Engine, create_engine
 
 from interloper_db import engine as engine_module
 from interloper_db.engine import engine_from_settings, get_engine, init_engine
+from interloper_db.sqlite import SQLiteConnection
 
 
 @pytest.fixture(autouse=True)
@@ -123,6 +124,20 @@ class TestInitEngine:
         init_engine("postgresql+psycopg://u:p@localhost/db", pool_pre_ping=False)
 
         assert created_kwargs["pool_pre_ping"] is False
+
+    def test_a_sqlite_engine_sets_each_connection_up_for_sqlite(self) -> None:
+        engine = init_engine("sqlite://")
+
+        with engine.connect() as connection:
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
+
+    def test_a_postgres_engine_gets_nothing_of_sqlite(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        installed: list[Engine] = []
+        monkeypatch.setattr(SQLiteConnection, "install", lambda self, engine: installed.append(engine))
+
+        init_engine("postgresql+psycopg://u:p@localhost/db")
+
+        assert installed == []
 
     def test_re_initializing_replaces_the_singleton(self) -> None:
         first = init_engine("sqlite://")

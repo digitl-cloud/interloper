@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
 from interloper import runner
+from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session
 
@@ -35,6 +37,12 @@ def store() -> Iterator[Store]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+
+    # The rows these tests seed name runs the database does not hold, so references go unchecked.
+    @event.listens_for(engine, "connect")
+    def _unchecked_references(dbapi_connection: Any, _record: Any) -> None:
+        dbapi_connection.execute("PRAGMA foreign_keys=OFF")
+
     # Only what these tests exercise; creating the full schema would pull in
     # Postgres-only column types (e.g. ARRAY) that SQLite can't render.
     for model in (Component, Event, Execution):

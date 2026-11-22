@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import interloper as il
@@ -468,7 +469,8 @@ class TestResolveOrphanedToken:
         # for a row that should not be there.
         _token, raw = store.tokens.create_personal(profile.id, "ci", None)
         with token_db.connect() as connection:
-            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            # Through the driver, ahead of the transaction SQLAlchemy opens: inside one, the pragma does nothing.
+            cast("sqlite3.Connection", connection.connection.dbapi_connection).execute("PRAGMA foreign_keys=OFF")
             connection.exec_driver_sql("DELETE FROM profiles")
             connection.commit()
 

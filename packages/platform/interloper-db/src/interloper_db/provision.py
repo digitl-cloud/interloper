@@ -72,6 +72,9 @@ def create_all(engine: Engine | None = None) -> None:
     (concurrent callers can both pass the existence check and then
     collide on ``pg_type_typname_nsp_index``).
 
+    A SQLite database is brought up by `SQLiteSchema` instead, its every
+    transaction holding the database's write lock.
+
     Args:
         engine: SQLAlchemy engine. Defaults to the global engine.
     """
@@ -79,6 +82,11 @@ def create_all(engine: Engine | None = None) -> None:
     from sqlmodel import SQLModel
 
     eng = engine or get_engine()
+    if eng.dialect.name == "sqlite":
+        from interloper_db.sqlite import SQLiteSchema
+
+        SQLiteSchema(eng).create(_alembic_config(eng))
+        return
     # Stable arbitrary bigint — only this provisioning routine uses it.
     PROVISION_LOCK_KEY = 0x1A7E_5C8E_A7E1_5C8E
     # A migration's CREATE INDEX CONCURRENTLY waits out every older transaction, so the lock is held outside one
@@ -98,6 +106,8 @@ def ensure_database(dsn: str) -> None:
 
     Connects to the default ``postgres`` maintenance database to issue
     ``CREATE DATABASE``. Silently succeeds if the database already exists.
+    A SQLite file is created by its first connection, so only its folder is
+    made here.
 
     Args:
         dsn: The target database connection string.
@@ -105,7 +115,14 @@ def ensure_database(dsn: str) -> None:
     from urllib.parse import urlparse, urlunparse
 
     from sqlalchemy import create_engine, text
+    from sqlalchemy.engine import make_url
 
+    url = make_url(dsn)
+    if url.get_backend_name() == "sqlite":
+        from interloper_db.sqlite import SQLiteSchema
+
+        SQLiteSchema.create_folder(url)
+        return
     parsed = urlparse(dsn)
     db_name = parsed.path.lstrip("/")
     if not db_name:
@@ -128,12 +145,13 @@ def bootstrap(dsn: str, *, statement_timeout: float | None = None) -> Engine:
 
     What writes the schema calls it: ``interloper db init``, once per
     release, and ``interloper dev`` for its own databases. ``create_all`` is
-    idempotent and serialized by an advisory lock, so concurrent bootstraps
-    are safe.
+    idempotent and serialized, by an advisory lock on Postgres and the write
+    lock on SQLite, so concurrent bootstraps are safe.
 
     Args:
-        dsn: The PostgreSQL connection string.
+        dsn: The PostgreSQL connection string, or a SQLite URL (``sqlite:///path``).
         statement_timeout: Seconds after which the server cancels a statement; ``None`` keeps the server's setting.
+            Postgres only.
 
     Returns:
         The bound engine.
@@ -154,8 +172,9 @@ def connect(dsn: str, *, statement_timeout: float | None = None) -> Engine:
     and is served with a warning.
 
     Args:
-        dsn: The PostgreSQL connection string.
+        dsn: The PostgreSQL connection string, or a SQLite URL (``sqlite:///path``).
         statement_timeout: Seconds after which the server cancels a statement; ``None`` keeps the server's setting.
+            Postgres only.
 
     Returns:
         The bound engine.

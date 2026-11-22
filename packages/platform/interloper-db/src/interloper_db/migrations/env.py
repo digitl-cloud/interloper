@@ -23,26 +23,27 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         try:
-            # Bound how long any migration will WAIT for a lock. Without this, a DDL
-            # statement (e.g. ALTER TABLE) that can't immediately acquire its lock on
-            # a busy table blocks indefinitely — and while it waits at the head of
-            # the lock queue it also blocks every new query on that table, taking the
-            # API down (504s) and wedging the db-init job forever. Failing fast turns
-            # that silent deadlock into a loud, retryable migration error.
-            #
-            # This caps lock *acquisition*, which includes a `CREATE INDEX
-            # CONCURRENTLY` waiting out older transactions, so such a migration must
-            # recover from a build it left invalid. Statement runtime is uncapped,
-            # whatever `statement_timeout` the engine's connections carry.
-            connection.exec_driver_sql("SET lock_timeout = '10s'")
-            connection.exec_driver_sql("SET statement_timeout = 0")
-            # The SET above autobegins a transaction on the SQLAlchemy 2.0
-            # connection. Commit it before configuring Alembic: otherwise Alembic
-            # sees a pre-existing ("external") transaction, declines to manage
-            # transactions itself, and any migration using ``autocommit_block``
-            # asserts on a transaction it never opened. The SET is a session GUC,
-            # so it persists past this commit.
-            connection.commit()
+            if connection.dialect.name == "postgresql":
+                # Bound how long any migration will WAIT for a lock. Without this, a DDL
+                # statement (e.g. ALTER TABLE) that can't immediately acquire its lock on
+                # a busy table blocks indefinitely — and while it waits at the head of
+                # the lock queue it also blocks every new query on that table, taking the
+                # API down (504s) and wedging the db-init job forever. Failing fast turns
+                # that silent deadlock into a loud, retryable migration error.
+                #
+                # This caps lock *acquisition*, which includes a `CREATE INDEX
+                # CONCURRENTLY` waiting out older transactions, so such a migration must
+                # recover from a build it left invalid. Statement runtime is uncapped,
+                # whatever `statement_timeout` the engine's connections carry.
+                connection.exec_driver_sql("SET lock_timeout = '10s'")
+                connection.exec_driver_sql("SET statement_timeout = 0")
+                # The SET above autobegins a transaction on the SQLAlchemy 2.0
+                # connection. Commit it before configuring Alembic: otherwise Alembic
+                # sees a pre-existing ("external") transaction, declines to manage
+                # transactions itself, and any migration using ``autocommit_block``
+                # asserts on a transaction it never opened. The SET is a session GUC,
+                # so it persists past this commit.
+                connection.commit()
             context.configure(
                 connection=connection,
                 target_metadata=target_metadata,
@@ -54,6 +55,8 @@ def run_migrations_online() -> None:
                 # transaction open for the whole run and ``autocommit_block``
                 # asserts there is a transaction to suspend, breaking ``db init``.
                 transaction_per_migration=True,
+                # SQLite alters a table by copying it into a new one; migrations after 0003 run on both dialects.
+                render_as_batch=connection.dialect.name == "sqlite",
             )
             with context.begin_transaction():
                 context.run_migrations()
