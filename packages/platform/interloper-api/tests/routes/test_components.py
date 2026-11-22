@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from interloper.errors import CatalogKeyError, ConfigError, DataNotFoundError
 from interloper_db import (
@@ -22,12 +22,15 @@ from interloper_db import (
     HydrationError,
     InUseError,
     NotFoundError,
+    Organisation,
     Page,
+    Profile,
     Store,
+    Token,
 )
 
 from interloper_api.app import ORG_PREFIX, install_error_handlers
-from interloper_api.dependencies import get_caller, get_store
+from interloper_api.dependencies import CallerCredential, OrgScope, get_org_scope, get_store
 from interloper_api.routes import components as components_module
 
 
@@ -44,18 +47,20 @@ class TestDelete:
 
         class FakeStore:
             def __init__(self):
-                self.members = SimpleNamespace(role_of=lambda org_id, user: "admin")
-                self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
                 self.components = SimpleNamespace(
                     get=lambda component_id: SimpleNamespace(id=component_id, org_id=_ORG_ID),
                     delete=_delete,
                 )
 
+            def org_scope(self, org_id: UUID) -> OrgScope:
+                return _scope(org_id, "admin")
+
+        store = FakeStore()
         app = FastAPI()
         install_error_handlers(app)
         app.include_router(components_module.org_router, prefix=ORG_PREFIX)
-        app.dependency_overrides[get_store] = lambda: FakeStore()
-        app.dependency_overrides[get_caller] = lambda: SimpleNamespace(id=uuid4(), is_super_admin=False)
+        app.dependency_overrides[get_store] = lambda: store
+        app.dependency_overrides[get_org_scope] = store.org_scope
 
         resp = TestClient(app, base_url=_BASE_URL).delete(f"/components/{uuid4()}")
 
@@ -203,6 +208,25 @@ _BASE_URL = f"http://testserver/organisations/{_ORG_ID}"
 _USER_ID = uuid4()
 
 
+def _scope(org_id: UUID, role: str | None) -> OrgScope:
+    """Stand in for ``get_org_scope``: the caller acts in the path's organisation with *role*.
+
+    Args:
+        org_id: The organisation the path names.
+        role: The caller's role there; ``None`` for a non-member.
+
+    Returns:
+        The scope.
+
+    Raises:
+        HTTPException: 404 for a non-member, as the real dependency answers.
+    """
+    if role is None:
+        raise HTTPException(status_code=404, detail=f"Organisation {org_id} not found")
+    caller = CallerCredential(user=cast(Profile, SimpleNamespace(id=_USER_ID)), token=cast(Token, SimpleNamespace()))
+    return OrgScope(credential=caller, organisation=cast(Organisation, SimpleNamespace(id=org_id)), role=role)
+
+
 def _row(
     component_id: UUID | None = None,
     *,
@@ -259,8 +283,6 @@ class CrudStore:
         self.impact_requested: list[list[UUID]] = []
         self.impact = DeleteImpact(blocking=[], detaching=[])
 
-        self.members = SimpleNamespace(role_of=lambda org_id, user: self.role)
-        self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
         self.components = SimpleNamespace(
             list=self._list,
             create=self._create,
@@ -277,6 +299,9 @@ class CrudStore:
             add=self._add_relation,
             delete=self._remove_relation,
         )
+
+    def org_scope(self, org_id: UUID) -> OrgScope:
+        return _scope(org_id, self.role)
 
     def _list(self, org_id: UUID, query: ComponentQuery) -> Page[Any]:
         self.listed.append((org_id, query))
@@ -345,12 +370,11 @@ def crud_client(crud_store: CrudStore) -> TestClient:
     Returns:
         A client for the probe app.
     """
-    user = SimpleNamespace(id=_USER_ID, email="ada@example.com", is_super_admin=False)
     app = FastAPI()
     install_error_handlers(app)
     app.include_router(components_module.org_router, prefix=ORG_PREFIX)
     app.dependency_overrides[get_store] = lambda: crud_store
-    app.dependency_overrides[get_caller] = lambda: user
+    app.dependency_overrides[get_org_scope] = crud_store.org_scope
     return TestClient(app, base_url=_BASE_URL)
 
 

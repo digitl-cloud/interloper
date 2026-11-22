@@ -1187,8 +1187,10 @@ class CallerStore:
         self._accepted = accepted
         self._organisations = organisations or []
         self._roles = roles or {}
-        resolved = (self.profile, SimpleNamespace(kind="session")) if authenticated else None
-        self.tokens = SimpleNamespace(resolve=lambda raw, audience: resolved, revoke_sessions=self._revoke_sessions)
+        self._authenticated = authenticated
+        self.tokens = SimpleNamespace(
+            resolve=self._resolve, resolve_in=self._resolve_in, revoke_sessions=self._revoke_sessions
+        )
         self.profiles = SimpleNamespace(
             update=self._update_profile,
             issuers=lambda profile_id: self.issuers,
@@ -1197,18 +1199,22 @@ class CallerStore:
         )
         self.organisations = SimpleNamespace(
             list=lambda query: Page(items=self._organisations, total=len(self._organisations)),
-            get=self._get_organisation,
         )
         self.members = SimpleNamespace(
             role_of=lambda org_id, user: "admin" if user.is_super_admin else self._roles.get(org_id)
         )
         self.invitations = SimpleNamespace(accept=self._accept)
 
-    def _get_organisation(self, org_id: UUID) -> Any:
-        for organisation in self._organisations:
-            if organisation.id == org_id:
-                return organisation
-        raise NotFoundError(f"Organisation {org_id} not found")
+    def _resolve(self, raw: str, audience: Any) -> tuple[Any, Any] | None:
+        return (self.profile, SimpleNamespace(kind="session")) if self._authenticated else None
+
+    def _resolve_in(self, raw: str, audience: Any, org_id: UUID) -> tuple[Any, Any, Any, str | None] | None:
+        resolved = self._resolve(raw, audience)
+        if resolved is None:
+            return None
+        organisation = next((row for row in self._organisations if row.id == org_id), None)
+        role = self.members.role_of(org_id, self.profile) if organisation is not None else None
+        return *resolved, organisation, role
 
     def _update_profile(self, user_id: UUID, *, last_organisation_id: UUID | None = None) -> Any:
         self.last_organisations.append((user_id, last_organisation_id))

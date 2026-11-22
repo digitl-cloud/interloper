@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.testclient import TestClient
-from interloper_db import Audience, NotFoundError, TokenKind
+from interloper_db import Audience, TokenKind
 
 from interloper_api.app import ORG_PREFIX
 from interloper_api.dependencies import (
@@ -31,11 +31,12 @@ _OTHER_ORG_ID = uuid4()
 
 
 class FakeStore:
-    """Stand-in exposing the ``tokens``, ``members``, ``organisations`` and ``runs`` facets these read.
+    """Stand-in exposing the ``tokens`` and ``runs`` facets these read.
 
     Tokens resolve by kind against the surface they are presented to, as the
     real resolver does, so the tests prove which surface each credential is
-    resolved for.
+    resolved for; resolving one in an organisation answers the caller's
+    standing there as the real one does.
     """
 
     def __init__(
@@ -63,15 +64,10 @@ class FakeStore:
         self._tokens = tokens or {}
         self._roles = roles or {}
         self._live_orgs = live_orgs
-        self.tokens = SimpleNamespace(resolve=self._resolve)
-        self.members = SimpleNamespace(role_of=self._role_of)
-        self.organisations = SimpleNamespace(get=self._get_organisation)
+        self.tokens = SimpleNamespace(resolve=self._resolve, resolve_in=self._resolve_in)
         self.resolved_run_tokens: list[str] = []
         self._run = run
         self.runs = SimpleNamespace(resolve_token=self._resolve_run_token)
-
-    def _role_of(self, org_id: UUID, user: Any) -> str | None:
-        return "admin" if user.is_super_admin else self._roles.get(org_id)
 
     def _resolve(self, raw: str, audience: Audience) -> tuple[Any, Any] | None:
         self.presented.append((raw, audience))
@@ -80,14 +76,18 @@ class FakeStore:
             return None
         return self.profile, SimpleNamespace(kind=kind)
 
+    def _resolve_in(self, raw: str, audience: Audience, org_id: UUID) -> tuple[Any, Any, Any, str | None] | None:
+        resolved = self._resolve(raw, audience)
+        if resolved is None:
+            return None
+        if self._live_orgs is not None and org_id not in self._live_orgs:
+            return *resolved, None, None
+        role = "admin" if self.profile.is_super_admin else self._roles.get(org_id)
+        return *resolved, SimpleNamespace(id=org_id, name="Dev Org"), role
+
     def _resolve_run_token(self, raw: str) -> Any:
         self.resolved_run_tokens.append(raw)
         return self._run
-
-    def _get_organisation(self, org_id: UUID) -> Any:
-        if self._live_orgs is not None and org_id not in self._live_orgs:
-            raise NotFoundError(f"Organisation {org_id} not found")
-        return SimpleNamespace(id=org_id, name="Dev Org")
 
 
 def _client(store: FakeStore) -> TestClient:
@@ -297,6 +297,39 @@ class TestGetOrgScope:
         response = _client(FakeStore()).get(f"/organisations/{_ORG_ID}/scope")
 
         assert response.status_code == 401
+
+    def test_an_unresolvable_credential_is_a_401_not_a_404(self) -> None:
+        client = _client(FakeStore(roles={_ORG_ID: "admin"}))
+        client.cookies.set("session_token", "stale")
+
+        response = client.get(f"/organisations/{_ORG_ID}/scope")
+
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Invalid or expired credentials"
+
+    def test_the_credential_and_the_organisation_are_resolved_together(self) -> None:
+        store = FakeStore(tokens={"ilp_pat": TokenKind.PERSONAL}, roles={_ORG_ID: "viewer"})
+
+        response = _client(store).get(f"/organisations/{_ORG_ID}/scope", headers={"Authorization": "Bearer ilp_pat"})
+
+        assert response.json() == {"org": str(_ORG_ID), "role": "viewer"}
+        assert store.presented == [("ilp_pat", Audience.API)]
+
+    def test_the_scope_carries_the_callers_credential(self) -> None:
+        store = FakeStore(tokens={"cookie": TokenKind.SESSION}, roles={_ORG_ID: "editor"})
+        router = APIRouter()
+
+        @router.get("/caller")
+        def read_caller(scope: Annotated[OrgScope, Depends(get_org_scope)]) -> dict[str, str]:
+            return {"email": scope.credential.user.email, "kind": scope.credential.token.kind}
+
+        app = FastAPI()
+        app.include_router(router, prefix=ORG_PREFIX)
+        app.dependency_overrides[get_store] = lambda: store
+        client = TestClient(app)
+        client.cookies.set("session_token", "cookie")
+
+        assert client.get(f"/organisations/{_ORG_ID}/caller").json() == {"email": "user@example.com", "kind": "session"}
 
 
 def _run_client(store: FakeStore) -> TestClient:

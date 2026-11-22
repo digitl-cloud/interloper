@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import datetime as dt
 from types import SimpleNamespace
-from typing import Any
+from typing import cast
 from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from interloper.dag import DAGSpec
 from interloper.errors import ConfigError, PartitionError
@@ -26,19 +26,41 @@ from interloper_db import (
     EventQuery,
     ExecutionQuery,
     NotFoundError,
+    Organisation,
     Page,
+    Profile,
     QuotaExceededError,
     RunQuery,
     RunStatus,
+    Token,
 )
 
 from interloper_api.app import ORG_PREFIX, install_error_handlers
-from interloper_api.dependencies import get_caller, get_store, require_run
+from interloper_api.dependencies import CallerCredential, OrgScope, get_org_scope, get_store, require_run
 from interloper_api.routes import runs as runs_module
 
 _ORG_ID = uuid4()
 _RUN_ID = UUID("99c018d6-98fe-4de5-a867-1f1a9a545a38")
 _BASE_URL = f"http://testserver/organisations/{_ORG_ID}"
+
+
+def _scope(org_id: UUID, role: str | None) -> OrgScope:
+    """Stand in for ``get_org_scope``: the caller acts in the path's organisation with *role*.
+
+    Args:
+        org_id: The organisation the path names.
+        role: The caller's role there; ``None`` for a non-member.
+
+    Returns:
+        The scope.
+
+    Raises:
+        HTTPException: 404 for a non-member, as the real dependency answers.
+    """
+    if role is None:
+        raise HTTPException(status_code=404, detail=f"Organisation {org_id} not found")
+    caller = CallerCredential(user=cast(Profile, SimpleNamespace(id=uuid4())), token=cast(Token, SimpleNamespace()))
+    return OrgScope(credential=caller, organisation=cast(Organisation, SimpleNamespace(id=org_id)), role=role)
 
 
 def _fake_run(run_id: UUID, org_id: UUID = _ORG_ID) -> SimpleNamespace:
@@ -76,11 +98,9 @@ class FakeStore:
         self.execution_rows: list[SimpleNamespace] = []
         self.role: str | None = "editor"
         self.run_org_id: UUID = _ORG_ID
-        self.members = SimpleNamespace(role_of=self._role_of)
         self.ingested: list[tuple[UUID, il.EventBatch]] = []
         self.served_spec: RunSpec | None = None
         self.spec_error: Exception | None = None
-        self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
         self.runs = SimpleNamespace(
             get=self._get_run,
             list=self._list_runs,
@@ -97,8 +117,8 @@ class FakeStore:
             raise NotFoundError(f"Run {run_id} not found")
         return _fake_run(run_id, self.run_org_id)
 
-    def _role_of(self, org_id: UUID, user: Any) -> str | None:
-        return self.role
+    def org_scope(self, org_id: UUID) -> OrgScope:
+        return _scope(org_id, self.role)
 
     def _list_runs(self, org_id: UUID, query: RunQuery) -> Page:
         self.list_calls.append((org_id, query))
@@ -154,7 +174,7 @@ def _app(store: FakeStore) -> FastAPI:
     app.include_router(runs_module.org_router, prefix=ORG_PREFIX)
     app.include_router(runs_module.router)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_caller] = lambda: SimpleNamespace(id=uuid4(), is_super_admin=False)
+    app.dependency_overrides[get_org_scope] = store.org_scope
     app.dependency_overrides[require_run] = _any_run
     return app
 
@@ -594,10 +614,11 @@ class EventsStore:
     def __init__(self, total: int = 777) -> None:
         self.total = total
         self.list_calls: list[tuple[UUID, EventQuery, UUID | None]] = []
-        self.members = SimpleNamespace(role_of=lambda org_id, user: "viewer")
-        self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
         self.runs = SimpleNamespace(get=lambda run_id: SimpleNamespace(id=run_id, org_id=_ORG_ID))
         self.events = SimpleNamespace(list=self._list_events)
+
+    def org_scope(self, org_id: UUID) -> OrgScope:
+        return _scope(org_id, "viewer")
 
     def _list_events(self, org_id: UUID, query: EventQuery, *, run_id: UUID | None = None) -> Page:
         self.list_calls.append((org_id, query, run_id))
@@ -622,7 +643,7 @@ def _events_client(store: EventsStore) -> TestClient:
     install_error_handlers(app)
     app.include_router(runs_module.org_router, prefix=ORG_PREFIX)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_caller] = lambda: SimpleNamespace(id=uuid4(), is_super_admin=False)
+    app.dependency_overrides[get_org_scope] = store.org_scope
     return TestClient(app, base_url=_BASE_URL)
 
 

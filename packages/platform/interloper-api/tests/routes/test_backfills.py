@@ -7,21 +7,49 @@ tests, matching the style of ``test_runs.py``.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any
+from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from interloper.errors import ConfigError
-from interloper_db import BackfillQuery, ConflictError, NotFoundError, Page, QuotaExceededError
+from interloper_db import (
+    BackfillQuery,
+    ConflictError,
+    NotFoundError,
+    Organisation,
+    Page,
+    Profile,
+    QuotaExceededError,
+    Token,
+)
 
 from interloper_api.app import ORG_PREFIX, install_error_handlers
-from interloper_api.dependencies import get_caller, get_store
+from interloper_api.dependencies import CallerCredential, OrgScope, get_org_scope, get_store
 from interloper_api.routes import backfills as backfills_module
 
 _ORG_ID = uuid4()
 _BASE_URL = f"http://testserver/organisations/{_ORG_ID}"
+
+
+def _scope(org_id: UUID, role: str | None) -> OrgScope:
+    """Stand in for ``get_org_scope``: the caller acts in the path's organisation with *role*.
+
+    Args:
+        org_id: The organisation the path names.
+        role: The caller's role there; ``None`` for a non-member.
+
+    Returns:
+        The scope.
+
+    Raises:
+        HTTPException: 404 for a non-member, as the real dependency answers.
+    """
+    if role is None:
+        raise HTTPException(status_code=404, detail=f"Organisation {org_id} not found")
+    caller = CallerCredential(user=cast(Profile, SimpleNamespace(id=uuid4())), token=cast(Token, SimpleNamespace()))
+    return OrgScope(credential=caller, organisation=cast(Organisation, SimpleNamespace(id=org_id)), role=role)
 
 
 def _fake_backfill(backfill_id: UUID, status: str = "running") -> SimpleNamespace:
@@ -53,8 +81,6 @@ class FakeStore:
         self.raise_conflict: str | None = None
         self.role: str | None = "editor"
         self.backfill_org_id: UUID = _ORG_ID
-        self.members = SimpleNamespace(role_of=self._role_of)
-        self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
         self.backfills = SimpleNamespace(
             get=self._get_backfill,
             cancel=self._cancel_backfill,
@@ -74,8 +100,8 @@ class FakeStore:
         backfill.org_id = self.backfill_org_id
         return backfill
 
-    def _role_of(self, org_id: UUID, user: Any) -> str | None:
-        return self.role
+    def org_scope(self, org_id: UUID) -> OrgScope:
+        return _scope(org_id, self.role)
 
     def _cancel_backfill(self, backfill_id: UUID):
         self.cancel_calls.append(backfill_id)
@@ -89,7 +115,7 @@ def _app(store: FakeStore) -> FastAPI:
     install_error_handlers(app)
     app.include_router(backfills_module.org_router, prefix=ORG_PREFIX)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_caller] = lambda: SimpleNamespace(id=uuid4(), is_super_admin=False)
+    app.dependency_overrides[get_org_scope] = store.org_scope
     return app
 
 
@@ -194,7 +220,7 @@ def _list_client(store: FakeStore) -> TestClient:
     install_error_handlers(app)
     app.include_router(backfills_module.org_router, prefix=ORG_PREFIX)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_caller] = lambda: SimpleNamespace(id=uuid4(), is_super_admin=False)
+    app.dependency_overrides[get_org_scope] = store.org_scope
     return TestClient(app, base_url=_BASE_URL)
 
 

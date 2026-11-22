@@ -376,7 +376,7 @@ class TestRealtimeLifespan:
 
 
 class FakeStore:
-    """Stand-in exposing the ``tokens``, ``members`` and ``organisations`` facets the endpoint reads."""
+    """Stand-in exposing the ``tokens`` facet the endpoint resolves the caller and their role through."""
 
     def __init__(self, *, authenticated: bool = True, role: str | None = "viewer") -> None:
         """Set up the fake.
@@ -389,16 +389,13 @@ class FakeStore:
         self.role = role
         self.presented: list[tuple[str, Audience]] = []
         self._profile = SimpleNamespace(id=uuid4(), email="user@example.com", is_super_admin=False)
-        self.tokens = SimpleNamespace(resolve=self._resolve)
-        self.members = SimpleNamespace(role_of=self._role_of)
-        self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
+        self.tokens = SimpleNamespace(resolve_in=self._resolve_in)
 
-    def _resolve(self, raw: str, audience: Audience) -> tuple[Any, Any] | None:
+    def _resolve_in(self, raw: str, audience: Audience, org_id: Any) -> tuple[Any, Any, Any, str | None] | None:
         self.presented.append((raw, audience))
-        return (self._profile, SimpleNamespace(kind="session")) if self.authenticated else None
-
-    def _role_of(self, org_id: Any, user: Any) -> str | None:
-        return self.role
+        if not self.authenticated:
+            return None
+        return self._profile, SimpleNamespace(kind="session"), SimpleNamespace(id=org_id), self.role
 
 
 @pytest.fixture

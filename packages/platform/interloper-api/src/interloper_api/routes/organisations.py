@@ -289,7 +289,6 @@ def update_member(
 @org_router.delete("/members/{user_id}", status_code=204)
 def remove_member(
     user_id: UUID,
-    user: CurrentUserDep,
     scope: AdminDep,
     store: StoreDep,
 ) -> Response:
@@ -297,8 +296,7 @@ def remove_member(
 
     Args:
         user_id: The member to remove.
-        user: The authenticated caller.
-        scope: The organisation the path names, the caller an admin there.
+        scope: The caller and the organisation the path names, the caller an admin there.
         store: The database store.
 
     Returns:
@@ -308,7 +306,7 @@ def remove_member(
         HTTPException: 400 when the caller targets their own membership, which
             would let an admin lock the organisation out of its admin seat.
     """
-    if user_id == user.id:
+    if user_id == scope.credential.user.id:
         raise HTTPException(status_code=400, detail="Cannot remove yourself")
     store.members.delete(scope.organisation.id, user_id)
     return Response(status_code=204)
@@ -341,7 +339,6 @@ def list_invitations(
 @org_router.post("/invitations", status_code=201)
 def create_invitation(
     body: InvitationCreateRequest,
-    user: CurrentUserDep,
     scope: AdminDep,
     store: StoreDep,
     settings: SettingsDep,
@@ -353,8 +350,8 @@ def create_invitation(
 
     Args:
         body: The address to invite and the role granted on acceptance.
-        user: The authenticated caller, the inviter.
-        scope: The organisation the path names, the caller an admin there.
+        scope: The caller, the inviter, and the organisation the path names,
+            the caller an admin there.
         store: The database store.
         settings: The settings, whose ``smtp`` is the mailer and ``server``
             the public URL the invite link is built on.
@@ -362,7 +359,7 @@ def create_invitation(
     Returns:
         The created invitation.
     """
-    organisation = scope.organisation
+    organisation, user = scope.organisation, scope.credential.user
     invitation = store.invitations.create(organisation.id, email=body.email.strip(), role=body.role, invited_by=user.id)
     InvitationEmail.from_invitation(
         invitation, org_name=organisation.name, inviter=user, base_url=settings.server.public_url
@@ -394,7 +391,6 @@ def delete_invitation(
 @org_router.post("/invitations/{invitation_id}/resend", status_code=201)
 def resend_invitation(
     invitation_id: UUID,
-    user: CurrentUserDep,
     scope: AdminDep,
     store: StoreDep,
     settings: SettingsDep,
@@ -406,8 +402,8 @@ def resend_invitation(
 
     Args:
         invitation_id: The invitation to reissue.
-        user: The authenticated caller, the inviter.
-        scope: The organisation the path names, the caller an admin there.
+        scope: The caller, the inviter, and the organisation the path names,
+            the caller an admin there.
         store: The database store.
         settings: The settings, whose ``smtp`` is the mailer and ``server``
             the public URL the invite link is built on.
@@ -415,7 +411,7 @@ def resend_invitation(
     Returns:
         The reissued invitation.
     """
-    organisation = scope.organisation
+    organisation, user = scope.organisation, scope.credential.user
     invitation = store.invitations.reissue(invitation_id, org_id=organisation.id, invited_by=user.id)
     InvitationEmail.from_invitation(
         invitation, org_name=organisation.name, inviter=user, base_url=settings.server.public_url

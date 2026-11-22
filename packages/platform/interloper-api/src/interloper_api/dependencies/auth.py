@@ -4,8 +4,10 @@ The caller proves who they are with the app's session cookie or an
 ``Authorization: Bearer`` token, each resolved for its own surface, so a
 secret presented on the wrong one is refused; the routes that manage
 credentials and memberships, and the super-admin ones, take the cookie alone.
-The organisation is named by the path, never remembered between requests. A
-run's pod authenticates as its run, with the run token, and nothing else.
+The organisation is named by the path, never remembered between requests, and
+is read with the credential, so an organisation route authenticates and
+authorises in one statement. A run's pod authenticates as its run, with the
+run token, and nothing else.
 """
 
 from __future__ import annotations
@@ -15,7 +17,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import Cookie, Depends, Header, HTTPException
-from interloper_db import Audience, NotFoundError, Organisation, Profile, Role, Run, Store, Token
+from interloper_db import Audience, Organisation, Profile, Role, Run, Store, Token
 
 from interloper_api.dependencies.state import StoreDep
 
@@ -52,6 +54,49 @@ def session_user(store: Store, session_token: str | None) -> Profile | None:
 
 
 @dataclass(frozen=True)
+class PresentedCredential:
+    """The secret a request presents, and the surface it is resolved for.
+
+    A bearer token resolves as an API credential (personal or access token)
+    and the cookie as a login session; a bearer token, when presented, is the
+    credential, so a failing one is never rescued by a cookie.
+
+    Attributes:
+        secret: The raw secret.
+        audience: ``api`` for a bearer token, ``app`` for the session cookie.
+    """
+
+    secret: str
+    audience: Audience
+
+    @classmethod
+    def from_request(cls, session_token: str | None, authorization: str | None) -> PresentedCredential:
+        """Take the bearer token, else the session cookie.
+
+        Args:
+            session_token: The session cookie value, or ``None`` when absent.
+            authorization: The ``Authorization`` header value, or ``None``
+                when absent; a scheme other than bearer leaves the cookie to
+                authenticate.
+
+        Returns:
+            The secret and the surface it resolves for.
+
+        Raises:
+            HTTPException: 401 when no credential is presented, or the bearer
+                token is empty.
+        """
+        token = bearer(authorization)
+        if token is None:
+            if not session_token:
+                raise HTTPException(status_code=401, detail="Not authenticated")
+            return cls(secret=session_token, audience=Audience.APP)
+        if not token:
+            raise HTTPException(status_code=401, detail="Invalid or expired credentials")
+        return cls(secret=token, audience=Audience.API)
+
+
+@dataclass(frozen=True)
 class CallerCredential:
     """The credential a request presented, and the user it stands for.
 
@@ -73,10 +118,6 @@ def get_caller_credential(
 ) -> CallerCredential:
     """Resolve the credential from the bearer token, else the session cookie.
 
-    A bearer token resolves as an API credential (personal or access token)
-    and the cookie as a login session; a bearer token, when presented, is the
-    credential, so a failing one is never rescued by a cookie.
-
     Args:
         store: The Store instance.
         session_token: The session cookie value.
@@ -89,13 +130,8 @@ def get_caller_credential(
         HTTPException: 401 when no credential is presented or the secret does
             not resolve for its surface.
     """
-    token = bearer(authorization)
-    if token is None:
-        if not session_token:
-            raise HTTPException(status_code=401, detail="Not authenticated")
-        resolved = store.tokens.resolve(session_token, Audience.APP)
-    else:
-        resolved = store.tokens.resolve(token, Audience.API) if token else None
+    presented = PresentedCredential.from_request(session_token, authorization)
+    resolved = store.tokens.resolve(presented.secret, presented.audience)
     if resolved is None:
         raise HTTPException(status_code=401, detail="Invalid or expired credentials")
     return CallerCredential(user=resolved[0], token=resolved[1])
@@ -160,13 +196,16 @@ SessionUserDep = Annotated[Profile, Depends(get_session_caller)]
 
 @dataclass(frozen=True)
 class OrgScope:
-    """The organisation a request acts in, and the role the caller holds there.
+    """Who acts, in which organisation, and with which role.
 
     Attributes:
+        credential: The credential the request presented, and the user it
+            stands for.
         organisation: The organisation the path names.
         role: The caller's live role in it; ``admin`` for a super-admin.
     """
 
+    credential: CallerCredential
     organisation: Organisation
     role: str
 
@@ -187,31 +226,39 @@ class OrgScope:
         return self
 
 
-def get_org_scope(org_id: UUID, user: CurrentUserDep, store: StoreDep) -> OrgScope:
-    """Resolve the organisation the path names and the caller's role in it.
+def get_org_scope(
+    org_id: UUID,
+    store: StoreDep,
+    session_token: str | None = Cookie(default=None),
+    authorization: str | None = Header(default=None),
+) -> OrgScope:
+    """Resolve the caller, the organisation the path names and their role in it, in one statement.
 
-    A non-member reads the organisation as missing, so an id reveals nothing.
+    The credential is taken as :func:`get_caller_credential` takes it. A
+    non-member reads the organisation as missing, so an id reveals nothing.
 
     Args:
         org_id: The organisation id from the path.
-        user: The authenticated caller.
         store: The Store instance.
+        session_token: The session cookie value.
+        authorization: The ``Authorization`` header value.
 
     Returns:
-        The organisation and the caller's role in it.
+        The caller's credential, the organisation and the caller's role in it.
 
     Raises:
-        HTTPException: 404 when the organisation is missing, deleted, or the
-            caller cannot act in it.
+        HTTPException: 401 when no credential is presented or the secret does
+            not resolve for its surface; 404 when the organisation is missing,
+            deleted, or the caller cannot act in it.
     """
-    try:
-        organisation = store.organisations.get(org_id)
-    except NotFoundError:
-        organisation = None
-    role = store.members.role_of(org_id, user) if organisation is not None else None
+    presented = PresentedCredential.from_request(session_token, authorization)
+    resolved = store.tokens.resolve_in(presented.secret, presented.audience, org_id)
+    if resolved is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired credentials")
+    user, token, organisation, role = resolved
     if organisation is None or role is None:
         raise HTTPException(status_code=404, detail=f"Organisation {org_id} not found")
-    return OrgScope(organisation=organisation, role=role)
+    return OrgScope(credential=CallerCredential(user=user, token=token), organisation=organisation, role=role)
 
 
 OrgDep = Annotated[OrgScope, Depends(get_org_scope)]

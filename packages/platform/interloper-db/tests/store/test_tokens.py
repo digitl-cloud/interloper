@@ -73,6 +73,21 @@ def store(token_db: Engine) -> Store:
 
 
 @pytest.fixture
+def statements(token_db: Engine) -> list[str]:
+    """Record every statement sent to the database from here on.
+
+    Args:
+        token_db: The engine to listen on.
+
+    Returns:
+        The statements, in the order they were sent.
+    """
+    sent: list[str] = []
+    event.listen(token_db, "before_cursor_execute", lambda _c, _cursor, statement, *_: sent.append(statement))
+    return sent
+
+
+@pytest.fixture
 def profile(store: Store) -> Profile:
     """A profile to hold tokens.
 
@@ -185,6 +200,34 @@ class TestResolve:
         assert second is not None
         assert second[1].last_used_at == first_used
 
+    def test_the_token_and_its_holder_are_read_in_one_statement(
+        self, store: Store, profile: Profile, statements: list[str]
+    ):
+        raw = store.tokens.create_session(profile.id)
+        store.tokens.resolve(raw, Audience.APP)
+        statements.clear()
+
+        resolved = store.tokens.resolve(raw, Audience.APP)
+
+        assert resolved is not None
+        assert resolved[0].id == profile.id
+        assert len(statements) == 1
+
+    def test_in_a_shared_session_the_stamp_commits_and_stays_throttled(
+        self, store: Store, profile: Profile, statements: list[str]
+    ):
+        row, raw = store.tokens.create_personal(profile.id, "t", None)
+        statements.clear()
+
+        with store.shared_session():
+            store.tokens.resolve(raw, Audience.API)
+            stamped = len(statements)
+            store.tokens.resolve(raw, Audience.API)
+
+        assert stamped == 2
+        assert len(statements) == 3
+        assert store.tokens.get(row.id).last_used_at is not None
+
     def test_a_row_with_the_old_columns_resolves_as_personal(self, store: Store, profile: Profile, token_db: Engine):
         # A personal_access_tokens row carried none of kind, client_id or
         # resource; migration 015 keeps it, and the kind's default makes it personal.
@@ -202,6 +245,96 @@ class TestResolve:
 
         assert resolved is not None
         assert resolved[1].kind == TokenKind.PERSONAL
+
+
+class TestResolveIn:
+    """A secret resolved in an organisation answers its holder's standing there, in the same statement."""
+
+    @pytest.fixture
+    def organisation(self, store: Store) -> Organisation:
+        """An organisation the profile is not yet a member of.
+
+        Returns:
+            The organisation.
+        """
+        return store.organisations.create("Acme")
+
+    def test_a_member_gets_the_organisation_and_their_role(
+        self, store: Store, profile: Profile, organisation: Organisation
+    ):
+        store.members.add(organisation.id, profile.id, "editor")
+        raw = store.tokens.create_session(profile.id)
+
+        resolved = store.tokens.resolve_in(raw, Audience.APP, organisation.id)
+
+        assert resolved is not None
+        holder, token, found, role = resolved
+        assert (holder.id, token.kind, role) == (profile.id, TokenKind.SESSION, "editor")
+        assert found is not None and found.id == organisation.id
+
+    def test_a_non_member_gets_the_organisation_and_no_role(
+        self, store: Store, profile: Profile, organisation: Organisation
+    ):
+        raw = store.tokens.create_session(profile.id)
+
+        resolved = store.tokens.resolve_in(raw, Audience.APP, organisation.id)
+
+        assert resolved is not None
+        assert resolved[2] is not None
+        assert resolved[3] is None
+
+    def test_a_super_admin_acts_as_admin_without_a_membership(
+        self, store: Store, profile: Profile, organisation: Organisation
+    ):
+        store.profiles.set_super_admin(profile.id, value=True)
+        raw = store.tokens.create_session(profile.id)
+
+        resolved = store.tokens.resolve_in(raw, Audience.APP, organisation.id)
+
+        assert resolved is not None
+        assert resolved[3] == "admin"
+
+    @pytest.mark.parametrize("is_super_admin", [True, False])
+    def test_a_deleted_or_unknown_organisation_is_none_for_everyone(
+        self, store: Store, profile: Profile, organisation: Organisation, token_db: Engine, is_super_admin: bool
+    ):
+        store.members.add(organisation.id, profile.id, "admin")
+        store.profiles.set_super_admin(profile.id, value=is_super_admin)
+        with token_db.begin() as connection:
+            connection.execute(
+                update(Organisation).where(col(Organisation.id) == organisation.id).values(deleted_at=datetime.now(UTC))
+            )
+        raw = store.tokens.create_session(profile.id)
+
+        for org_id in (organisation.id, uuid4()):
+            resolved = store.tokens.resolve_in(raw, Audience.APP, org_id)
+            assert resolved is not None
+            assert resolved[2:] == (None, None)
+
+    def test_a_secret_the_surface_refuses_resolves_to_nothing(
+        self, store: Store, profile: Profile, organisation: Organisation
+    ):
+        store.members.add(organisation.id, profile.id, "admin")
+        raw = store.tokens.create_session(profile.id)
+
+        assert store.tokens.resolve_in(raw, Audience.API, organisation.id) is None
+        assert store.tokens.resolve_in("ilp_no-such-token", Audience.API, organisation.id) is None
+
+    def test_everything_is_read_in_one_statement_and_the_use_stamped_once(
+        self, store: Store, profile: Profile, organisation: Organisation, statements: list[str]
+    ):
+        store.members.add(organisation.id, profile.id, "viewer")
+        row, raw = store.tokens.create_personal(profile.id, "t", None)
+        statements.clear()
+
+        store.tokens.resolve_in(raw, Audience.API, organisation.id)
+        stamped = list(statements)
+        statements.clear()
+        store.tokens.resolve_in(raw, Audience.API, organisation.id)
+
+        assert [statement.split()[0] for statement in stamped] == ["SELECT", "UPDATE"]
+        assert len(statements) == 1
+        assert store.tokens.get(row.id).last_used_at is not None
 
 
 class TestAccess:

@@ -2,8 +2,8 @@
 
 Tokens are opaque bearer secrets whose SHA-256 hash is the only thing
 stored. A token stands for its user and carries no organisation: resolving
-one yields the holder, and the caller reads the holder's live role in the
-organisation it acts in, so a role change or removal applies at once. A
+one yields the holder, and resolving it in an organisation also reads the
+holder's live role there, so a role change or removal applies at once. A
 login session is a token too, the one the app's cookie carries, and so is
 an OAuth access token, which a client holds for the surface it was issued for.
 OAuth refresh tokens are rows here as well, but the OAuth facet issues,
@@ -17,11 +17,11 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import Engine, delete, update
-from sqlmodel import col, select
+from sqlmodel import Session, col, select
 
 from interloper_db.crypto import hash_token
 from interloper_db.errors import NotFoundError
-from interloper_db.models import Audience, Profile, Token, TokenKind
+from interloper_db.models import Audience, Organisation, Profile, Token, TokenKind, UserOrganisation
 from interloper_db.session import commit, save, session_scope
 from interloper_db.store.page import Page, PageQuery
 
@@ -170,7 +170,7 @@ class TokenStore:
             return db_token, raw
 
     def resolve(self, raw: str, audience: Audience) -> tuple[Profile, Token] | None:
-        """Resolve a raw secret presented to a surface to its holder and row.
+        """Resolve a raw secret presented to a surface to its holder and row, in one statement.
 
         Args:
             raw: The raw secret as presented by the client.
@@ -183,33 +183,57 @@ class TokenStore:
             ``None``: on no match, a kind or resource the surface refuses,
             revocation, expiry, or a deleted profile.
         """
-        token_hash = hash_token(raw)
-        now = datetime.now(UTC)
-
+        statement = (
+            select(Token, Profile)
+            .join(Profile, col(Profile.id) == col(Token.user_id))
+            .where(col(Token.token_hash) == hash_token(raw))
+        )
         with session_scope(self._engine) as session:
-            db_token = session.exec(select(Token).where(Token.token_hash == token_hash)).first()
-            if not db_token:
+            row = session.exec(statement).first()
+            if row is None or not self._admit(session, row[0], audience):
                 return None
-
-            if db_token.kind not in audience.kinds:
-                return None
-            if db_token.kind == TokenKind.ACCESS and db_token.resource != audience.value:
-                return None
-            if db_token.revoked_at is not None:
-                return None
-            if db_token.expires_at is not None and db_token.expires_at < now:
-                return None
-
-            db_profile = session.get(Profile, db_token.user_id)
-            if not db_profile:
-                return None
-
-            last_used = db_token.last_used_at
-            if last_used is None or last_used < now - timedelta(seconds=LAST_USED_THROTTLE_SECONDS):
-                db_token.last_used_at = now
-                save(session, db_token)
-
+            db_token, db_profile = row
             return db_profile, db_token
+
+    def resolve_in(
+        self, raw: str, audience: Audience, org_id: UUID
+    ) -> tuple[Profile, Token, Organisation | None, str | None] | None:
+        """Resolve a raw secret presented to a surface, and its holder's standing in an organisation, in one statement.
+
+        A request acting in an organisation authenticates and authorises in
+        one round trip: the organisation and the holder's membership are read
+        with the token, so the role is as live as the token's validity.
+
+        Args:
+            raw: The raw secret as presented by the client.
+            audience: The surface it was presented to, refused as by :meth:`resolve`.
+            org_id: The organisation the holder acts in.
+
+        Returns:
+            ``(Profile, Token, organisation, role)`` when the token is valid
+            for the surface, else ``None`` as for :meth:`resolve`. The
+            organisation is ``None`` when no live organisation carries
+            ``org_id``; the role is :meth:`Profile.acting_role`'s there,
+            ``None`` when the holder cannot act in it.
+        """
+        statement = (
+            select(Token, Profile, Organisation, UserOrganisation.role)
+            .join(Profile, col(Profile.id) == col(Token.user_id))
+            .outerjoin(Organisation, (col(Organisation.id) == org_id) & col(Organisation.deleted_at).is_(None))
+            .outerjoin(
+                UserOrganisation,
+                (col(UserOrganisation.user_id) == col(Token.user_id))
+                & (col(UserOrganisation.organisation_id) == col(Organisation.id)),
+            )
+            .where(col(Token.token_hash) == hash_token(raw))
+        )
+        with session_scope(self._engine) as session:
+            row = session.exec(statement).first()
+            if row is None or not self._admit(session, row[0], audience):
+                return None
+            db_token, db_profile, organisation, membership = row
+            role = db_profile.acting_role(membership) if organisation is not None else None
+            return db_profile, db_token, organisation, role
 
     def list(self, user_id: UUID, query: PageQuery) -> Page[Token]:
         """List a user's personal access tokens, newest first.
@@ -286,3 +310,35 @@ class TokenStore:
             deleted = session.connection().execute(statement).rowcount
             commit(session)
         return deleted
+
+    def _admit(self, session: Session, db_token: Token, audience: Audience) -> bool:
+        """Decide whether a surface accepts a token now, stamping its use when it does.
+
+        The stamp commits with the resolving call, as any store write does
+        when its call ends. In a shared session that ends the transaction the
+        resolving read began, which holds nothing but reads, and the next call
+        begins a fresh one.
+
+        Args:
+            session: The session the token was read in.
+            db_token: The token row.
+            audience: The surface the token was presented to.
+
+        Returns:
+            True when the surface accepts the token's kind and, for an access
+            token, its resource, and the token is neither revoked nor expired.
+        """
+        now = datetime.now(UTC)
+        if db_token.kind not in audience.kinds:
+            return False
+        if db_token.kind == TokenKind.ACCESS and db_token.resource != audience.value:
+            return False
+        if db_token.revoked_at is not None:
+            return False
+        if db_token.expires_at is not None and db_token.expires_at < now:
+            return False
+        last_used = db_token.last_used_at
+        if last_used is None or last_used < now - timedelta(seconds=LAST_USED_THROTTLE_SECONDS):
+            db_token.last_used_at = now
+            commit(session)
+        return True

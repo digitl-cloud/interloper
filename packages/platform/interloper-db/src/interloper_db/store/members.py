@@ -48,9 +48,10 @@ class MemberStore:
     def role_of(self, org_id: UUID, user: Profile) -> str | None:
         """The role a user acts with in a live organisation.
 
-        A super-admin acts as ``admin`` in every organisation; anyone else
-        with their membership. Liveness is the caller's to establish: the
-        organisation was just read, or listed among the user's.
+        The role is :meth:`Profile.acting_role`'s, and the membership is read
+        only when it decides it, never for a super-admin. Liveness is the
+        caller's to establish: the organisation was just read, or listed
+        among the user's.
 
         Args:
             org_id: Organisation UUID.
@@ -59,7 +60,7 @@ class MemberStore:
         Returns:
             The role name, or ``None`` when the user cannot act in the organisation.
         """
-        return Role.ADMIN.value if user.is_super_admin else self.role(org_id, user.id)
+        return user.acting_role(None if user.is_super_admin else self.role(org_id, user.id))
 
     def list(self, org_id: UUID, query: PageQuery) -> Page[UserOrganisation]:
         """List an organisation's members, oldest membership first.

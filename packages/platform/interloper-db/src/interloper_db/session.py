@@ -20,7 +20,8 @@ _open_transaction: ContextVar[Session | None] = ContextVar("interloper_db_transa
 
 #: The session currently in scope, and how many nested scopes are sharing it.
 #: One store method calling another must join rather than open a second
-#: session, and only the outermost scope may commit.
+#: session, and only the outermost scope may commit. A ``shared_session``
+#: binds one at depth 0, outside every store method.
 _open_session: ContextVar[Session | None] = ContextVar("interloper_db_session", default=None)
 _scope_depth: ContextVar[int] = ContextVar("interloper_db_scope_depth", default=0)
 
@@ -28,7 +29,8 @@ _scope_depth: ContextVar[int] = ContextVar("interloper_db_scope_depth", default=
 def commit(session: Session) -> None:
     """End a store method's unit of work.
 
-    Commits when the method owns the session, and flushes when something
+    Commits when the method owns its unit of work (its own session, or the
+    outermost call in a :func:`shared_session`), and flushes when something
     outside it does — an enclosing ``Store.transaction``, or an outer store
     method that this one was called from. The writes stay visible to the rest
     of that scope without being made durable early.
@@ -105,12 +107,50 @@ def transaction(engine: Engine) -> Generator[Session, None, None]:
 
 
 @contextmanager
+def shared_session(engine: Engine) -> Generator[Session, None, None]:
+    """Let the store calls made in the block share one session, each still its own unit of work.
+
+    A store method that opens its own session pays a connection checkout, a
+    ``BEGIN`` and a ``ROLLBACK`` around its reads. Inside this block the
+    methods join one session instead, and so share its connection and, until
+    one of them commits, its transaction. Each still owns what it does as if
+    it had opened the session: its writes commit when it ends, a failure
+    rolls the open transaction back, and the rows it returns leave the
+    session detached, so nothing a caller does to them reaches a later commit.
+
+    The session connects on first use. Closing it ends the open transaction,
+    a round trip, so an async caller closes it itself, off its event loop,
+    before the block ends; the block's own close then has nothing left to do.
+
+    Args:
+        engine: The engine to open the session on.
+
+    Yields:
+        The session the store calls share.
+    """
+    session = Session(engine, expire_on_commit=False)
+    open_token = _open_session.set(session)
+    depth = _scope_depth.set(0)
+    try:
+        with session:
+            yield session
+    finally:
+        _scope_depth.reset(depth)
+        _open_session.reset(open_token)
+
+
+@contextmanager
 def session_scope(engine: Engine) -> Generator[Session, None, None]:
     """Work in a session on *engine*.
 
-    Joins the session already in scope — an enclosing :func:`transaction`, or
-    an outer store method that called this one — so nested store calls share
-    one session. Opens its own only when nothing is in scope.
+    Joins the session already in scope (an enclosing :func:`transaction`, a
+    :func:`shared_session`, or an outer store method that called this one),
+    so nested store calls share one session. Opens its own only when nothing
+    is in scope.
+
+    The outermost store method in a shared session ends its unit of work as
+    if it had opened the session: a failure rolls back the open transaction,
+    and the rows it loaded leave the session.
 
     Args:
         engine: The engine to open a session on when not already in one.
@@ -120,11 +160,18 @@ def session_scope(engine: Engine) -> Generator[Session, None, None]:
     """
     joined = _open_session.get()
     if joined is not None:
+        outermost = _scope_depth.get() == 0
         depth = _scope_depth.set(_scope_depth.get() + 1)
         try:
             yield joined
+        except BaseException:
+            if outermost:
+                joined.rollback()
+            raise
         finally:
             _scope_depth.reset(depth)
+            if outermost:
+                joined.expunge_all()
         return
 
     session = Session(engine, expire_on_commit=False)

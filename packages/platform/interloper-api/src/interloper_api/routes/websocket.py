@@ -27,7 +27,7 @@ from fastapi import APIRouter, Cookie, FastAPI, HTTPException, WebSocket, WebSoc
 from interloper_db import Store
 from starlette.concurrency import run_in_threadpool
 
-from interloper_api.dependencies import StoreDep, get_caller_credential, get_org_scope
+from interloper_api.dependencies import StoreDep, get_org_scope
 
 logger = logging.getLogger(__name__)
 org_router = APIRouter(tags=["websocket"])
@@ -214,8 +214,7 @@ class Subscription:
 
     def _authorize(self) -> None:
         """Resolve the caller's credential and their role in the organisation, raising when either fails."""
-        user = get_caller_credential(self._store, self._session_token, self._authorization).user
-        get_org_scope(self._org_id, user, self._store)
+        get_org_scope(self._org_id, self._store, self._session_token, self._authorization)
 
     async def _stream(self) -> HTTPException | None:
         """Broadcast to the socket, checking the caller again every ``RECHECK_SECONDS``.

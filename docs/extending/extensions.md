@@ -200,10 +200,11 @@ def create_bucket(scope: EditorDep) -> dict:
 `GET /api/organisations/{org_id}/ext/acme/buckets/{bucket_id}` reaches `get_bucket`. Every
 route of the router requires the viewer role in the organisation the path names, so a caller
 outside it reads the organisation as missing; a route that writes raises the floor with
-`EditorDep` or `AdminDep`. Keeping one organisation's data from another is the router's job:
-every row it stores carries the organisation's id, and a fetch by id goes through
-`load_authorized`, which answers a record of another organisation with the same 404 as a
-missing one.
+`EditorDep` or `AdminDep`. The scope also names the caller, `scope.credential.user`, read in
+the same statement as the organisation and the role. Keeping one organisation's data from
+another is the router's job: every row it stores carries the organisation's id, and a fetch by
+id goes through `load_authorized`, which answers a record of another organisation with the
+same 404 as a missing one.
 
 The routes reach Python in every deployment shape, since only `/api` goes to the API, and the
 package declaring them must be installed in the API's image.

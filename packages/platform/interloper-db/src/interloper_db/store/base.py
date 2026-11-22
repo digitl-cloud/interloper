@@ -12,7 +12,7 @@ from sqlalchemy import Engine
 from sqlmodel import Session
 
 from interloper_db.engine import engine_from_settings, get_engine
-from interloper_db.session import transaction
+from interloper_db.session import shared_session, transaction
 from interloper_db.settings import QuotaSettings
 from interloper_db.store.backfills import BackfillStore
 from interloper_db.store.components import ComponentStore, Hydrator
@@ -227,3 +227,12 @@ class Store:
             A context manager yielding the session the calls will share.
         """
         return transaction(self._engine)
+
+    def shared_session(self) -> AbstractContextManager[Session]:
+        """Let the store calls made in the block share one session, each still its own unit of work.
+
+        Returns:
+            A context manager yielding the session the calls will share; see
+            :func:`~interloper_db.session.shared_session`.
+        """
+        return shared_session(self._engine)
