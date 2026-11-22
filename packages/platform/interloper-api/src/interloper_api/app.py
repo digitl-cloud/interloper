@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from interloper.catalog import Catalog
 from interloper.errors import ConfigError
@@ -212,6 +213,9 @@ def create_app(
 
     install_error_handlers(app)
 
+    # A listing is hundreds of kilobytes of repetitive JSON, a tenth of that compressed. Level 4 stays
+    # within an eighth of level 9's size for half its time, and zlib releases the GIL while it works.
+    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=4)
     if cors_origins:
         app.add_middleware(
             CORSMiddleware,

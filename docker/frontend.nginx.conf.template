@@ -5,6 +5,16 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
+    # The app's scripts and styles are a few megabytes of text. gzip_proxied:
+    # nginx leaves a request that came through a proxy uncompressed unless
+    # told otherwise, and a load balancer in front marks every request so.
+    gzip on;
+    gzip_proxied any;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_comp_level 5;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+
     # Use relative Location headers in redirects so the browser resolves
     # them against the current URL (preserving scheme + host + port).
     # Without this, nginx's trailing-slash auto-redirect (e.g.
