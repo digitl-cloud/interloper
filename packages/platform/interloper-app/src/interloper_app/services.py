@@ -9,8 +9,8 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from interloper.utils import Service, Supervisor
-from interloper_api import ApiServer
-from interloper_scheduler import scheduler_services
+from interloper_api.server import ApiServer
+from interloper_scheduler.services import scheduler_services
 
 from interloper_app.assets import SpaFallback, static_dir
 

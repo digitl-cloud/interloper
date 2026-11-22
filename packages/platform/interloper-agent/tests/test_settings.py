@@ -1,5 +1,8 @@
 """Tests for ``interloper_agent.settings``."""
 
+import subprocess
+import sys
+
 import pytest
 from pydantic import ValidationError
 
@@ -47,3 +50,12 @@ def test_an_enabled_agent_without_a_model_fails_naming_the_variable(monkeypatch:
 def test_a_disabled_agent_needs_no_model():
     """The model is only required to serve the agent."""
     assert AgentSettings(enabled=False).model is None
+
+
+def test_reading_the_section_loads_no_agent():
+    """The API reads the section whether the agent is enabled or not, so it must not import pydantic-ai."""
+    probe = "import sys\nfrom interloper_agent.settings import AgentSettings\nprint(*sys.modules)"
+
+    loaded = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, check=True).stdout.split()
+
+    assert "pydantic_ai" not in loaded

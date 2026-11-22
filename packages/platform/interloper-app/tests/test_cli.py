@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
 import pytest
 from interloper.settings import ServerSettings
 from interloper_api.settings import AuthSettings
+from interloper_db import Store
 from interloper_db.settings import PostgresSettings
 from interloper_scheduler.settings import CronSettings, ReaperSettings, WorkerSettings
 
 from interloper_app import cli
+from interloper_app.services import App
 
 
 def _parse(*argv: str) -> argparse.Namespace:
@@ -55,15 +58,22 @@ def wiring(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         recorded["app"] = kwargs
         return FakeApp()
 
-    monkeypatch.setattr(cli, "bootstrap", lambda dsn, **kwargs: recorded.setdefault("bootstrap", (dsn, kwargs)))
+    monkeypatch.setattr(
+        "interloper_db.provision.bootstrap", lambda dsn, **kwargs: recorded.setdefault("bootstrap", (dsn, kwargs))
+    )
     monkeypatch.setattr(cli.Catalog, "from_settings", classmethod(lambda cls: cli.Catalog()))
-    monkeypatch.setattr(cli.Store, "from_settings", classmethod(store_from_settings))
-    monkeypatch.setattr(cli.App, "from_settings", classmethod(from_settings))
+    monkeypatch.setattr(Store, "from_settings", classmethod(store_from_settings))
+    monkeypatch.setattr(App, "from_settings", classmethod(from_settings))
     return recorded
 
 
 class TestArguments:
     """Parser wiring for the ``app`` command."""
+
+    def test_the_help_loads_none_of_the_services(self, help_modules: Callable[..., set[str]]) -> None:
+        assert {"fastapi", "sqlalchemy", "interloper_api", "interloper_db", "interloper_scheduler"}.isdisjoint(
+            help_modules("app", "--help")
+        )
 
     def test_service_toggles_default_to_unset(self) -> None:
         args = _parse("app")

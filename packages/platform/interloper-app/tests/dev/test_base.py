@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import signal
+from collections.abc import Callable
 from pathlib import Path
 from unittest import mock
 
@@ -51,11 +52,17 @@ def served(monkeypatch: pytest.MonkeyPatch) -> tuple[list[PlatformSpec], mock.Mo
         platform.spec = spec
         return platform
 
-    monkeypatch.setattr(base_module, "Platform", make_platform)
+    monkeypatch.setattr("interloper_app.dev.platform.Platform", make_platform)
     monkeypatch.setattr(base_module, "watch", lambda *args, **kwargs: iter([]))
     opened: list[str] = []
     monkeypatch.setattr(base_module.webbrowser, "open", opened.append)
     return built, platform, opened
+
+
+def test_the_help_loads_none_of_the_platform(help_modules: Callable[..., set[str]]):
+    assert {"fastapi", "sqlalchemy", "interloper_api", "interloper_db", "interloper_scheduler"}.isdisjoint(
+        help_modules("dev", "--help")
+    )
 
 
 def test_windows_is_refused(monkeypatch: pytest.MonkeyPatch):
@@ -76,7 +83,7 @@ def test_an_unreachable_postgres_is_named(monkeypatch: pytest.MonkeyPatch):
     def refuse(*args: object, **kwargs: object) -> None:
         raise OperationalError("connect", {}, Exception("connection refused"))
 
-    monkeypatch.setattr(base_module, "bootstrap", refuse)
+    monkeypatch.setattr("interloper_db.provision.bootstrap", refuse)
 
     with pytest.raises(SystemExit, match=r"Postgres at localhost:5432 \(database 'interloper'\) does not answer"):
         DevCommand._check_database()

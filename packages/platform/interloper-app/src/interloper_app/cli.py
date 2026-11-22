@@ -15,13 +15,6 @@ from interloper.catalog import Catalog
 from interloper.cli import Command
 from interloper.cli.console import configure_console_logging
 from interloper.settings import LogSettings, ServerSettings
-from interloper_api.settings import ApiSettings
-from interloper_db import Store
-from interloper_db.provision import bootstrap
-from interloper_db.settings import PostgresSettings
-from interloper_scheduler.settings import CronSettings, ReaperSettings, SchedulerSettings, WorkerSettings
-
-from interloper_app.services import App
 
 
 class AppCommand(Command):
@@ -66,6 +59,14 @@ class AppCommand(Command):
             args: The parsed command line: the service toggles, ``host``, ``port`` and
                 ``no_create_tables``.
         """
+        from interloper_api.settings import ApiSettings
+        from interloper_db import Store
+        from interloper_db.provision import bootstrap
+        from interloper_db.settings import PostgresSettings
+        from interloper_scheduler.settings import SchedulerSettings
+
+        from interloper_app.services import App
+
         self._activate_flags(args)
         configure_console_logging(
             logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s", log_format=LogSettings.get().format
@@ -98,6 +99,8 @@ class AppCommand(Command):
         Args:
             args: The parsed command line: ``host``, ``port`` and the ``api``/``cron``/``worker``/``reaper`` toggles.
         """
+        from interloper_scheduler.settings import CronSettings, ReaperSettings, WorkerSettings
+
         server = {"host": args.host, "port": args.port, "enabled": args.api}
         ServerSettings.activate(
             ServerSettings.get().model_copy(update={name: value for name, value in server.items() if value is not None})

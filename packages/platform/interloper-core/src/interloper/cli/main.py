@@ -29,26 +29,35 @@ def _load_dotenv() -> None:
 
 
 def build_parser(command: str | None = None) -> argparse.ArgumentParser:
-    """Assemble the ``interloper`` parser: the named command alone, or every installed one sorted by name.
+    """Assemble the ``interloper`` parser: the named command in full, or every installed one by name alone.
 
     Building one command imports one package, so ``interloper run`` neither
-    pays for nor breaks on an installed api or app. The documentation site
-    renders the CLI reference from the full parser, so every flag's ``help``
-    and every command's ``description`` is user-facing copy.
+    pays for nor breaks on an installed api or app. The list imports none: it
+    names the commands the manifests declare, and each command's own help
+    says what it does. The documentation site renders the CLI reference from
+    each command's parser, so every flag's ``help`` and every command's
+    ``description`` is user-facing copy.
 
     Args:
         command: The command the process runs; ``None``, or a name no
-            package registers, builds every command (for the usage and its
-            error).
+            installed package registers, lists every command (for the usage
+            and its error).
 
     Returns:
         The root parser.
     """
-    parser = argparse.ArgumentParser(prog="interloper", description="Interloper CLI")
-    subparsers = parser.add_subparsers(dest="command")
-    named = COMMANDS.get(command) if command else None
-    for name, command_class in [(command, named)] if command and named else COMMANDS.items():
-        command_class().attach(subparsers, name)
+    parser = argparse.ArgumentParser(
+        prog="interloper",
+        description="Interloper CLI",
+        epilog="Run 'interloper <command> --help' for what a command does and the arguments it takes.",
+    )
+    subparsers = parser.add_subparsers(dest="command", title="commands", metavar="<command>")
+    if command and (named := COMMANDS.get(command)):
+        named().attach(subparsers, command)
+    else:
+        for name in COMMANDS.names():
+            # A help, even empty, lists the name on its own line; without one, only the usage error names it.
+            subparsers.add_parser(name, help="")
     return parser
 
 

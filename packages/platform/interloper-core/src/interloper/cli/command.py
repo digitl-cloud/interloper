@@ -22,11 +22,13 @@ class Command:
     """One ``interloper`` command.
 
     A subclass is the command, and its docstring is its copy: the first line
-    is the help the command list shows, the whole docstring the description
+    is the help its group lists it with, the whole docstring the description
     its own help shows, so it is written for the person at the terminal and
     carries no ``Args:`` or ``Returns:`` sections. `add_arguments` declares
-    the command's arguments and `run` executes it, with its heavy imports kept
-    inside so that building the parser stays cheap.
+    the command's arguments and `run` executes it. Building the parser imports
+    the command's module and every ``__init__`` above it, so the heavy
+    imports belong inside `run`, which keeps ``interloper <command> --help``
+    cheap.
 
     A group lists its commands in `commands` and runs none itself: named
     alone, it prints its help.

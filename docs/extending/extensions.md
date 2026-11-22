@@ -149,10 +149,12 @@ class BackupCommand(Command):
         ...
 ```
 
-The docstring is the command's copy: its first line is the help `interloper --help` lists, the
-whole docstring the description `interloper backup --help` shows. `add_arguments` declares the
-arguments on the command's `argparse` parser and `run` receives them parsed. Keep heavy imports
-inside `run`: `interloper --help` builds every command.
+The docstring is the command's copy: the whole docstring is the description `interloper backup
+--help` shows, and its first line the help a group lists the command with. `add_arguments`
+declares the arguments on the command's `argparse` parser and `run` receives them parsed.
+`interloper --help` lists the installed commands by name without importing any; `interloper
+backup --help` imports the command's module and its package's `__init__`, so keep heavy imports
+inside `run`, out of both.
 
 A group lists its commands, each named the same way, and prints its help when named alone:
 

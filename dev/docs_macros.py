@@ -117,16 +117,18 @@ def _default(field: FieldInfo) -> str:
 
 
 def cli_reference() -> str:
-    """Render every ``interloper`` command from the parser the CLI runs on.
+    """Render every ``interloper`` command from the parser the CLI runs it on.
 
     Returns:
         Markdown: one section per command (and per nested subcommand) with
-        its description and argument table.
+        its description and argument table, the commands sorted by name.
     """
-    from interloper.cli.main import build_parser
+    from interloper.cli.main import COMMANDS, build_parser
 
     return "\n".join(
-        _command(parser, f"interloper {name}", 2, help) for name, parser, help in _subcommands(build_parser())
+        _command(parser, f"interloper {name}", 2, help)
+        for command in COMMANDS
+        for name, parser, help in _subcommands(build_parser(command))
     )
 
 

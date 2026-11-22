@@ -14,20 +14,19 @@ import sys
 import webbrowser
 from pathlib import Path
 from types import FrameType
+from typing import TYPE_CHECKING
 
 from interloper.cli import Command
 from interloper.settings import ServerSettings
-from interloper_db.provision import bootstrap
-from interloper_db.settings import PostgresSettings
-from sqlalchemy.exc import OperationalError
 from watchfiles import watch
 
 from interloper_app.dev.nuxt import NuxtServer
-from interloper_app.dev.platform import Platform, PlatformSpec
 from interloper_app.dev.port import Port
 from interloper_app.dev.project import MANIFEST, DevProject
-from interloper_app.dev.signin import SignIn
 from interloper_app.dev.vite import ViteServer
+
+if TYPE_CHECKING:
+    from interloper_app.dev.platform import Platform
 
 
 class DevCommand(Command):
@@ -80,6 +79,9 @@ class DevCommand(Command):
         Raises:
             SystemExit: On Windows, when the port is taken or Postgres does not answer.
         """
+        from interloper_app.dev.platform import Platform, PlatformSpec
+        from interloper_app.dev.signin import SignIn
+
         if sys.platform == "win32":
             raise SystemExit("Error: interloper dev runs on macOS and Linux; on Windows, run it inside WSL.")
         files = [Path(file).resolve() for file in args.files]
@@ -158,6 +160,10 @@ class DevCommand(Command):
         Raises:
             SystemExit: When Postgres does not answer.
         """
+        from interloper_db.provision import bootstrap
+        from interloper_db.settings import PostgresSettings
+        from sqlalchemy.exc import OperationalError
+
         postgres = PostgresSettings.get()
         try:
             bootstrap(postgres.dsn, statement_timeout=postgres.statement_timeout)

@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
 from interloper.cli import Command
 from interloper.cli import main as cli_main
 from interloper.cli.commands.run import RunCommand
+from interloper.extension import ExtensionEntry, Manifests
 from interloper.registry import Registry
 from interloper.settings import ServerSettings, Settings
 
@@ -109,12 +112,27 @@ class TestMain:
 class TestBuildParser:
     """The parser the CLI runs on, and the documentation renders from."""
 
-    def test_the_parser_holds_every_installed_command_sorted(self) -> None:
+    def test_the_parser_lists_every_installed_command_sorted(self) -> None:
         parser = cli_main.build_parser()
         subparsers = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
 
         assert list(subparsers.choices) == sorted(subparsers.choices)
         assert {"app", "db", "extension", "launch", "run", "scheduler"} <= set(subparsers.choices)
+
+    def test_the_list_names_the_declared_commands_without_importing_one(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        declared = [
+            ExtensionEntry("acme", "acme", "cli", name, f"acme.missing:{name.title()}Command") for name in ("b", "a")
+        ]
+        manifests = mock.Mock(spec=Manifests)
+        manifests.entries.return_value = declared
+        monkeypatch.setattr("interloper.registry.base.MANIFESTS", manifests)
+        monkeypatch.setattr(cli_main, "COMMANDS", Registry("cli"))
+
+        parser = cli_main.build_parser()
+
+        subparsers = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+        assert list(subparsers.choices) == ["a", "b"]
+        manifests.record.assert_not_called()
 
     def test_naming_a_command_builds_that_command_alone(self, monkeypatch: pytest.MonkeyPatch) -> None:
         class Named(Command):
@@ -150,11 +168,21 @@ class TestBuildParser:
         assert '"app"' not in source
 
     def test_every_command_and_flag_carries_user_facing_copy(self) -> None:
-        parser = cli_main.build_parser()
-        commands = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction)).choices
+        for name in cli_main.COMMANDS:
+            parser = cli_main.build_parser(name)
+            command = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction)).choices[name]
 
-        for name, command in commands.items():
             assert command.description, f"{name} has no description"
             for action in command._actions:
                 if not isinstance(action, argparse._HelpAction | argparse._SubParsersAction):
                     assert action.help, f"{name} {action.dest} has no help"
+
+
+class TestHelp:
+    """What printing the help costs: the list imports no command, a command's help imports only its own."""
+
+    @pytest.mark.parametrize("argv", [["--help"], ["run", "--help"], ["launch", "--help"]])
+    def test_the_help_loads_neither_the_api_nor_the_database(
+        self, argv: list[str], help_modules: Callable[..., set[str]]
+    ) -> None:
+        assert {"fastapi", "sqlalchemy", "interloper_api"}.isdisjoint(help_modules(*argv))

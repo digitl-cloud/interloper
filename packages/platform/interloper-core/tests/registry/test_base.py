@@ -74,6 +74,34 @@ class TestViews:
         assert registry.items() == (("alpha", 1), ("beta", 2))
 
 
+class TestNames:
+    def test_declared_names_are_listed_without_loading_an_entry(self):
+        declared = _entry("beta", "B")
+        registry: Registry[str] = Registry("things")
+        registry.register("alpha", "A")
+        with mock.patch("interloper.registry.base.MANIFESTS", _declaring(declared)):
+            assert registry.names() == ("alpha", "beta")
+        declared.load.assert_not_called()
+
+    def test_an_entry_that_failed_to_load_is_left_out(self):
+        broken = _entry("broken", None)
+        broken.load.side_effect = ImportError("No module named 'kubernetes'")
+        registry: Registry[str] = Registry("things")
+        with mock.patch("interloper.registry.base.MANIFESTS", _declaring(broken, _entry("alpha", "A"))):
+            assert registry.get("broken") is None
+            assert registry.names() == ("alpha",)
+
+    def test_a_registry_without_a_section_names_its_registered_entries(self):
+        registry: Registry[str] = Registry()
+        registry.register("alpha", "A")
+        assert registry.names() == ("alpha",)
+
+    def test_an_adopting_registry_cannot_name_entries_it_has_not_adopted(self):
+        registry: Registry[str] = Registry("things", adopt=lambda name, entry: (f"{name}!", entry))
+        with pytest.raises(TypeError, match="known only once its entries are adopted"):
+            registry.names()
+
+
 class TestIteration:
     def test_iterates_names_in_keys_order(self):
         registry: Registry[int] = Registry()

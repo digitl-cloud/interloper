@@ -11,7 +11,7 @@ from interloper.catalog import Catalog
 from interloper_db import Store
 
 import interloper_scheduler.services as services_module
-from interloper_scheduler import scheduler_services
+from interloper_scheduler.services import scheduler_services
 from interloper_scheduler.settings import ReaperSettings, RenewalSettings, SchedulerSettings
 
 
