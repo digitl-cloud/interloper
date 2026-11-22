@@ -105,7 +105,7 @@ class Component(SQLModel, table=True):
         Returns:
             ``source.asset`` for an owned asset, the bare key otherwise.
         """
-        parent = instance_state(self).attrs.parent.loaded_value
+        parent = instance_state(self).dict.get("parent", NO_VALUE)
         if parent is NO_VALUE:
             parent = self.parent if self.parent_id is not None else None
         return self.key if parent is None else f"{parent.key}.{self.key}"

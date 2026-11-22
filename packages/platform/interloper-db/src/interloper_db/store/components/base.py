@@ -52,15 +52,20 @@ SENSITIVE_KINDS = tuple(kind for kind, anchor in il.KINDS.items() if anchor.sens
 """The kinds whose payload is stored encrypted, so reading a row of one has to decode it."""
 
 # Eager-load set for rows returned to API consumers: the parent, the row's
-# own relations with the rows they point at, and the children with theirs, so
-# the whole unit reads off a detached row.
+# own relations with the key and name of the rows they point at, and the
+# children with theirs, so the whole unit reads off a detached row. A child's
+# parent is the row already loaded, which the identity map resolves without a
+# query.
 COMPONENT_LOAD_OPTIONS = [
     selectinload(Component.parent),  # ty: ignore[invalid-argument-type]
-    selectinload(Component.out_relations).selectinload(ComponentRelation.dst),  # ty: ignore[invalid-argument-type]
+    selectinload(Component.out_relations)  # ty: ignore[invalid-argument-type]
+    .selectinload(ComponentRelation.dst)  # ty: ignore[invalid-argument-type]
+    .load_only(Component.key, Component.name),  # ty: ignore[invalid-argument-type]
     selectinload(Component.children)  # ty: ignore[invalid-argument-type]
     .selectinload(Component.out_relations)  # ty: ignore[invalid-argument-type]
-    .selectinload(ComponentRelation.dst),  # ty: ignore[invalid-argument-type]
-    selectinload(Component.children).selectinload(Component.parent),  # ty: ignore[invalid-argument-type]
+    .selectinload(ComponentRelation.dst)  # ty: ignore[invalid-argument-type]
+    .load_only(Component.key, Component.name),  # ty: ignore[invalid-argument-type]
+    selectinload(Component.children).immediateload(Component.parent),  # ty: ignore[invalid-argument-type]
 ]
 
 
