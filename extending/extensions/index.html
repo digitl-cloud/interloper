@@ -2773,10 +2773,12 @@ declares it):</p>
 </span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="p">:</span> <span class="n">argparse</span><span class="o">.</span><span class="n">Namespace</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>        <span class="o">...</span>
 </span></code></pre></div>
-<p>The docstring is the command's copy: its first line is the help <code>interloper --help</code> lists, the
-whole docstring the description <code>interloper backup --help</code> shows. <code>add_arguments</code> declares the
-arguments on the command's <code>argparse</code> parser and <code>run</code> receives them parsed. Keep heavy imports
-inside <code>run</code>: <code>interloper --help</code> builds every command.</p>
+<p>The docstring is the command's copy: the whole docstring is the description <code>interloper backup
+--help</code> shows, and its first line the help a group lists the command with. <code>add_arguments</code>
+declares the arguments on the command's <code>argparse</code> parser and <code>run</code> receives them parsed.
+<code>interloper --help</code> lists the installed commands by name without importing any; <code>interloper
+backup --help</code> imports the command's module and its package's <code>__init__</code>, so keep heavy imports
+inside <code>run</code>, out of both.</p>
 <p>A group lists its commands, each named the same way, and prints its help when named alone:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ClassVar</span>
