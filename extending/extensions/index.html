@@ -2924,6 +2924,14 @@ extension in its own repository installs <code>@interloper/ui</code> from npm in
 <code>uv run interloper extension build</code> runs npm in its <code>ui/</code>, type-checks and builds the UI, then
 builds the wheel and checks that it carries the bundle; <code>make check-extension</code> runs that whole
 path in a fresh project against the SDK packed as npm publishes it, as CI does.</p>
+<p>Such an extension runs inside the real app with <code>uv run interloper dev</code>, from its project. It
+serves the platform on <code>127.0.0.1:3000</code> (<code>--port</code> to change it) against the Postgres its
+<code>interloper.yaml</code> names, and prints a sign-in link that needs no login provider: it signs in a
+local developer, super-admin of an organisation named after the project, and lands on the
+extension's page. The UI comes from its Vite dev server, built or not: a stylesheet edit
+applies in place, a <code>.vue</code> edit reloads the page, and an edit to a Python file, the manifest or
+<code>interloper.yaml</code> restarts the platform. Class paths given as arguments join the catalog, so a
+plain project serves its sources the same way (<code>uv run interloper dev weather.OpenMeteo</code>).</p>
 <p>To work on a UI with hot reload, run its dev server beside the app's and name it in
 <code>INTERLOPER_UI_DEV</code> (<code>&lt;key&gt;=&lt;entry URL&gt;</code>, several separated by commas):</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>pnpm<span class="w"> </span>--filter<span class="w"> </span>@interloper/example<span class="w"> </span>dev<span class="w">       </span><span class="c1"># http://localhost:5173</span>

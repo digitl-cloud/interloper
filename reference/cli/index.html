@@ -1963,6 +1963,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#interloper-dev" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>interloper dev</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#interloper-extension" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2770,6 +2781,34 @@ enabled.</p>
 <tr>
 <td><code>revision [optional]</code></td>
 <td>Target revision (default: -1)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="interloper-dev"><code>interloper dev</code><a class="headerlink" href="#interloper-dev" title="Permanent link">&para;</a></h2>
+<p>Serve the project in this directory on 127.0.0.1, signed in, restarting on edits.</p>
+<p>Classes named as targets join the catalog. The extensions the project
+holds are served from source, their UIs from their Vite dev servers. The
+platform restarts when a Python file, a manifest or interloper.yaml
+changes; open the printed link to sign in.</p>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>targets ...</code></td>
+<td>Component class to add to the catalog (module.Class)</td>
+</tr>
+<tr>
+<td><code>--port PORT</code></td>
+<td>Port on 127.0.0.1 (default: server.port, 3000)</td>
+</tr>
+<tr>
+<td><code>--no-browser</code></td>
+<td>Print the sign-in link without opening it</td>
 </tr>
 </tbody>
 </table>

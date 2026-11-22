@@ -2293,6 +2293,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#interloper.Catalog.including" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;including
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#interloper.Catalog.to_paths" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -3227,6 +3238,90 @@ the partitioning and the relations.</p>
             <td>
               <div class="doc-md-description">
                 <p>or does not declare the asset.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.Catalog.including" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">including</span>
+
+
+<a href="#interloper.Catalog.including" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">including</span><span class="p">(</span><span class="n">components</span><span class="p">:</span> <span class="n"><span title="collections.abc.Iterable">Iterable</span></span><span class="p">[</span><span class="n"><span title="type">type</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Component&lt;/span&gt; (&lt;code&gt;interloper.component.base.Component&lt;/code&gt;)" href="../components/#interloper.Component">Component</a></span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Catalog&lt;/span&gt; (&lt;code&gt;interloper.catalog.base.Catalog&lt;/code&gt;)" href="./#interloper.Catalog">Catalog</a></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Build a catalog enabling these component classes on top of this one.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>components</code>
+            </td>
+            <td>
+                  <code><span title="collections.abc.Iterable">Iterable</span>[<span title="type">type</span>[<a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Component&lt;/span&gt; (&lt;code&gt;interloper.component.base.Component&lt;/code&gt;)" href="../components/#interloper.Component">Component</a>]]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The classes to add, with their dependencies.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Catalog&lt;/span&gt; (&lt;code&gt;interloper.catalog.base.Catalog&lt;/code&gt;)" href="./#interloper.Catalog">Catalog</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A new catalog; this one is left as it is. A class whose key this</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Catalog&lt;/span&gt; (&lt;code&gt;interloper.catalog.base.Catalog&lt;/code&gt;)" href="./#interloper.Catalog">Catalog</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>catalog already holds replaces that definition.</p>
               </div>
             </td>
           </tr>
