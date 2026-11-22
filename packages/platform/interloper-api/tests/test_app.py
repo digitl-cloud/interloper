@@ -287,6 +287,27 @@ class TestCreateApp:
 
         assert not any("CORSMiddleware" in getattr(m.cls, "__name__", "") for m in app.user_middleware)
 
+    def test_a_large_response_is_compressed_for_a_client_that_accepts_it(
+        self, fake_settings: ApiSettings, oauth_store: Store
+    ) -> None:
+        client = TestClient(create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings))
+
+        packed = client.get("/openapi.json", headers={"Accept-Encoding": "gzip"})
+        plain = client.get("/openapi.json", headers={"Accept-Encoding": "identity"})
+
+        assert packed.headers["content-encoding"] == "gzip"
+        assert "content-encoding" not in plain.headers
+        assert packed.json() == plain.json()
+        assert packed.num_bytes_downloaded < plain.num_bytes_downloaded / 4
+
+    def test_a_small_response_is_sent_as_it_is(self, fake_settings: ApiSettings, oauth_store: Store) -> None:
+        client = TestClient(create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings))
+
+        response = client.get("/api/health", headers={"Accept-Encoding": "gzip"})
+
+        assert response.status_code == 200
+        assert "content-encoding" not in response.headers
+
     def test_a_missing_agent_extra_is_reported_and_survived(
         self,
         fake_settings: ApiSettings,
