@@ -45,23 +45,16 @@ class AppCommand(Command):
             default=None,
             help="Run the reaper (timed-out run cleanup; singleton)",
         )
-        parser.add_argument(
-            "--no-create-tables",
-            action="store_true",
-            default=False,
-            help="Skip CREATE TABLE bootstrap on startup (production: run `interloper db init` once instead)",
-        )
 
     def run(self, args: argparse.Namespace) -> None:
         """Run the application services together until a signal or a service's death.
 
         Args:
-            args: The parsed command line: the service toggles, ``host``, ``port`` and
-                ``no_create_tables``.
+            args: The parsed command line: the service toggles, ``host`` and ``port``.
         """
         from interloper_api.settings import ApiSettings
         from interloper_db import Store
-        from interloper_db.provision import bootstrap
+        from interloper_db.provision import connect
         from interloper_db.settings import PostgresSettings
         from interloper_scheduler.settings import SchedulerSettings
 
@@ -72,7 +65,7 @@ class AppCommand(Command):
             logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s", log_format=LogSettings.get().format
         )
         postgres = PostgresSettings.get()
-        bootstrap(postgres.dsn, statement_timeout=postgres.statement_timeout, create_tables=not args.no_create_tables)
+        connect(postgres.dsn, statement_timeout=postgres.statement_timeout)
         api_settings = ApiSettings.get()
         scheduler_settings = SchedulerSettings.get()
         catalog = Catalog.from_settings()

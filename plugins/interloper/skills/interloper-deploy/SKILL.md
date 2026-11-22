@@ -75,15 +75,16 @@ and https://docs.interloper.dev/ui/running/
 
    ```sh
    interloper db init                                  # create database, tables, migrate to head; idempotent
-   interloper api --no-create-tables                   # the api role (what the api image runs)
-   interloper scheduler --no-create-tables             # cron, worker, reaper (what the scheduler image runs)
+   interloper api                                      # the api role (what the api image runs)
+   interloper scheduler                                # cron, worker, reaper (what the scheduler image runs)
    interloper db upgrade                               # on every release
    ```
 
    `interloper app --api --cron --worker --reaper` runs everything in one process when
    `interloper-app` is installed. `cron` and `reaper` are singletons (`interloper scheduler
    --no-worker` for them, `--no-cron --no-reaper` for worker replicas); `api` and `worker` scale
-   out. `--no-create-tables` skips the startup bootstrap because `db init` owns the schema.
+   out. `db init` owns the schema: the services never write it, and stop at startup, naming
+   `interloper db init`, while the database is behind the release.
 
 4. **Verify the resolved settings** from the deployment directory with the variables exported:
 

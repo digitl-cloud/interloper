@@ -59,7 +59,10 @@ def wiring(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         return FakeApp()
 
     monkeypatch.setattr(
-        "interloper_db.provision.bootstrap", lambda dsn, **kwargs: recorded.setdefault("bootstrap", (dsn, kwargs))
+        "interloper_db.provision.connect", lambda dsn, **kwargs: recorded.setdefault("connect", (dsn, kwargs))
+    )
+    monkeypatch.setattr(
+        "interloper_db.provision.bootstrap", lambda *args, **kwargs: pytest.fail("a serving command wrote the schema")
     )
     monkeypatch.setattr(cli.Catalog, "from_settings", classmethod(lambda cls: cli.Catalog()))
     monkeypatch.setattr(Store, "from_settings", classmethod(store_from_settings))
@@ -81,7 +84,6 @@ class TestArguments:
         # None (not False) so settings, not the parser, decide the default.
         assert (args.api, args.cron, args.worker, args.reaper) == (None, None, None, None)
         assert (args.host, args.port) == (None, None)
-        assert args.no_create_tables is False
 
     def test_negated_toggles_are_supported(self) -> None:
         args = _parse("app", "--api", "--no-cron", "--worker", "--no-reaper")
@@ -130,20 +132,19 @@ class TestActivateFlags:
 class TestRun:
     """``interloper app``."""
 
-    def test_the_configured_statement_timeout_reaches_the_bootstrap(
+    def test_the_configured_statement_timeout_reaches_the_database_check(
         self, wiring: dict[str, Any], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("INTERLOPER_POSTGRES_STATEMENT_TIMEOUT", "12.5")
 
         cli.AppCommand().run(_parse("app", "--api"))
 
-        assert wiring["bootstrap"][1]["statement_timeout"] == 12.5
+        assert wiring["connect"][1]["statement_timeout"] == 12.5
 
-    def test_bootstraps_the_database_and_runs_the_composition(self, wiring: dict[str, Any]) -> None:
+    def test_checks_the_database_and_runs_the_composition(self, wiring: dict[str, Any]) -> None:
         cli.AppCommand().run(_parse("app", "--api", "--no-cron", "--no-worker", "--no-reaper"))
 
-        expected = {"statement_timeout": None, "create_tables": True}
-        assert wiring["bootstrap"] == (PostgresSettings.get().dsn, expected)
+        assert wiring["connect"] == (PostgresSettings.get().dsn, {"statement_timeout": None})
         assert wiring["ran"] is True
         assert (wiring["app"]["api"], wiring["app"]["cron"], wiring["app"]["worker"], wiring["app"]["reaper"]) == (
             True,
@@ -153,11 +154,9 @@ class TestRun:
         )
         assert "dev" not in wiring["app"]
 
-    def test_no_create_tables_skips_the_table_bootstrap(self, wiring: dict[str, Any]) -> None:
-        cli.AppCommand().run(_parse("app", "--no-create-tables", "--worker"))
-
-        assert wiring["bootstrap"][1]["create_tables"] is False
-        assert wiring["app"]["worker"] is True
+    def test_there_is_no_flag_to_skip_a_bootstrap_that_no_longer_runs(self) -> None:
+        with pytest.raises(SystemExit):
+            _parse("app", "--no-create-tables")
 
     def test_the_flags_are_activated_for_the_command(self, wiring: dict[str, Any]) -> None:
         cli.AppCommand().run(_parse("app", "--port", "4321"))

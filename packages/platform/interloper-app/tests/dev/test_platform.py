@@ -106,12 +106,13 @@ class TestServe:
             store, and the app.
         """
         monkeypatch.setattr(platform_module, "UI_BUNDLES", mock.Mock())
-        bootstrapped: dict[str, Any] = {}
-        monkeypatch.setattr(platform_module, "bootstrap", lambda dsn, **kwargs: bootstrapped.update(kwargs))
+        database: dict[str, Any] = {}
+        monkeypatch.setattr(platform_module, "bootstrap", lambda dsn, **kwargs: database.update(written=kwargs))
+        monkeypatch.setattr(platform_module, "connect", lambda dsn, **kwargs: database.update(checked=kwargs))
         monkeypatch.setattr(platform_module.Catalog, "from_settings", classmethod(lambda cls: Catalog()))
         store = mock.Mock()
         store.components.apply.return_value = Applied()
-        built: dict[str, Any] = {"bootstrapped": bootstrapped}
+        built: dict[str, Any] = {"database": database}
 
         def build(cls: object, **kwargs: object) -> mock.Mock:
             built.update(kwargs)
@@ -164,7 +165,7 @@ class TestServe:
         _, built, store, _ = self._serve(spec, monkeypatch)
 
         assert PostgresSettings.get().database == configured
-        assert built["bootstrapped"]["create_tables"] is False
+        assert set(built["database"]) == {"checked"}
         assert built["served_from"] is None
         store.components.apply.assert_not_called()
 
@@ -180,7 +181,7 @@ class TestServe:
             assert PostgresSettings.get().database == spec._served_database(configured)
         finally:
             PostgresSettings.activate(configured)
-        assert built["bootstrapped"]["create_tables"] is True
+        assert set(built["database"]) == {"written"}
         assert built["served_from"] == "collection.yaml"
         store.components.apply.assert_called_once_with(mock.ANY, ["row"])
 

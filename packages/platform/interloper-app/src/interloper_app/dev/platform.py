@@ -28,7 +28,7 @@ from interloper_api import DevServerUI
 from interloper_api.routes.extensions import UI_BUNDLES
 from interloper_api.settings import ApiSettings, AuthSettings
 from interloper_db import Store
-from interloper_db.provision import bootstrap
+from interloper_db.provision import bootstrap, connect
 from interloper_db.settings import PostgresSettings
 from interloper_db.store.components.declaration import Declarations
 from interloper_scheduler.settings import SchedulerSettings
@@ -115,7 +115,10 @@ class PlatformSpec(BaseModel):
             )
         postgres = PostgresSettings.get()
         # dev brought the configured database up; file mode's own is brought up here.
-        bootstrap(postgres.dsn, statement_timeout=postgres.statement_timeout, create_tables=targets.declares)
+        if targets.declares:
+            bootstrap(postgres.dsn, statement_timeout=postgres.statement_timeout)
+        else:
+            connect(postgres.dsn, statement_timeout=postgres.statement_timeout)
         api_settings = ApiSettings.get()
         scheduler_settings = SchedulerSettings.get()
         _, organisation = self.sign_in.ensure(Store.from_settings())

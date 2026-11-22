@@ -37,7 +37,6 @@ spec:
           command: ["interloper"]
           args:
             - api
-            - --no-create-tables
           {{- with .Values.securityContext }}
           securityContext: {{- toYaml . | nindent 12 }}
           {{- end }}

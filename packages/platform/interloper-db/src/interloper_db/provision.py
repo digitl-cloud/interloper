@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from time import sleep
 from typing import TYPE_CHECKING
 
@@ -12,6 +13,8 @@ if TYPE_CHECKING:
 
 import interloper_db.models as _models  # noqa: F401 — ensure all models are registered
 from interloper_db.engine import get_engine, init_engine
+
+logger = logging.getLogger(__name__)
 
 FOLDED_HEAD = "026"
 """The head of the migrations folded into 0001 to 0003, which a database at it already matches."""
@@ -120,25 +123,71 @@ def ensure_database(dsn: str) -> None:
     engine.dispose()
 
 
-def bootstrap(dsn: str, *, statement_timeout: float | None = None, create_tables: bool = True) -> Engine:
-    """Bring a database up: ensure it exists, bind the process engine, create the tables.
+def bootstrap(dsn: str, *, statement_timeout: float | None = None) -> Engine:
+    """Bring a database up: ensure it exists, bind the process engine, create the tables and migrate them.
 
-    ``create_all`` is idempotent and serialized by an advisory lock, so
-    concurrent bootstraps are safe; production deploys run ``interloper db
-    init`` once and start the serving commands with ``create_tables=False``.
+    What writes the schema calls it: ``interloper db init``, once per
+    release, and ``interloper dev`` for its own databases. ``create_all`` is
+    idempotent and serialized by an advisory lock, so concurrent bootstraps
+    are safe.
 
     Args:
         dsn: The PostgreSQL connection string.
         statement_timeout: Seconds after which the server cancels a statement; ``None`` keeps the server's setting.
-        create_tables: Whether to create the tables and run the migrations.
 
     Returns:
         The bound engine.
     """
     ensure_database(dsn)
     engine = init_engine(dsn, statement_timeout=statement_timeout)
-    if create_tables:
-        create_all(engine)
+    create_all(engine)
+    return engine
+
+
+def connect(dsn: str, *, statement_timeout: float | None = None) -> Engine:
+    """Bind the process engine to a database this release can serve, writing nothing to it.
+
+    The serving commands (``api``, ``scheduler``, ``app``) call it: the
+    schema is ``interloper db init``'s to write. A database behind this
+    release's migrations stops the command, naming that step. One at a
+    revision this release does not know is ahead of it, as after a rollback,
+    and is served with a warning.
+
+    Args:
+        dsn: The PostgreSQL connection string.
+        statement_timeout: Seconds after which the server cancels a statement; ``None`` keeps the server's setting.
+
+    Returns:
+        The bound engine.
+
+    Raises:
+        SystemExit: If the database has no schema, or one behind this release's migrations.
+    """
+    engine = init_engine(dsn, statement_timeout=statement_timeout)
+    # Alembic notes its setup at INFO; a serving process only reads two revisions.
+    alembic_logger = logging.getLogger("alembic")
+    level = alembic_logger.level
+    alembic_logger.setLevel(logging.WARNING)
+    try:
+        from alembic.runtime.migration import MigrationContext
+        from alembic.script import ScriptDirectory
+
+        script = ScriptDirectory.from_config(_alembic_config(engine))
+        with engine.connect() as connection:
+            current = MigrationContext.configure(connection).get_current_revision()
+        head = script.get_current_head()
+    finally:
+        alembic_logger.setLevel(level)
+    if current == head:
+        return engine
+    if current is None:
+        raise SystemExit("Error: the database has no schema yet: run `interloper db init` first.")
+    if current == FOLDED_HEAD or current in {revision.revision for revision in script.walk_revisions()}:
+        raise SystemExit(
+            f"Error: the database is at revision {current}, and this release needs {head}: "
+            "run `interloper db init` first."
+        )
+    logger.warning("The database is at revision %s, ahead of this release (%s): serving it anyway.", current, head)
     return engine
 
 

@@ -8,6 +8,7 @@ SQLite-backed unit-test style rather than requiring a live server.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, Self
@@ -15,9 +16,11 @@ from typing import Any, Self
 import pytest
 import sqlalchemy
 
+from interloper_db import engine as engine_module
 from interloper_db import provision as provision_module
 from interloper_db.provision import (
     _alembic_config,
+    connect,
     create_all,
     downgrade,
     drop_database,
@@ -483,12 +486,99 @@ class TestBootstrap:
         assert provision_module.bootstrap("postgresql+psycopg://db/x", statement_timeout=30) is engine
         assert calls == [("ensure", "postgresql+psycopg://db/x"), ("init", 30), ("create", engine)]
 
-    def test_create_tables_false_skips_the_tables(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        created: list[Any] = []
-        monkeypatch.setattr(provision_module, "ensure_database", lambda dsn: None)
-        monkeypatch.setattr(provision_module, "init_engine", lambda dsn, statement_timeout=None: object())
-        monkeypatch.setattr(provision_module, "create_all", created.append)
 
-        provision_module.bootstrap("postgresql+psycopg://db/x", create_tables=False)
+class TestConnect:
+    """``connect`` binds the engine to a database this release can serve, and writes nothing to it."""
 
-        assert created == []
+    @pytest.fixture
+    def database(self, tmp_path: Path) -> Iterator[Any]:
+        """Make a SQLite database at a revision, and forget the process engine afterwards.
+
+        Args:
+            tmp_path: Where the database file lives.
+
+        Yields:
+            A function taking the revision (``None`` for no schema) and returning the database's URL.
+        """
+        url = f"sqlite:///{tmp_path / 'interloper.db'}"
+
+        def at(revision: str | None) -> str:
+            engine = sqlalchemy.create_engine(url)
+            with engine.begin() as connection:
+                if revision is not None:
+                    connection.exec_driver_sql("CREATE TABLE alembic_version (version_num VARCHAR(32) PRIMARY KEY)")
+                    connection.exec_driver_sql("INSERT INTO alembic_version VALUES (?)", (revision,))
+            engine.dispose()
+            return url
+
+        yield at
+        engine_module._engine = None
+
+    @staticmethod
+    def _head() -> str:
+        from alembic.script import ScriptDirectory
+
+        head = ScriptDirectory(str(Path(provision_module.__file__).parent / "migrations")).get_current_head()
+        assert head is not None
+        return head
+
+    @staticmethod
+    def _tables(url: str) -> set[str]:
+        engine = sqlalchemy.create_engine(url)
+        try:
+            return set(sqlalchemy.inspect(engine).get_table_names())
+        finally:
+            engine.dispose()
+
+    def test_a_database_at_the_head_is_served(self, database: Any) -> None:
+        url = database(self._head())
+
+        engine = connect(url)
+
+        assert str(engine.url) == url
+        assert engine_module.get_engine() is engine
+
+    def test_a_database_behind_the_release_stops_the_command_naming_db_init(self, database: Any) -> None:
+        url = database("0001")
+
+        with pytest.raises(
+            SystemExit, match=rf"revision 0001, and this release needs {self._head()}.*interloper db init"
+        ):
+            connect(url)
+
+    def test_a_database_without_a_schema_stops_the_command(self, database: Any) -> None:
+        with pytest.raises(SystemExit, match=r"no schema.*interloper db init"):
+            connect(database(None))
+
+    def test_a_database_at_the_folded_head_is_behind(self, database: Any) -> None:
+        with pytest.raises(SystemExit, match="revision 026"):
+            connect(database(provision_module.FOLDED_HEAD))
+
+    def test_a_database_ahead_of_the_release_is_served_with_a_warning(
+        self, database: Any, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        url = database("9999")
+
+        with caplog.at_level("WARNING", logger="interloper_db.provision"):
+            connect(url)
+
+        assert "ahead of this release" in caplog.text
+
+    def test_alembic_s_setup_notes_stay_out_of_the_serving_log(
+        self, database: Any, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        url = database(self._head())
+
+        with caplog.at_level("INFO"):
+            connect(url)
+
+        assert not [record for record in caplog.records if record.name.startswith("alembic")]
+        assert logging.getLogger("alembic").level == logging.NOTSET
+
+    def test_nothing_is_written(self, database: Any) -> None:
+        url = database("0001")
+
+        with pytest.raises(SystemExit):
+            connect(url)
+
+        assert self._tables(url) == {"alembic_version"}

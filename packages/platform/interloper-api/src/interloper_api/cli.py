@@ -32,21 +32,15 @@ class ApiCommand(Command):
         """
         parser.add_argument("--host", default=None, help="Bind host (default: server.host, 0.0.0.0)")
         parser.add_argument("--port", type=int, default=None, help="Bind port (default: server.port, 3000)")
-        parser.add_argument(
-            "--no-create-tables",
-            action="store_true",
-            default=False,
-            help="Skip CREATE TABLE bootstrap on startup (production: run `interloper db init` once instead)",
-        )
 
     def run(self, args: argparse.Namespace) -> None:
         """Serve the API until a signal or its death.
 
         Args:
-            args: The parsed command line: ``host``, ``port`` and ``no_create_tables``.
+            args: The parsed command line: ``host`` and ``port``.
         """
         from interloper_db import Store
-        from interloper_db.provision import bootstrap
+        from interloper_db.provision import connect
         from interloper_db.settings import PostgresSettings
 
         from interloper_api.server import ApiServer
@@ -59,7 +53,7 @@ class ApiCommand(Command):
             logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s", log_format=LogSettings.get().format
         )
         postgres = PostgresSettings.get()
-        bootstrap(postgres.dsn, statement_timeout=postgres.statement_timeout, create_tables=not args.no_create_tables)
+        connect(postgres.dsn, statement_timeout=postgres.statement_timeout)
         catalog = Catalog.from_settings()
         store = Store.from_settings(
             catalog=catalog,
