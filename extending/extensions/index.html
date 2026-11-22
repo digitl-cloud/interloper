@@ -2576,7 +2576,9 @@ present.</p>
 <h2 id="the-manifest">The manifest<a class="headerlink" href="#the-manifest" title="Permanent link">&para;</a></h2>
 <p>In a project made with <code>uv init --lib</code>, with <code>interloper-app</code> installed, <code>uv run interloper
 extension init</code> writes both, the manifest declaring no section yet, and <code>uv run interloper
-extension add &lt;part&gt;</code> adds each part below, its code and its entry.</p>
+extension add &lt;part&gt;</code> adds each part below, its code and its entry. <code>init</code> also sets the
+project's <code>requires-python</code> to the Pythons <code>interloper-core</code> supports: <code>uv init</code> declares the
+newest Python on your machine, and the wheel would refuse to install on an older one.</p>
 <p>A package names its import package under the <code>interloper.extensions</code> entry point, the one entry
 point interloper reads, and ships the manifest inside that package so it lands in the wheel:</p>
 <div class="language-toml highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">[project.entry-points.</span><span class="s2">"interloper.extensions"</span><span class="k">]</span>
