@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 
+from interloper_api.ui import VITE_MANIFEST
+
 from interloper_app.extension.command import ProjectCommand
 from interloper_app.extension.errors import ExtensionError
 from interloper_app.extension.project import Project
@@ -29,8 +31,6 @@ class BuildCommand(ProjectCommand):
             ExtensionError: If the project is not an extension yet, a step
                 fails, or the wheel lacks the UI's Vite manifest.
         """
-        from interloper_api.routes.extensions import VITE_MANIFEST
-
         if not project.declares_extension:
             raise ExtensionError(
                 f"{project.distribution} is not an extension yet: run uv run interloper extension init first"

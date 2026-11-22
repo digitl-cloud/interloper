@@ -1,9 +1,9 @@
 """``interloper extension check``: load everything the installed packages' manifests declare.
 
-Every entry of every section is imported, which also imports the module of
-each registry the entries register into, so the sections no registry claimed
-afterwards are the ones nothing in this installation reads: a misspelt
-section name most often.
+Every entry of every section is imported, and so is every registry the
+platform's processes read, each claiming its section as its module is
+imported, so the sections no registry claimed afterwards are the ones nothing
+in this installation reads: a misspelt section name most often.
 """
 
 from __future__ import annotations
@@ -35,6 +35,9 @@ class CheckCommand(Command):
             SystemExit: With status 1 when anything is named.
         """
         from interloper.extension import MANIFESTS
+
+        # The app runs every role, so its services import every registry a platform process reads.
+        import interloper_app.services  # noqa: F401
 
         problems: list[str] = []
         for failure in MANIFESTS.failures:

@@ -358,7 +358,7 @@ def _state(
     features = {"agent": agent_model is not None}
     agent = None
     if agent_model is not None:
-        from interloper_agent import build_agent
+        from interloper_agent.agent import build_agent
 
         agent = build_agent(agent_model)
     return State(

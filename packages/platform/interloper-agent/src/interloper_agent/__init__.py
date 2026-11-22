@@ -1,6 +1,6 @@
-"""Interloper Agent: the assistant, on pydantic-ai, over the shared toolkit."""
+"""Interloper Agent: the assistant, on pydantic-ai, over the shared toolkit.
 
-from interloper_agent.agent import TURN_LIMITS, build_agent
-from interloper_agent.history import summary_of
-
-__all__ = ["TURN_LIMITS", "build_agent", "summary_of"]
+The package is imported whenever the API reads its ``agent`` settings
+section, enabled or not, so it imports nothing here: the agent is
+`interloper_agent.agent`, built only when the section enables it.
+"""

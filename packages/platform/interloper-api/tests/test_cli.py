@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
@@ -11,6 +12,7 @@ from interloper_db import Store
 from interloper_db.crypto import hash_token
 
 from interloper_api import cli
+from interloper_api.server import ApiServer
 from interloper_api.settings import ApiSettings, AuthSettings
 
 
@@ -51,12 +53,20 @@ def wiring(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         recorded["server"] = (settings, kwargs)
         return object()
 
-    monkeypatch.setattr(cli, "bootstrap", lambda dsn, **kwargs: recorded.setdefault("bootstrap", kwargs))
+    monkeypatch.setattr(
+        "interloper_db.provision.bootstrap", lambda dsn, **kwargs: recorded.setdefault("bootstrap", kwargs)
+    )
     monkeypatch.setattr(cli.Catalog, "from_settings", classmethod(lambda cls: cli.Catalog()))
-    monkeypatch.setattr(cli.Store, "from_settings", classmethod(store_from_settings))
-    monkeypatch.setattr(cli.ApiServer, "from_settings", classmethod(from_settings))
+    monkeypatch.setattr(Store, "from_settings", classmethod(store_from_settings))
+    monkeypatch.setattr(ApiServer, "from_settings", classmethod(from_settings))
     monkeypatch.setattr(cli.Supervisor, "run", lambda self: recorded.setdefault("ran", list(self.services)))
     return recorded
+
+
+@pytest.mark.parametrize("command", ["api", "oauth"])
+def test_the_help_loads_neither_the_app_nor_the_database(command: str, help_modules: Callable[..., set[str]]) -> None:
+    """Printing a command's help imports none of what serving or reaching the database needs."""
+    assert {"fastapi", "sqlalchemy", "interloper_db"}.isdisjoint(help_modules(command, "--help"))
 
 
 def test_serves_one_api_on_the_port_and_host_flags(wiring: dict[str, Any]) -> None:
@@ -111,7 +121,7 @@ def clients(oauth_store: Store, monkeypatch: pytest.MonkeyPatch) -> Store:
     Returns:
         The store the commands read and write.
     """
-    monkeypatch.setattr(cli.Store, "from_settings", classmethod(lambda cls, catalog=None: oauth_store))
+    monkeypatch.setattr(Store, "from_settings", classmethod(lambda cls, catalog=None: oauth_store))
     return oauth_store
 
 

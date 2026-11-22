@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
 import pytest
+from interloper_db import Store
 
 from interloper_scheduler import cli
 from interloper_scheduler.settings import CronSettings, ReaperSettings, SchedulerSettings, WorkerSettings
@@ -48,16 +50,23 @@ def services(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         recorded["services"] = kwargs
         return {"stub": object()}
 
-    monkeypatch.setattr(cli, "bootstrap", lambda dsn, **kwargs: recorded.setdefault("bootstrap", kwargs))
+    monkeypatch.setattr(
+        "interloper_db.provision.bootstrap", lambda dsn, **kwargs: recorded.setdefault("bootstrap", kwargs)
+    )
     monkeypatch.setattr(cli.Catalog, "from_settings", classmethod(lambda cls: cli.Catalog()))
-    monkeypatch.setattr(cli.Store, "from_settings", classmethod(lambda cls, catalog=None: object()))
-    monkeypatch.setattr(cli, "scheduler_services", scheduler_services)
+    monkeypatch.setattr(Store, "from_settings", classmethod(lambda cls, catalog=None: object()))
+    monkeypatch.setattr("interloper_scheduler.services.scheduler_services", scheduler_services)
     monkeypatch.setattr(cli.Supervisor, "run", lambda self: recorded.setdefault("ran", list(self.services)))
     return recorded
 
 
 class TestScheduler:
     """``interloper scheduler``."""
+
+    def test_the_help_loads_neither_the_controllers_nor_the_database(self, help_modules: Callable[..., set[str]]):
+        assert {"sqlalchemy", "interloper_db", "interloper_scheduler.services"}.isdisjoint(
+            help_modules("scheduler", "--help")
+        )
 
     def test_flags_override_the_settings(self, services: dict[str, Any]) -> None:
         cli.SchedulerCommand().run(_parse("scheduler", "--no-worker"))

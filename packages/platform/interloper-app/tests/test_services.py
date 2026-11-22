@@ -15,7 +15,7 @@ from fastapi import APIRouter
 from fastapi.testclient import TestClient
 from interloper.catalog import Catalog
 from interloper.settings import ServerSettings
-from interloper_api import ApiServer
+from interloper_api.server import ApiServer
 from interloper_api.settings import ApiSettings
 from interloper_db import Store
 from interloper_scheduler.settings import SchedulerSettings

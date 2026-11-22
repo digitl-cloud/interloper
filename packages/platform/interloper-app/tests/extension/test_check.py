@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import os
+import subprocess
+import sys
 
 import pytest
 from interloper.extension import Manifests
@@ -63,3 +66,26 @@ class TestCheck:
         )
         assert lines[3] == "package 'acme_ext', section 'runner': no registry reads this section"
         assert lines[4] == "Checked 3 entries in 2 sections: 4 problem(s)."
+
+    def test_a_section_only_the_api_reads_is_claimed(self, tmp_path):
+        # A fresh interpreter: the registries in this one were constructed, and claimed, by earlier imports.
+        package = tmp_path / "acme_ext"
+        package.mkdir()
+        (package / "__init__.py").write_text("from fastapi import APIRouter\n\nrouter = APIRouter()\n")
+        (package / "extension.yaml").write_text("manifest_version: 1\nkey: acme\nroutes: acme_ext:router\n")
+        metadata = tmp_path / "acme_ext-0.1.0.dist-info"
+        metadata.mkdir()
+        (metadata / "METADATA").write_text("Metadata-Version: 2.1\nName: acme-ext\nVersion: 0.1.0\n")
+        (metadata / "entry_points.txt").write_text("[interloper.extensions]\nacme = acme_ext\n")
+        probe = "import sys\nsys.argv[1:] = ['extension', 'check']\nfrom interloper.cli.main import main\nmain()"
+
+        completed = subprocess.run(
+            [sys.executable, "-c", probe],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=tmp_path,
+            env={**os.environ, "PYTHONPATH": str(tmp_path)},
+        )
+
+        assert completed.stdout.endswith(": no problems.\n"), completed.stdout

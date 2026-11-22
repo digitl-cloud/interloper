@@ -11,19 +11,11 @@ import logging
 from collections.abc import Mapping
 from typing import ClassVar
 
-from authlib.oauth2.rfc7591 import InvalidRedirectURIError
 from interloper.catalog import Catalog
 from interloper.cli import Command
 from interloper.cli.console import configure_console_logging
 from interloper.settings import LogSettings, ServerSettings
 from interloper.utils import Supervisor
-from interloper_db import Store
-from interloper_db.provision import bootstrap
-from interloper_db.settings import PostgresSettings
-
-from interloper_api.oauth import Client
-from interloper_api.server import ApiServer
-from interloper_api.settings import ApiSettings
 
 
 class ApiCommand(Command):
@@ -53,6 +45,13 @@ class ApiCommand(Command):
         Args:
             args: The parsed command line: ``host``, ``port`` and ``no_create_tables``.
         """
+        from interloper_db import Store
+        from interloper_db.provision import bootstrap
+        from interloper_db.settings import PostgresSettings
+
+        from interloper_api.server import ApiServer
+        from interloper_api.settings import ApiSettings
+
         if args.host is not None:
             ServerSettings.activate(ServerSettings.get().model_copy(update={"host": args.host}))
         settings = ApiSettings.get()
@@ -102,6 +101,11 @@ class OAuthCreateCommand(Command):
         Raises:
             SystemExit: When a redirect URI is one dynamic registration would refuse.
         """
+        from authlib.oauth2.rfc7591 import InvalidRedirectURIError
+        from interloper_db import Store
+
+        from interloper_api.oauth import Client
+
         try:
             Client.check_redirect_uris(args.redirect_uri)
         except InvalidRedirectURIError as error:
@@ -124,6 +128,8 @@ class OAuthListCommand(Command):
         Args:
             args: The parsed command line; this command takes no arguments.
         """
+        from interloper_db import Store
+
         for client in Store.from_settings(catalog=Catalog()).oauth.list_clients(registered_by="operator"):
             print(f"{client.client_id}  {client.name}  {' '.join(client.redirect_uris)}")
 
@@ -148,6 +154,8 @@ class OAuthDeleteCommand(Command):
         Raises:
             SystemExit: When no operator client has that id.
         """
+        from interloper_db import Store
+
         client = Store.from_settings(catalog=Catalog()).oauth.delete_client(args.client_id, registered_by="operator")
         if client is None:
             raise SystemExit(f"No operator client {args.client_id}.")
@@ -178,6 +186,8 @@ class OAuthRotateCommand(Command):
         Raises:
             SystemExit: When no operator client has that id.
         """
+        from interloper_db import Store
+
         rotated = Store.from_settings(catalog=Catalog()).oauth.rotate_secret(args.client_id, registered_by="operator")
         if rotated is None:
             raise SystemExit(f"No operator client {args.client_id}.")

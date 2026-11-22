@@ -10,12 +10,6 @@ from interloper.cli import Command
 from interloper.cli.console import configure_console_logging
 from interloper.settings import LogSettings
 from interloper.utils import Supervisor
-from interloper_db import Store
-from interloper_db.provision import bootstrap
-from interloper_db.settings import PostgresSettings
-
-from interloper_scheduler.services import scheduler_services
-from interloper_scheduler.settings import SchedulerSettings
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +60,13 @@ class SchedulerCommand(Command):
         Raises:
             SystemExit: When no service is enabled.
         """
+        from interloper_db import Store
+        from interloper_db.provision import bootstrap
+        from interloper_db.settings import PostgresSettings
+
+        from interloper_scheduler.services import scheduler_services
+        from interloper_scheduler.settings import SchedulerSettings
+
         settings = SchedulerSettings.get()
         cron = settings.cron.enabled if args.cron is None else args.cron
         worker = settings.worker.enabled if args.worker is None else args.worker

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import socket
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -40,8 +41,24 @@ from interloper_api.routes import admin as admin_module
 from interloper_api.routes import extensions as extensions_module
 from interloper_api.routes.admin import AdminConfigResponse
 from interloper_api.settings import ApiSettings, AuthSettings, SmtpSettings
+from interloper_api.ui import DevServerUI, UIBundle
 
 PUBLIC_ADDRESS = "160.79.104.10"
+
+VITE_MANIFEST: dict[str, dict[str, Any]] = {
+    "src/index.ts": {
+        "file": "assets/index-3f9a1c.js",
+        "isEntry": True,
+        "imports": ["_shared-77aa01.js"],
+        "css": ["assets/index-b72e04.css"],
+    },
+    "_shared-77aa01.js": {
+        "file": "assets/shared-77aa01.js",
+        "imports": ["src/index.ts"],
+        "css": ["assets/shared-0c11d2.css", "assets/index-b72e04.css"],
+        "assets": ["assets/logo-5e5e5e.svg"],
+    },
+}
 
 
 class FakeDocumentHost:
@@ -209,12 +226,10 @@ def load_extensions(install: Callable[..., None], monkeypatch: pytest.MonkeyPatc
         name override the declared ones, as ``interloper dev`` does.
     """
 
-    def load(ui_overrides: dict[str, extensions_module.DevServerUI] | None = None) -> Manifests:
+    def load(ui_overrides: dict[str, DevServerUI] | None = None) -> Manifests:
         manifests = Manifests()
         routers = Registry("routes", adopt=extensions_module._adopt_router)
-        bundles: Registry[extensions_module.UIBundle | extensions_module.DevServerUI] = Registry(
-            "ui", adopt=extensions_module._adopt_bundle
-        )
+        bundles: Registry[UIBundle | DevServerUI] = Registry("ui", adopt=extensions_module._adopt_bundle)
         for name, ui in (ui_overrides or {}).items():
             bundles.override(name, ui)
         with monkeypatch.context() as scoped:
@@ -228,6 +243,31 @@ def load_extensions(install: Callable[..., None], monkeypatch: pytest.MonkeyPatc
         return manifests
 
     return load
+
+
+@pytest.fixture
+def vite_build() -> Callable[..., Path]:
+    """Write Vite builds: the manifest, the files it names, and an unhashed public file.
+
+    Returns:
+        A function writing a build into the directory it is given, created,
+        from the chunks it is given or, by default, an entry importing a
+        shared chunk that imports it back, the two sharing a stylesheet; it
+        returns the directory.
+    """
+
+    def build(directory: Path, manifest: dict[str, dict[str, Any]] | None = None) -> Path:
+        chunks = VITE_MANIFEST if manifest is None else manifest
+        (directory / ".vite").mkdir(parents=True)
+        (directory / ".vite" / "manifest.json").write_text(json.dumps(chunks))
+        for chunk in chunks.values():
+            for path in (chunk["file"], *chunk.get("css", ()), *chunk.get("assets", ())):
+                (directory / path).parent.mkdir(parents=True, exist_ok=True)
+                (directory / path).write_text(f"/* {path} */")
+        (directory / "favicon.svg").write_text("<svg/>")
+        return directory
+
+    return build
 
 
 @pytest.fixture

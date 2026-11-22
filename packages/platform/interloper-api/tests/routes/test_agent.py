@@ -17,7 +17,7 @@ import interloper as il
 import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
-from interloper_agent import build_agent
+from interloper_agent.agent import build_agent
 from interloper_agent.history import SUMMARY_LEAD
 from interloper_agent.toolset import TOOLS, toolset
 from interloper_db import Audience, TokenKind

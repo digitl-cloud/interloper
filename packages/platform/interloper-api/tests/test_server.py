@@ -11,7 +11,7 @@ from interloper.settings import ServerSettings
 from interloper.utils import Supervisor
 from interloper_db import Store
 
-from interloper_api import ApiServer
+from interloper_api.server import ApiServer
 from interloper_api.settings import ApiSettings
 
 

@@ -26,7 +26,8 @@ from uuid import UUID
 from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from interloper.telemetry import meter
-from interloper_agent import TURN_LIMITS, summary_of
+from interloper_agent.agent import TURN_LIMITS
+from interloper_agent.history import summary_of
 from interloper_agent.toolset import TOOLS
 from interloper_db import Page, PageQuery
 from interloper_db.models import Conversation

@@ -17,12 +17,14 @@ its environment and working directory.
 
 Packages declare what they bring in extension manifests, so the suites of
 core and of the platform packages that read a manifest section share one way
-to install a throwaway package that ships one.
+to install a throwaway package that ships one, and the packages declaring a
+command share one way to see what printing its help imports.
 """
 
 from __future__ import annotations
 
 import importlib
+import subprocess
 import sys
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
@@ -194,3 +196,38 @@ def install(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Install
     for locator in locators:
         for module in [name for name in sys.modules if name.partition(".")[0] == locator.module]:
             del sys.modules[module]
+
+
+_HELP_PROBE = """\
+import sys
+from interloper.cli.main import main
+try:
+    main()
+except SystemExit:
+    pass
+print(*sys.modules, file=sys.stderr)
+"""
+
+
+@pytest.fixture
+def help_modules(tmp_path: Path) -> Callable[..., set[str]]:
+    """Print an ``interloper`` help in a fresh interpreter and name the modules it loaded.
+
+    Args:
+        tmp_path: The interpreter's working directory, holding no
+            ``interloper.yaml`` or ``.env``.
+
+    Returns:
+        A function taking the arguments after ``interloper``, ``--help``
+        among them, which asserts the help printed and returns the name of
+        every module loaded once it had.
+    """
+
+    def modules(*argv: str) -> set[str]:
+        completed = subprocess.run(
+            [sys.executable, "-c", _HELP_PROBE, *argv], capture_output=True, text=True, check=False, cwd=tmp_path
+        )
+        assert completed.stdout.startswith("usage: interloper"), completed.stderr
+        return set(completed.stderr.split())
+
+    return modules

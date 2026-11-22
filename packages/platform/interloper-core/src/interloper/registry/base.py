@@ -152,6 +152,25 @@ class Registry(Generic[T]):
         self._load()
         return tuple(sorted(self._entries.items()))
 
+    def names(self) -> tuple[str, ...]:
+        """All registered names and every name the section declares, without loading an entry.
+
+        What a listing that must stay cheap shows, as ``interloper --help``
+        listing its commands does: a declared entry is named before it is
+        loaded, and one that already failed to load is left out.
+
+        Returns:
+            The names, sorted.
+
+        Raises:
+            TypeError: If the registry adopts its entries, whose names are
+                known only once they are loaded.
+        """
+        if self._adopt is not None:
+            raise TypeError(f"the names of section '{self._section}' are known only once its entries are adopted")
+        declared = {entry.name for entry in MANIFESTS.entries(self._section)} if self._section else set()
+        return tuple(sorted(self._entries.keys() | (declared - self._failures.keys())))
+
     def __iter__(self) -> Iterator[str]:
         """Iterate the registered names, in `keys` order.
 

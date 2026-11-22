@@ -14,8 +14,7 @@ from pydantic_ai.models.anthropic import AnthropicCompaction
 from pydantic_ai.models.openai import OpenAICompaction
 from pydantic_ai.models.test import TestModel
 
-from interloper_agent import TURN_LIMITS, build_agent
-from interloper_agent.agent import capabilities, model_settings
+from interloper_agent.agent import TURN_LIMITS, build_agent, capabilities, model_settings
 from interloper_agent.history import COMPACTION_THRESHOLD, elide_tool_returns, summarise
 from interloper_agent.prompts import INSTRUCTIONS
 
@@ -48,7 +47,7 @@ class TestBuildAgent:
         # A fresh interpreter: this module imports both other SDKs itself.
         probe = (
             "import sys\n"
-            "from interloper_agent import build_agent\n"
+            "from interloper_agent.agent import build_agent\n"
             "build_agent('google:gemini-3.8-flash')\n"
             "print(sorted(name for name in ('anthropic', 'openai', 'google.genai') if name in sys.modules))\n"
         )
