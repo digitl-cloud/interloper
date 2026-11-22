@@ -23,9 +23,12 @@ class SQLiteConnection:
       from both reading it free, as Postgres's row locks do.
     * ``gen_random_uuid()``, which the models' server defaults call, as a
       function, so those defaults work unchanged.
+    * ``notify(payload)`` for the notifying triggers: it holds each payload
+      on the connection until `SQLiteListener` takes it at commit.
     """
 
     BUSY_TIMEOUT_MILLISECONDS: ClassVar[int] = 30_000
+    NOTIFICATIONS: ClassVar[str] = "notifications"
 
     def install(self, engine: Engine) -> None:
         """Set up each connection the engine opens, and open each of its transactions.
@@ -48,9 +51,11 @@ class SQLiteConnection:
         for pragma in ("journal_mode=WAL", "foreign_keys=ON", f"busy_timeout={self.BUSY_TIMEOUT_MILLISECONDS}"):
             dbapi_connection.execute(f"PRAGMA {pragma}")
         dbapi_connection.create_function("gen_random_uuid", 0, self.random_uuid)
+        notifications: list[str] = connection_record.info.setdefault(self.NOTIFICATIONS, [])
+        dbapi_connection.create_function("notify", 1, notifications.append)
 
     def begin(self, connection: Connection) -> None:
-        """Open a transaction holding the write lock.
+        """Open a transaction holding the write lock, dropping what a rolled-back one notified.
 
         It is sent through the driver's connection, as psycopg sends Postgres's
         ``BEGIN``, so neither shows among the statements SQLAlchemy executes.
@@ -61,6 +66,7 @@ class SQLiteConnection:
         dbapi_connection = cast("sqlite3.Connection", connection.connection.dbapi_connection)
         # Sessions sharing one connection (a single-connection pool) join the transaction already open on it.
         if not dbapi_connection.in_transaction:
+            connection.connection.info[self.NOTIFICATIONS].clear()
             dbapi_connection.execute("BEGIN IMMEDIATE")
 
     @staticmethod

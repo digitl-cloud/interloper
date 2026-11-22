@@ -10,6 +10,7 @@ from sqlalchemy import Engine
 from sqlalchemy.engine import URL
 
 from interloper_db.sqlite.folds import SQLiteFolds
+from interloper_db.sqlite.notifications import SQLiteNotifications
 
 if TYPE_CHECKING:
     from alembic.config import Config
@@ -72,3 +73,4 @@ class SQLiteSchema:
             One DDL statement at a time.
         """
         yield from SQLiteFolds().statements()
+        yield from SQLiteNotifications().statements()

@@ -15,7 +15,7 @@ from sqlmodel import SQLModel
 from interloper_db import engine as engine_module
 from interloper_db.engine import init_engine
 from interloper_db.provision import _alembic_config
-from interloper_db.sqlite import SQLiteFolds, SQLiteSchema
+from interloper_db.sqlite import SQLiteFolds, SQLiteNotifications, SQLiteSchema
 
 
 @pytest.fixture
@@ -41,6 +41,10 @@ def _revision(engine: Engine) -> str | None:
         return MigrationContext.configure(connection).get_current_revision()
 
 
+def _expected_triggers() -> set[str]:
+    return set(SQLiteFolds().triggers()) | set(SQLiteNotifications().triggers())
+
+
 def _triggers(engine: Engine) -> set[str]:
     with engine.connect() as connection:
         return set(connection.exec_driver_sql("SELECT name FROM sqlite_master WHERE type = 'trigger'").scalars())
@@ -59,10 +63,10 @@ class TestCreate:
 
         assert _revision(engine) == ScriptDirectory.from_config(_alembic_config(engine)).get_current_head()
 
-    def test_it_carries_the_fold_triggers(self, engine: Engine) -> None:
+    def test_it_carries_the_fold_and_notifying_triggers(self, engine: Engine) -> None:
         SQLiteSchema(engine).create(_alembic_config(engine))
 
-        assert _triggers(engine) == set(SQLiteFolds().triggers())
+        assert _triggers(engine) == _expected_triggers()
 
     def test_an_existing_database_gets_its_triggers_back(self, engine: Engine) -> None:
         SQLiteSchema(engine).create(_alembic_config(engine))
@@ -71,7 +75,7 @@ class TestCreate:
 
         SQLiteSchema(engine).create(_alembic_config(engine))
 
-        assert _triggers(engine) == set(SQLiteFolds().triggers())
+        assert _triggers(engine) == _expected_triggers()
 
     def test_an_existing_database_gains_a_table_a_newer_release_declares(self, engine: Engine) -> None:
         SQLiteSchema(engine).create(_alembic_config(engine))

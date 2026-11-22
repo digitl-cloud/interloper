@@ -57,6 +57,24 @@ class TestConfigure:
         assert UUID(hex=value).version == 4
 
 
+class TestNotify:
+    """``notify()`` holds a payload on the connection until a new transaction begins."""
+
+    def test_a_payload_is_held_on_its_connection(self, engine: Engine) -> None:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT notify('a'), notify('b')"))
+
+            assert connection.connection.info[SQLiteConnection.NOTIFICATIONS] == ["a", "b"]
+
+    def test_a_new_transaction_drops_what_the_last_one_held(self, engine: Engine) -> None:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT notify('a')"))
+            connection.rollback()
+            connection.execute(text("SELECT 1"))
+
+            assert connection.connection.info[SQLiteConnection.NOTIFICATIONS] == []
+
+
 class TestBegin:
     """Every transaction takes the write lock as it begins."""
 
