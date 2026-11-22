@@ -2,14 +2,19 @@
 """Populate the scale-test database with organisations shaped like production ones.
 
 Every organisation one invocation adds gets the same population: demo sources
-with their five assets, cron jobs over a share of them, members with sessions,
-and a history of backfills, runs, executions and events. The invocation's
-first organisation's components go through the store, as the app creates
-them; the others clone those rows, and a later invocation adds organisations
-of another shape after them. History is copied in with ``COPY`` while the
-tables' user triggers are off: the execution fold and the realtime
+with their five assets, cron jobs over a share of them, connections, members
+with sessions, and a history of backfills, runs, executions and events. The
+invocation's first organisation's components go through the store, as the app
+creates them; the others clone those rows, and a later invocation adds
+organisations of another shape after them. History is copied in with ``COPY``
+while the tables' user triggers are off: the folds and the realtime
 notifications are the live phase's to exercise, not the load's, so executions
-are written as the fold would have left them.
+and partitions are written as the folds would have left them.
+
+A real organisation's history has holes: some assets miss days now and then,
+and the coverage calendar reads such an asset partition by partition where it
+reads an unbroken one as a run. ``--gap-share`` gives that share of the
+executed assets a missed day one time in ten.
 
 The last ``--event-days`` days carry every event a run reports. Older runs
 keep their executions and their failures' ``operation_failed`` events, which
@@ -47,6 +52,8 @@ from interloper_db.store import Store
 STATE = Path(__file__).parent / "state"
 SESSIONS = STATE / "sessions.json"
 SOURCE_KEY = "demo_source"
+CONNECTION_KEY = "adtraction_connection"
+MISSED_DAY_SHARE = 0.1
 ROLES = ("admin", "editor", "viewer")
 ERRORS = (
     "HTTPError: 429 Too Many Requests for url https://api.example.com/v3/reports?level=ad&fields=spend,clicks",
@@ -75,6 +82,9 @@ class Shape:
         failure_rate: Share of the history's executions that failed.
         live_failure_rate: The demo sources' random failure probability, per
             asset, when the scheduler probe runs them.
+        gap_share: Share of the executed assets whose history misses a day
+            one time in ten.
+        connections: Connections, their secrets encrypted as the app stores them.
         members: Members per organisation, each with a session.
     """
 
@@ -86,6 +96,8 @@ class Shape:
     event_days: int
     failure_rate: float
     live_failure_rate: float
+    gap_share: float
+    connections: int
     members: int
 
     @classmethod
@@ -107,6 +119,8 @@ class Shape:
             event_days=args.event_days,
             failure_rate=args.failure_rate,
             live_failure_rate=args.live_failure_rate,
+            gap_share=args.gap_share,
+            connections=args.connections,
             members=args.members,
         )
 
@@ -222,6 +236,8 @@ class History:
         self._first_day = now.date() - dt.timedelta(days=shape.days)
         self._backfills = {job.id: uuid.uuid4() for job in jobs}
         self._backfill_created = dt.datetime.combine(self._first_day, dt.time(9), dt.UTC)
+        assets = sorted({asset.id for job in jobs for asset in job.assets})
+        self._gapped = {asset for asset in assets if self._random.random() < shape.gap_share}
         self.runs = [run for job in jobs for run in self._plan(job)]
 
     def _plan(self, job: Job) -> Iterator[PlannedRun]:
@@ -244,11 +260,24 @@ class History:
                     started = self._backfill_created + dt.timedelta(minutes=offset * 2)
                 else:
                     started = scheduled + dt.timedelta(hours=3 * (index - 1))
-                if started >= self._now:
+                executed = [asset for asset in job.assets if not self._misses(asset, day)]
+                if started >= self._now or not executed:
                     continue
                 run = PlannedRun(uuid.uuid4(), job, day.isoformat(), backfill_id, started)
-                run.outcomes = [self._outcome(asset, started) for asset in job.assets]
+                run.outcomes = [self._outcome(asset, started) for asset in executed]
                 yield run
+
+    def _misses(self, asset: Asset, day: dt.date) -> bool:
+        """Decide whether a gapped asset misses a day, the same way for every run of that day.
+
+        Args:
+            asset: The asset.
+            day: The day its runs cover.
+
+        Returns:
+            Whether no run executes it for that day.
+        """
+        return asset.id in self._gapped and random.Random(f"{asset.id}{day}").random() < MISSED_DAY_SHARE
 
     def _outcome(self, asset: Asset, run_started: dt.datetime) -> Outcome:
         """Decide how an asset fared in a run.
@@ -616,6 +645,14 @@ class Population:
             )
             for index in range(self._shape.sources)
         ]
+        for index in range(self._shape.connections):
+            self._store.components.create(
+                org_id,
+                kind="connection",
+                key=CONNECTION_KEY,
+                name=f"Connection {index:02d}",
+                config={"api_token": f"scale-token-{index:03d}"},
+            )
         targeted = sources[: int(len(sources) * self._shape.job_share)]
         for index in range(self._shape.jobs):
             self._store.components.create(
@@ -676,10 +713,11 @@ class Population:
         return [Job(job_id, job_name, tuple(owned)) for (job_id, job_name), owned in assets.items()]
 
     def _copy_history(self, history: History) -> None:
-        """Copy an organisation's history in, its tables' user triggers off, and meter its successful runs.
+        """Copy an organisation's history in, its tables' user triggers off, then fold and meter it.
 
-        The usage ledger counts what dispatch would have metered, so the
-        reaper's reconciliation finds no drift to correct.
+        The partitions are what the executions' fold would have left, and the
+        usage ledger counts what dispatch would have metered, so the reaper's
+        reconciliation finds no drift to correct.
 
         Args:
             history: The history.
@@ -698,6 +736,13 @@ class Population:
                         copy.write_row([row[column] for column in columns])
             for table in tables:
                 self._connection.execute(f"ALTER TABLE {table} ENABLE TRIGGER USER")
+            self._connection.execute(
+                "INSERT INTO partitions (org_id, component_id, partition_key, succeeded, failed_run_id) "
+                "SELECT org_id, component_id, partition_key, bool_or(status = 'success'), "
+                "(max(run_id::text) FILTER (WHERE status = 'failed'))::uuid FROM executions "
+                "WHERE org_id = %s AND partition_key IS NOT NULL GROUP BY org_id, component_id, partition_key",
+                (history.org_id,),
+            )
             self._connection.execute(
                 "INSERT INTO usage (org_id, metric, period_start, used, reserved) "
                 "SELECT org_id, 'successful_runs', date_trunc('month', completed_at AT TIME ZONE 'UTC')::date, "
@@ -721,6 +766,8 @@ def main() -> None:
     parser.add_argument("--event-days", type=int, default=30, help="recent days carrying every event")
     parser.add_argument("--failure-rate", type=float, default=0.15, help="share of the history's executions failed")
     parser.add_argument("--live-failure-rate", type=float, default=0.005, help="per-asset failure rate of live runs")
+    parser.add_argument("--gap-share", type=float, default=0.0, help="share of executed assets that miss days")
+    parser.add_argument("--connections", type=int, default=0, help="connections per organisation")
     parser.add_argument("--members", type=int, default=5, help="members per organisation, each with a session")
     args = parser.parse_args()
 

@@ -1,5 +1,6 @@
-# Scale-test stack: Postgres held to the production database's shape, and two
-# api replicas behind a round-robin proxy, as the load balancer spreads them.
+# Scale-test stack: Postgres held to the production database's shape, two api
+# replicas behind a proxy that keeps a browser on one replica, and between the
+# api and Postgres the round trip production's database proxy costs.
 #
 #   make scale-up      # build the api image from this checkout and start the stack
 #   make scale-down    # stop it and drop the database volume
@@ -7,11 +8,15 @@
 # The generator, the load driver and the scheduler probe run from the
 # workspace against it (see the Makefile's scale-* targets). Throwaway
 # credentials, never reused anywhere real.
+#
+# SCALE_DATABASE_DELAY_MS is the delay added to a round trip from the api to
+# Postgres, set so the round trip costs what production's does (2.5 ms). What
+# the stack does not reproduce is in AGENTS.md, "Scale test".
 
 name: interloper-scale
 
 x-interloper-env: &interloper-env
-  INTERLOPER_POSTGRES_HOST: postgres
+  INTERLOPER_POSTGRES_HOST: database-proxy
   INTERLOPER_POSTGRES_PORT: "5432"
   INTERLOPER_POSTGRES_USER: postgres
   INTERLOPER_POSTGRES_PASSWORD: postgres
@@ -53,6 +58,32 @@ services:
       timeout: 3s
       retries: 20
 
+  # Production's database proxy: every round trip from the api crosses it, and
+  # with it every statement, BEGIN, ROLLBACK and pool ping a request makes. The
+  # kernel holds each packet leaving this relay for half the delay, so both
+  # directions pay it. The delay is less than the round trip it aims for: the
+  # relay and a virtual machine's timers add the rest.
+  database-proxy:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM alpine:3.22
+        RUN apk add --no-cache iproute2 socat
+    image: interloper-database-proxy:scale
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DELAY_MS: ${SCALE_DATABASE_DELAY_MS:-1.5}
+    command:
+      - sh
+      - -c
+      - >-
+        tc qdisc add dev eth0 root netem limit 10000 delay $$(awk "BEGIN { print $$DELAY_MS / 2 }")ms
+        && exec socat TCP-LISTEN:5432,fork,reuseaddr,nodelay TCP:postgres:5432,nodelay
+
   # Production's api: two replicas, 1Gi each. CPU is a request, not a limit, in
   # production; SCALE_API_CPUS caps each replica here (one core by default).
   api:
@@ -62,8 +93,8 @@ services:
       target: api
     image: interloper-api:scale
     depends_on:
-      postgres:
-        condition: service_healthy
+      database-proxy:
+        condition: service_started
     working_dir: /interloper
     environment: *interloper-env
     volumes:
