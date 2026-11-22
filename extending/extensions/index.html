@@ -19,7 +19,7 @@
         <link rel="prev" href="../operations/">
       
       
-        <link rel="next" href="../../reference/settings/">
+        <link rel="next" href="../own-repository/">
       
       
         
@@ -353,6 +353,8 @@
   
     
       
+      
+        
       
         
       
@@ -1510,6 +1512,8 @@
       
         
       
+        
+      
     
     
     
@@ -1883,6 +1887,33 @@
   
 </nav>
       
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../own-repository/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Writing an extension in its own repository
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -2504,6 +2535,8 @@
       
         
       
+        
+      
     
     
     
@@ -2920,7 +2953,8 @@ every page that shows an extension, so each is added to <code>host.ts</code> whe
 wheel carries whatever its <code>static/</code> holds, so the release runs <code>make build-extensions</code> before
 it builds the wheels, and the loaded api image builds the <code>packages/extensions</code> UIs into the
 packages it installs.</p>
-<p>That is how the repository's own extensions build, through the workspace and the Makefile. An
+<p>That is how the repository's own extensions build, through the workspace and the Makefile;
+<a href="../own-repository/">Writing an extension in its own repository</a> walks through the other path. An
 extension in its own repository installs <code>@interloper/ui</code> from npm instead, and
 <code>uv run interloper extension build</code> runs npm in its <code>ui/</code>, type-checks and builds the UI, then
 builds the wheel and checks that it carries the bundle; <code>make check-extension</code> runs that whole
@@ -3063,13 +3097,13 @@ no anchor makes catalog construction fail with <code>ConfigError</code>.</p>
         
         
           
-          <a href="../../reference/settings/" class="md-footer__link md-footer__link--next" aria-label="Next: Settings">
+          <a href="../own-repository/" class="md-footer__link md-footer__link--next" aria-label="Next: Writing an extension in its own repository">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Settings
+                Writing an extension in its own repository
               </div>
             </div>
             <div class="md-footer__button md-icon">
