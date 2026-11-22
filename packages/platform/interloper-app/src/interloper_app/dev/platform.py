@@ -11,7 +11,6 @@ Run as ``python -m interloper_app.dev``, which only ``dev`` does.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import sys
 import time
@@ -28,12 +27,11 @@ from interloper_api import DevServerUI
 from interloper_api.routes.extensions import UI_BUNDLES
 from interloper_api.settings import ApiSettings, AuthSettings
 from interloper_db import Store
-from interloper_db.provision import bootstrap, connect
-from interloper_db.settings import PostgresSettings
 from interloper_db.store.components.declaration import Declarations
 from interloper_scheduler.settings import SchedulerSettings
 from pydantic import BaseModel
 
+from interloper_app.dev.database import DevDatabase
 from interloper_app.dev.port import Port
 from interloper_app.dev.process import ProcessGroup
 from interloper_app.dev.signin import SignIn
@@ -88,10 +86,10 @@ class PlatformSpec(BaseModel):
         """Run the platform this spec describes, in this process, until a signal, a service's death or dev's.
 
         In file mode (an instance target or a spec file), the platform uses a
-        database of its own beside the configured one, one per checkout, and
-        before anything is served the files' components are written to its dev
-        organisation, which they then fill alone, read-only in the app. A
-        target that does not import or build exits the process with its error.
+        database of its own (`DevDatabase`), and before anything is served the
+        files' components are written to its dev organisation, which they then
+        fill alone, read-only in the app. A target that does not import or
+        build exits the process with its error.
         """
         watchdog = ParentWatchdog(parent=self.parent)
         root = Path(self.root)
@@ -109,16 +107,12 @@ class PlatformSpec(BaseModel):
         for key, entry in self.ui_entries.items():
             UI_BUNDLES.override(key, DevServerUI(entry))
         targets = Targets(root, self.targets, self.files)
+        database = DevDatabase.from_settings(root)
+        # dev brought the app's database up; file mode's own is brought up here.
         if targets.declares:
-            PostgresSettings.activate(
-                PostgresSettings.get().model_copy(update={"database": self._served_database(PostgresSettings.get())})
-            )
-        postgres = PostgresSettings.get()
-        # dev brought the configured database up; file mode's own is brought up here.
-        if targets.declares:
-            bootstrap(postgres.dsn, statement_timeout=postgres.statement_timeout)
+            database.bootstrap(files=True)
         else:
-            connect(postgres.dsn, statement_timeout=postgres.statement_timeout)
+            database.connect()
         api_settings = ApiSettings.get()
         scheduler_settings = SchedulerSettings.get()
         _, organisation = self.sign_in.ensure(Store.from_settings())
@@ -154,19 +148,6 @@ class PlatformSpec(BaseModel):
         app.run()
 
     # -- Internals -------------------------------------------------------------
-
-    def _served_database(self, postgres: PostgresSettings) -> str:
-        """Name the database file mode uses: its own, one per checkout, so the files never touch the configured one.
-
-        Args:
-            postgres: The configured Postgres settings.
-
-        Returns:
-            The configured database's name, cut so the whole stays within
-            Postgres's 63-byte identifiers, suffixed with a digest of the
-            project root.
-        """
-        return f"{postgres.database[:48]}_files_{hashlib.sha256(self.root.encode()).hexdigest()[:8]}"
 
     @staticmethod
     def _apply(store: Store, org_id: UUID, declared: list[Declarations], served_from: str) -> None:

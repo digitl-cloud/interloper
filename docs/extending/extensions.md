@@ -366,8 +366,8 @@ builds the wheel and checks that it carries the bundle; `make check-extension` r
 path in a fresh project against the SDK packed as npm publishes it, as CI does.
 
 Such an extension runs inside the real app with `uv run interloper dev`, from its project. It
-serves the platform on `127.0.0.1:3000` (`--port` to change it) against the Postgres its
-`interloper.yaml` names, and prints a sign-in link that needs no login provider: it signs in a
+serves the platform on `127.0.0.1:3000` (`--port` to change it), its state in `.interloper/` or
+a configured Postgres, and prints a sign-in link that needs no login provider: it signs in a
 local developer, super-admin of an organisation named after the project, and lands on the
 extension's page. The UI comes from its Vite dev server, built or not: a stylesheet edit
 applies in place, a `.vue` edit reloads the page, and an edit to a Python file, the manifest or
@@ -378,7 +378,7 @@ The collection can come from files instead of the app. An instance path (`uv run
 dev weather.paris`) declares that instance and what it binds, and `-f collection.yaml`
 (repeatable) declares each document of a spec file, the format `interloper run -f` reads.
 Either puts `dev` in file mode: the collection is served from those files alone, from a database
-of its own beside the configured one (one per checkout), and the app shows it read-only, saying
+of its own, and the app shows it read-only, saying
 which files serve it. Runs, backfills and cancels work as usual. Every start writes the files'
 components as they are: an edit updates a component in place, its id and run history kept (give
 a spec component an `id` to keep them across a reordering of the file), and a component the

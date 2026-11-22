@@ -8,6 +8,7 @@ import os
 import runpy
 import socket
 import threading
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest import mock
@@ -17,10 +18,10 @@ import pytest
 from interloper.catalog import Catalog
 from interloper.settings import ServerSettings
 from interloper_api.settings import AuthSettings
-from interloper_db.settings import PostgresSettings
 from interloper_db.store.components import Applied
 
 from interloper_app.dev import platform as platform_module
+from interloper_app.dev.database import DevDatabase
 from interloper_app.dev.platform import Platform, PlatformSpec
 from interloper_app.dev.signin import SignIn
 
@@ -107,8 +108,8 @@ class TestServe:
         """
         monkeypatch.setattr(platform_module, "UI_BUNDLES", mock.Mock())
         database: dict[str, Any] = {}
-        monkeypatch.setattr(platform_module, "bootstrap", lambda dsn, **kwargs: database.update(written=kwargs))
-        monkeypatch.setattr(platform_module, "connect", lambda dsn, **kwargs: database.update(checked=kwargs))
+        monkeypatch.setattr(DevDatabase, "bootstrap", lambda self, files=False: database.update(written=files))
+        monkeypatch.setattr(DevDatabase, "connect", lambda self: database.update(checked=self.root))
         monkeypatch.setattr(platform_module.Catalog, "from_settings", classmethod(lambda cls: Catalog()))
         store = mock.Mock()
         store.components.apply.return_value = Applied()
@@ -157,31 +158,23 @@ class TestServe:
         assert "parent-watchdog" in app.services
         app.run.assert_called_once_with()
 
-    def test_without_files_the_app_edits_the_configured_database(
+    def test_without_files_the_app_edits_the_database_dev_brought_up(
         self, spec: PlatformSpec, monkeypatch: pytest.MonkeyPatch
     ):
-        configured = PostgresSettings.get().database
-
         _, built, store, _ = self._serve(spec, monkeypatch)
 
-        assert PostgresSettings.get().database == configured
-        assert set(built["database"]) == {"checked"}
+        assert built["database"] == {"checked": Path("/work/acme")}
         assert built["served_from"] is None
         store.components.apply.assert_not_called()
 
     def test_files_serve_the_collection_from_a_database_of_their_own(
         self, spec: PlatformSpec, monkeypatch: pytest.MonkeyPatch
     ):
-        configured = PostgresSettings.get()
         declared: list[Any] = [SimpleNamespace(file="collection.yaml", rows=["row"], classes=[])]
 
-        try:
-            _, built, store, _ = self._serve(spec, monkeypatch, declared)
+        _, built, store, _ = self._serve(spec, monkeypatch, declared)
 
-            assert PostgresSettings.get().database == spec._served_database(configured)
-        finally:
-            PostgresSettings.activate(configured)
-        assert set(built["database"]) == {"written"}
+        assert built["database"] == {"written": True}
         assert built["served_from"] == "collection.yaml"
         store.components.apply.assert_called_once_with(mock.ANY, ["row"])
 
@@ -240,21 +233,3 @@ class TestApply:
 
         with pytest.raises(SystemExit, match=r"collection\.yaml: 'demo' collides"):
             PlatformSpec._apply(store, ORG, [], "collection.yaml")
-
-
-def test_each_checkout_serves_its_files_from_a_database_of_its_own(spec: PlatformSpec):
-    postgres = PostgresSettings(database="interloper")
-    other = spec.model_copy(update={"root": "/work/acme-worktree"})
-
-    database = spec._served_database(postgres)
-
-    assert database.startswith("interloper_files_")
-    assert database == spec._served_database(postgres)
-    assert database != other._served_database(postgres)
-
-
-def test_a_long_configured_name_keeps_the_served_database_within_postgres_s_limit(spec: PlatformSpec):
-    database = spec._served_database(PostgresSettings(database="d" * 70))
-
-    assert len(database) == 63
-    assert database.endswith(spec._served_database(PostgresSettings(database="d"))[-15:])

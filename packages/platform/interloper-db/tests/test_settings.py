@@ -1,5 +1,8 @@
 """Tests for ``interloper_db.settings``."""
 
+import os
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 from sqlalchemy.engine import make_url
@@ -71,3 +74,35 @@ def test_location_names_the_target_without_credentials():
 
     assert settings.location == "db:5433/warehouse"
     assert "secret" not in settings.location
+
+
+class TestConfigured:
+    """A Postgres is configured once the config file or the environment sets any of its fields."""
+
+    @pytest.fixture(autouse=True)
+    def _no_ambient_variables(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Clear any ``INTERLOPER_POSTGRES_*`` variable the shell running the tests set.
+
+        Args:
+            monkeypatch: Fixture used to clear the variables.
+        """
+        for name in [name for name in os.environ if name.startswith("INTERLOPER_POSTGRES_")]:
+            monkeypatch.delenv(name)
+
+    def test_defaults_alone_configure_none(self) -> None:
+        assert PostgresSettings().configured is False
+
+    def test_an_environment_variable_configures_one(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("INTERLOPER_POSTGRES_HOST", "db.internal")
+
+        assert PostgresSettings().configured is True
+
+    def test_a_config_block_setting_a_field_configures_one(self, tmp_path: Path) -> None:
+        (tmp_path / "interloper.yaml").write_text("postgres:\n  database: interloper\n")
+
+        assert PostgresSettings().configured is True
+
+    def test_an_empty_config_block_configures_none(self, tmp_path: Path) -> None:
+        (tmp_path / "interloper.yaml").write_text("postgres:\n")
+
+        assert PostgresSettings().configured is False

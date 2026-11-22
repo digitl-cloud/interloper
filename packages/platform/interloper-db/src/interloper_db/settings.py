@@ -48,6 +48,15 @@ class PostgresSettings(Settings):
         """
         return f"{self.host}:{self.port}/{self.database}"
 
+    @property
+    def configured(self) -> bool:
+        """Whether a Postgres is configured: the config file's block or an environment variable sets a field.
+
+        Returns:
+            ``True`` when any field was set, ``False`` when every field is its default.
+        """
+        return bool(self.model_fields_set)
+
 
 class EncryptionSettings(Settings):
     """The key the platform encrypts and signs with.
