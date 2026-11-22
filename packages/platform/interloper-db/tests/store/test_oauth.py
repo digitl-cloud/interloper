@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import importlib
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
-from sqlalchemy import Engine, inspect, text, update
+from sqlalchemy import Engine, update
 from sqlmodel import col, select
 
 from interloper_db.crypto import hash_token
@@ -891,63 +888,3 @@ class TestPurge:
 
         assert store.oauth.find_refresh(ended) is None
         assert store.oauth.rotate_refresh(live, client.client_id) is not None
-
-
-class TestMigration:
-    def test_migration_018_creates_and_drops_the_tables(self, store: Store, profile: Profile, auth_db: Engine):
-        module = importlib.import_module("interloper_db.migrations.versions.018_oauth_authorization_server")
-        with auth_db.begin() as connection:
-            with Operations.context(MigrationContext.configure(connection)):
-                module.downgrade()
-            assert not MIGRATION_018_TABLES & set(inspect(connection).get_table_names())
-            with Operations.context(MigrationContext.configure(connection)):
-                module.upgrade()
-                module.upgrade()
-            assert MIGRATION_018_TABLES <= set(inspect(connection).get_table_names())
-            code_indexes = {index["name"] for index in inspect(connection).get_indexes("oauth_authorization_codes")}
-            assert "ix_oauth_authorization_codes_user_id" in code_indexes
-
-        client, _ = store.oauth.register_client("Claude Code", ["http://localhost/cb"], registered_by="dynamic")
-        code = store.oauth.issue_code(
-            client_id=client.client_id,
-            user_id=profile.id,
-            redirect_uri="http://localhost/cb",
-            code_challenge="challenge",
-            resource=Audience.API,
-        )
-        consumed = store.oauth.consume_code(code)
-        assert consumed is not None
-        refresh = store.oauth.issue_refresh(profile.id, client.client_id, Audience.API, family_id=consumed.family_id)
-        assert store.oauth.rotate_refresh(refresh, client.client_id) is not None
-        assert store.oauth.get_client(client.client_id) is not None
-
-    def test_migration_023_keeps_every_grant_and_its_state_through_a_downgrade_and_upgrade(
-        self, store: Store, profile: Profile, client: OAuthClient, auth_db: Engine
-    ):
-        module = importlib.import_module("interloper_db.migrations.versions.023_refresh_tokens_are_tokens")
-        rotated = store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP)
-        retired = store.oauth.rotate_refresh(rotated, client.client_id)
-        assert retired is not None
-        newest = store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP, family_id=retired.family_id)
-        other_family = store.oauth.issue_refresh(profile.id, client.client_id, Audience.API)
-        session_cookie = store.tokens.create_session(profile.id)
-
-        with auth_db.begin() as connection:
-            with Operations.context(MigrationContext.configure(connection)):
-                module.downgrade()
-            moved_back = connection.execute(text("SELECT token_hash, family_id, rotated_at FROM oauth_refresh_tokens"))
-            by_hash = {row.token_hash: row for row in moved_back}
-            assert set(by_hash) == {hash_token(rotated), hash_token(newest), hash_token(other_family)}
-            assert by_hash[hash_token(rotated)].family_id == by_hash[hash_token(newest)].family_id
-            assert by_hash[hash_token(rotated)].rotated_at is not None
-            assert connection.execute(text("SELECT count(*) FROM tokens WHERE kind = 'refresh'")).scalar() == 0
-            token_columns = {column["name"] for column in inspect(connection).get_columns("tokens")}
-            assert not {"family_id", "rotated_at"} & token_columns
-            with Operations.context(MigrationContext.configure(connection)):
-                module.upgrade()
-            assert "oauth_refresh_tokens" not in inspect(connection).get_table_names()
-
-        assert store.tokens.resolve(session_cookie, Audience.APP) is not None
-        assert store.oauth.rotate_refresh(other_family, client.client_id) is not None
-        assert store.oauth.rotate_refresh(rotated, client.client_id) is None
-        assert store.oauth.rotate_refresh(newest, client.client_id) is None

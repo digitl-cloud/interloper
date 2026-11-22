@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, ClassVar
+from typing import ClassVar
 from uuid import UUID
 
 from sqlmodel import AutoString, Column, SQLModel, text
@@ -80,17 +80,12 @@ class Token(SQLModel, table=True):
     A token carries no organisation and no role: the caller names the
     organisation and the role is read live from the membership, so a
     membership change or removal applies to every token at once.
-    Migration 015 renamed ``personal_access_tokens`` to this table, keeping
-    the hashes, which is why ``create_all`` skips it (see the
-    ``migration_owned`` marker).
 
     An OAuth refresh token is a row too, the only kind with a ``family_id``
-    and a ``rotated_at`` (see :mod:`interloper_db.store.oauth`); migration
-    023 moved them in from ``oauth_refresh_tokens``.
+    and a ``rotated_at`` (see :mod:`interloper_db.store.oauth`).
     """
 
     __tablename__: ClassVar[str] = "tokens"
-    __table_args__: ClassVar[dict[str, Any]] = {"info": {"migration_owned": True}}
 
     id: UUID = SQLField(
         default=None,
