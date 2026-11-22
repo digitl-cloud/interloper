@@ -2600,8 +2600,8 @@ scheduler or core image as well when it also brings components that run there.</
 components.</p>
 <h2 id="one-process-per-role">One process per role<a class="headerlink" href="#one-process-per-role" title="Permanent link">&para;</a></h2>
 <p>Each role starts through the command its package contributes, which is what the images run:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>interloper<span class="w"> </span>api<span class="w"> </span>--no-create-tables<span class="w">                                  </span><span class="c1"># the api image: the HTTP API</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>interloper<span class="w"> </span>scheduler<span class="w"> </span>--cron<span class="w"> </span>--worker<span class="w"> </span>--reaper<span class="w"> </span>--no-create-tables<span class="w">   </span><span class="c1"># the scheduler image: cron (with hooks and renewal), worker, reaper</span>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>interloper<span class="w"> </span>api<span class="w">                                  </span><span class="c1"># the api image: the HTTP API</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>interloper<span class="w"> </span>scheduler<span class="w"> </span>--cron<span class="w"> </span>--worker<span class="w"> </span>--reaper<span class="w">   </span><span class="c1"># the scheduler image: cron (with hooks and renewal), worker, reaper</span>
 </span></code></pre></div>
 <p><code>interloper scheduler</code> takes <code>--no-cron</code>, <code>--no-worker</code> and <code>--no-reaper</code> to split its services
 across replicas: cron and the reaper are singletons, the worker scales out, and replicas split
@@ -2661,8 +2661,11 @@ keys from other Secrets one by one.</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>interloper<span class="w"> </span>db<span class="w"> </span>init<span class="w">          </span><span class="c1"># create the database, tables and run migrations; idempotent</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>interloper<span class="w"> </span>db<span class="w"> </span>upgrade<span class="w">       </span><span class="c1"># migrate an existing database to head</span>
 </span></code></pre></div>
-<p>The serving commands (<code>interloper api</code>, <code>interloper scheduler</code>, <code>interloper app</code>) also create missing tables on
-startup unless <code>--no-create-tables</code> is passed.</p>
+<p><code>interloper db init</code> is the only command that writes the schema; run it once per release, before
+the serving commands. <code>interloper api</code>, <code>interloper scheduler</code> and <code>interloper app</code> never write it:
+they stop at startup, naming <code>interloper db init</code>, while the database is behind the release, and
+serve one ahead of it, as after a rollback. A single container runs
+<code>interloper db init &amp;&amp; interloper app</code>.</p>
 <h2 id="local-development">Local development<a class="headerlink" href="#local-development" title="Permanent link">&para;</a></h2>
 <p><code>interloper dev</code> serves the project in the current directory, its own sources and extensions
 included, on <code>127.0.0.1</code> with a printed sign-in link, and restarts the platform when one of its

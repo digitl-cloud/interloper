@@ -2711,10 +2711,6 @@
 <td><code>--port PORT</code></td>
 <td>Bind port (default: server.port, 3000)</td>
 </tr>
-<tr>
-<td><code>--no-create-tables</code></td>
-<td>Skip CREATE TABLE bootstrap on startup (production: run <code>interloper db init</code> once instead)</td>
-</tr>
 </tbody>
 </table>
 <h2 id="interloper-app"><code>interloper app</code><a class="headerlink" href="#interloper-app" title="Permanent link">&para;</a></h2>
@@ -2752,10 +2748,6 @@ enabled.</p>
 <tr>
 <td><code>--reaper, --no-reaper</code></td>
 <td>Run the reaper (timed-out run cleanup; singleton)</td>
-</tr>
-<tr>
-<td><code>--no-create-tables</code></td>
-<td>Skip CREATE TABLE bootstrap on startup (production: run <code>interloper db init</code> once instead)</td>
 </tr>
 </tbody>
 </table>
@@ -3081,10 +3073,6 @@ fall back to the cron, worker and reaper settings; at least one service must be 
 <tr>
 <td><code>--reaper, --no-reaper</code></td>
 <td>Run the reaper (fails silent and overdue runs; singleton)</td>
-</tr>
-<tr>
-<td><code>--no-create-tables</code></td>
-<td>Skip CREATE TABLE bootstrap on startup (production: run <code>interloper db init</code> once instead)</td>
 </tr>
 </tbody>
 </table>
