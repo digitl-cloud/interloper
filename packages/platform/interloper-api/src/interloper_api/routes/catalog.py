@@ -11,11 +11,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, NoReturn
+from typing import Annotated, Any, NoReturn
 
 import httpx2
 import interloper as il
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from interloper.connection import CheckResult, Connection
 from interloper.errors import ConnectionCheckError, format_exception
 from interloper.resource import is_fetch_field_provider
@@ -29,17 +29,34 @@ logger = logging.getLogger(__name__)
 org_router = APIRouter(prefix="/catalog", tags=["catalog"], dependencies=[Depends(require_viewer)])
 
 
-@org_router.get("")
-def list_catalog(catalog: CatalogDep) -> dict[str, Any]:
-    """Return the full catalog.
+@org_router.get(
+    "",
+    response_model=dict[str, Any],
+    responses={304: {"description": "The caller already holds this catalog."}},
+)
+def list_catalog(catalog: CatalogDep, if_none_match: Annotated[str | None, Header()] = None) -> Response:
+    """Return the full catalog, or nothing to a caller that already holds it.
+
+    The catalog does not change while the process lives. Its bytes are
+    serialised once and named by their digest, so a caller that sends the
+    name back in ``If-None-Match`` is told its copy still stands.
+    ``no-cache`` has a browser ask that way before each reuse, and
+    ``private`` keeps the copy out of shared caches.
 
     Args:
         catalog: Injected catalog.
+        if_none_match: The names of the copies the caller holds.
 
     Returns:
-        Every catalog entry, serialised.
+        Every catalog entry, serialised, or an empty 304 when the caller
+        holds this catalog.
     """
-    return catalog.dump()
+    name = f'"{catalog.digest}"'
+    headers = {"ETag": name, "Cache-Control": "private, no-cache"}
+    held = {candidate.strip().removeprefix("W/") for candidate in (if_none_match or "").split(",")}
+    if name in held:
+        return Response(status_code=304, headers=headers)
+    return Response(catalog.document, media_type="application/json", headers=headers)
 
 
 @org_router.get("/resource-kinds")
