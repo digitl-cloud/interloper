@@ -30,6 +30,18 @@ httpRoute:
   parentRefs:
     - name: ci-gateway
 
+# Cover the api's autoscaler and its topology spread.
+api:
+  autoscaling:
+    enabled: true
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/component: api
+
 # Cover the env every interloper pod shares, with a component's own after it.
 extraEnvFrom:
   - secretRef:

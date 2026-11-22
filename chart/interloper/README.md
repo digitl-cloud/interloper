@@ -268,6 +268,96 @@ which points at `replicaCount` or `maxUnavailable` instead.
 
 [gke-neg-500]: https://docs.cloud.google.com/kubernetes-engine/docs/troubleshooting/load-balancing#500-series-errors
 
+### Scaling the api
+
+An api pod is one Python process. It serves requests on one core, and a
+heavy request delays every other request in the same pod. Capacity is
+added with pods, not with processes inside a pod.
+
+| Value | Default | Purpose |
+|-------|---------|---------|
+| `api.autoscaling.enabled` | `false` | Creates a HorizontalPodAutoscaler (`autoscaling/v2`) for the api. The Deployment then sets no `replicas`, and `api.replicaCount` is ignored. |
+| `api.autoscaling.minReplicas` | `2` | The fewest pods the autoscaler keeps. |
+| `api.autoscaling.maxReplicas` | `4` | The most pods it starts. |
+| `api.autoscaling.targetCPUUtilizationPercentage` | `80` | The average CPU use it aims for, as a percentage of the CPU request. |
+| `api.topologySpreadConstraints` | `[]` | Rendered as given on the api pods. |
+
+The autoscaler reads CPU use from the cluster's metrics API
+(metrics-server).
+
+**The CPU request.** The autoscaler measures CPU use against the request
+(`api.resources.requests.cpu`), so the request must reflect what one busy
+api process uses. That is one core at most, since a pod is one Python
+process. The default of `100m` keeps a small install small, but with it the
+autoscaler scales on almost any load: a pod using a fifth of a core reads
+as 200%. Raise the request when enabling autoscaling. With a request of
+`1`, the target reads directly: at `70`, pods are added once the average
+process is busy 70% of the time. A lower request scales earlier and
+reserves less.
+
+**The rollout.** `api.strategy` defaults to a surge of one pod, so pods
+are replaced one at a time. Behind a load balancer that puts a readiness
+gate on the pods (GKE's NEGs do), a new pod counts as ready only once the
+load balancer has registered it and seen it healthy. If that takes two
+minutes, four pods roll in eight, longer than the five minutes
+`helm upgrade --wait` allows by default (`--timeout`). From four pods on,
+give the surge as a percentage, so it grows with the replica count:
+
+- `maxSurge: 100%` starts every replacement at once. The rollout takes one
+  such wait at any replica count, and the cluster needs room for twice the
+  pods while it lasts.
+- `maxSurge: 50%` takes two waits and half the extra room.
+
+`maxUnavailable` stays `0`.
+
+**The spread.** Without a constraint, the scheduler's own defaults apply.
+They only prefer a spread, and tolerate three more pods on one node than
+on another, so a few api pods may share a node and go down with it.
+`api.topologySpreadConstraints` is rendered as given, so the label
+selector is written out in full: the api pods carry
+`app.kubernetes.io/instance` (the release name) and
+`app.kubernetes.io/component: api`. `matchLabelKeys: [pod-template-hash]`
+(Kubernetes 1.27 and later) spreads each rollout's pods among themselves.
+Without it, a surging rollout counts the outgoing pods too and can leave
+the new ones uneven.
+
+**Turning it on.** Enabling autoscaling on a running release removes
+`replicas` from the Deployment. Kubernetes then defaults it to one pod,
+until the autoscaler restores `minReplicas` on its next pass. Enable it
+when one pod can carry the load.
+
+The example above, autoscaled:
+
+```yaml
+api:
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  resources:
+    requests:
+      cpu: "1"
+  strategy:
+    rollingUpdate:
+      maxSurge: 100%
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/instance: interloper  # the release name
+          app.kubernetes.io/component: api
+      matchLabelKeys:
+        - pod-template-hash
+  terminationGracePeriodSeconds: 210
+  lifecycle:
+    preStop:
+      exec:
+        command: ["/bin/sh", "-c", "sleep 120"]
+```
+
 ### Run pods
 
 A run's pod holds no database credentials and no encryption key. The
