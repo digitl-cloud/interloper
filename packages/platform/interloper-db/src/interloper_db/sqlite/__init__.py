@@ -7,5 +7,7 @@ SQLite's own equivalent, reached only on a SQLite URL.
 from interloper_db.sqlite.base import SQLiteSchema
 from interloper_db.sqlite.connection import SQLiteConnection
 from interloper_db.sqlite.folds import SQLiteFolds
+from interloper_db.sqlite.listener import SQLiteListener
+from interloper_db.sqlite.notifications import Notification, SQLiteNotifications
 
-__all__ = ["SQLiteConnection", "SQLiteFolds", "SQLiteSchema"]
+__all__ = ["Notification", "SQLiteConnection", "SQLiteFolds", "SQLiteListener", "SQLiteNotifications", "SQLiteSchema"]

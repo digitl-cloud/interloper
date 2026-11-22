@@ -1,8 +1,10 @@
-"""WebSocket realtime endpoint — bridges PostgreSQL NOTIFY to connected clients.
+"""WebSocket realtime endpoint — bridges the database's change notifications to connected clients.
 
 Architecture:
-- A background thread LISTENs on the ``table_changes`` PostgreSQL channel.
-- When a notification arrives, the payload (table, op, org_id, record) is
+- A background thread LISTENs on the ``table_changes`` PostgreSQL channel;
+  on SQLite, `interloper_db.sqlite.SQLiteListener` hands over each change as
+  its transaction commits.
+- When a change arrives, the payload (table, op, org_id, record) is
   broadcast to all WebSocket clients belonging to that org.
 - Clients subscribe to one organisation by connecting to
   ``/api/organisations/{org_id}/ws``, authenticated and authorised as every
@@ -20,6 +22,8 @@ import threading
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from functools import partial
+from typing import Any
 from uuid import UUID
 
 import psycopg
@@ -92,7 +96,18 @@ class ConnectionManager:
 _manager = ConnectionManager()
 
 
-# -- NOTIFY listener -----------------------------------------------------------
+# -- Listeners -----------------------------------------------------------------
+
+
+def _relay(payload: dict[str, Any], loop: asyncio.AbstractEventLoop) -> None:
+    """Broadcast one change to its organisation's sockets.
+
+    Args:
+        payload: The change as the database notified it: ``table``, ``op``, ``org_id`` and ``record``.
+        loop: The asyncio event loop to schedule the broadcast on.
+    """
+    message = {"table": payload["table"], "event": payload["op"], "record": payload.get("record")}
+    asyncio.run_coroutine_threadsafe(_manager.broadcast(str(payload["org_id"]), message), loop)
 
 
 def _start_notify_listener(dsn: str, loop: asyncio.AbstractEventLoop) -> None:
@@ -110,14 +125,7 @@ def _start_notify_listener(dsn: str, loop: asyncio.AbstractEventLoop) -> None:
 
                 for notify in connection.notifies():
                     try:
-                        payload = json.loads(notify.payload)
-                        org_id = str(payload["org_id"])
-                        message = {
-                            "table": payload["table"],
-                            "event": payload["op"],
-                            "record": payload.get("record"),
-                        }
-                        asyncio.run_coroutine_threadsafe(_manager.broadcast(org_id, message), loop)
+                        _relay(json.loads(notify.payload), loop)
                     except (json.JSONDecodeError, KeyError) as e:
                         logger.warning("[Realtime] Invalid NOTIFY payload: %s", e)
         except Exception as e:  # noqa: BLE001
@@ -130,23 +138,30 @@ def _start_notify_listener(dsn: str, loop: asyncio.AbstractEventLoop) -> None:
 
 @asynccontextmanager
 async def realtime_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Start the NOTIFY listener thread on app startup.
+    """Start relaying the database's changes on app startup: Postgres's NOTIFY thread, or SQLite's listener.
 
-    Reads the DSN from the engine already initialized by ``init_engine()``.
+    Reads the database from the engine already initialized by ``init_engine()``.
 
     Args:
         app: The FastAPI application being started.
 
     Yields:
-        None, once the listener thread is running.
+        None, once the changes are relayed.
     """
     from interloper_db import get_engine
 
     engine = get_engine()
+    loop = asyncio.get_running_loop()
+    if engine.url.get_backend_name() == "sqlite":
+        from interloper_db.sqlite import SQLiteListener
+
+        SQLiteListener(engine, partial(_relay, loop=loop))
+        logger.info("[Realtime] SQLite listener started")
+        yield
+        return
     # libpq refuses SQLAlchemy's driver name, and str(engine.url) would mask the password as '***'.
     dsn = engine.url.set(drivername="postgresql").render_as_string(hide_password=False)
 
-    loop = asyncio.get_running_loop()
     thread = threading.Thread(
         target=_start_notify_listener,
         args=(dsn, loop),

@@ -1,7 +1,7 @@
 """Tests for ``interloper_api.routes.websocket``.
 
-The realtime path has three separable halves: the connection registry, the
-background thread that turns PostgreSQL NOTIFY into broadcasts, and the
+The realtime path has separable parts: the connection registry, what turns
+PostgreSQL NOTIFY or SQLite's notified changes into broadcasts, and the
 endpoint that authenticates a socket before registering it.
 """
 
@@ -349,6 +349,55 @@ class TestNotifyListener:
 
 class TestRealtimeLifespan:
     """Startup arms the listener thread from the already-initialized engine."""
+
+    @pytest.fixture
+    def started(self, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+        """Record the threads the lifespan starts, without running them.
+
+        Args:
+            monkeypatch: Fixture used to swap the thread class.
+
+        Returns:
+            The keyword arguments of each thread started.
+        """
+        started: list[dict[str, Any]] = []
+
+        class FakeThread:
+            def __init__(self, **kwargs: Any) -> None:
+                started.append(kwargs)
+
+            def start(self) -> None:
+                started[-1]["started"] = True
+
+        monkeypatch.setattr(websocket_module.threading, "Thread", FakeThread)
+        return started
+
+    @pytest.mark.parametrize("url", ["sqlite:////project/.interloper/interloper.db", "sqlite://"])
+    async def test_a_sqlite_database_relays_through_a_listener_on_its_engine(
+        self, url: str, monkeypatch: pytest.MonkeyPatch, started: list[dict[str, Any]]
+    ) -> None:
+        engine = SimpleNamespace(url=make_url(url))
+        attached: list[tuple[Any, Any]] = []
+        scheduled: list[tuple[str, dict[str, object]]] = []
+
+        def fake_schedule(coroutine: Any, loop: Any) -> None:
+            scheduled.append((coroutine.cr_frame.f_locals["org_id"], coroutine.cr_frame.f_locals["message"]))
+            coroutine.close()
+
+        monkeypatch.setattr("interloper_db.get_engine", lambda: engine)
+        monkeypatch.setattr(
+            "interloper_db.sqlite.SQLiteListener", lambda engine, callback: attached.append((engine, callback))
+        )
+
+        async with websocket_module.realtime_lifespan(FastAPI()):
+            pass
+        monkeypatch.setattr(websocket_module.asyncio, "run_coroutine_threadsafe", fake_schedule)
+        ((listened, callback),) = attached
+        callback({"org_id": "org-1", "table": "runs", "op": "UPDATE", "record": {"status": "running"}})
+
+        assert started == []
+        assert listened is engine
+        assert scheduled == [("org-1", {"table": "runs", "event": "UPDATE", "record": {"status": "running"}})]
 
     async def test_starts_a_daemon_thread_with_the_unmasked_libpq_dsn(self, monkeypatch: pytest.MonkeyPatch) -> None:
         started: list[dict[str, Any]] = []
