@@ -34,7 +34,7 @@ def _parse(*argv: str) -> argparse.Namespace:
 
 @pytest.fixture
 def wiring(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
-    """Stub the bootstrap, catalog, store, server and supervisor the command wires.
+    """Stub the database check, catalog, store, server and supervisor the command wires.
 
     Args:
         monkeypatch: Fixture used to swap the collaborators.
@@ -53,8 +53,9 @@ def wiring(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         recorded["server"] = (settings, kwargs)
         return object()
 
+    monkeypatch.setattr("interloper_db.provision.connect", lambda dsn, **kwargs: recorded.setdefault("connect", kwargs))
     monkeypatch.setattr(
-        "interloper_db.provision.bootstrap", lambda dsn, **kwargs: recorded.setdefault("bootstrap", kwargs)
+        "interloper_db.provision.bootstrap", lambda *args, **kwargs: pytest.fail("a serving command wrote the schema")
     )
     monkeypatch.setattr(cli.Catalog, "from_settings", classmethod(lambda cls: cli.Catalog()))
     monkeypatch.setattr(Store, "from_settings", classmethod(store_from_settings))
@@ -87,11 +88,17 @@ def test_the_port_defaults_to_the_settings(wiring: dict[str, Any]) -> None:
     assert kwargs["port"] == settings.server.port
 
 
-def test_no_create_tables_reaches_the_bootstrap(wiring: dict[str, Any]) -> None:
-    """``--no-create-tables`` skips the table bootstrap."""
-    cli.ApiCommand().run(_parse("api", "--no-create-tables"))
+def test_the_api_checks_the_schema_and_writes_none(wiring: dict[str, Any]) -> None:
+    """The API serves a database ``interloper db init`` brought up, checking it without writing."""
+    cli.ApiCommand().run(_parse("api"))
 
-    assert wiring["bootstrap"]["create_tables"] is False
+    assert wiring["connect"] == {"statement_timeout": None}
+
+
+def test_there_is_no_flag_to_skip_a_bootstrap_that_no_longer_runs() -> None:
+    """``--no-create-tables`` is gone with the bootstrap it skipped."""
+    with pytest.raises(SystemExit):
+        _parse("api", "--no-create-tables")
 
 
 def test_the_api_serves_through_a_store_issuing_tokens_for_the_configured_lifetimes(wiring: dict[str, Any]) -> None:

@@ -50,8 +50,9 @@ def services(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         recorded["services"] = kwargs
         return {"stub": object()}
 
+    monkeypatch.setattr("interloper_db.provision.connect", lambda dsn, **kwargs: recorded.setdefault("connect", kwargs))
     monkeypatch.setattr(
-        "interloper_db.provision.bootstrap", lambda dsn, **kwargs: recorded.setdefault("bootstrap", kwargs)
+        "interloper_db.provision.bootstrap", lambda *args, **kwargs: pytest.fail("a serving command wrote the schema")
     )
     monkeypatch.setattr(cli.Catalog, "from_settings", classmethod(lambda cls: cli.Catalog()))
     monkeypatch.setattr(Store, "from_settings", classmethod(lambda cls, catalog=None: object()))
@@ -85,10 +86,14 @@ class TestScheduler:
 
         assert "ran" not in services
 
-    def test_no_create_tables_reaches_the_bootstrap(self, services: dict[str, Any]) -> None:
-        cli.SchedulerCommand().run(_parse("scheduler", "--no-create-tables"))
+    def test_the_scheduler_checks_the_schema_and_writes_none(self, services: dict[str, Any]) -> None:
+        cli.SchedulerCommand().run(_parse("scheduler"))
 
-        assert services["bootstrap"]["create_tables"] is False
+        assert services["connect"] == {"statement_timeout": None}
+
+    def test_there_is_no_flag_to_skip_a_bootstrap_that_no_longer_runs(self) -> None:
+        with pytest.raises(SystemExit):
+            _parse("scheduler", "--no-create-tables")
 
 
 # -- launch ----------------------------------------------------------------------

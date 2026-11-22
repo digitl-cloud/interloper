@@ -44,24 +44,18 @@ class SchedulerCommand(Command):
             default=None,
             help="Run the reaper (fails silent and overdue runs; singleton)",
         )
-        parser.add_argument(
-            "--no-create-tables",
-            action="store_true",
-            default=False,
-            help="Skip CREATE TABLE bootstrap on startup (production: run `interloper db init` once instead)",
-        )
 
     def run(self, args: argparse.Namespace) -> None:
         """Run the enabled scheduler services until a signal or a service's death.
 
         Args:
-            args: The parsed command line: the ``cron``/``worker``/``reaper`` toggles and ``no_create_tables``.
+            args: The parsed command line: the ``cron``/``worker``/``reaper`` toggles.
 
         Raises:
             SystemExit: When no service is enabled.
         """
         from interloper_db import Store
-        from interloper_db.provision import bootstrap
+        from interloper_db.provision import connect
         from interloper_db.settings import PostgresSettings
 
         from interloper_scheduler.services import scheduler_services
@@ -75,7 +69,7 @@ class SchedulerCommand(Command):
             raise SystemExit("Error: No scheduler service enabled. Enable at least one of: --cron, --worker, --reaper.")
         configure_console_logging(logging.INFO, _LOG_FORMAT, log_format=LogSettings.get().format)
         postgres = PostgresSettings.get()
-        bootstrap(postgres.dsn, statement_timeout=postgres.statement_timeout, create_tables=not args.no_create_tables)
+        connect(postgres.dsn, statement_timeout=postgres.statement_timeout)
         catalog = Catalog.from_settings()
         store = Store.from_settings(catalog=catalog)
         services = scheduler_services(settings, store=store, catalog=catalog, cron=cron, worker=worker, reaper=reaper)

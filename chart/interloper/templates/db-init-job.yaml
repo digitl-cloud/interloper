@@ -1,8 +1,9 @@
 {{/*
-Schema bootstrap: runs `interloper db init` once per release. Application
-deployments are launched with --no-create-tables, so this Job is the sole
-writer of schema. The Job and the deployments come up together; deployments
-crash-loop briefly until the Job completes (~one backoff cycle).
+Schema bootstrap: runs `interloper db init` once per release, the sole
+writer of schema: the serving commands never write it, and stop at startup,
+naming `interloper db init`, while the database is behind the release. The
+Job and the deployments come up together, so the deployments restart until
+the Job completes (~one backoff cycle).
 
 Not a Helm hook on purpose — hooks can't reference the chart's Secret
 (hooks live outside the managed-resource set). As a normal manifest, the

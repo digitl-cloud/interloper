@@ -80,8 +80,8 @@ components.
 Each role starts through the command its package contributes, which is what the images run:
 
 ```sh
-interloper api --no-create-tables                                  # the api image: the HTTP API
-interloper scheduler --cron --worker --reaper --no-create-tables   # the scheduler image: cron (with hooks and renewal), worker, reaper
+interloper api                                  # the api image: the HTTP API
+interloper scheduler --cron --worker --reaper   # the scheduler image: cron (with hooks and renewal), worker, reaper
 ```
 
 `interloper scheduler` takes `--no-cron`, `--no-worker` and `--no-reaper` to split its services
@@ -155,8 +155,11 @@ interloper db init          # create the database, tables and run migrations; id
 interloper db upgrade       # migrate an existing database to head
 ```
 
-The serving commands (`interloper api`, `interloper scheduler`, `interloper app`) also create missing tables on
-startup unless `--no-create-tables` is passed.
+`interloper db init` is the only command that writes the schema; run it once per release, before
+the serving commands. `interloper api`, `interloper scheduler` and `interloper app` never write it:
+they stop at startup, naming `interloper db init`, while the database is behind the release, and
+serve one ahead of it, as after a rollback. A single container runs
+`interloper db init && interloper app`.
 
 ## Local development
 
