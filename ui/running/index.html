@@ -2581,8 +2581,8 @@ the work through row locks. Without a flag, a service follows its <code>enabled<
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>interloper<span class="w"> </span>app<span class="w"> </span>--api<span class="w"> </span>--cron<span class="w"> </span>--worker<span class="w"> </span>--reaper
 </span></code></pre></div>
 <p>runs every service in one process against the configured Postgres, serving the UI on port 3000.
-It needs <code>interloper-app</code> installed. Each service can be toggled off on its own, and <code>--dev</code> runs
-the Nuxt dev server with hot reload instead of the built assets.</p>
+It needs <code>interloper-app</code> installed. Each service can be toggled off on its own. Local work runs
+through <code>interloper dev</code> instead (below).</p>
 <h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
 <p><code>interloper.yaml</code> in the working directory, or <code>INTERLOPER_*</code> variables:</p>
 <div class="language-yaml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">postgres</span><span class="p">:</span>
@@ -2638,9 +2638,11 @@ included, on <code>127.0.0.1</code> with a printed sign-in link, and restarts th
 Python files changes; <a href="../../extending/extensions/#building-it-with-the-sdk">Extensions</a> walks
 through it.</p>
 <p>The repository ships a dev harness: <code>make dev</code> provisions a local Postgres database, seeds a
-super-admin, an organisation, the demo source and a daily job, and starts every service with the
-Nuxt dev server on port 3000. <code>make compose-up</code> does the same in Docker. The screenshots on the
-<a href="../">Tour</a> come from that harness with a few more demo components added.</p>
+super-admin and an organisation, and runs <code>interloper dev -f collection.yaml</code>, which serves the
+repository with the Nuxt dev server on port 3000 and declares the demo source and a daily job.
+<code>make compose-up</code> runs the roles' images in Docker instead, the seed putting the demo source and
+its job in, and nginx serving the built app. The screenshots on the <a href="../">Tour</a> come from a
+seeded instance with a few more demo components added.</p>
 
 
 
