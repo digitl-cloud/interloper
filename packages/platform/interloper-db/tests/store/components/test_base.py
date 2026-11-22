@@ -395,6 +395,35 @@ class TestCrud:
         nested = next(row for row in roots if row.id == source.id)
         assert {child.key for child in nested.children} == {"rows", "totals"}
 
+    def test_an_owned_row_reads_its_owner_from_the_listing(self, store: Store, component_db: Engine):
+        store.components.create(_ORG, kind="source", key="wire_up_source")
+        statements: list[str] = []
+        event.listen(component_db, "before_cursor_execute", lambda *args: statements.append(args[2]))
+
+        (nested,) = store.components.list(_ORG, ComponentQuery(limit=None)).items
+
+        assert all(child.parent is nested for child in nested.children)
+        assert {child.qualified_key for child in nested.children} == {"wire_up_source.rows", "wire_up_source.totals"}
+        # The roots, their relations, their children, the children's relations and the one row those name.
+        assert len(statements) == 5
+
+    def test_a_relation_target_listed_on_the_page_reads_whole(self, store: Store):
+        source = store.components.create(_ORG, kind="source", key="wire_up_source")
+        totals = _child(source, "totals")
+        store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [totals.id]})
+
+        roots = store.components.list(_ORG, ComponentQuery(limit=None)).items
+
+        listed = _child(next(row for row in roots if row.id == source.id), "totals")
+        assert (listed.created_at, listed.config, listed.qualified_key) == (
+            totals.created_at,
+            totals.config,
+            "wire_up_source.totals",
+        )
+        assert [(relation.name, relation.dst.key) for relation in listed.out_relations if relation.dst] == [
+            ("rows", "rows")
+        ]
+
     def test_list_roots_filters_root_kinds(self, store: Store, connection: Component):
         store.components.create(_ORG, kind="source", key="wire_up_source")
 
@@ -437,7 +466,11 @@ class TestCrud:
 
         relation = next(r for r in row.out_relations if r.name == "connection")
         assert relation.dst is not None
-        assert (relation.dst.id, relation.dst.key) == (connection.id, "wire_connection")
+        assert (relation.dst.id, relation.dst.key, relation.dst.name) == (
+            connection.id,
+            "wire_connection",
+            connection.name,
+        )
 
 
 class TestDeleteInUseGuard:
