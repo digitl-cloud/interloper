@@ -2,10 +2,12 @@
 """Load the scale-test stack's API the way browsers do, and report what it costs.
 
 Virtual users sign in with the generator's sessions and walk the app's pages,
-each page making the requests the app makes for it: the app shell on arrival
-(catalog, components, latest executions), the overview (overview, coverage
-and the timeline's runs, refreshed every minute while it stays open), the
-collection's runs list, a run's page and a component's page.
+each page making the requests the app makes for it, together as the app fires
+them: the catalog once on arrival, the overview (overview, coverage, the
+components it names and the timeline's runs, refreshed every minute while it
+stays open), the assets page (every component, their relations, the latest
+executions and the runs list), the collection's runs list, a run's page and a
+component's page.
 
 Each user also holds its organisation's realtime socket and does with it what
 the app's runs store does: a run arriving over the socket enters the store,
@@ -49,7 +51,8 @@ from websockets.asyncio.client import connect
 STATE = Path(__file__).parent / "state"
 SESSIONS = STATE / "sessions.json"
 CONTAINER_PREFIX = "interloper-scale-"
-PAGE_WEIGHTS = {"overview": 0.35, "collection": 0.3, "run": 0.25, "component": 0.1}
+PAGE_WEIGHTS = {"overview": 0.35, "collection": 0.25, "run": 0.2, "assets": 0.1, "component": 0.1}
+OVERVIEW_KINDS = "kind=job&kind=source&kind=asset&kind=connection"
 TIMELINE_REFRESH = 60.0
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
@@ -208,24 +211,42 @@ class Visitor:
     # -- Pages -----------------------------------------------------------------
 
     async def _shell(self) -> None:
-        """Load what the app shell loads on entering the organisation."""
+        """Load what the app loads once on entering the organisation: the catalog."""
         await asyncio.gather(
             self._get(f"{self._org}/catalog"),
             self._get(f"{self._org}/catalog/resource-kinds"),
             self._get("/api/oauth/providers"),
-            self._get_all(f"{self._org}/executions", latest="true"),
         )
-        components = await self._get_all(f"{self._org}/components")
-        self._components = [component["id"] for component in components]
 
     async def _overview(self) -> None:
-        """Load the overview page: the overview, its coverage and the timeline."""
+        """Load the overview page: the overview, its coverage, its components and the timeline."""
         today = dt.datetime.now(dt.UTC).date()
-        await asyncio.gather(
+        _, _, components, _ = await asyncio.gather(
             self._get(f"{self._org}/overview"),
             self._get(f"{self._org}/overview/coverage?since={today - dt.timedelta(days=90)}&until={today}"),
+            self._get_all(f"{self._org}/components", OVERVIEW_KINDS),
             self._timeline(),
         )
+        self._hold(components)
+
+    async def _assets(self) -> None:
+        """Load the assets page: every component, their relations, the latest executions and the runs list."""
+        components, _, _, _ = await asyncio.gather(
+            self._get_all(f"{self._org}/components"),
+            self._get_all(f"{self._org}/relations"),
+            self._get_all(f"{self._org}/executions", "latest=true"),
+            self._collection(),
+        )
+        self._hold(components)
+
+    def _hold(self, roots: list[dict[str, Any]]) -> None:
+        """Keep the ids a components listing returned, for the component page to pick from.
+
+        Args:
+            roots: The listing's items, each with its children nested.
+        """
+        if roots:
+            self._components = [member["id"] for root in roots for member in (root, *root["children"])]
 
     async def _timeline(self) -> None:
         """Load the timeline's window of runs, the last sixteen hours."""
@@ -343,19 +364,19 @@ class Visitor:
         )
         return response.json() if response.is_success else None
 
-    async def _get_all(self, path: str, **params: str) -> list[dict[str, Any]]:
+    async def _get_all(self, path: str, filters: str = "") -> list[dict[str, Any]]:
         """Request every page of a listing, as the app's ``fetchAll`` does.
 
         Args:
             path: The listing's path.
-            **params: Its filters.
+            filters: Its filters as a query string, empty for none.
 
         Returns:
             Every item, or those read before a page failed.
         """
         items: list[dict[str, Any]] = []
         while True:
-            query = "&".join([*(f"{key}={value}" for key, value in params.items()), f"limit=500&offset={len(items)}"])
+            query = "&".join(part for part in (filters, f"limit=500&offset={len(items)}") if part)
             page = await self._get(f"{path}?{query}")
             if not page:
                 return items

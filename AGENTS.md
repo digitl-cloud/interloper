@@ -92,13 +92,22 @@ Both run against [dev/interloper.yaml](dev/interloper.yaml), which carries **onl
 
 ### Scale test
 
-[dev/scale/](dev/scale/) loads a stack shaped like production to find what gives first as organisations, browsers and runs grow. Its compose stack holds Postgres to the production database tier (1 CPU, 3.75GB, `pg_stat_statements` on, port 5434) and runs two api replicas of 1GiB each, built from the checkout, behind a round-robin proxy on `:3010`. Three scripts drive it, each run from `dev/` through its `make` target:
+[dev/scale/](dev/scale/) loads a stack shaped like production to find what gives first as organisations, browsers and runs grow. Its compose stack holds Postgres to the production database tier (1 vCPU, 3.75GB, `pg_stat_statements` on, port 5434) and runs two api replicas of 1GiB each, built from the checkout, behind a proxy on `:3010` that keeps a browser on one replica. Three scripts drive it, each run from `dev/` through its `make` target:
 
-- `make scale-generate ARGS="--orgs 20"` adds organisations with demo sources, jobs, members with sessions, and months of runs, executions and events (`--sources`, `--jobs`, `--days`, `--event-days` size them). Its sessions land in the gitignored `dev/scale/state/`.
+- `make scale-generate ARGS="--orgs 20"` adds organisations with demo sources, jobs, members with sessions, and months of runs, executions and events (`--sources`, `--jobs`, `--days`, `--event-days` size them). A real organisation's history is less regular than the default: `--job-share 1` runs every source, `--gap-share` makes that share of the assets miss a day now and then (the coverage calendar reads such an asset partition by partition), `--connections` adds connections with encrypted secrets, and `--failure-rate` with `--runs-per-day` sets how many partitions end failed. Its sessions land in the gitignored `dev/scale/state/`.
 - `make scale-scheduler ARGS="--orgs 20 --live-runs 3"` runs the scheduler's own loops, timing every pass, and keeps that many runs open per organisation. Each run executes on a simulated pod that loads its spec and posts its events through the api with the run's token, as `interloper launch` does.
 - `make scale-load ARGS="--orgs 20 --stages 10,25,50"` ramps browsers that walk the app's pages and follow the realtime socket as the app's stores do, and reports per stage each route's latency, the containers' CPU and memory, and the database's costliest statements.
 
 `make scale-up` starts the stack (rebuild after a code change), `make scale-reset` empties the database, `make scale-down` removes it. Results go to `dev/scale/state/` as JSON; figures from a client-shaped run stay out of the repository.
+
+In production the same request is several times slower than on one laptop, for three reasons. The stack reproduces two of them:
+
+- **The round trip to the database.** Every statement, `BEGIN`, `ROLLBACK` and pool ping crosses a proxy to a managed database, and a cheap request spends most of its time there. The `database-proxy` service relays the api to Postgres and delays its packets by `SCALE_DATABASE_DELAY_MS`, set so a round trip measured from an api container costs production's median, 2.5 ms as its traces show it (the pool checkout span is one ping). The setting is lower than that: the relay and a virtual machine's timers add about a millisecond.
+- **One Python process per replica.** A page's parallel requests wait for each other when they land on the same replica, which production's load balancer does two times in three. The proxy keeps a browser on one replica, and the load driver fires a page's requests together as the app does.
+
+It does not reproduce the third, **slower cores**: production's run Python and Postgres about 2.5 times slower than an Apple M-series laptop's. A CPU quota does not stand in for a slower core (it stalls a request for seconds where a slow core only stretches it), so time spent computing reads that much lower here than in production. To measure the ratio on another machine, time `explain (analyze, timing off) select sum(hashtext(i::text)) from generate_series(1, 1500000) as i` in the stack's Postgres: production's instance takes about 420 ms.
+
+Check the stack against production's traces before trusting a figure, on an organisation generated in production's shape: a cheap authenticated read (a run's detail) should land within a fifth of production's median, and a page that mostly computes (coverage, the components listing) about the core ratio below it.
 
 ## Docker images
 
