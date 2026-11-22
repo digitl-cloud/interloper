@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { ComponentRecord } from '~/types/component'
+
 /**
  * Step for selecting destinations for a source.
  *
@@ -41,14 +43,12 @@ const compatibleDefinitions = computed(() => {
 // ── Load destinations ───────────────────────────────────────────
 
 onMounted(async () => {
-    if (destinations.value.length === 0 && !componentsStore.loading) {
-        loading.value = true
-        try {
-            await componentsStore.fetchAll(['destination'])
-        }
-        finally {
-            loading.value = false
-        }
+    loading.value = true
+    try {
+        await componentsStore.fetchAll(['destination'])
+    }
+    finally {
+        loading.value = false
     }
 })
 
@@ -74,17 +74,9 @@ function isSelected(id: string) {
 
 // ── Create new ──────────────────────────────────────────────────
 
-async function handleCreated() {
-    // Refresh destinations so the new one appears in the list.
-    const before = new Set(destinations.value.map(d => d.id))
-    await componentsStore.fetchAll(['destination'])
-    // Auto-select the newly created destination.
-    for (const d of destinations.value) {
-        if (!before.has(d.id) && !selectedIds.value.includes(d.id)) {
-            selectedIds.value.push(d.id)
-        }
-    }
-    drawerOpen.value = false
+/** Select the destination just created; the store already lists it, from the create's response. */
+async function selectCreated(created: ComponentRecord) {
+    if (!selectedIds.value.includes(created.id)) selectedIds.value.push(created.id)
 }
 
 function destLabel(key: string) {
@@ -159,7 +151,8 @@ function destLabel(key: string) {
                                          :component="null"
                                          :definitions="compatibleDefinitions"
                                          name-optional
-                                         @created="handleCreated" />
+                                         :after-save="selectCreated"
+                                         @created="drawerOpen = false" />
             </template>
             <template #footer>
                 <WizardStepperNav v-if="destStepperRef"

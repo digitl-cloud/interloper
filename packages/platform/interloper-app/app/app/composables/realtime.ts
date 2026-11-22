@@ -10,6 +10,7 @@
  *       onInsert: (record) => upsertRun(record),
  *       onUpdate: (record) => upsertRun(record),
  *       onDelete: (record) => removeRun(record.id),
+ *       onReconnect: () => reloadRuns(),
  *   })
  */
 
@@ -30,6 +31,9 @@ const _MAX_RECONNECT_DELAY = 30000
 /** Closed by the server for a caller that is signed out (4001) or cannot act in the organisation (4004): retrying cannot help. */
 const _FINAL_CLOSE_CODES = new Set([4001, 4004])
 const _handlers = new Map<string, Set<RealtimeHandler>>()
+const _reconnectHandlers = new Set<() => void>()
+/** Whether a socket of the current organisation closed, a failed attempt included: the next open has messages to catch up on. */
+let _dropped = false
 let _following = false
 
 function _url(orgId: string): string {
@@ -47,6 +51,10 @@ function _connect() {
 
     socket.onopen = () => {
         _reconnectDelay = 1000
+        if (_dropped) {
+            _dropped = false
+            for (const h of _reconnectHandlers) h()
+        }
     }
 
     socket.onmessage = (e) => {
@@ -66,6 +74,7 @@ function _connect() {
         if (_ws !== socket) return
         _ws = null
         if (_FINAL_CLOSE_CODES.has(e.code)) return
+        _dropped = true
         _reconnectTimer = setTimeout(_connect, _reconnectDelay)
         _reconnectDelay = Math.min(_reconnectDelay * 2, _MAX_RECONNECT_DELAY)
     }
@@ -79,6 +88,7 @@ function _connect() {
 function _open(orgId: string | null) {
     if (orgId === _orgId) return
     _orgId = orgId
+    _dropped = false
     if (_reconnectTimer) clearTimeout(_reconnectTimer)
     _reconnectTimer = null
     _reconnectDelay = 1000
@@ -98,11 +108,13 @@ function _ensureConnection() {
     })
 }
 
-function _subscribe(table: string, handler: RealtimeHandler): () => void {
+function _subscribe(table: string, handler: RealtimeHandler, onReconnect?: () => void): () => void {
     if (!_handlers.has(table)) _handlers.set(table, new Set())
     _handlers.get(table)!.add(handler)
+    if (onReconnect) _reconnectHandlers.add(onReconnect)
     return () => {
         _handlers.get(table)?.delete(handler)
+        if (onReconnect) _reconnectHandlers.delete(onReconnect)
     }
 }
 
@@ -120,6 +132,8 @@ interface UseRealtimeSubscriptionOptions {
     onUpdate?: (record: Record<string, any>) => void
     onDelete?: (record: Record<string, any>) => void
     onAny?: (event: RealtimeEvent, record: Record<string, any>) => void
+    /** The socket opened again after a drop: messages sent while it was down never arrived. */
+    onReconnect?: () => void
 }
 
 export function useRealtimeSubscription(options: UseRealtimeSubscriptionOptions) {
@@ -154,7 +168,7 @@ export function useRealtimeSubscription(options: UseRealtimeSubscriptionOptions)
                 else if (event === 'DELETE') options.onDelete?.(record)
 
                 options.onAny?.(event, record)
-            })
+            }, options.onReconnect)
         },
         { immediate: true },
     )

@@ -35,11 +35,7 @@ const warnings = computed(() =>
 
 const sourceIcon = computed(() => componentIcon(props.source.key, appConfig.icons.source))
 
-onMounted(() => {
-    if (componentsStore.byKind('destination').length === 0 && !componentsStore.loading) {
-        componentsStore.fetchAll(['destination'])
-    }
-})
+onMounted(() => componentsStore.fetchAll(['destination']))
 
 // ── Partition row counts ────────────────────────────────────────
 

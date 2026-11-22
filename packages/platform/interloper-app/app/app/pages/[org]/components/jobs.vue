@@ -155,7 +155,6 @@ function rowActions(job: ComponentRecord): DropdownMenuItem[][] {
 }
 
 function handleSaved() {
-    componentsStore.fetchAll(['job'])
     drawerOpen.value = false
 }
 
@@ -192,7 +191,7 @@ const enabled = useQueryParam<boolean | null>('enabled', null, booleanQuery)
                        @reset-filters="enabled = null"
                        @delete="handleDelete"
                        @edit="handleEdit"
-                       @retry="componentsStore.fetchAll(['job'])">
+                       @retry="componentsStore.reload()">
                 <template #filters>
                     <EnabledFilter v-model="enabled" />
                 </template>

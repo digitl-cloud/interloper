@@ -176,7 +176,6 @@ async function handleDelete(ids: string[]) {
 }
 
 function handleSaved() {
-    componentsStore.fetchAll([kind.value])
     drawerOpen.value = false
 }
 
@@ -221,7 +220,7 @@ const typeKey = useQueryParam('type', null)
                        @reset-filters="typeKey = null"
                        @delete="handleDelete"
                        @edit="handleEdit"
-                       @retry="componentsStore.fetchAll([kind])">
+                       @retry="componentsStore.reload()">
                 <template #filters>
                     <TypeFilter v-model="typeKey"
                                 :components="resources" />

@@ -106,7 +106,6 @@ const columns: TableColumn<ComponentRecord>[] = [
 ]
 
 function handleSaved() {
-    componentsStore.fetchAll(['source'])
     drawerOpen.value = false
 }
 
@@ -143,7 +142,7 @@ const typeKey = useQueryParam('type', null)
                        @reset-filters="typeKey = null"
                        @delete="handleDelete"
                        @edit="handleEdit"
-                       @retry="componentsStore.fetchAll(['source'])">
+                       @retry="componentsStore.reload()">
                 <template #filters>
                     <TypeFilter v-model="typeKey"
                                 :components="sources" />

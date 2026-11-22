@@ -1,5 +1,8 @@
 import type { ComponentRecord, ComponentInput, DeleteImpact, Relation, RelationInput } from '~/types/component'
 
+/** The key an unfiltered listing is held under, beside the kinds. */
+const ALL_KINDS = '*'
+
 export const useComponentsStore = defineStore('components', () => {
     const { apiFetch, fetchAll: fetchPages } = useOrgApi()
     const toast = useToast()
@@ -9,14 +12,26 @@ export const useComponentsStore = defineStore('components', () => {
      **********************/
     const components = ref<ComponentRecord[]>([])
     const relations = ref<Relation[]>([])
-    const loading = ref(false)
+    const pending = ref(0)
     const error = ref<Error | null>(null)
+
+    /**
+     * The listings asked for in the organisation, by kind (`ALL_KINDS` for an
+     * unfiltered one), each with the request that brought or is bringing it:
+     * once held, the realtime handlers keep it current and nothing fetches it
+     * again. `null` marks a request that failed, so the next ask fetches it
+     * again and a reload knows to.
+     */
+    const listings = new Map<string, Promise<void> | null>()
+    /** The relations listing, the same way; `undefined` until asked for. */
+    let relationsListing: Promise<void> | null | undefined
 
     /**********************
      * Getters
      **********************/
     /** All asset-to-asset relations (an asset's declared upstreams). */
     const upstreams = computed(() => relations.value.filter(r => r.src_kind === 'asset' && r.dst_kind === 'asset'))
+    const loading = computed(() => pending.value > 0)
 
     /**********************
      * Internals
@@ -28,6 +43,43 @@ export const useComponentsStore = defineStore('components', () => {
         const idx = siblings.findIndex(c => c.id === component.id)
         if (idx >= 0) siblings[idx] = { ...siblings[idx], ...component }
         else siblings.push(component)
+        _relabel(component)
+    }
+
+    /**
+     * Carry a component's name onto the embedded relations that point at it:
+     * a rename writes no other row, so no message names its referrers.
+     */
+    function _relabel(component: ComponentRecord) {
+        for (const record of all.value) {
+            for (const refs of Object.values(record.relations ?? {})) {
+                for (const ref of refs) {
+                    if (ref.dst_id === component.id) ref.dst_name = component.name
+                }
+            }
+        }
+    }
+
+    /**
+     * Mirror a relation row onto its source's embedded `relations`, which a
+     * relation message leaves alone otherwise. A new binding is labelled from
+     * the destination the store holds; one it does not hold refetches the
+     * source, whose detail names it.
+     */
+    function _embed(relation: Relation) {
+        const src = byId(relation.src_id)
+        if (!src) return
+        const refs = (src.relations ??= {})[relation.name] ??= []
+        if (refs.some(ref => ref.dst_id === relation.dst_id)) return
+        const dst = byId(relation.dst_id)
+        if (dst) refs.push({ dst_id: dst.id, dst_kind: dst.kind, dst_key: dst.key, dst_name: dst.name })
+        else _refetchChanged(src)
+    }
+
+    function _unembed(relation: Relation) {
+        const src = byId(relation.src_id)
+        const refs = src?.relations?.[relation.name]
+        if (src && refs) src.relations[relation.name] = refs.filter(ref => ref.dst_id !== relation.dst_id)
     }
 
     /**
@@ -51,37 +103,87 @@ export const useComponentsStore = defineStore('components', () => {
         }
     }
 
-    /**********************
-     * Actions
-     **********************/
     /**
-     * Fetch root components, optionally narrowed to `kinds`. An unfiltered
-     * fetch replaces the whole list; a filtered one replaces only entries of
-     * the fetched kinds so pages loading different kinds don't clobber each
-     * other. Owned components (a source's assets) arrive under their owner's
-     * `children`, never as entries of their own.
+     * Fetch one listing, recorded under each of its keys until it fails.
+     * The failure is matched on the request itself, so a failed request a
+     * reload has since replaced does not unmark the one that replaced it.
      */
-    async function fetchAll(kinds?: string[]) {
-        loading.value = true
+    function _requestListing(kinds?: string[]): Promise<void> {
+        const keys = kinds ?? [ALL_KINDS]
+        const request = _fetchListing(kinds).then((ok) => {
+            if (ok) return
+            for (const key of keys) {
+                if (listings.get(key) === request) listings.set(key, null)
+            }
+        })
+        for (const key of keys) listings.set(key, request)
+        return request
+    }
+
+    /**
+     * Fetch root components, optionally narrowed to `kinds`, and say whether
+     * they landed. An unfiltered fetch replaces the whole list; a filtered
+     * one replaces only entries of the fetched kinds so pages loading
+     * different kinds don't clobber each other.
+     */
+    async function _fetchListing(kinds?: string[]): Promise<boolean> {
+        pending.value++
         error.value = null
         try {
             const params = new URLSearchParams()
             for (const kind of kinds ?? []) params.append('kind', kind)
             const fetched = await fetchPages<ComponentRecord>('/components', params)
-            if (kinds?.length) {
+            if (kinds) {
                 const kindSet = new Set(kinds)
                 components.value = [...components.value.filter(c => !kindSet.has(c.kind)), ...fetched]
             }
             else {
                 components.value = fetched
             }
+            return true
         }
         catch (e) {
             _reportFetchFailure(e, 'components')
+            return false
         }
         finally {
-            loading.value = false
+            pending.value--
         }
+    }
+
+    async function _fetchRelations(): Promise<boolean> {
+        try {
+            relations.value = await fetchPages<Relation>('/relations')
+            return true
+        }
+        catch (e) {
+            _reportFetchFailure(e, 'component relations')
+            return false
+        }
+    }
+
+    /**********************
+     * Actions
+     **********************/
+    /**
+     * Hold the root components of `kinds`, or of every kind when none are
+     * given, and resolve once they are held. Only what the store neither
+     * holds nor is fetching for the organisation is fetched: the realtime
+     * handlers keep what it holds current. The API has no "every kind but
+     * these", so the first unfiltered call fetches every kind, those held
+     * included.
+     *
+     * Owned components (a source's assets) arrive under their owner's
+     * `children`, never as entries of their own: `source` brings the
+     * sources' assets with them, `asset` the standalone assets alone.
+     */
+    function fetchAll(kinds?: string[]): Promise<void> {
+        const everything = listings.get(ALL_KINDS)
+        if (everything) return everything
+        if (!kinds?.length) return _requestListing()
+        const missing = kinds.filter(kind => !listings.get(kind))
+        if (missing.length) _requestListing(missing)
+        return Promise.all(kinds.map(kind => listings.get(kind))).then(() => {})
     }
 
     /** Fetch one component (secret kinds come back with decoded `config`). */
@@ -120,19 +222,18 @@ export const useComponentsStore = defineStore('components', () => {
     }
 
     /**
-     * Fetch relations, optionally narrowed to a name (replaces that name only).
-     * Reported rather than thrown: pages fire it without awaiting, so a
+     * Hold every relation of the organisation, fetched once like the
+     * listings and kept current by the relation messages. A failure is
+     * reported rather than thrown: pages fire it without awaiting, so a
      * rejection would otherwise surface nowhere but the console.
      */
-    async function fetchRelations(name?: string) {
-        try {
-            const fetched = await fetchPages<Relation>('/relations', name ? { name } : undefined)
-            if (name) relations.value = [...relations.value.filter(r => r.name !== name), ...fetched]
-            else relations.value = fetched
-        }
-        catch (e) {
-            _reportFetchFailure(e, 'component relations')
-        }
+    function fetchRelations(): Promise<void> {
+        if (relationsListing) return relationsListing
+        const request = _fetchRelations().then((ok) => {
+            if (!ok && relationsListing === request) relationsListing = null
+        })
+        relationsListing = request
+        return request
     }
 
     /**
@@ -224,16 +325,29 @@ export const useComponentsStore = defineStore('components', () => {
         )
     }
 
-    /** Refetch everything the collection pages read: the retry their tables offer. */
+    /**
+     * Fetch again everything asked for in the organisation, failed fetches
+     * included: the retry an error state offers, and the catch-up after the
+     * realtime socket reconnects, since what changed while it was down never
+     * reached the store.
+     */
     async function reload() {
-        await Promise.all([fetchAll(), fetchRelations()])
+        const kinds = [...listings.keys()]
+        const withRelations = relationsListing !== undefined
+        listings.clear()
+        relationsListing = undefined
+        await Promise.all([
+            kinds.includes(ALL_KINDS) ? fetchAll() : kinds.length ? fetchAll(kinds) : undefined,
+            withRelations ? fetchRelations() : undefined,
+        ])
     }
 
     function $reset() {
         components.value = []
         relations.value = []
-        loading.value = false
         error.value = null
+        listings.clear()
+        relationsListing = undefined
     }
 
     /**********************
@@ -259,6 +373,8 @@ export const useComponentsStore = defineStore('components', () => {
             _remove(record.id)
             relations.value = relations.value.filter(r => r.src_id !== record.id && r.dst_id !== record.id)
         },
+        // Relations included: the one reload covers both subscriptions.
+        onReconnect: reload,
     })
 
     // Relation rows are small and arrive whole — mirror them locally.
@@ -269,12 +385,14 @@ export const useComponentsStore = defineStore('components', () => {
             const key = (r: Relation) => `${r.src_id}|${r.name}|${r.dst_id}`
             const incoming = record as Relation
             if (!relations.value.some(r => key(r) === key(incoming))) relations.value.push(incoming)
+            _embed(incoming)
         },
         onUpdate: () => {},
         onDelete: (record: Record<string, any>) => {
             relations.value = relations.value.filter(
                 r => !(r.src_id === record.src_id && r.name === record.name && r.dst_id === record.dst_id),
             )
+            _unembed(record as Relation)
         },
     })
 
