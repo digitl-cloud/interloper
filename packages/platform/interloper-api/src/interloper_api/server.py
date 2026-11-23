@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 from typing import TYPE_CHECKING
 
 import uvicorn
@@ -65,7 +66,14 @@ class ApiServer:
         return cls(app, uvicorn.Server(config))
 
     def start(self) -> None:
-        """Serve until stopped."""
+        """Serve until stopped, the collector kept off what the process has loaded by now.
+
+        The modules, the catalog's definitions and the app live as long as the
+        process, yet every full collection walked them again, during whichever
+        request triggered it. Frozen, they are left out of every collection.
+        """
+        gc.collect()
+        gc.freeze()
         self._server.run()
 
     def stop(self) -> None:
