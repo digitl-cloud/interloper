@@ -1,4 +1,4 @@
-"""The folds migration 0003 runs on Postgres, as SQLite triggers."""
+"""The folds Postgres's migrations hold, as SQLite triggers."""
 
 from __future__ import annotations
 
@@ -7,14 +7,13 @@ from typing import ClassVar
 
 
 class SQLiteFolds:
-    """0003's folds as SQLite triggers, under the same names.
+    """Postgres's folds as SQLite triggers, under the same names.
 
-    Where SQLite cannot say what Postgres says: a trigger cannot assign
-    ``NEW``, so the fold's insert stamps the partition key itself; there are
-    no functions, so the status ranks are written out; ``min()`` and
-    ``max()`` of several values are ``NULL`` when one is, so ``LEAST(a, b)``
-    is ``COALESCE(min(a, b), a, b)``; and SQLite 3.51 and older reject a
-    table alias inside a trigger, so tables go by their names.
+    Where SQLite cannot say what Postgres says: there are no functions, so
+    the status ranks are written out; ``min()`` and ``max()`` of several
+    values are ``NULL`` when one is, so ``LEAST(a, b)`` is
+    ``COALESCE(min(a, b), a, b)``; and SQLite 3.51 and older reject a table
+    alias inside a trigger, so tables go by their names.
     """
 
     FOLD_PARTITION: ClassVar[str] = """
