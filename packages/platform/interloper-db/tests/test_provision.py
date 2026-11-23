@@ -424,12 +424,12 @@ class TestEnsureDatabase:
 
         assert record == {} or "dsn" not in record
 
-    def test_a_sqlite_file_gets_its_folder_and_nothing_else(self, maintenance: Any, tmp_path: Path) -> None:
+    def test_a_sqlite_url_is_left_alone(self, maintenance: Any, tmp_path: Path) -> None:
         record = maintenance()
 
         ensure_database(f"sqlite:///{tmp_path}/project/.interloper/interloper.db")
 
-        assert list((tmp_path / "project" / ".interloper").iterdir()) == []
+        assert list(tmp_path.iterdir()) == []
         assert "dsn" not in record
 
 
@@ -497,7 +497,7 @@ class TestBootstrap:
         assert calls == [("ensure", "postgresql+psycopg://db/x"), ("init", 30), ("create", engine)]
 
     def test_a_sqlite_database_is_brought_up_to_what_connect_serves(self, tmp_path: Path) -> None:
-        url = f"sqlite:///{tmp_path}/.interloper/interloper.db"
+        url = f"sqlite:///{tmp_path}/interloper.db"
         try:
             provision_module.bootstrap(url).dispose()
             engine = connect(url)
@@ -505,7 +505,7 @@ class TestBootstrap:
         finally:
             engine_module._engine = None
 
-        assert (tmp_path / ".interloper" / "interloper.db").is_file()
+        assert (tmp_path / "interloper.db").is_file()
 
 
 class TestConnect:
