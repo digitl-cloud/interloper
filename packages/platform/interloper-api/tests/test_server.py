@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import gc
 import socket
 import threading
+from collections.abc import Iterator
 
+import pytest
 import sqlalchemy
 from interloper.catalog import Catalog
 from interloper.settings import ServerSettings
@@ -17,6 +20,24 @@ from interloper_api.settings import ApiSettings
 
 def _store() -> Store:
     return Store(Catalog(), engine=sqlalchemy.create_engine("sqlite://"))
+
+
+@pytest.fixture(autouse=True)
+def _unfreeze() -> Iterator[None]:
+    """Hand the test worker's objects back to the collector after a test that started a server."""
+    yield
+    gc.unfreeze()
+
+
+def test_start_freezes_what_the_process_holds_before_it_serves(monkeypatch: pytest.MonkeyPatch):
+    """A server starts serving with everything loaded so far out of the collector's reach."""
+    server = ApiServer.from_settings(ApiSettings.get(), store=_store(), catalog=Catalog(), port=3101)
+    frozen_when_serving: list[int] = []
+    monkeypatch.setattr(server._server, "run", lambda: frozen_when_serving.append(gc.get_freeze_count()))
+
+    server.start()
+
+    assert frozen_when_serving and frozen_when_serving[0] > 0
 
 
 def test_binds_the_settings_host_and_the_given_port():
