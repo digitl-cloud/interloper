@@ -2964,8 +2964,8 @@ extension in its own repository installs <code>@interloper/ui</code> from npm in
 builds the wheel and checks that it carries the bundle; <code>make check-extension</code> runs that whole
 path in a fresh project against the SDK packed as npm publishes it, as CI does.</p>
 <p>Such an extension runs inside the real app with <code>uv run interloper dev</code>, from its project. It
-serves the platform on <code>127.0.0.1:3000</code> (<code>--port</code> to change it) against the Postgres its
-<code>interloper.yaml</code> names, and prints a sign-in link that needs no login provider: it signs in a
+serves the platform on <code>127.0.0.1:3000</code> (<code>--port</code> to change it), its state in <code>.interloper/</code> or
+a configured Postgres, and prints a sign-in link that needs no login provider: it signs in a
 local developer, super-admin of an organisation named after the project, and lands on the
 extension's page. The UI comes from its Vite dev server, built or not: a stylesheet edit
 applies in place, a <code>.vue</code> edit reloads the page, and an edit to a Python file, the manifest or
@@ -2975,7 +2975,7 @@ plain project serves its sources the same way (<code>uv run interloper dev weath
 dev weather.paris</code>) declares that instance and what it binds, and <code>-f collection.yaml</code>
 (repeatable) declares each document of a spec file, the format <code>interloper run -f</code> reads.
 Either puts <code>dev</code> in file mode: the collection is served from those files alone, from a database
-of its own beside the configured one (one per checkout), and the app shows it read-only, saying
+of its own, and the app shows it read-only, saying
 which files serve it. Runs, backfills and cancels work as usual. Every start writes the files'
 components as they are: an edit updates a component in place, its id and run history kept (give
 a spec component an <code>id</code> to keep them across a reordering of the file), and a component the

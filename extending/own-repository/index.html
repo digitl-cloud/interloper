@@ -2483,8 +2483,6 @@ installed.</p>
 <h2 id="what-you-need">What you need<a class="headerlink" href="#what-you-need" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="https://docs.astral.sh/uv/">uv</a>, which runs every command below.</li>
-<li>A PostgreSQL you can create a database in: the app keeps its state there, also on your machine.
-  <code>docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres</code> is enough.</li>
 <li>Node.js and npm, for a UI only.</li>
 <li>macOS or Linux. On Windows, work inside WSL.</li>
 </ul>
@@ -2502,9 +2500,10 @@ dependency: it carries the platform you run locally and the <code>interloper ext
   <code>interloper-core</code> as a dependency;</li>
 <li><code>src/acme_interloper/extension.yaml</code> is the manifest: the extension's key (<code>acme</code>), its name and
   description, and later every part it declares;</li>
-<li><code>interloper.yaml</code> is the configuration every <code>interloper</code> command run in this directory reads:
-  the Postgres to use and a key that encrypts what the local instance stores. It holds that key,
-  so <code>init</code> adds it to <code>.gitignore</code>. Point its <code>postgres</code> section at your database.</li>
+<li><code>interloper.yaml</code> is the configuration every <code>interloper</code> command run in this directory reads,
+  with a key that encrypts what the local instance stores. It holds that key, so <code>init</code> adds it
+  to <code>.gitignore</code>. The local instance keeps its state in SQLite files in <code>.interloper/</code>, which
+  ignores itself; add a <code>postgres</code> section to keep it in a Postgres you run instead.</li>
 </ul>
 <h2 id="add-what-it-declares">Add what it declares<a class="headerlink" href="#add-what-it-declares" title="Permanent link">&para;</a></h2>
 <p><code>add</code> writes one part, its files and its manifest entry, and adds the dependency the part needs.

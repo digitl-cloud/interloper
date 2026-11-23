@@ -2813,7 +2813,9 @@ them alone, read-only in the app, from a database of its own; without
 them, the collection is the one made in the app. The extensions the
 project holds are served from source, their UIs from their Vite dev
 servers. The platform restarts when a Python file, a manifest, a spec file
-or interloper.yaml changes; open the printed link to sign in.</p>
+or interloper.yaml changes; open the printed link to sign in. Its state is
+kept in SQLite files in .interloper/, unless interloper.yaml or the
+environment configures a Postgres.</p>
 <table>
 <thead>
 <tr>
