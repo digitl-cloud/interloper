@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Engine
-from sqlalchemy.engine import URL
 
 from interloper_db.sqlite.folds import SQLiteFolds
 from interloper_db.sqlite.notifications import SQLiteNotifications
@@ -30,16 +28,6 @@ class SQLiteSchema:
             engine: An engine on a SQLite database, set up by `SQLiteConnection`.
         """
         self.engine = engine
-
-    @staticmethod
-    def create_folder(url: URL) -> None:
-        """Create the folder a database file goes in, which SQLite will not; an in-memory database has none.
-
-        Args:
-            url: The database's URL.
-        """
-        if url.database and url.database != ":memory:":
-            Path(url.database).parent.mkdir(parents=True, exist_ok=True)
 
     def create(self, migrations: Config) -> None:
         """Create the tables and recreate the triggers, stamping a new database at the migration head.

@@ -9,7 +9,6 @@ import pytest
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from sqlalchemy import Engine, inspect
-from sqlalchemy.engine import make_url
 from sqlmodel import SQLModel
 
 from interloper_db import engine as engine_module
@@ -93,20 +92,3 @@ class TestCreate:
 
         with pytest.raises(SystemExit, match=r"at revision 0002.*delete it"):
             SQLiteSchema(engine).create(_alembic_config(engine))
-
-
-class TestCreateFolder:
-    """The folder a database file goes in."""
-
-    def test_the_folder_of_a_file_is_created(self, tmp_path: Path) -> None:
-        SQLiteSchema.create_folder(make_url(f"sqlite:///{tmp_path}/a/b/interloper.db"))
-
-        assert (tmp_path / "a" / "b").is_dir()
-
-    @pytest.mark.parametrize("url", ["sqlite://", "sqlite:///:memory:"])
-    def test_an_in_memory_database_has_none(self, url: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.chdir(tmp_path)
-
-        SQLiteSchema.create_folder(make_url(url))
-
-        assert list(tmp_path.iterdir()) == []

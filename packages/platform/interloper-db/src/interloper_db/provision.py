@@ -106,8 +106,7 @@ def ensure_database(dsn: str) -> None:
 
     Connects to the default ``postgres`` maintenance database to issue
     ``CREATE DATABASE``. Silently succeeds if the database already exists.
-    A SQLite file is created by its first connection, so only its folder is
-    made here.
+    A SQLite file needs nothing: its first connection creates it.
 
     Args:
         dsn: The target database connection string.
@@ -117,11 +116,7 @@ def ensure_database(dsn: str) -> None:
     from sqlalchemy import create_engine, text
     from sqlalchemy.engine import make_url
 
-    url = make_url(dsn)
-    if url.get_backend_name() == "sqlite":
-        from interloper_db.sqlite import SQLiteSchema
-
-        SQLiteSchema.create_folder(url)
+    if make_url(dsn).get_backend_name() == "sqlite":
         return
     parsed = urlparse(dsn)
     db_name = parsed.path.lstrip("/")
