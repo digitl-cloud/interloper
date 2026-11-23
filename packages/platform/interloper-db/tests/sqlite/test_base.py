@@ -42,7 +42,7 @@ def _revision(engine: Engine) -> str | None:
 
 
 def _expected_triggers() -> set[str]:
-    return set(SQLiteFolds().triggers()) | set(SQLiteNotifications().triggers())
+    return set(SQLiteFolds.TRIGGERS) | set(SQLiteNotifications().triggers())
 
 
 def _triggers(engine: Engine) -> set[str]:
