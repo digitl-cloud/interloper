@@ -172,14 +172,9 @@ class TestRunMigrationsOnline:
 
         assert configured["transaction_per_migration"] is True
 
-    def test_migrations_alter_postgres_tables_in_place(self, configured: dict[str, Any]) -> None:
-        run_env(FakeEngine())
-
-        assert configured["render_as_batch"] is False
-
 
 class TestRunMigrationsOnSQLite:
-    """SQLite has no session settings to bound, and alters a table by copying it."""
+    """A SQLite database is only ever stamped, and has no session settings to bound."""
 
     def test_no_session_setting_is_sent(self, configured: dict[str, Any]) -> None:
         engine = FakeEngine(sqlite.dialect())
@@ -187,8 +182,3 @@ class TestRunMigrationsOnSQLite:
         run_env(engine)
 
         assert engine.log == ["configure", "migrate"]
-
-    def test_migrations_run_in_batch_mode(self, configured: dict[str, Any]) -> None:
-        run_env(FakeEngine(sqlite.dialect()))
-
-        assert configured["render_as_batch"] is True

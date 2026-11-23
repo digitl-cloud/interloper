@@ -17,14 +17,10 @@ if TYPE_CHECKING:
 
 
 class SQLiteSchema:
-    """Bring a SQLite database up to what this release serves, as `create_all` does a Postgres one.
+    """Build a SQLite database from the models, with its triggers, as the migrations build a Postgres one.
 
-    A new database is built from the models and stamped at the migration
-    head: migrations 0001 to 0003 hold Postgres's extension, functions and
-    triggers, and never run on SQLite. An existing one gains any table a
-    newer release declares and runs the migrations after its revision, which
-    are written to run on both dialects. Either way its triggers are dropped
-    and created again, so the file always carries this release's.
+    Migrations never run on SQLite: a new database is stamped at the head, and
+    one at another revision is refused, to be deleted and made anew.
     """
 
     def __init__(self, engine: Engine) -> None:
@@ -46,25 +42,33 @@ class SQLiteSchema:
             Path(url.database).parent.mkdir(parents=True, exist_ok=True)
 
     def create(self, migrations: Config) -> None:
-        """Create the tables, stamp or upgrade the migration revision, and recreate the triggers.
+        """Create the tables and recreate the triggers, stamping a new database at the migration head.
 
         Args:
             migrations: The Alembic configuration of this package's migrations, run against the engine.
+
+        Raises:
+            SystemExit: When the database is at another revision than the head.
         """
         from alembic import command
         from alembic.runtime.migration import MigrationContext
+        from alembic.script import ScriptDirectory
         from sqlmodel import SQLModel
 
+        head = ScriptDirectory.from_config(migrations).get_current_head()
         with self.engine.begin() as connection:
             revision = MigrationContext.configure(connection).get_current_revision()
+            if revision not in (None, head):
+                raise SystemExit(
+                    f"Error: the SQLite database {self.engine.url.database} is at revision {revision}, and this "
+                    f"release needs {head}. SQLite databases are never migrated: delete it, with its -wal and -shm "
+                    "files, to start afresh."
+                )
             SQLModel.metadata.create_all(connection)
-        if revision is None:
-            command.stamp(migrations, "head")
-        else:
-            command.upgrade(migrations, "head")
-        with self.engine.begin() as connection:
             for statement in self.statements():
                 connection.exec_driver_sql(statement)
+        if revision is None:
+            command.stamp(migrations, "head")
 
     def statements(self) -> Iterator[str]:
         """The statements that recreate every trigger a SQLite database carries.

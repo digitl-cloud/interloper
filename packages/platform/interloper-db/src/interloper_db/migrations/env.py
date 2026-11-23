@@ -55,8 +55,6 @@ def run_migrations_online() -> None:
                 # transaction open for the whole run and ``autocommit_block``
                 # asserts there is a transaction to suspend, breaking ``db init``.
                 transaction_per_migration=True,
-                # SQLite alters a table by copying it into a new one; migrations after 0003 run on both dialects.
-                render_as_batch=connection.dialect.name == "sqlite",
             )
             with context.begin_transaction():
                 context.run_migrations()

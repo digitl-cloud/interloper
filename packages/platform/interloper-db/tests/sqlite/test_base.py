@@ -86,6 +86,14 @@ class TestCreate:
 
         assert "conversations" in inspect(engine).get_table_names()
 
+    def test_a_database_at_another_revision_is_refused(self, engine: Engine) -> None:
+        SQLiteSchema(engine).create(_alembic_config(engine))
+        with engine.begin() as connection:
+            connection.exec_driver_sql("UPDATE alembic_version SET version_num = '0002'")
+
+        with pytest.raises(SystemExit, match=r"at revision 0002.*delete it"):
+            SQLiteSchema(engine).create(_alembic_config(engine))
+
 
 class TestCreateFolder:
     """The folder a database file goes in."""
