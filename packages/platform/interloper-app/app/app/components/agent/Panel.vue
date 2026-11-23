@@ -19,15 +19,21 @@ const panel = useTemplateRef<HTMLElement>('panel')
 // has no room to leave, so the panel spans the page's width over it and does not resize.
 const sizing = new CSSStyleSheet()
 watchEffect(() => {
-    const room = open.value ? `calc(${width.value}px + var(--agent-inset))` : '0px'
+    // The page's content stands an inset from the card, as from the window, and the page splits that
+    // inset with the card: half of it its own padding, half a gap before the card, so its scrollbar
+    // runs between the two, clear of the card.
+    const room = open.value
+        ? `margin-inline-end: calc(${width.value}px + var(--agent-inset) * 1.5); padding-inline-end: calc(var(--agent-inset) / 2)`
+        : ''
     sizing.replaceSync(`
         .agent-panel { width: ${width.value}px }
-        .agent-panel-handle { right: calc(${width.value}px + var(--agent-inset) * 1.5 - 1px) }
-        .agent-room { margin-inline-end: ${room}; transition-duration: ${dragging.value ? '0ms' : '300ms'} }
+        .agent-panel-handle { right: calc(${width.value}px + var(--agent-inset)) }
+        .agent-room { transition-duration: ${dragging.value ? '0ms' : '300ms'} }
+        @media (width >= 40rem) {
+            .agent-room { ${room} }
+        }
         @media (width < 40rem) {
             .agent-panel { width: auto; left: var(--agent-inset) }
-            .agent-panel-handle { display: none }
-            .agent-room { margin-inline-end: 0 }
         }
     `)
 })
@@ -115,10 +121,8 @@ async function submit(text: string) {
     input.value = ''
 }
 
-/** Start a resize from the card's current inset, which the theme sets per breakpoint. */
 function onResizeStart() {
-    const right = panel.value?.getBoundingClientRect().right ?? window.innerWidth
-    startResize(window.innerWidth - right)
+    startResize(panel.value?.getBoundingClientRect().right ?? window.innerWidth)
 }
 
 const SUGGESTIONS = [
@@ -129,16 +133,6 @@ const SUGGESTIONS = [
 </script>
 
 <template>
-    <UDashboardResizeHandle v-if="open"
-                            class="agent-panel-handle fixed z-40 w-0.5 transition-colors hover:bg-accented"
-                            :class="dragging && 'bg-accented'"
-                            :style="{
-                                top: 'calc(var(--ui-header-height) + var(--agent-inset))',
-                                bottom: 'var(--agent-inset)',
-                            }"
-                            @mousedown.prevent="onResizeStart"
-                            @touchstart.prevent="onResizeStart"
-                            @dblclick="resetWidth" />
     <aside ref="panel"
            class="agent-panel fixed z-40 flex min-h-0 flex-col overflow-hidden rounded-lg bg-muted ring ring-default transition-transform duration-300"
            :style="{
@@ -256,4 +250,15 @@ const SUGGESTIONS = [
             </UChatPrompt>
         </div>
     </aside>
+    <!-- The card's left border resizes it, as the sidebar's border does: the handle has no width,
+         its grab area straddles the border, and it comes after the card to stay above it. -->
+    <UDashboardResizeHandle v-if="open"
+                            class="agent-panel-handle fixed z-40"
+                            :style="{
+                                top: 'calc(var(--ui-header-height) + var(--agent-inset))',
+                                bottom: 'var(--agent-inset)',
+                            }"
+                            @mousedown.prevent="onResizeStart"
+                            @touchstart.prevent="onResizeStart"
+                            @dblclick="resetWidth" />
 </template>

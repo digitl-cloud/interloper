@@ -19,11 +19,10 @@ export function useAgentPanel() {
     const dragging = useState('agent-panel-dragging', () => false)
 
     /**
-     * Drag the handle in the gutter: width follows the pointer until release.
-     * `inset` is the card's distance from the window's right edge (`--agent-inset`);
-     * the gutter between the page and the card is as wide, the handle sits in its middle.
+     * Drag the card's left border: width follows the pointer until release.
+     * `right` is the card's right edge, which stays put while it resizes.
      */
-    function startResize(inset: number) {
+    function startResize(right: number) {
         dragging.value = true
         const previousCursor = document.body.style.cursor
         const previousUserSelect = document.body.style.userSelect
@@ -33,7 +32,7 @@ export function useAgentPanel() {
         function onMove(e: MouseEvent | TouchEvent) {
             const x = 'touches' in e ? e.touches[0]?.clientX : e.clientX
             if (x == null) return
-            width.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(window.innerWidth - inset * 1.5 - x)))
+            width.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(right - x)))
         }
         function onEnd() {
             dragging.value = false

@@ -71,7 +71,7 @@ export default defineAppConfig({
     // (the panel sizes `agent-room` from its own stylesheet), the navbar keeps the full width.
     dashboardPanel: {
       slots: {
-        body: 'agent-room transition-[margin]'
+        body: 'agent-room transition-[margin,padding]'
       }
     },
     // A page's toolbar (its sub-page tabs, a detail page's actions) is the first row of the page's
@@ -79,7 +79,7 @@ export default defineAppConfig({
     // keeps the theme's sideways scroll for tabs wider than a phone.
     dashboardToolbar: {
       slots: {
-        root: 'agent-room transition-[margin] min-h-0 border-b-0 pt-4 sm:pt-6'
+        root: 'agent-room transition-[margin,padding] min-h-0 border-b-0 pt-4 sm:pt-6'
       }
     },
     // The navbar's search field reads as a filled control, not an outlined button.
