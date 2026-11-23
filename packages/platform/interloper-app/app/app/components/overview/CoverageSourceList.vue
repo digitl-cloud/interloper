@@ -90,7 +90,6 @@ const rowsByType = computed(() => {
 
 const troubledGroups = computed(() => groups.value.filter(group => group.troubled))
 const completeGroups = computed(() => groups.value.filter(group => !group.troubled))
-const completeSources = computed(() => completeGroups.value.reduce((n, group) => n + group.sources, 0))
 const showComplete = ref(false)
 const visibleGroups = computed(() => showComplete.value ? [...troubledGroups.value, ...completeGroups.value] : troubledGroups.value)
 
@@ -230,25 +229,25 @@ const COL = {
             </template>
             <div v-if="completeGroups.length && troubledGroups.length"
                  class="flex items-center gap-2 border-t border-default py-2 text-xs text-muted">
-                <UIcon :name="ui.icons.success"
-                       class="size-3.5 text-success" />
-                <span class="tabular-nums">{{ completeGroups.length }} {{ completeGroups.length === 1 ? 'type' : 'types' }} complete · {{ completeSources }} {{ completeSources === 1 ? 'source' : 'sources' }}</span>
-                <UButton :label="showComplete ? 'Hide' : 'Show'"
+                <UButton :label="showComplete ? 'Hide completed' : `Show all (${completeGroups.length})`"
                          size="xs"
                          color="neutral"
                          variant="link"
+                         class="px-0"
                          @click="showComplete = !showComplete" />
             </div>
-            <div v-else-if="!troubledGroups.length && !showComplete"
+            <div v-else-if="!troubledGroups.length && groups.length > 1"
                  class="flex items-center gap-2 border-t border-default py-2 text-xs text-muted">
                 <UIcon :name="ui.icons.success"
                        class="size-3.5 text-success" />
-                <span class="tabular-nums">Every source is complete in this window · {{ completeSources }} {{ completeSources === 1 ? 'source' : 'sources' }}</span>
-                <UButton label="Show"
+                <span>Every source is complete in this window</span>
+                <span aria-hidden="true">·</span>
+                <UButton :label="showComplete ? 'Hide completed' : `Show all (${completeGroups.length})`"
                          size="xs"
                          color="neutral"
                          variant="link"
-                         @click="showComplete = true" />
+                         class="px-0"
+                         @click="showComplete = !showComplete" />
             </div>
         </template>
         <UEmpty v-else
