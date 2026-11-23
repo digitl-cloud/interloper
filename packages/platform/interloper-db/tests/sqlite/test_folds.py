@@ -2,7 +2,7 @@
 
 Every test goes through the triggers, as the platform does: it saves events
 and reads what the folds made of them. The same sequences were run against
-Postgres's 0003 by hand, to the same rows.
+Postgres by hand, to the same rows.
 """
 
 from __future__ import annotations

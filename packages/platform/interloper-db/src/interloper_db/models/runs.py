@@ -497,8 +497,8 @@ class Execution(SQLModel, table=True):
     events as they are saved: latest attempt first, then severity, then
     recency decides the status, and the timestamps span every attempt, so a
     retried operation reads as one execution from its first start to its
-    final outcome. The fold is a trigger on ``events`` (migration 0003 on
-    Postgres, :class:`~interloper_db.sqlite.SQLiteFolds` on SQLite), so the
+    final outcome. The fold is a trigger on ``events`` (migrations 0003 and
+    0004 on Postgres, :class:`~interloper_db.sqlite.SQLiteFolds` on SQLite), so the
     application never writes this table. The partition the operation's
     events name, else its run's, is stamped on the row as it is created, so
     a snapshot's execution is filed under the period it observed, and
