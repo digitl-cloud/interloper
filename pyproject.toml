@@ -149,6 +149,8 @@ patch = ["subprocess"]
 
 [tool.coverage.report]
 include = ["packages/**/src/**"]
+# Migration revisions run on Postgres only, which the unit suite never reaches; each PR records their check by hand.
+omit = ["packages/platform/interloper-db/src/interloper_db/migrations/versions/*"]
 exclude_also = [
     # Don't complain about missing debug-only code:
     # "def __repr__",
