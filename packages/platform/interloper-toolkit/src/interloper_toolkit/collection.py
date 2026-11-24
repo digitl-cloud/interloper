@@ -266,8 +266,11 @@ def bind_relation(ctx: ToolkitContext, component_id: str, name: str, dst_id: str
     Works on any kind: a source's connection, a job's watched assets, a
     destination target, whatever the component's own class declares under
     that name. A ``many`` name accumulates; a single-valued one repoints, so
-    rebinding it needs no prior unbind_relation call. Recap what the binding
-    changes and get the user's explicit confirmation BEFORE calling this.
+    rebinding it needs no prior unbind_relation call. An asset's upstream
+    relation needs no binding: unbound, it follows every matching asset of
+    the organisation, accounts added later included; binding it narrows it to
+    exactly what is bound. Recap what the binding changes and get the user's
+    explicit confirmation BEFORE calling this.
 
     Args:
         component_id: UUID of the component the relation originates from.
@@ -288,8 +291,10 @@ def unbind_relation(ctx: ToolkitContext, component_id: str, name: str, dst_id: s
     """Detach one component from another under a declared relation name.
 
     A non-optional relation cannot be emptied, only repointed with
-    bind_relation. Recap what the component loses and get the user's
-    explicit confirmation BEFORE calling this.
+    bind_relation, except an asset's upstream relation: removing its last
+    binding returns it to following every matching asset of the organisation.
+    Recap what the component loses and get the user's explicit confirmation
+    BEFORE calling this.
 
     Args:
         component_id: UUID of the component the relation originates from.

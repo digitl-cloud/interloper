@@ -14,7 +14,7 @@ import interloper as il
 import pydantic
 import pytest
 from sqlalchemy import Engine
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from interloper_db import ComponentDriftError, HydrationError
 from interloper_db.models import Component, ComponentRelation
@@ -124,6 +124,47 @@ class Finance(il.Source):
             return []
 
 
+class Account(il.Source):
+    """Discriminated source, so several accounts coexist in one organisation."""
+
+    account_id: str = il.InputField(default="", discriminator=True)
+
+    class Stats(il.Asset):
+        """The asset ``report.summary`` reads."""
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:  # pragma: no cover
+            """Never materialized by these tests.
+
+            Args:
+                context: The execution context of the materialization.
+
+            Returns:
+                No rows.
+            """
+            return []
+
+
+class Report(il.Source):
+    """Source whose single-valued upstream reads ``account.stats``."""
+
+    class Summary(il.Asset):
+        """Asset reading exactly one account's ``stats``."""
+
+        stats = il.Relation("asset", "account.stats")
+
+        def data(self, context: il.ExecutionContext, stats: il.Upstream) -> list[dict]:  # pragma: no cover
+            """Never materialized by these tests.
+
+            Args:
+                context: The execution context of the materialization.
+                stats: The upstream leg read from ``account.stats``.
+
+            Returns:
+                No rows.
+            """
+            return []
+
+
 class FakeLinker(il.Component):
     """Test-only kind whose vocabulary the hydrator has never seen."""
 
@@ -132,7 +173,7 @@ class FakeLinker(il.Component):
 
 il.KINDS.register(FakeLinker.kind, FakeLinker.anchor())
 
-_CATALOG = il.Catalog.from_assets([DemoSource, demo_asset, Shop, Finance, Warehouse])
+_CATALOG = il.Catalog.from_assets([DemoSource, demo_asset, Shop, Finance, Account, Report, Warehouse])
 
 
 @pytest.fixture
@@ -332,6 +373,65 @@ class TestSourceRoundTrip:
         assert [relation.name for relation in remaining] == ["a"]
 
 
+class TestAutomaticUpstreams:
+    """An upstream relation holding no row is bound to the organisation's matches on load, never written."""
+
+    def test_load_binds_unbound_upstreams_to_the_organisations_matches(
+        self, store: Store, shop_connection: Component, component_db: Engine
+    ):
+        shop = store.components.create(_ORG, kind="source", key="shop", relations={"connection": [shop_connection.id]})
+        finance = store.components.create(_ORG, kind="source", key="finance")
+
+        hydrated = store.components.load(finance.id)
+
+        orders = _asset(hydrated, "revenue").bound("orders")
+        assert isinstance(orders, il.Asset) and orders.id == str(_child(shop, "orders").id)
+        with Session(component_db) as session:
+            assert session.exec(select(ComponentRelation).where(ComponentRelation.src_kind == "asset")).all() == []
+
+    def test_load_leaves_an_unmatched_required_relation_unbound(self, store: Store):
+        finance = store.components.create(_ORG, kind="source", key="finance")
+
+        hydrated = store.components.load(finance.id)
+
+        assert _asset(hydrated, "revenue").bound("orders") is None
+
+    def test_load_refuses_a_single_valued_relation_with_two_matches(self, store: Store):
+        for account in ("a", "b"):
+            store.components.create(_ORG, kind="source", key="account", config={"account_id": account})
+        report = store.components.create(_ORG, kind="source", key="report")
+
+        with pytest.raises(HydrationError, match="'stats' matches 2 assets"):
+            store.components.load(report.id)
+
+    def test_load_resolves_nothing_for_a_component_holding_no_asset(
+        self, store: Store, shop_connection: Component, monkeypatch: pytest.MonkeyPatch
+    ):
+        calls: list[UUID] = []
+        original = store.relations.automatic
+        monkeypatch.setattr(store.relations, "automatic", lambda org_id: calls.append(org_id) or original(org_id))
+
+        store.components.load(shop_connection.id)
+
+        assert calls == []
+
+    def test_load_leaves_a_disabled_assets_upstreams_alone(self, store: Store):
+        for account in ("a", "b"):
+            store.components.create(_ORG, kind="source", key="account", config={"account_id": account})
+        report = store.components.create(_ORG, kind="source", key="report", config={"enabled": False})
+
+        hydrated = store.components.load(report.id)
+
+        assert _asset(hydrated, "summary").bound("stats") is None
+
+    def test_siblings_bind_without_rows(self, store: Store):
+        demo = store.components.create(_ORG, kind="source", key="demo_source")
+
+        hydrated = store.components.load(demo.id)
+
+        assert _asset(hydrated, "b").bound("a") is _asset(hydrated, "a")
+
+
 class TestCrossSourceUpstream:
     """A reference no document carries is resolved through the store."""
 
@@ -375,10 +475,10 @@ class TestCrossSourceUpstream:
         original_build = Hydrator._build
         shop_hydrations: list[UUID] = []
 
-        def spy(self: Hydrator, db_component: Component, cache: Any, chain: Any) -> il.Component:
+        def spy(self: Hydrator, db_component: Component, cache: Any, chain: Any, automatic: Any) -> il.Component:
             if db_component.key == "shop":
                 shop_hydrations.append(db_component.id)
-            return original_build(self, db_component, cache, chain)
+            return original_build(self, db_component, cache, chain, automatic)
 
         monkeypatch.setattr(Hydrator, "_build", spy)
 

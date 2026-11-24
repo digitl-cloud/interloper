@@ -1554,19 +1554,21 @@ class TestAssetPath:
 class TestUpstreamReadFailures:
     """Reading an upstream's data is where a run most often breaks."""
 
-    async def test_a_missing_upstream_destination_is_named(self):
+    async def test_an_upstream_without_destination_is_passed_as_none(self):
         one = FbLike()
+        seen: list[Any] = []
 
         @il.asset(relations={"c": il.Relation("asset", "fb_like.campaigns")}, partitioning=PARTITION)
-        def consumer(context: il.ExecutionContext, c: il.Upstream) -> Any:  # pragma: no cover - never reached
+        def consumer(context: il.ExecutionContext, c: il.Upstream) -> Any:
+            seen.append(c.data)
             return []
 
         asset = consumer(destinations=[il.MemoryDestination()])
         asset.bind("c", one.campaigns)
         dag = DAG(one(enabled=False), asset)
 
-        with pytest.raises(AssetError, match="No destination found for upstream asset 'campaigns'"):
-            await asset.run_async(TimePartition(dt.date(2026, 1, 1)), dag=dag)
+        await asset.run_async(TimePartition(dt.date(2026, 1, 1)), dag=dag)
+        assert seen == [None]
 
     async def test_a_failing_read_is_wrapped_and_reported(self):
         class BrokenReadDestination(il.MemoryDestination):

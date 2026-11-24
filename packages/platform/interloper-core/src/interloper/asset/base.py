@@ -20,6 +20,7 @@ from interloper.component import Component, ComponentDefinition, ComponentIdenti
 from interloper.destination import Destination, IOContext
 from interloper.errors import (
     AssetError,
+    ConfigError,
     PartitionError,
 )
 from interloper.events import EventBus, EventType, Step, StepKind
@@ -590,6 +591,8 @@ class Asset(Operation, metaclass=AssetMeta):
 
         Raises:
             AssetError: If an upstream is bound but no DAG was provided.
+            ConfigError: If a kind that only refers to its upstreams is left
+                with nothing for a required single-valued relation.
         """
         kwargs: dict[str, Any] = {}
         relations = type(self).relations
@@ -610,7 +613,11 @@ class Asset(Operation, metaclass=AssetMeta):
                         "Pass a DAG to run() or materialize() for upstream resolution."
                     )
                 upstreams = await self._upstreams(name, targets, dag, window, context.metadata)
-                kwargs[name] = upstreams if relations[name].many else (upstreams[0] if upstreams else None)
+                relation = relations[name]
+                # A kind that only refers to its upstreams has nothing to hand a required single one it left out.
+                if targets and not upstreams and not (relation.many or relation.optional or self.reads_upstream_data):
+                    raise ConfigError(f"Asset '{self.qualified_key}': '{name}' has no readable upstream")
+                kwargs[name] = upstreams if relation.many else (upstreams[0] if upstreams else None)
             else:
                 # Lazily-built clients cost under the data() span, not here.
                 with tracer().start_as_current_span(
@@ -635,7 +642,10 @@ class Asset(Operation, metaclass=AssetMeta):
         when it is there: for a mini-DAG that node is a read-only copy of the
         binding. An upstream absent from the DAG is skipped with a warning when
         this asset reads data, since there is no run to read it for; a kind
-        that only refers to its upstreams refers to the binding itself.
+        that only refers to its upstreams refers to the binding itself, asks
+        about every upstream at once (each answer is a metadata call), and
+        drops one it can find nothing to refer to (the warning is already
+        out), so its ``data()`` only ever sees upstreams it can query.
 
         Args:
             name: The ``data()`` parameter the upstreams are for.
@@ -648,7 +658,7 @@ class Asset(Operation, metaclass=AssetMeta):
         Returns:
             One `Upstream` per upstream handed over, in binding order.
         """
-        upstreams: list[Upstream] = []
+        nodes: list[Asset] = []
         for target in targets:
             node = dag.operation_map.get(target.id) if dag is not None else target
             if node is None and self.reads_upstream_data:
@@ -665,8 +675,11 @@ class Asset(Operation, metaclass=AssetMeta):
                     ),
                 )
                 continue
-            upstreams.append(await self._upstream(name, cast("Asset", node or target), window, metadata))
-        return upstreams
+            nodes.append(cast("Asset", node or target))
+        if self.reads_upstream_data:
+            return [await self._upstream(name, node, window, metadata) for node in nodes]
+        referred = await asyncio.gather(*(self._upstream(name, node, window, metadata) for node in nodes))
+        return [upstream for upstream in referred if upstream.data is not None]
 
     async def _upstream(
         self, name: str, target: Asset, window: PartitionWindow | None, metadata: dict[str, Any]
@@ -684,7 +697,7 @@ class Asset(Operation, metaclass=AssetMeta):
         """
         if self.reads_upstream_data:
             return await Upstream.read(target, self, window, metadata, parameter=name)
-        return Upstream.reference(target, self.default_destination)
+        return await Upstream.reference(target, self, window, metadata, parameter=name)
 
     async def _produce(self, window: PartitionWindow | None, dag: DAG | None, metadata: dict[str, Any]) -> Output:
         """Run ``data()`` over the resolved inputs and shape what it returned.

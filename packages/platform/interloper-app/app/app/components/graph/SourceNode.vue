@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { ContextMenuItem } from '@nuxt/ui'
-import type { Connection } from '@vue-flow/core'
-import { Handle, Position, useNodeConnections, useVueFlow, useNodeId } from '@vue-flow/core'
+import { Handle, Position, useNodeConnections } from '@vue-flow/core'
 import type { ComponentRecord } from '~/types/component'
 
 /**
@@ -36,45 +35,13 @@ const emit = defineEmits<{
 const container = computed(() => props.open)
 const collapsed = computed(() => !props.open)
 
-const isValidConnection = inject<(connection: Connection) => boolean>('isValidConnection')
 const graphReadonly = inject<Ref<boolean>>('graphReadonly', ref(false))
 const materializingAssetIds = inject<ComputedRef<Set<string>>>('materializingAssetIds')
-const nodeId = useNodeId()
-const { connectionStartHandle } = useVueFlow()
 
 const sourceConnections = useNodeConnections({ handleType: 'source' })
 const targetConnections = useNodeConnections({ handleType: 'target' })
 const hasDownstream = computed(() => sourceConnections.value.length > 0)
 const hasUpstream = computed(() => targetConnections.value.length > 0)
-
-const isDragging = computed(() => connectionStartHandle.value !== null)
-
-const isValidTarget = computed(() => {
-    if (container.value) return false
-    const start = connectionStartHandle.value
-    if (!start || start.type !== 'source' || !nodeId) return false
-    return isValidConnection?.({
-        source: start.nodeId,
-        target: nodeId,
-        sourceHandle: start.id ?? null,
-        targetHandle: 'source-target',
-    }) ?? false
-})
-
-const isValidSource = computed(() => {
-    if (container.value) return false
-    const start = connectionStartHandle.value
-    if (!start || start.type !== 'target' || !nodeId) return false
-    return isValidConnection?.({
-        source: nodeId,
-        target: start.nodeId,
-        sourceHandle: 'source-source',
-        targetHandle: start.id ?? null,
-    }) ?? false
-})
-
-const isCompatible = computed(() => isValidTarget.value || isValidSource.value)
-const shouldFade = computed(() => !container.value && isDragging.value && !isCompatible.value)
 
 const confirmDeleteSource = useConfirmDeleteSource()
 const catalogStore = useCatalogStore()
@@ -138,19 +105,12 @@ const frameClass = computed(() => [
 
 <template>
     <UContextMenu :items="graphReadonly ? [] : contextMenuItems">
-        <div class="graph-node relative h-full w-full transition-opacity duration-200"
-             :style="shouldFade ? { opacity: GRAPH_DIM_OPACITY } : undefined">
+        <div class="graph-node relative h-full w-full">
             <Handle id="source-target"
                     type="target"
                     :position="Position.Left"
-                    :connectable-start="false"
-                    :connectable-end="false"
-                    :is-valid-connection="isValidConnection"
-                    :class="[
-                        'transition-all duration-150',
-                        !hasUpstream && !isValidTarget && 'opacity-0',
-                        isValidTarget && '!size-3 !bg-transparent !border-2 !border-primary animate-pulse-grow',
-                    ]" />
+                    :connectable="false"
+                    :class="!hasUpstream && 'opacity-0'" />
 
             <GraphCornerBadge v-if="isMaterializing && collapsed"
                               :icon="appConfig.ui.icons.loading"
@@ -235,14 +195,8 @@ const frameClass = computed(() => [
             <Handle id="source-source"
                     type="source"
                     :position="Position.Right"
-                    :connectable-start="!container && !graphReadonly"
-                    :connectable-end="!container && !graphReadonly"
-                    :is-valid-connection="isValidConnection"
-                    :class="[
-                        'transition-all duration-150',
-                        !hasDownstream && !isValidSource && 'opacity-0',
-                        isValidSource && '!size-3 !bg-transparent !border-2 !border-primary animate-pulse-grow',
-                    ]" />
+                    :connectable="false"
+                    :class="!hasDownstream && 'opacity-0'" />
         </div>
     </UContextMenu>
 </template>

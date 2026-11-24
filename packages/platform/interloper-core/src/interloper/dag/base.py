@@ -170,14 +170,11 @@ class DAG:
     def _bind_declared(self) -> None:
         """Bind the declared upstream keys nothing has bound yet.
 
-        For every materializing asset and every unbound upstream relation that
-        declares keys, the candidates are the DAG's other assets the relation
-        `accepts`; a
-        `local` key is
-        further restricted to the asset's own source instance, since it names
-        a sibling. A ``many`` relation binds every candidate and a
-        single-valued one the only candidate there is; no candidate leaves the
-        relation unbound for `_check_relations` to judge.
+        For every materializing asset and every unbound upstream relation, the
+        candidates are the DAG's other assets the relation `Relation.matches`.
+        A ``many`` relation binds every candidate and a single-valued one the
+        only candidate there is; no candidate leaves the relation unbound for
+        `_check_relations` to judge.
 
         Binding goes through
         `bind`, so an explicit
@@ -188,20 +185,18 @@ class DAG:
             DAGError: If a single-valued relation has several candidates; the
                 caller has to bind it explicitly.
         """
-        assets = [operation for operation in self.operations if isinstance(operation, Asset)]
-        for asset in assets:
+        assets = {operation.id: operation for operation in self.operations if isinstance(operation, Asset)}
+        identities = {handle: asset.identity for handle, asset in assets.items()}
+        for asset in assets.values():
             if not asset.enabled:
                 continue
             for name, relation in asset.upstream_relations().items():
                 if asset.bound(name) or not relation.keys:
                     continue
-                candidates = [
-                    candidate
-                    for candidate in assets
-                    if candidate is not asset
-                    and relation.accepts("asset", candidate.identity, owner=asset.identity)
-                    and (not relation.local or candidate.parent is asset.parent)
-                ]
+                others = {handle: identity for handle, identity in identities.items() if handle != asset.id}
+                siblings = {handle for handle in others if assets[handle].parent is asset.parent}
+                matched = relation.matches(identities[asset.id], others, siblings=siblings)
+                candidates = [assets[handle] for handle in matched]
                 if not candidates:
                     continue
                 if not relation.many and len(candidates) > 1:

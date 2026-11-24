@@ -128,17 +128,28 @@ class BigQueryDestination(DatabaseDestination):
         except NotFound:
             return None
 
-    def _table_exists(self, table: str, dataset: str | None) -> bool:
-        """Check whether a BigQuery table exists.
+    def has_table(self, table: str, dataset: str | None) -> bool:
+        """Whether a BigQuery table exists, a wildcard table by any table it covers.
 
         Args:
-            table: Table name.
+            table: Table name; one ending in ``*`` names BigQuery's wildcard
+                table over every table starting with what precedes it.
             dataset: The BigQuery dataset, or ``None`` for the destination's default.
 
         Returns:
-            ``True`` if the table exists, ``False`` otherwise.
+            True when the table exists, or for a wildcard name when the
+            dataset holds a table it covers.
         """
-        return self._get_table(table, dataset) is not None
+        if not table.endswith("*"):
+            return self._get_table(table, dataset) is not None
+        prefix = table.removesuffix("*")
+        project, resolved, _ = self.table_parts(table, dataset)
+        try:
+            return any(
+                listed.table_id.startswith(prefix) for listed in self.client.list_tables(f"{project}.{resolved}")
+            )
+        except NotFound:
+            return False
 
     def _create_table(
         self,
@@ -447,7 +458,7 @@ class BigQueryDestination(DatabaseDestination):
         Raises:
             DataNotFoundError: If the table does not exist.
         """
-        if not self._table_exists(table, dataset):
+        if not self.has_table(table, dataset):
             ref = self._table_ref(table, dataset)
             raise DataNotFoundError(f"Table '{ref}' does not exist. Has the asset been materialized?")
 

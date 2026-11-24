@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import type { ContextMenuItem } from '@nuxt/ui'
-import { Handle, Position, useVueFlow, useNodeConnections, useNodeId } from '@vue-flow/core'
-import type { Connection } from '@vue-flow/core'
+import { Handle, Position, useNodeConnections } from '@vue-flow/core'
 import type { ComponentRecord } from '~/types/component'
 import { requiredUpstreams } from '~/types/catalog'
 
 /**
  * An asset card on the graph: name, status dot, description, tags and the
  * latest status label, with corner badges for materializing, drift, warnings
- * and destinations. Its target handle shows while the asset still needs an
- * upstream, and both handles light up as drop targets during a connection drag.
+ * and destinations. Its target handle shows while it has an upstream, and
+ * rings in warning while a required upstream relation matches no asset.
  */
 const props = defineProps<{
     asset: ComponentRecord
@@ -30,16 +29,10 @@ const componentsStore = useComponentsStore()
 const { getWarnings } = useAssetWarnings()
 const { getBadgeForAssetId } = useDestinationBadge()
 const { statusBadge } = useDrift()
-const { confirm } = useConfirm()
-const toast = useToast()
 const appConfig = useAppConfig()
 
 const isMissing = computed(() => props.asset.status === 'missing')
 const driftBadge = computed(() => statusBadge(props.asset.status))
-const nodeId = useNodeId()
-const { connectionStartHandle } = useVueFlow()
-
-const isValidConnection = inject<(connection: Connection) => boolean>('isValidConnection')
 const graphReadonly = inject<Ref<boolean>>('graphReadonly', ref(false))
 const materializingAssetIds = inject<ComputedRef<Set<string>>>('materializingAssetIds')
 
@@ -61,53 +54,15 @@ const statusTextClass = computed(() => LOUD_TEXT[nodeStateColor(state.value)] ??
 const warnings = computed(() => getWarnings(props.asset.id, props.asset.key))
 const destinationBadge = computed(() => getBadgeForAssetId(props.asset.id))
 
-// Is a connection drag currently in progress?
-const isDragging = computed(() => connectionStartHandle.value !== null)
-
-// Is this the node that started the drag?
-const isDragSource = computed(() => {
-    const start = connectionStartHandle.value
-    return start !== null && start.nodeId === nodeId
-})
-
-// Would this asset's target handle be a valid drop target for the current drag?
-const isValidTarget = computed(() => {
-    const start = connectionStartHandle.value
-    if (!start || start.type !== 'source' || !nodeId) return false
-    return isValidConnection?.({
-        source: start.nodeId,
-        target: nodeId,
-        sourceHandle: start.id ?? null,
-        targetHandle: null,
-    }) ?? false
-})
-
-const isValidSource = computed(() => {
-    const start = connectionStartHandle.value
-    if (!start || start.type !== 'target' || !nodeId) return false
-    return isValidConnection?.({
-        source: nodeId,
-        target: start.nodeId,
-        sourceHandle: null,
-        targetHandle: start.id ?? null,
-    }) ?? false
-})
-
-const isCompatible = computed(() => isValidTarget.value || isValidSource.value)
-const shouldFade = computed(() => isDragging.value && !isDragSource.value && !isCompatible.value)
-
-// Check if this asset has all required upstream dependencies
-const requiredDepCount = computed(() =>
-    props.assetDefn ? Object.keys(requiredUpstreams(props.assetDefn)).length : 0,
-)
+// Every required upstream relation follows at least one asset.
 const isRunnable = computed(() => {
-    if (requiredDepCount.value === 0) return true
+    const required = props.assetDefn ? Object.keys(requiredUpstreams(props.assetDefn)) : []
     const upstreams = componentsStore.upstreams.filter(d => d.src_id === props.asset.id)
-    return upstreams.length >= requiredDepCount.value
+    return required.every(name => upstreams.some(d => d.name === name))
 })
 
-const showTargetHandle = computed(() => hasUpstream.value || !isRunnable.value || isValidTarget.value)
-const showSourceHandle = computed(() => hasDownstream.value || isValidSource.value)
+const showTargetHandle = computed(() => hasUpstream.value || !isRunnable.value)
+const showSourceHandle = computed(() => hasDownstream.value)
 
 const frameClass = computed(() => [
     'border-(--graph-card-line)',
@@ -124,52 +79,18 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
             },
         ],
     ]
-    if (hasUpstream.value) {
-        items.push([
-            {
-                label: 'Disconnect upstream',
-                icon: 'i-lucide-unlink',
-                color: 'error' as const,
-                onSelect: async () => {
-                    const confirmed = await confirm({
-                        title: 'Disconnect upstream dependencies',
-                        description: `This will remove all upstream dependencies from "${label.value}".`,
-                    })
-                    if (confirmed) {
-                        const deps = componentsStore.upstreams.filter(d => d.src_id === props.asset.id)
-                        // Sequential, not concurrent: a non-optional relation refuses to
-                        // reach zero bindings, and parallel deletes make which leg keeps
-                        // it (and so which call 400s) a race.
-                        try {
-                            for (const d of deps) await componentsStore.removeRelation(d.src_id, d.name, d.dst_id)
-                        }
-                        catch (e) {
-                            toast.add(errorToast(e, 'Couldn\'t disconnect upstream'))
-                        }
-                    }
-                },
-            },
-        ])
-    }
     return items
 })
 </script>
 
 <template>
     <UContextMenu :items="graphReadonly ? [] : contextMenuItems">
-        <div class="graph-node relative w-64 transition-opacity duration-200"
-             :style="shouldFade ? { opacity: GRAPH_DIM_OPACITY } : undefined">
+        <div class="graph-node relative w-64">
             <Handle v-if="showTargetHandle"
                     type="target"
                     :position="Position.Left"
-                    :connectable-start="!graphReadonly"
-                    :connectable-end="false"
-                    :is-valid-connection="isValidConnection"
-                    :class="[
-                        'transition-all duration-150',
-                        isValidTarget && '!size-3 !bg-transparent !border-2 !border-primary animate-pulse-grow',
-                        !isRunnable && !isValidTarget && '!size-2.5 !bg-transparent !border-2 !border-warning',
-                    ]" />
+                    :connectable="false"
+                    :class="!isRunnable && '!size-2.5 !bg-transparent !border-2 !border-warning'" />
 
             <GraphCornerBadge v-if="isMaterializing"
                               :icon="appConfig.ui.icons.loading"
@@ -231,13 +152,7 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
             <Handle v-if="showSourceHandle"
                     type="source"
                     :position="Position.Right"
-                    :connectable-start="!graphReadonly"
-                    :connectable-end="!graphReadonly"
-                    :is-valid-connection="isValidConnection"
-                    :class="[
-                        'transition-all duration-150',
-                        isValidSource && '!size-3 !bg-transparent !border-2 !border-primary animate-pulse-grow',
-                    ]" />
+                    :connectable="false" />
         </div>
     </UContextMenu>
 </template>

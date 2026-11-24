@@ -668,3 +668,10 @@ class TestConcurrency:
 
         assert _rows(clickhouse, "SELECT cost FROM marts.daily") == [(float(d),) for d in range(1, 9)]
         assert _staging_tables(clickhouse) == []
+
+
+class TestHasTable:
+    def test_has_table_is_false_before_the_first_write_and_true_after(self, clickhouse):
+        assert _destination().has_table("ads_stats", "marts") is False
+        _destination().write(_ctx(ads_stats(), schema=_DaySchema), [{"day": _day(1), "cost": 1.0}])
+        assert _destination().has_table("ads_stats", "marts") is True

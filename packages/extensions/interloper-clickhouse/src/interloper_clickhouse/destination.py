@@ -473,6 +473,18 @@ class ClickHouseDestination(DatabaseDestination):
         predicate, parameters = _predicate(where, columns)
         return self.connection.client.query_df(f"SELECT * FROM {ref} WHERE {predicate}", parameters=parameters)
 
+    def has_table(self, table: str, dataset: str | None) -> bool:
+        """Whether the table exists, read from the system tables.
+
+        Args:
+            table: Target table name.
+            dataset: The database, or ``None`` for the destination's default.
+
+        Returns:
+            True when the table exists.
+        """
+        return bool(self._columns(table, self._database(dataset)))
+
     def count(self, table: str, dataset: str | None, column: str) -> dict[str, int]:
         """Return row counts grouped by a column.
 

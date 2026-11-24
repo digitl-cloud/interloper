@@ -87,6 +87,30 @@ class TestLineage:
         assert result.status == "success"
         assert [(edge.param_name, edge.asset_id) for edge in result.upstream] == [("orders", str(orders.id))]
 
+    def test_get_upstream_follows_automatic_edges(
+        self, ctx: ToolkitContext, create_source: Callable[[UUID, str], Component]
+    ):
+        shop = create_source(ctx.org_id, "shop_source")
+        finance = create_source(ctx.org_id, "finance_source")
+        orders = next(child for child in shop.children if child.key == "orders")
+        revenue = next(child for child in finance.children if child.key == "revenue")
+
+        result = lineage.get_upstream(ctx, str(revenue.id))
+
+        assert result.status == "success"
+        assert [(edge.param_name, edge.asset_id) for edge in result.upstream] == [("orders", str(orders.id))]
+
+    def test_cross_source_dependencies_counts_automatic_edges(
+        self, ctx: ToolkitContext, create_source: Callable[[UUID, str], Component]
+    ):
+        create_source(ctx.org_id, "shop_source")
+        create_source(ctx.org_id, "finance_source")
+
+        result = lineage.cross_source_dependencies(ctx)
+
+        assert result.status == "success"
+        assert result.cross_source_count == 1
+
     def test_lineage_ignores_non_asset_relations(
         self, ctx: ToolkitContext, store: Store, create_source: Callable[[UUID, str], Component]
     ):

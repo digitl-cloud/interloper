@@ -382,6 +382,7 @@ class TestViews:
         def orders() -> list:
             return []
 
+        destination.connection.client.execute("CREATE SCHEMA shop; CREATE TABLE shop.orders AS SELECT 1 AS total")
         assert destination.reference(orders(destinations=[destination])) == TableReference(
             name='"shop"."orders"', parts=("shop", "orders"), schema=None
         )
@@ -411,3 +412,10 @@ class TestViews:
 
     def test_reaches_only_duckdb_destinations(self, destination):
         assert not destination.reaches(il.MemoryDestination(id="memory"))
+
+
+class TestHasTable:
+    def test_has_table_is_false_before_the_first_write_and_true_after(self, destination):
+        assert destination.has_table("plain", None) is False
+        destination.write(_ctx(plain()), [{"a": 1}])
+        assert destination.has_table("plain", None) is True

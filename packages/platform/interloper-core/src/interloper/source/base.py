@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import inspect
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import ConfigDict, Field, model_validator
@@ -43,6 +43,51 @@ class SourceDefinition(ComponentDefinition):
             One partitioning per partitioned asset, in declaration order.
         """
         return [asset.partitioning for asset in self.assets if asset.partitioning is not None]
+
+    def sibling_bindings(self) -> dict[str, dict[str, str]]:
+        """Which of this source's assets each asset relation resolves to, by key.
+
+        The definition's own answer to `Source.sibling_bindings`, for a
+        reader holding the catalog rather than the classes.
+
+        Returns:
+            Asset key to a map of relation name to the sibling asset key that
+            fills it; assets with no sibling wiring are absent.
+        """
+        return self.siblings_among(self.key, [(asset.key, asset.relations) for asset in self.assets])
+
+    @staticmethod
+    def siblings_among(
+        source_key: str, assets: Sequence[tuple[str, Mapping[str, Relation]]]
+    ) -> dict[str, dict[str, str]]:
+        """Resolve the relations of a source's assets that name one of their siblings.
+
+        The one rule for intra-source wiring, read by a live source from its
+        classes and by the platform from the catalog's definitions. Only a
+        declared key resolving to this very source and to another of its
+        assets is decided here; a key reaching another source, or a wildcard,
+        is matched against a pool (`Relation.matches`). When several declared
+        keys name siblings, the last one wins.
+
+        Args:
+            source_key: The key of the source owning the assets.
+            assets: Each asset's key and its declared relations, by name.
+
+        Returns:
+            Asset key to a map of relation name to the sibling asset key that
+            fills it; assets with no sibling wiring are absent.
+        """
+        siblings = {key for key, _ in assets}
+        bindings: dict[str, dict[str, str]] = {}
+        for asset_key, relations in assets:
+            for name, relation in relations.items():
+                if "asset" not in relation.kinds:
+                    continue
+                for declared in relation.keys:
+                    expected = ComponentIdentity.resolve(declared, own_source_key=source_key)
+                    if expected.source_key == source_key and expected.key in siblings and expected.key != asset_key:
+                        bindings.setdefault(asset_key, {})[name] = expected.key
+        return bindings
 
 
 class Source(Component, Workload):
@@ -412,27 +457,17 @@ class Source(Component, Workload):
     def sibling_bindings(cls) -> dict[str, dict[str, str]]:
         """Which of this source's assets each asset relation resolves to, by key.
 
-        Only intra-source wiring is decided here: a declared key that resolves
-        to another source, or to a wildcard, needs the whole DAG to be
-        resolved and is left to it. Public for the relation store, which
-        persists the same wiring; connector code never needs it.
+        Only intra-source wiring is decided here (`SourceDefinition.siblings_among`
+        holds the rule): a declared key that resolves to another source, or to
+        a wildcard, needs a pool of candidates and is left to it.
 
         Returns:
             Asset key to a map of relation name to the sibling asset key that
             fills it; assets with no sibling wiring are absent.
         """
-        siblings = {asset_class.key for asset_class in cls.asset_types}
-        bindings: dict[str, dict[str, str]] = {}
-        for asset_class in cls.asset_types:
-            for name, relation in asset_class.relations.items():
-                if "asset" not in relation.kinds:
-                    continue
-                declared_keys = relation.keys
-                for declared in declared_keys:
-                    expected = ComponentIdentity.resolve(declared, own_source_key=cls.key)
-                    if expected.source_key == cls.key and expected.key in siblings and expected.key != asset_class.key:
-                        bindings.setdefault(asset_class.key, {})[name] = expected.key
-        return bindings
+        return SourceDefinition.siblings_among(
+            cls.key, [(asset_class.key, asset_class.relations) for asset_class in cls.asset_types]
+        )
 
     def _bind_siblings(self) -> None:
         """Bind each asset's sibling relations to this source's own asset instances.

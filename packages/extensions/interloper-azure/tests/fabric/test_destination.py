@@ -466,3 +466,10 @@ class TestBatchSize:
             size = batch_size(columns)
             assert size <= MAX_ROWS
             assert size * columns <= MAX_PARAMETERS or size == 1
+
+
+class TestHasTable:
+    def test_has_table_is_false_before_the_first_write_and_true_after(self, warehouse):
+        assert _destination().has_table("ads_stats", "marts") is False
+        warehouse.table("marts", "ads_stats", "day", "cost")
+        assert _destination().has_table("ads_stats", "marts") is True

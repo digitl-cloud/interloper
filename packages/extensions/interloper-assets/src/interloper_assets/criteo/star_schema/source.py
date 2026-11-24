@@ -78,10 +78,9 @@ class CriteoStarSchema(il.Source):
     days. Campaigns carry no status, and nothing carries a
     creation or change time. An ad's campaign comes from its ad set, since
     the ad's own snapshot names only the ad set.
-    Every bound upstream's table must exist, or the view fails when it is
-    created. Views are recreated on every run, so they follow the advertisers
-    bound to them; an advertiser added to the organisation is absent until it
-    is bound.
+    Views are recreated on every run
+    over every advertiser of the organisation, an advertiser added later included;
+    one with no table yet is skipped with a warning.
     """
 
     @ibis_view(

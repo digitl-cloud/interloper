@@ -424,6 +424,18 @@ class DatabricksDestination(DatabaseDestination):
         sql = f"SELECT * FROM {ref}" if where is None else f"SELECT * FROM {ref} WHERE {_predicate([where])}"
         return self._execute(sql, fetch=lambda cursor: cursor.fetchall_arrow().to_pandas())
 
+    def has_table(self, table: str, dataset: str | None) -> bool:
+        """Whether the table exists, read from the catalog's information schema.
+
+        Args:
+            table: Target table name.
+            dataset: The schema, or ``None`` for the destination's default.
+
+        Returns:
+            True when the table exists.
+        """
+        return self._table_exists(table, self._resolve_dataset(dataset))
+
     def count(self, table: str, dataset: str | None, column: str) -> dict[str, int]:
         """Return row counts grouped by a column.
 

@@ -34,6 +34,9 @@ class RecordingWarehouse(DatabaseDestination):
     def count(self, table, dataset, column):
         return {}
 
+    def has_table(self, table, dataset):
+        return True
+
     def table_parts(self, table, dataset):
         return (dataset or "main", table)
 
@@ -132,8 +135,31 @@ def test_union_stamps_an_integer_as_int64():
 
 
 def test_union_of_nothing_is_a_config_error():
-    with pytest.raises(ConfigError, match="no upstream bound"):
+    with pytest.raises(ConfigError, match="no readable upstream: a view needs at least one"):
         union([])
+
+
+class _TablelessWarehouse(RecordingWarehouse):
+    """Warehouse double holding no table for the second shop."""
+
+    def has_table(self, table, dataset):
+        return table != "orders__2"
+
+
+def test_a_view_skips_an_upstream_without_table():
+    warehouse = _TablelessWarehouse(id="warehouse")
+    shops = [Shop(account_id=account, destinations=[warehouse], enabled=False) for account in ("1", "2")]
+    sql = _run(Reporting(destinations=[warehouse]), *shops)
+    assert '"shop"."orders__1"' in sql
+    assert "orders__2" not in sql
+
+
+def test_a_view_with_no_readable_upstream_fails_clearly():
+    warehouse = _TablelessWarehouse(id="warehouse")
+    reporting = Reporting(destinations=[warehouse])
+    result = il.DAG(Shop(account_id="2", destinations=[warehouse], enabled=False), reporting).materialize()
+    error = result.executions[reporting.totals.id].error
+    assert error is not None and "no readable upstream" in error
 
 
 def test_an_expression_that_misses_a_declared_column_is_refused():

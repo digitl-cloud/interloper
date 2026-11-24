@@ -1,10 +1,8 @@
 <script setup lang="ts">
 /**
  * The source wizard: the definition-driven stepper plus the two steps only
- * sources have — asset selection (with cross-source dependency resolution)
- * and destination attachment. Both live here as extra steps; their state is
- * contributed to the payload via `extraInput` and the dependency wiring runs
- * post-save (it needs the saved children's ids).
+ * sources have, asset selection and destination attachment. Both live here
+ * as extra steps; their state is contributed to the payload via `extraInput`.
  */
 import type { ComponentRecord } from '~/types/component'
 import { relationIds } from '~/types/component'
@@ -28,14 +26,10 @@ const emit = defineEmits<{
 
 const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
-const toast = useToast()
 const appConfig = useAppConfig()
 
 const selectedAssetKeys = ref<string[]>(props.source ? props.source.children.map(a => a.key) : [])
-const resolvedCrossDeps = ref<Record<string, string[]>>({})
 const selectedDestinationIds = ref<string[]>(props.source ? relationIds(props.source, 'destinations') : [])
-
-const sources = computed(() => componentsStore.byKind('source'))
 
 /** Dynamic options context for SchemaForm's x-options-from fields. */
 const optionsContext = computed(() => ({
@@ -76,38 +70,6 @@ function extraInput() {
     }
 }
 
-/**
- * Cross-source deps are wired per child asset via the relations endpoint,
- * using the child ids from the save response.
- *
- * One upstream at a time, and every failure is reported: the source itself
- * is already saved by the time this runs, so an upstream that never binds
- * leaves an asset the user believes is wired unable to run. Re-submitting an
- * already-wired upstream on edit is not a failure, the API returns the row it
- * holds.
- */
-async function wireCrossDeps(saved: ComponentRecord) {
-    const childIdByKey = new Map(saved.children.map(a => [a.key, a.id]))
-    const failed: string[] = []
-    for (const [key, upstreamIds] of Object.entries(resolvedCrossDeps.value)) {
-        const [assetKey, name] = key.split('→')
-        const childId = assetKey ? childIdByKey.get(assetKey) : undefined
-        if (!childId || !name) continue
-        for (const upstreamId of upstreamIds.filter(Boolean)) {
-            try {
-                await componentsStore.addRelation(childId, { name, dst_id: upstreamId })
-            }
-            catch {
-                if (!failed.includes(`${assetKey}.${name}`)) failed.push(`${assetKey}.${name}`)
-            }
-        }
-    }
-    if (failed.length) {
-        const reason = new Error(`${failed.join(', ')} could not be bound. Edit the source to wire them again.`)
-        toast.add(errorToast(reason, "Couldn't wire some dependencies"))
-    }
-}
-
 const stepper = useTemplateRef('stepper')
 
 /**
@@ -145,15 +107,12 @@ defineExpose({
                              :exclude="exclude"
                              :options-context="optionsContext"
                              :extra-input="extraInput"
-                             :after-save="wireCrossDeps"
                              @created="emit('created')"
                              @updated="emit('updated')">
         <template #step-assets="{ definition }">
             <SourcesAssetSelect v-if="definition"
                                 v-model:selected-keys="selectedAssetKeys"
-                                v-model:resolved-deps="resolvedCrossDeps"
-                                :source-defn="definition as SourceDefinition"
-                                :all-sources="sources" />
+                                :source-defn="definition as SourceDefinition" />
         </template>
 
         <template #step-destinations="{ definition }">

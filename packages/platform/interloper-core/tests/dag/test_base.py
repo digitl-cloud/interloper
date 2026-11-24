@@ -701,6 +701,18 @@ class TestDeclaredResolution:
         dag = DAG(a, b, matcher)
         assert dag.predecessors[matcher.id] == [a.campaigns.id]
 
+    def test_identities_are_computed_once_per_asset(self, monkeypatch: pytest.MonkeyPatch):
+        calls: list[Any] = []
+        original = il.ComponentIdentity.of
+
+        def counted(cls: type, component: Any) -> il.ComponentIdentity:
+            calls.append(component)
+            return original(component)
+
+        monkeypatch.setattr(il.ComponentIdentity, "of", classmethod(counted))
+        DAG(*(FakeShop() for _ in range(40)))
+        assert len(calls) <= 2 * 40
+
     def test_bare_key_resolves_within_the_source_instance(self):
         one, two = FakePairSource(), FakePairSource()
         one.second.unbind("first", one.first)  # simulate a sibling binding lost before build

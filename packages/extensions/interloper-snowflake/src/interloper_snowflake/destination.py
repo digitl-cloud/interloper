@@ -391,6 +391,18 @@ class SnowflakeDestination(DatabaseDestination):
         predicate, params = _predicate(where)
         return self._execute(f"SELECT * FROM {ref} WHERE {predicate}", params).fetch_pandas_all()
 
+    def has_table(self, table: str, dataset: str | None) -> bool:
+        """Whether the table exists, read from the database's information schema.
+
+        Args:
+            table: Target table name.
+            dataset: The schema, or ``None`` for the destination's default.
+
+        Returns:
+            True when the table exists.
+        """
+        return self._table_exists(table, self._resolve_dataset(dataset))
+
     def count(self, table: str, dataset: str | None, column: str) -> dict[str, int]:
         """Return row counts grouped by a column.
 

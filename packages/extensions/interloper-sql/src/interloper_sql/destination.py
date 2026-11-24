@@ -240,6 +240,19 @@ class SQLDestination(DatabaseDestination):
                 statement = statement.where(_predicate(sql_table, where))
             return [dict(row._mapping) for row in conn.execute(statement)]
 
+    def has_table(self, table: str, dataset: str | None) -> bool:
+        """Whether the table exists, asked of the database's own catalog.
+
+        Args:
+            table: Target table name.
+            dataset: The asset's schema, or ``None`` for ``default_dataset``.
+
+        Returns:
+            True when the table exists.
+        """
+        with self._begin() as conn:
+            return inspect(conn).has_table(table, schema=self._resolve_dataset(dataset))
+
     def count(self, table: str, dataset: str | None, column: str) -> dict[str, int]:
         """Return row counts grouped by a column's values, cast to strings.
 

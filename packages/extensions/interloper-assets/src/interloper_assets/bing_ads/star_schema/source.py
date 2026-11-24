@@ -54,10 +54,9 @@ class BingAdsStarSchema(il.Source):
     and when anything last changed; Bing gives no creation time, so nothing
     publishes one. An ad's campaign comes from its ad group, since the ad's
     own snapshot names only the ad group.
-    Every bound upstream's table must exist, or the view fails when it is
-    created. Views are recreated on every run, so they follow the accounts
-    bound to them; an account added to the organisation is absent until it
-    is bound.
+    Views are recreated on every run
+    over every account of the organisation, an account added later included;
+    one with no table yet is skipped with a warning.
     """
 
     @ibis_view(

@@ -464,26 +464,26 @@ class TestOnDuckDB:
         assert {row["campaign_id"] for row in _rows(warehouse, "dim_campaigns")} == {"c111"}
         assert {row["ad_id"] for row in _rows(warehouse, "dim_ads")} == {"a1", "a9"}
 
-    def test_a_missing_entity_table_fails_the_dimension(self, warehouse):
+    def test_a_missing_entity_table_is_skipped_by_the_dimension(self, warehouse):
         first = _account("111", warehouse)
         _seed(warehouse, "111", skip=("campaigns",))
         star = BingAdsStarSchema(destinations=[warehouse])
         result = il.DAG(first, star).materialize()
-        assert result.status is ExecutionStatus.FAILED
-        error = result.executions[star.dim_campaigns.id].error
-        assert error is not None and "campaigns__111" in error
+        assert result.executions[star.dim_campaigns.id].status is ExecutionStatus.COMPLETED
+        assert _rows(warehouse, "dim_campaigns")
 
-    def test_a_missing_account_table_fails_the_view(self, warehouse):
-        first = _account("111", warehouse)
+    def test_a_missing_account_table_is_skipped(self, warehouse):
+        missing = _account("111", warehouse)
+        present = _account("222", warehouse)
+        _seed(warehouse, "222")
         star = BingAdsStarSchema(destinations=[warehouse])
-        result = il.DAG(first, star).materialize()
-        assert result.status is ExecutionStatus.FAILED
-        error = result.executions[star.fact_campaign_performance.id].error
-        assert error is not None and "ads_stats__111" in error
+        result = il.DAG(missing, present, star).materialize()
+        assert result.executions[star.fact_campaign_performance.id].status is ExecutionStatus.COMPLETED
+        assert {row["account_id"] for row in _rows(warehouse, "fact_campaign_performance")} == {"222"}
 
     def test_a_fact_with_no_account_bound_fails_clearly(self, warehouse):
         star = BingAdsStarSchema(destinations=[warehouse])
         result = il.DAG(star).materialize()
         assert result.status is ExecutionStatus.FAILED
         error = result.executions[star.fact_campaign_performance.id].error
-        assert error is not None and "no upstream bound" in error
+        assert error is not None and "no readable upstream" in error

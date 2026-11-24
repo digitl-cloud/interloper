@@ -2,6 +2,7 @@
 
 import datetime
 import json
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -9,7 +10,7 @@ import interloper as il
 import pytest
 from google.cloud import bigquery
 from interloper.destination import IOContext, TableReference
-from interloper.errors import ConfigError
+from interloper.errors import ConfigError, DataNotFoundError
 from interloper.partitioning import PartitionFilter
 from interloper.schema import Schema
 from pydantic import BaseModel, Field
@@ -137,15 +138,15 @@ class TestTableRef:
             dest._table_ref("my_table", None)
 
 
-# -- _table_exists -------------------------------------------------------------
+# -- has_table -----------------------------------------------------------------
 
 
-class TestTableExists:
-    """Table existence check delegates to the BQ client."""
+class TestHasTable:
+    """Table existence is asked of the BQ client; a wildcard name by listing the dataset."""
 
     def test_returns_true_when_found(self):
         dest, mock_client = _make_destination(dataset="ds")
-        assert dest._table_exists("tbl", None) is True
+        assert dest.has_table("tbl", None) is True
         mock_client.get_table.assert_called_once_with("test-proj.ds.tbl")
 
     def test_returns_false_when_not_found(self):
@@ -153,7 +154,49 @@ class TestTableExists:
 
         dest, mock_client = _make_destination(dataset="ds")
         mock_client.get_table.side_effect = NotFound("nope")
-        assert dest._table_exists("tbl", None) is False
+        assert dest.has_table("tbl", None) is False
+
+    def test_has_table_matches_a_wildcard_by_prefix(self):
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.list_tables.return_value = [SimpleNamespace(table_id="other"), SimpleNamespace(table_id="events_1")]
+        assert dest.has_table("events_*", None) is True
+        mock_client.list_tables.assert_called_once_with("test-proj.ds")
+        mock_client.list_tables.return_value = [SimpleNamespace(table_id="other")]
+        assert dest.has_table("events_*", None) is False
+
+    def test_has_table_is_false_for_a_wildcard_over_a_missing_dataset(self):
+        from google.cloud.exceptions import NotFound
+
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.list_tables.side_effect = NotFound("no dataset")
+        assert dest.has_table("events_*", None) is False
+
+
+# -- count ---------------------------------------------------------------------
+
+
+class TestCount:
+    """Row counts per partition come from one grouped query over an existing table."""
+
+    def test_count_groups_rows_by_the_column(self):
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.query.return_value.result.return_value = [
+            {"partition_value": "2026-01-01", "cnt": 3},
+            {"partition_value": "2026-01-02", "cnt": 5},
+        ]
+        assert dest.count("tbl", None, "date") == {"2026-01-01": 3, "2026-01-02": 5}
+        mock_client.query.assert_called_once_with(
+            "SELECT CAST(`date` AS STRING) AS partition_value, COUNT(*) AS cnt FROM `test-proj.ds.tbl` GROUP BY 1"
+        )
+
+    def test_count_raises_for_a_missing_table(self):
+        from google.cloud.exceptions import NotFound
+
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.get_table.side_effect = NotFound("nope")
+        with pytest.raises(DataNotFoundError, match="does not exist"):
+            dest.count("tbl", None, "date")
+        mock_client.query.assert_not_called()
 
 
 # -- Schema-driven loads -------------------------------------------------------

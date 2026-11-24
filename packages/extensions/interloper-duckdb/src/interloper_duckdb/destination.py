@@ -284,6 +284,19 @@ class DuckDBDestination(DatabaseDestination):
             predicate, parameters = self._predicate(where, types)
             return cursor.execute(f"SELECT * FROM {ref} WHERE {predicate}", parameters).df()
 
+    def has_table(self, table: str, dataset: str | None) -> bool:
+        """Whether the table exists, read from the information schema.
+
+        Args:
+            table: Target table name.
+            dataset: The schema, or ``None`` for the destination's default.
+
+        Returns:
+            True when the table exists.
+        """
+        with self._cursor() as cursor:
+            return bool(self._columns(cursor, table, dataset))
+
     def count(self, table: str, dataset: str | None, column: str) -> dict[str, int]:
         """Return row counts grouped by a column.
 

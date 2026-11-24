@@ -7,7 +7,7 @@ import pytest
 
 import interloper as il
 from interloper.destination import DatabaseDestination, IOContext, TableReference
-from interloper.errors import ConfigError
+from interloper.errors import ConfigError, DataNotFoundError
 from interloper.partitioning import (
     ListPartition,
     ListPartitionConfig,
@@ -43,11 +43,21 @@ class RecordingDatabase(DatabaseDestination):
     def count(self, table, dataset, column):
         return {}
 
+    def has_table(self, table, dataset):
+        return True
+
     def table_parts(self, table, dataset):
         return (dataset or "main", table)
 
     def replace_view(self, table, dataset, sql):
         self.calls.append(("replace_view", (table, dataset, sql)))
+
+
+class TablelessDatabase(RecordingDatabase):
+    """Database destination holding no table at all."""
+
+    def has_table(self, table, dataset):
+        return False
 
 
 class ViewlessDatabase(RecordingDatabase):
@@ -356,15 +366,20 @@ class TestReference:
         asset = plain_asset(destinations=[unreachable, there, here])
         assert here.reference(asset).parts == ("there", "plain_asset")
 
-    def test_reference_refuses_an_asset_it_cannot_query(self):
+    def test_reference_raises_data_not_found_for_an_unreachable_destination(self):
         here = RecordingDatabase(id="here")
         elsewhere = RecordingDatabase(id="elsewhere")
-        with pytest.raises(ConfigError, match="cannot query asset 'plain_asset'"):
+        with pytest.raises(DataNotFoundError, match="cannot query asset 'plain_asset'"):
             here.reference(plain_asset(destinations=[elsewhere]))
 
-    def test_reference_refuses_an_asset_with_no_destination(self):
-        with pytest.raises(ConfigError, match="no destination"):
+    def test_reference_raises_data_not_found_for_an_asset_without_destination(self):
+        with pytest.raises(DataNotFoundError, match="'plain_asset' has no destination"):
             RecordingDatabase(id="db").reference(plain_asset())
+
+    def test_reference_raises_data_not_found_for_a_missing_table(self):
+        destination = TablelessDatabase(id="db")
+        with pytest.raises(DataNotFoundError, match="'plain_asset' has no table"):
+            destination.reference(plain_asset(destinations=[destination]))
 
     def test_a_backend_without_view_hooks_refuses(self):
         destination = ViewlessDatabase(id="db")

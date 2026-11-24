@@ -162,3 +162,33 @@ class TestDescriptor:
         unbound = Owner()
         assert unbound.bound("conn") is None
         assert isinstance(unbound.conn, Conn)
+
+
+class TestMatches:
+    def test_a_qualified_key_matches_that_asset_in_every_source_of_that_key(self) -> None:
+        relation = Relation("asset", "shop.orders", many=True)
+        candidates = {
+            1: ComponentIdentity("shop", "orders"),
+            2: ComponentIdentity("shop", "orders"),
+            3: ComponentIdentity("crm", "orders"),
+            4: ComponentIdentity("shop", "refunds"),
+        }
+        assert relation.matches(ComponentIdentity("finance", "revenue"), candidates, siblings=()) == [1, 2]
+
+    def test_a_wildcard_matches_the_key_in_any_source_but_never_a_sourceless_asset(self) -> None:
+        relation = Relation("asset", "*.orders", many=True)
+        candidates = {
+            1: ComponentIdentity("shop", "orders"),
+            2: ComponentIdentity(None, "orders"),
+            3: ComponentIdentity("crm", "orders"),
+        }
+        assert relation.matches(ComponentIdentity("finance", "revenue"), candidates, siblings=()) == [1, 3]
+
+    def test_a_bare_key_matches_only_siblings(self) -> None:
+        relation = Relation("asset", "orders")
+        candidates = {1: ComponentIdentity("shop", "orders"), 2: ComponentIdentity("shop", "orders")}
+        assert relation.matches(ComponentIdentity("shop", "revenue"), candidates, siblings={2}) == [2]
+
+    def test_a_relation_without_keys_matches_nothing(self) -> None:
+        candidates = {1: ComponentIdentity("shop", "orders")}
+        assert Relation("asset").matches(ComponentIdentity("shop", "revenue"), candidates, siblings={1}) == []

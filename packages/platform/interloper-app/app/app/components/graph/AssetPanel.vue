@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import type { JsonSchemaProperty } from '~/types/catalog'
-import { parseQualifiedKey, requiredUpstreams } from '~/types/catalog'
+import { qualifiedKey, upstreamRelations } from '~/types/catalog'
 import type { ComponentRecord } from '~/types/component'
-import { relationIds } from '~/types/component'
+import { relationIds, relationRefs } from '~/types/component'
 import type { Page } from '~/composables/api'
 import type { Execution } from '~/types/execution'
 
 /**
  * The open asset's side panel: its identity and warnings, then folding
  * sections for its latest materializations, destinations, partitions,
- * upstream dependencies and schema. The `actions` slot (the page's way to
+ * upstreams and schema. The `actions` slot (the page's way to
  * close the panel) sits at the end of the identity header.
  */
 const props = defineProps<{
@@ -184,19 +184,33 @@ function historyTooltip(execution: Execution): string {
     return `${statusMeta(execution.status).label}${elapsed ? ` · ${elapsed}` : ''} · ${formatDate(execution.started_at)}`
 }
 
-/** Upstream dependencies as display rows (param → resolved upstream asset). */
-const dependencyRows = computed(() => {
-    const reqs = props.assetDefn ? requiredUpstreams(props.assetDefn) : {}
-    return Object.entries(reqs).map(([param, qk]) => {
-        const { sourceKey } = parseQualifiedKey(qk)
-        return {
-            param,
-            name: catalogStore.getAssetDefinition(qk)?.name ?? qk,
-            sourceName: (sourceKey && catalogStore.getSourceDefinition(sourceKey)?.name) || sourceKey || qk,
-            icon: componentIcon(sourceKey || qk, appConfig.icons.source),
-        }
+/**
+ * Each upstream relation and the assets it reads: every matching asset of the
+ * organisation, or exactly the ones a curation binds. Read only.
+ */
+const upstreamGroups = computed(() => {
+    const relations = props.assetDefn ? upstreamRelations(props.assetDefn) : {}
+    const edges = componentsStore.upstreams.filter(edge => edge.src_id === props.asset.id)
+    return Object.keys(relations).map((name) => {
+        const assets = edges
+            .filter(edge => edge.name === name)
+            .map(edge => componentsStore.byId(edge.dst_id))
+            .filter((asset): asset is ComponentRecord => !!asset)
+            .map((asset) => {
+                const owner = asset.parent_id ? componentsStore.byId(asset.parent_id) : undefined
+                const defn = catalogStore.getAssetDefinition(owner ? qualifiedKey(owner.key, asset.key) : asset.key)
+                return {
+                    id: asset.id,
+                    name: defn?.name ?? asset.key,
+                    sourceName: owner ? (owner.name ?? owner.key) : '',
+                    icon: componentIcon(owner?.key ?? asset.key, appConfig.icons.source),
+                }
+            })
+        return { name, curated: relationRefs(props.asset, name).length > 0, assets }
     })
 })
+
+const upstreamCount = computed(() => upstreamGroups.value.reduce((count, group) => count + group.assets.length, 0))
 </script>
 
 <template>
@@ -349,25 +363,35 @@ const dependencyRows = computed(() => {
                         title="No partition data" />
             </GraphPanelSection>
 
-            <GraphPanelSection v-if="dependencyRows.length"
-                               title="Upstream dependencies"
-                               :count="dependencyRows.length">
-                <ul class="divide-y divide-default">
-                    <li v-for="dep in dependencyRows"
-                        :key="dep.param"
-                        class="flex items-center gap-3 py-2">
-                        <UIcon :name="dep.icon"
-                               class="size-4 shrink-0 text-muted" />
-                        <div class="min-w-0 flex-1">
-                            <div class="truncate text-sm">{{ dep.name }}</div>
-                            <div class="truncate text-xs text-muted">{{ dep.sourceName }}</div>
+            <GraphPanelSection v-if="upstreamGroups.length"
+                               title="Upstreams"
+                               :count="upstreamCount">
+                <div class="flex flex-col gap-3">
+                    <div v-for="group in upstreamGroups"
+                         :key="group.name">
+                        <div class="caption mb-1 flex items-center gap-2 text-muted">
+                            <span>{{ group.name }}</span>
+                            <span v-if="group.curated"
+                                  class="text-dimmed">Curated</span>
                         </div>
-                        <UBadge color="neutral"
-                                size="sm"
-                                class="shrink-0"
-                                :label="dep.param" />
-                    </li>
-                </ul>
+                        <ul v-if="group.assets.length"
+                            class="divide-y divide-default">
+                            <li v-for="upstream in group.assets"
+                                :key="upstream.id"
+                                class="flex items-center gap-3 py-2">
+                                <UIcon :name="upstream.icon"
+                                       class="size-4 shrink-0 text-muted" />
+                                <div class="min-w-0 flex-1">
+                                    <div class="truncate text-sm">{{ upstream.name }}</div>
+                                    <div v-if="upstream.sourceName"
+                                         class="truncate text-xs text-muted">{{ upstream.sourceName }}</div>
+                                </div>
+                            </li>
+                        </ul>
+                        <p v-else
+                           class="py-2 text-xs text-dimmed">No matching asset</p>
+                    </div>
+                </div>
             </GraphPanelSection>
 
             <GraphPanelSection v-if="schemaFields.length"

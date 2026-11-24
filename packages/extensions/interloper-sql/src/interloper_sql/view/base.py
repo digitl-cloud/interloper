@@ -67,13 +67,16 @@ class IbisView(View):
             metadata: Forwarded.
 
         Returns:
-            The upstream, its ``data`` an ``ibis.Table``.
+            The upstream, its ``data`` an ``ibis.Table``, or ``None`` when the
+            destination holds nothing to refer to (the view then leaves it out).
 
         Raises:
             ConfigError: If the upstream declares no schema, or its reference is not a table.
         """
         upstream = await super()._upstream(name, target, window, metadata)
         reference = upstream.data
+        if reference is None:
+            return upstream
         if not isinstance(reference, TableReference):
             raise ConfigError(f"Upstream '{upstream.asset.qualified_key}' is not a table: {reference!r}")
         if reference.schema is None:
@@ -126,7 +129,7 @@ def union(upstreams: Sequence[Upstream], *columns: str, **stamps: Callable[[Upst
     share a column order.
 
     Args:
-        upstreams: The bound upstreams of a many-valued relation, each carrying an ``ibis.Table``.
+        upstreams: The readable upstreams of a many-valued relation, each carrying an ``ibis.Table``.
         *columns: The columns to keep from every table, in this order; every declared column by default.
         **stamps: Column name to a function of the upstream giving that
             upstream's constant value, such as the account it came from.
@@ -135,10 +138,10 @@ def union(upstreams: Sequence[Upstream], *columns: str, **stamps: Callable[[Upst
         One table over every upstream.
 
     Raises:
-        ConfigError: If no upstream is bound; a view over nothing has no columns.
+        ConfigError: If no upstream is left; a view over nothing has no columns.
     """
     if not upstreams:
-        raise ConfigError("no upstream bound: a view needs at least one")
+        raise ConfigError("no readable upstream: a view needs at least one")
     names = list(columns or upstreams[0].data.columns)
     tables = []
     for upstream in upstreams:

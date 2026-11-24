@@ -14,7 +14,6 @@ from interloper.utils.concurrency import invoke
 
 if TYPE_CHECKING:
     from interloper.asset.base import Asset
-    from interloper.destination import Destination
     from interloper.partitioning import PartitionWindow
 
 
@@ -68,9 +67,10 @@ class Upstream:
     ) -> Upstream:
         """Read an upstream's data from its default destination for the window it consumes.
 
-        Nothing materialized where the destination looks is not a failure: the
-        upstream is handed over with ``data=None`` and a warning event, and the
-        reader decides what that means. Any other failure fails the reader.
+        Nothing materialized where the destination looks, or no destination to
+        look in, is not a failure: the upstream is handed over with
+        ``data=None`` and a warning event, and the reader decides what that
+        means. Any other failure fails the reader.
 
         Args:
             upstream: The asset whose data is read.
@@ -88,6 +88,10 @@ class Upstream:
         Raises:
             AssetError: If the read fails for any reason other than missing data.
         """
+        if not upstream.destinations:
+            return cls._missing(
+                upstream, reader, window, metadata, message=cls._no_data(upstream, reader, window, parameter)
+            )
         destination = upstream.default_destination
         window = window if upstream.partitioning is not None else None
         context = IOContext(asset=upstream, window=window, metadata=metadata, schema=upstream.schema)
@@ -102,19 +106,9 @@ class Upstream:
             with step:
                 data = await invoke(destination.read, context)
         except DataNotFoundError:
-            EventBus.emit(
-                EventType.LOG,
-                metadata=reader.event_metadata(
-                    metadata,
-                    window,
-                    level="WARNING",
-                    message=(
-                        f"Asset '{reader.key}' found no data in upstream '{upstream.qualified_key}' "
-                        f"for parameter '{parameter}' at {window}; it is passed with data=None"
-                    ),
-                ),
+            return cls._missing(
+                upstream, reader, window, metadata, message=cls._no_data(upstream, reader, window, parameter)
             )
-            return cls(asset=upstream, data=None)
         except Exception as error:
             raise AssetError(
                 f"Failed to load data from upstream asset '{upstream.key}': {format_exception(error)}"
@@ -122,14 +116,83 @@ class Upstream:
         return cls(asset=upstream, data=data)
 
     @classmethod
-    def reference(cls, upstream: Asset, destination: Destination) -> Upstream:
+    async def reference(
+        cls,
+        upstream: Asset,
+        reader: Asset,
+        window: PartitionWindow | None,
+        metadata: dict[str, Any],
+        *,
+        parameter: str,
+    ) -> Upstream:
         """Refer to an upstream's table instead of reading it, for a kind that reads no data.
+
+        The reference comes from the reader's own destination, which is where
+        the reader's definition will query it. An upstream that destination
+        holds nothing for (no table yet, no destination, none it reaches) is
+        handed over with ``data=None`` and a warning saying why, which the
+        reader then leaves out.
 
         Args:
             upstream: The asset referred to.
-            destination: The destination whose handle on the upstream is wanted.
+            reader: The asset referring to it; its default destination makes the reference.
+            window: The reader's window, which the warning names.
+            metadata: Run-level metadata carried onto the emitted events.
+            parameter: The reader's ``data()`` parameter the upstream is bound
+                to, which the warning names.
 
         Returns:
             The upstream with the destination's reference as its data.
         """
-        return cls(asset=upstream, data=destination.reference(upstream))
+        try:
+            data = await invoke(reader.default_destination.reference, upstream)
+        except DataNotFoundError as error:
+            message = (
+                f"Asset '{reader.key}' left out upstream '{upstream.qualified_key}' "
+                f"for parameter '{parameter}': {format_exception(error)}"
+            )
+            return cls._missing(upstream, reader, window, metadata, message=message)
+        return cls(asset=upstream, data=data)
+
+    @staticmethod
+    def _no_data(upstream: Asset, reader: Asset, window: PartitionWindow | None, parameter: str) -> str:
+        """Word the warning of a read that found nothing.
+
+        Args:
+            upstream: The upstream with nothing to give.
+            reader: The asset reading it.
+            window: The reader's window.
+            parameter: The reader's ``data()`` parameter the upstream is bound to.
+
+        Returns:
+            The warning's message.
+        """
+        return (
+            f"Asset '{reader.key}' found no data in upstream '{upstream.qualified_key}' "
+            f"for parameter '{parameter}' at {window}; it is passed with data=None"
+        )
+
+    @classmethod
+    def _missing(
+        cls,
+        upstream: Asset,
+        reader: Asset,
+        window: PartitionWindow | None,
+        metadata: dict[str, Any],
+        *,
+        message: str,
+    ) -> Upstream:
+        """Hand over an upstream the reader can get nothing from, and say so.
+
+        Args:
+            upstream: The upstream with nothing to give.
+            reader: The asset it is handed to, whose identity the event carries.
+            window: The reader's window, carried onto the event.
+            metadata: Run-level metadata carried onto the emitted event.
+            message: The warning, naming the upstream and why it gives nothing.
+
+        Returns:
+            The upstream with ``data=None``.
+        """
+        EventBus.emit(EventType.LOG, metadata=reader.event_metadata(metadata, window, level="WARNING", message=message))
+        return cls(asset=upstream, data=None)

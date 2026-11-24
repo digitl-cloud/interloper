@@ -90,10 +90,10 @@ Dimensions are type 1: the latest row wins. `as_of_date` says which day it refle
 
 ## 7. Relations
 
-- Every upstream relation is `many=True, optional=True`: the star schema is a view over whatever is bound, and a platform with no bound account produces an empty fact, not a failed one. A fact with nothing bound raises `ConfigError("no upstream bound: ...")` from `union()`; a dimension with no entity tier falls through to the lower tiers.
+- Every upstream relation is `many=True, optional=True`: the star schema is a view over whatever its relations follow. A fact with no readable upstream raises `ConfigError("no readable upstream: ...")` from `union()`; a dimension whose entity tier has no readable upstream falls through to the lower tiers.
 - Relation names are the raw asset's key (`campaigns_stats`, `profiles`, `ads`). A relation over several keys lists them (`["amazon_ads.products_campaigns_stats", ...]`).
-- Bindings are per asset instance and manual: an account added to the organisation is absent from the views until bound. Say so in the source docstring.
+- Upstreams follow the organisation: a relation with no binding reads every asset of the organisation it matches, so an account added later joins the views on their next run, and one with no table yet is skipped with a warning naming it. A binding (API, MCP, spec file) curates the relation to exactly what it names. Say so in the source docstring.
 
 ## 8. Tests
 
-Each star schema has DuckDB tests in `tests/<platform>/star_schema/test_source.py` that seed two accounts and assert, at least: the fact's grain (finer vendor rows summed to one row per key and day, and no two rows share the stated key), the columns the platform omits, the tier preference (entity beats report beats fact), tie determinism (two tied candidates with different values yield the same row on every evaluation), that a raw row without a key reaches no view, the empty-relation behaviour, and that a missing upstream table fails with the table name.
+Each star schema has DuckDB tests in `tests/<platform>/star_schema/test_source.py` that seed two accounts and assert, at least: the fact's grain (finer vendor rows summed to one row per key and day, and no two rows share the stated key), the columns the platform omits, the tier preference (entity beats report beats fact), tie determinism (two tied candidates with different values yield the same row on every evaluation), that a raw row without a key reaches no view, the empty-relation behaviour, and that an account with no upstream table is skipped, the views building from the others.

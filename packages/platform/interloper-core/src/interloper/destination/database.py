@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Protocol, runtime_checkable
 
 from interloper.destination.base import Destination
 from interloper.destination.context import IOContext
-from interloper.errors import ConfigError
+from interloper.errors import ConfigError, DataNotFoundError
 from interloper.partitioning import PartitionFilter
 from interloper.partitioning.base import Partition
 from interloper.representation import TableData
@@ -165,6 +165,22 @@ class DatabaseDestination(Destination):
             Each distinct value, as a string, to its row count.
         """
 
+    @abstractmethod
+    def has_table(self, table: str, dataset: str | None) -> bool:
+        """Whether the table exists, asked of the backend at the moment of the call.
+
+        A table name ending in ``*`` (a sharded table a reference reads, such
+        as ``events_*``) exists when any table of the dataset starts with
+        what precedes the ``*``.
+
+        Args:
+            table: Target table name.
+            dataset: The dataset (database schema) holding the table, or ``None`` for the backend default.
+
+        Returns:
+            True when the table exists.
+        """
+
     @contextmanager
     def transaction(self) -> Generator[None, None, None]:
         """Wrap one write, a delete followed by an insert.
@@ -239,7 +255,11 @@ class DatabaseDestination(Destination):
         """The table an asset materializes to, as a view here may query it.
 
         The asset's ``default_destination_key`` destination is preferred,
-        then the first one this destination `reaches`.
+        then the first one this destination `reaches`. An asset this
+        destination has no table to query for is missing data, not a broken
+        configuration: a view refers to whatever its upstreams hold, and one
+        that holds nothing here yet is skipped by the view, as a read skips
+        missing data.
 
         Args:
             asset: The upstream asset.
@@ -248,21 +268,25 @@ class DatabaseDestination(Destination):
             The table reference.
 
         Raises:
-            ConfigError: If the asset has no destination, or none this
-                destination reaches.
+            DataNotFoundError: If the asset has no destination, none this
+                destination reaches, or no table there yet.
         """
         destinations: list[Destination] = asset.destinations
         if not destinations:
-            raise ConfigError(f"Asset '{asset.qualified_key}' has no destination to reference")
+            raise DataNotFoundError(f"Asset '{asset.qualified_key}' has no destination to reference")
         ordered = sorted(destinations, key=lambda candidate: candidate.key != asset.default_destination_key)
         for candidate in ordered:
             if isinstance(candidate, DatabaseDestination) and self.reaches(candidate):
-                return TableReference(
-                    name=candidate.qualified_name(asset.table, asset.dataset or None),
-                    parts=candidate.table_parts(asset.table, asset.dataset or None),
+                table, dataset = asset.table, asset.dataset or None
+                reference = TableReference(
+                    name=candidate.qualified_name(table, dataset),
+                    parts=candidate.table_parts(table, dataset),
                     schema=asset.schema,
                 )
-        raise ConfigError(
+                if not candidate.has_table(table, dataset):
+                    raise DataNotFoundError(f"Asset '{asset.qualified_key}' has no table {reference.name} yet")
+                return reference
+        raise DataNotFoundError(
             f"Destination '{self.key}' cannot query asset '{asset.qualified_key}': "
             f"none of its destinations ({', '.join(destination.key for destination in destinations)}) is reachable"
         )

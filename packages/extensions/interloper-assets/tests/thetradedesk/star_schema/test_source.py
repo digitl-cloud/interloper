@@ -291,17 +291,18 @@ class TestOnDuckDB:
         [row] = _rows(warehouse, "fact_campaign_performance")
         assert row["impressions"] == 170
 
-    def test_a_missing_partner_table_fails_the_view(self, warehouse):
-        first = _partner("aaa", warehouse)
+    def test_a_missing_partner_table_is_skipped(self, warehouse):
+        missing = _partner("aaa", warehouse)
+        present = _partner("bbb", warehouse)
+        _seed(warehouse, "bbb")
         star = TheTradeDeskStarSchema(destinations=[warehouse])
-        result = il.DAG(first, star).materialize()
-        assert result.status is ExecutionStatus.FAILED
-        error = result.executions[star.fact_campaign_performance.id].error
-        assert error is not None and "ad_groups_stats__aaa" in error
+        result = il.DAG(missing, present, star).materialize()
+        assert result.executions[star.fact_campaign_performance.id].status is ExecutionStatus.COMPLETED
+        assert {row["account_id"] for row in _rows(warehouse, "fact_campaign_performance")} == {"bbb"}
 
     def test_a_fact_with_no_partner_bound_fails_clearly(self, warehouse):
         star = TheTradeDeskStarSchema(destinations=[warehouse])
         result = il.DAG(star).materialize()
         assert result.status is ExecutionStatus.FAILED
         error = result.executions[star.fact_campaign_performance.id].error
-        assert error is not None and "no upstream bound" in error
+        assert error is not None and "no readable upstream" in error

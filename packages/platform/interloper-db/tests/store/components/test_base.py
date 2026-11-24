@@ -15,7 +15,7 @@ from sqlalchemy import Engine, event
 from sqlmodel import Session, select
 
 from interloper_db import ComponentDriftError, HydrationError, InUseError, NotFoundError, ReadOnlyError
-from interloper_db.models import Component, table_of
+from interloper_db.models import Component, ComponentRelation, table_of
 from interloper_db.settings import QuotaSettings
 from interloper_db.store import ComponentQuery, RelationQuery, Store
 from interloper_db.store.components import ComponentOutline, ComponentStatus
@@ -27,6 +27,11 @@ _ORG = uuid4()
 # -- Test components -----------------------------------------------------------
 
 _DAILY = il.TimePartitionConfig(column="date", allow_window=False)
+
+
+def _stored(component_db: Engine, src_id: UUID) -> list[ComponentRelation]:
+    with Session(component_db) as session:
+        return list(session.exec(select(ComponentRelation).where(ComponentRelation.src_id == src_id)).all())
 
 
 class DemoSource(il.Source):
@@ -418,12 +423,13 @@ class TestCrud:
 
         assert all(child.parent is nested for child in nested.children)
         assert {child.qualified_key for child in nested.children} == {"wire_up_source.rows", "wire_up_source.totals"}
-        # The roots, their relations, their children, the children's relations and the one row those name.
-        assert len(statements) == 5
+        # The roots, their relations, their children and the children's relations: siblings hold no row.
+        assert len(statements) == 4
 
     def test_a_relation_target_listed_on_the_page_reads_whole(self, store: Store):
         source = store.components.create(_ORG, kind="source", key="wire_up_source")
         totals = _child(source, "totals")
+        store.relations.add(totals.id, name="rows", dst_id=_child(source, "rows").id)
         store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [totals.id]})
 
         roots = store.components.list(_ORG, ComponentQuery(limit=None)).items
@@ -603,7 +609,7 @@ class TestServedCollection:
             with pytest.raises(NotFoundError):
                 store.components.get(deleted)
 
-    def test_a_relation_the_file_does_not_bind_is_left_empty(self, store: Store):
+    def test_a_relation_the_file_does_not_bind_is_left_empty(self, store: Store, component_db: Engine):
         upstream = Declaration(id=uuid5(_ORG, "upstream"), kind="asset", key="guard_upstream")
         reader = Declaration(
             id=uuid5(_ORG, "reader"), kind="asset", key="guard_optional", relations={"up": [upstream.id]}
@@ -612,20 +618,21 @@ class TestServedCollection:
 
         store.components.apply(_ORG, [upstream, Declaration(id=reader.id, kind="asset", key="guard_optional")])
 
-        assert store.relations.list(_ORG, RelationQuery(name="up", limit=None)).items == []
+        assert _stored(component_db, reader.id) == []
 
-    def test_an_asset_s_relation_to_another_source_s_asset_is_bound_and_cleared_with_the_file(self, store: Store):
+    def test_an_asset_s_relation_to_another_source_s_asset_is_bound_and_cleared_with_the_file(
+        self, store: Store, component_db: Engine
+    ):
         up, down = self._wired()
         assert up.children and down.children
         reader_id, rows_id = down.children[0].id, up.children[0].id
 
         store.components.apply(_ORG, [up, down])
-        bound = store.relations.list(_ORG, RelationQuery(name="rows", limit=None)).items
+        bound = _stored(component_db, reader_id)
         store.components.apply(_ORG, self._wired(consumer_reads_rows=False))
-        left = store.relations.list(_ORG, RelationQuery(name="rows", limit=None)).items
 
         assert (reader_id, rows_id) in {(edge.src_id, edge.dst_id) for edge in bound}
-        assert reader_id not in {edge.src_id for edge in left}
+        assert _stored(component_db, reader_id) == []
 
     def test_an_asset_dropped_with_what_requires_it_applies_at_once(self, store: Store):
         up, down = self._wired(down=("wire_down_source", "consumer"))

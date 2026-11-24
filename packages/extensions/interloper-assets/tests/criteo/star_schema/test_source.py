@@ -354,13 +354,14 @@ class TestOnDuckDB:
         for (table, key), expected in keys.items():
             assert {row[key] for row in _rows(warehouse, table)} == expected
 
-    def test_a_missing_advertiser_table_fails_the_view(self, warehouse):
-        first = _advertiser("111", warehouse)
+    def test_a_missing_advertiser_table_is_skipped(self, warehouse):
+        missing = _advertiser("111", warehouse)
+        present = _advertiser("222", warehouse)
+        _seed_one(warehouse, "222")
         star = CriteoStarSchema(destinations=[warehouse])
-        result = il.DAG(first, star).materialize()
-        assert result.status is ExecutionStatus.FAILED
-        error = result.executions[star.fact_campaign_performance.id].error
-        assert error is not None and "campaigns_stats__111" in error
+        result = il.DAG(missing, present, star).materialize()
+        assert result.executions[star.fact_campaign_performance.id].status is ExecutionStatus.COMPLETED
+        assert {row["account_id"] for row in _rows(warehouse, "fact_campaign_performance")} == {"222"}
 
     def test_an_advertiser_takes_its_snapshot_over_its_reports(self, warehouse):
         first, second = _advertiser("111", warehouse, timezone="Europe/Berlin"), _advertiser("222", warehouse)
@@ -481,18 +482,17 @@ class TestOnDuckDB:
         ("entity", "view"),
         [("advertisers", "dim_accounts"), ("campaigns", "dim_campaigns"), ("ad_sets", "dim_ad_groups")],
     )
-    def test_a_missing_entity_table_fails_the_dimension(self, warehouse, entity: str, view: str):
+    def test_a_missing_entity_table_is_skipped_by_the_dimension(self, warehouse, entity: str, view: str):
         first = _advertiser("111", warehouse)
         _seed_one(warehouse, "111", skip=(entity,))
         star = CriteoStarSchema(destinations=[warehouse])
         result = il.DAG(first, star).materialize()
-        assert result.status is ExecutionStatus.FAILED
-        error = result.executions[getattr(star, view).id].error
-        assert error is not None and f"{entity}__111" in error
+        assert result.executions[getattr(star, view).id].status is ExecutionStatus.COMPLETED
+        assert _rows(warehouse, view)
 
     def test_a_fact_with_no_advertiser_bound_fails_clearly(self, warehouse):
         star = CriteoStarSchema(destinations=[warehouse])
         result = il.DAG(star).materialize()
         assert result.status is ExecutionStatus.FAILED
         error = result.executions[star.fact_campaign_performance.id].error
-        assert error is not None and "no upstream bound" in error
+        assert error is not None and "no readable upstream" in error

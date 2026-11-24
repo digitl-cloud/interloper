@@ -341,6 +341,18 @@ class GoogleSheetsDestination(DatabaseDestination):
                     row[column] = json.loads(row[column])
         return context.schema.reconcile(rows)
 
+    def has_table(self, table: str, dataset: str | None) -> bool:
+        """Whether the table exists, as a tab of the spreadsheet.
+
+        Args:
+            table: Target table name.
+            dataset: The asset's dataset, or ``None``.
+
+        Returns:
+            True when the table exists.
+        """
+        return self._title(table, dataset) in self.api.sheet_titles()
+
     def count(self, table: str, dataset: str | None, column: str) -> dict[str, int]:
         """Return row counts grouped by a column's stored value.
 

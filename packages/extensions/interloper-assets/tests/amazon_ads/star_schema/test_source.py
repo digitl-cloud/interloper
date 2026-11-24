@@ -401,7 +401,7 @@ class TestOnDuckDB:
         star = AmazonAdsStarSchema(destinations=[warehouse])
         result = il.DAG(star).materialize()
         error = result.executions[star.dim_ads.id].error
-        assert error is not None and "no upstream bound" in error
+        assert error is not None and "no readable upstream" in error
 
     def test_a_profile_takes_its_own_entity_row_over_the_facts(self, warehouse):
         first, second = _profile("1", warehouse), _profile("2", warehouse)
@@ -418,17 +418,18 @@ class TestOnDuckDB:
         assert (other["account_name"], other["currency"], other["timezone"]) == (None, "EUR", None)
         assert other["as_of_date"] == DAY
 
-    def test_a_missing_profile_table_fails_the_view(self, warehouse):
-        first = _profile("1", warehouse)
+    def test_a_missing_profile_table_is_skipped(self, warehouse):
+        missing = _profile("1", warehouse)
+        present = _profile("2", warehouse)
+        _seed(warehouse, "2", entity=False)
         star = AmazonAdsStarSchema(destinations=[warehouse])
-        result = il.DAG(first, star).materialize()
-        assert result.status is ExecutionStatus.FAILED
-        error = result.executions[star.fact_campaign_performance.id].error
-        assert error is not None and "campaigns_stats__1" in error
+        result = il.DAG(missing, present, star).materialize()
+        assert result.executions[star.fact_campaign_performance.id].status is ExecutionStatus.COMPLETED
+        assert {row["account_id"] for row in _rows(warehouse, "fact_campaign_performance")} == {"2"}
 
     def test_a_fact_with_no_profile_bound_fails_clearly(self, warehouse):
         star = AmazonAdsStarSchema(destinations=[warehouse])
         result = il.DAG(star).materialize()
         assert result.status is ExecutionStatus.FAILED
         error = result.executions[star.fact_campaign_performance.id].error
-        assert error is not None and "no upstream bound" in error
+        assert error is not None and "no readable upstream" in error
