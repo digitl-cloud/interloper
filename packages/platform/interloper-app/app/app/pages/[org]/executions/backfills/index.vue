@@ -1,6 +1,6 @@
 <template>
     <UDashboardPanel id="backfills"
-                     class="page-column">
+                     class="page-wide">
         <template #header>
             <AppNavbar title="Backfills" />
         </template>

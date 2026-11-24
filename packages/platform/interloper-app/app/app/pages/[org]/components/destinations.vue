@@ -75,7 +75,7 @@ const typeKey = useQueryParam('type', null)
 
 <template>
     <UDashboardPanel id="destinations"
-                     class="page-column">
+                     class="page-wide">
         <template #header>
             <AppNavbar title="Destinations" />
         </template>

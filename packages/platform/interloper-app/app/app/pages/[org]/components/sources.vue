@@ -127,7 +127,7 @@ const typeKey = useQueryParam('type', null)
 
 <template>
     <UDashboardPanel id="sources"
-                     class="page-column">
+                     class="page-wide">
         <template #header>
             <AppNavbar title="Sources" />
         </template>

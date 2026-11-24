@@ -184,7 +184,7 @@ onMounted(loadData)
 
 <template>
     <UDashboardPanel id="admin-users"
-                     class="page-column">
+                     class="page-wide">
         <template #header>
             <AppNavbar title="Users" />
         </template>

@@ -88,7 +88,7 @@ export default defineAppConfig({
     dashboardNavbar: {
       slots: {
         root: 'sm:px-4 border-b-0 @container',
-        title: 'page-title-offset'
+        title: 'page-title-offset transition-[margin] text-xl'
       }
     },
     // A page's toolbar (its sub-page tabs, a detail page's actions) is the first row of the page's

@@ -176,7 +176,7 @@ const enabled = useQueryParam<boolean | null>('enabled', null, booleanQuery)
 
 <template>
     <UDashboardPanel id="jobs"
-                     class="page-column">
+                     class="page-wide">
         <template #header>
             <AppNavbar title="Jobs" />
         </template>

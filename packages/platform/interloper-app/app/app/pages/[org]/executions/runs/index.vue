@@ -5,7 +5,7 @@ const { view, tabs } = usePageView(useRunViews())
 
 <template>
     <UDashboardPanel id="runs"
-                     :class="view === 'timeline' ? undefined : 'page-column'">
+                     :class="view === 'timeline' ? undefined : 'page-wide'">
         <template #header>
             <AppNavbar title="Runs" />
             <UDashboardToolbar>

@@ -78,10 +78,11 @@ Never for ids, names, numbers, dates or captions.
 - `text-xs`: meta and helper text; captions take it through `caption`
 - `text-sm`: body; the default for content
 - `text-base`: a heading outside any component title
+- `text-xl`: the page's title, in the navbar (the theme)
 - `text-2xl`: the heading of a standalone page (sign-in, welcome, invite, the agent's start)
 - `text-3xl`: KPI numbers
 
-Titles of cards, page cards, modals, drawers, empty states and the navbar take the size their Nuxt UI slot ships. No arbitrary sizes.
+Titles of cards, page cards, modals, drawers and empty states take the size their Nuxt UI slot ships. No arbitrary sizes.
 
 **Weights**
 - `font-normal`: body, and a table's column headers
@@ -122,7 +123,8 @@ No arbitrary radii.
 Buttons, badges and empty states size their own icons.
 
 **Widths.** A page names its column once, on its `UDashboardPanel`; its toolbar, body and navbar title line up on it (`page-gutter` and `page-title-offset` in main.css, applied by the theme), so no page centres its own content:
-- `page-column` (64rem): lists, the overview, the admin's lists
+- `page-wide` (80rem): lists; at a laptop's width they span the panel, so a table scrolls only when the window lacks room, and on a wide screen they stay capped and centred
+- `page-column` (64rem): the overview and the admin's overview
 - `page-narrow` (42rem): settings and forms
 - none, the panel's full width: canvases and detail pages (assets, a timeline, a run, a backfill)
 - auth pages: `max-w-sm`
@@ -258,4 +260,4 @@ Show the one fact a row, tile or line exists for; the rest waits for hover, a to
 - semantic colours and the status table
 - icon maps
 
-The agent panel slides in from the right below the navbar, which keeps the full width; the page's toolbar and body make room for it: the theme marks them `agent-room`, and the panel sizes `agent-room`, itself and its handle from a small stylesheet it owns. A resize then re-renders nothing and restyles only those few elements; no size that changes on every pointer move goes into a template binding, a cookie or a variable on a shared ancestor. The panel sits `--agent-inset` (the page body's own padding) from the navbar and the window's edges, so it lines up with the page's content; inside, it is padded like a card (`p-4`). The graph's own colours and shadows are `--graph-*` tokens in main.css, defined from the palette, never inline. A graph node's border is always its card line: its state shows in its status dot, and the only coloured ring on a node is the selection's. The agent's code blocks and tool payloads are the code that `font-mono` exists for.
+The agent panel slides in from the right below the navbar, which keeps the full width; the page's toolbar and body make room for it: the theme marks them `agent-room`, and the panel sizes `agent-room`, itself and its handle from a small stylesheet it owns. The room it reserves is `--agent-room` on those elements and on the navbar's title, so a page's column recentres in the space left beside the panel, its title with it, instead of pressing against the panel. A resize then re-renders nothing and restyles only those few elements; no size that changes on every pointer move goes into a template binding, a cookie or a variable on a shared ancestor. The panel sits `--agent-inset` (the page body's own padding) from the navbar and the window's edges, so it lines up with the page's content; inside, it is padded like a card (`p-4`). The graph's own colours and shadows are `--graph-*` tokens in main.css, defined from the palette, never inline. A graph node's border is always its card line: its state shows in its status dot, and the only coloured ring on a node is the selection's. The agent's code blocks and tool payloads are the code that `font-mono` exists for.

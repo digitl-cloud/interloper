@@ -166,9 +166,15 @@
     }
 }
 
-/* A page's content column. A page that reads best in a column names its width on its panel,
-   `page-column` (lists, the overview) or `page-narrow` (settings, forms); its toolbar, body and
-   navbar title line up on it. Without one, a page spans the panel (the graph, timelines, a run). */
+/* A page's content column. A page that reads best in a column names its width on its panel:
+   `page-wide` (lists, whose tables scroll only when the window lacks room), `page-column` (the
+   overview) or `page-narrow` (settings, forms); its toolbar, body and navbar title line up on it.
+   Without one, a page spans the panel (the graph, timelines, a run). The column is centred in the
+   panel less what the agent panel reserves (`--agent-room`, set by the panel while it is open). */
+.page-wide {
+    --page-column: --theme(--container-7xl);
+}
+
 .page-column {
     --page-column: --theme(--container-5xl);
 }
@@ -179,15 +185,15 @@
 
 /* The side padding that centres the page's column, never less than the page's own 16px inset. */
 @utility page-gutter {
-    padding-inline: max(--spacing(4), calc((100% - var(--page-column, 100%)) / 2));
+    padding-inline: max(--spacing(4), calc((100% - var(--agent-room, 0px) - var(--page-column, 100%)) / 2));
 }
 
 /* The navbar's title starts where the column does, never before the sidebar toggle it follows.
    The navbar is the query container, its content box (100cqw) the panel less its two 16px insets:
-   the column starts (100cqw - column) / 2 + 16px from the panel's edge, and the title, past the
-   toggle, already stands 58px from it, so it moves by the difference. */
+   the column starts (100cqw - room - column) / 2 + 16px from the panel's edge, and the title, past
+   the toggle, already stands 58px from it, so it moves by the difference. */
 @utility page-title-offset {
-    margin-inline-start: max(0px, calc((100cqw - var(--page-column, 100cqw)) / 2 - --spacing(10.5)));
+    margin-inline-start: max(0px, calc((100cqw - var(--agent-room, 0px) - var(--page-column, 100cqw)) / 2 - --spacing(10.5)));
 }
 
 /* A section's label (Input, History, a separator's label): one size and weight for all of them, in
