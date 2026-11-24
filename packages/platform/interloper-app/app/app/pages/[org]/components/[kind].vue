@@ -205,7 +205,8 @@ const typeKey = useQueryParam('type', null)
 </script>
 
 <template>
-    <UDashboardPanel id="kind">
+    <UDashboardPanel id="kind"
+                     class="page-column">
         <template #header>
             <AppNavbar :title="pageTitle" />
         </template>

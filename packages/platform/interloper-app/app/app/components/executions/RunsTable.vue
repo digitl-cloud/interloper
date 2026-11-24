@@ -197,25 +197,23 @@ function onPageChange(page: number) {
                 description="Executions are the run history of your pipelines. Every time a job runs, on schedule or by hand, each partition it materialises shows up here with its status and timing."
                 :actions="editor ? [{ label: 'New job', icon: appConfig.ui.icons.plus, to: { path: organisationStore.path(kindPath('job')), query: { new: '1' } } }] : undefined" />
 
-        <UCard v-else-if="showTable"
-               :ui="FILL_CARD_UI">
-            <template #header>
-                <FilterBar :active="activeFilters"
-                           @reset="resetFilters">
-                    <template #search>
-                        <UInput v-model="search"
-                                placeholder="Search runs by target…"
-                                :icon="appConfig.ui.icons.search"
-                                class="w-full sm:w-64" />
-                    </template>
-                    <KindFilter v-model="kind"
-                                :components="componentsStore.all" />
-                    <TypeFilter v-model="type"
-                                :components="typeChoices" />
-                    <StatusFilter v-model="status"
-                                  :statuses="RUN_STATUSES" />
-                </FilterBar>
-            </template>
+        <div v-else-if="showTable"
+             class="flex min-h-0 flex-1 flex-col gap-3">
+            <FilterBar :active="activeFilters"
+                       @reset="resetFilters">
+                <template #search>
+                    <UInput v-model="search"
+                            placeholder="Search runs by target…"
+                            :icon="appConfig.ui.icons.search"
+                            class="w-full sm:w-64" />
+                </template>
+                <KindFilter v-model="kind"
+                            :components="componentsStore.all" />
+                <TypeFilter v-model="type"
+                            :components="typeChoices" />
+                <StatusFilter v-model="status"
+                              :statuses="RUN_STATUSES" />
+            </FilterBar>
 
             <UTable v-model:expanded="expanded"
                     :data="rows"
@@ -238,13 +236,11 @@ function onPageChange(page: number) {
                 </template>
             </UTable>
 
-            <template #footer>
-                <TableFooter :page="pageIndex + 1"
-                             :total="total"
-                             :page-size="pageSize"
-                             noun="run"
-                             @update:page="onPageChange" />
-            </template>
-        </UCard>
+            <TableFooter :page="pageIndex + 1"
+                         :total="total"
+                         :page-size="pageSize"
+                         noun="run"
+                         @update:page="onPageChange" />
+        </div>
     </div>
 </template>

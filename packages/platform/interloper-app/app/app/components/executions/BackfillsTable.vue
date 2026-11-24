@@ -132,25 +132,23 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
                 description="Backfills re-run past partitions to fill gaps or reprocess data. Start one from a job and every partition it replays shows up here."
                 :actions="[{ label: 'Go to jobs', icon: appConfig.icons.job, to: organisationStore.path(kindPath('job')) }]" />
 
-        <UCard v-else-if="showTable"
-               :ui="FILL_CARD_UI">
-            <template #header>
-                <FilterBar :active="activeFilters"
-                           @reset="resetFilters">
-                    <template #search>
-                        <UInput v-model="search"
-                                placeholder="Search backfills by target…"
-                                :icon="appConfig.ui.icons.search"
-                                class="w-full sm:w-64" />
-                    </template>
-                    <StatusFilter v-model="status"
-                                  :statuses="BACKFILL_STATUSES" />
-                    <FilterBarField label="Partitions">
-                        <UCheckbox v-model="showSinglePartition"
-                                   label="Show single partition" />
-                    </FilterBarField>
-                </FilterBar>
-            </template>
+        <div v-else-if="showTable"
+             class="flex min-h-0 flex-1 flex-col gap-3">
+            <FilterBar :active="activeFilters"
+                       @reset="resetFilters">
+                <template #search>
+                    <UInput v-model="search"
+                            placeholder="Search backfills by target…"
+                            :icon="appConfig.ui.icons.search"
+                            class="w-full sm:w-64" />
+                </template>
+                <StatusFilter v-model="status"
+                              :statuses="BACKFILL_STATUSES" />
+                <FilterBarField label="Partitions">
+                    <UCheckbox v-model="showSinglePartition"
+                               label="Show single partition" />
+                </FilterBarField>
+            </FilterBar>
 
             <UTable v-model:pagination="pagination"
                     v-model:sorting="sorting"
@@ -172,13 +170,11 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
                 </template>
             </UTable>
 
-            <template #footer>
-                <TableFooter :page="pagination.pageIndex + 1"
-                             :total="shown.length"
-                             :page-size="PAGE_SIZE"
-                             noun="backfill"
-                             @update:page="(p: number) => pagination = { ...pagination, pageIndex: p - 1 }" />
-            </template>
-        </UCard>
+            <TableFooter :page="pagination.pageIndex + 1"
+                         :total="shown.length"
+                         :page-size="PAGE_SIZE"
+                         noun="backfill"
+                         @update:page="(p: number) => pagination = { ...pagination, pageIndex: p - 1 }" />
+        </div>
     </div>
 </template>

@@ -289,7 +289,8 @@ const columns: TableColumn<PersonalAccessToken>[] = [
 </script>
 
 <template>
-    <UDashboardPanel id="authentication">
+    <UDashboardPanel id="authentication"
+                     class="page-narrow">
         <template #header>
             <AppNavbar title="Authentication" />
             <UDashboardToolbar>
@@ -300,48 +301,49 @@ const columns: TableColumn<PersonalAccessToken>[] = [
         </template>
         <template #body>
             <div v-if="activeTab === 'signin'"
-                 class="mx-auto flex w-full max-w-2xl flex-col gap-4">
-                <UPageCard variant="naked"
-                           orientation="horizontal"
-                           title="Sign in"
-                           description="The accounts you sign in to Interloper with." />
-                <LoadError v-if="identitiesError"
-                           title="Couldn't load your sign-in methods"
-                           :error="identitiesError"
-                           @retry="loadIdentities" />
-                <USkeleton v-else-if="identities === null"
-                           class="h-16 w-full" />
-                <UCard v-else
-                       :ui="{ body: 'flex flex-col gap-4' }">
-                    <template v-for="(identity, index) in identities"
-                              :key="identity.id">
-                        <USeparator v-if="index > 0" />
-                        <UFormField :label="identityLabel(identity)"
-                                    :description="identity.created_at ? `Added ${formatDay(identity.created_at)}` : undefined"
-                                    orientation="horizontal">
-                            <template #label>
-                                <span class="flex items-center gap-2">
-                                    <UIcon :name="providerIcon(identity.provider?.name ?? '')"
-                                           class="size-4" />
-                                    {{ identityLabel(identity) }}
-                                </span>
-                            </template>
-                            <UButton v-if="identities.length > 1"
-                                     label="Remove"
-                                     color="error"
-                                     variant="soft"
-                                     size="sm"
-                                     @click="removeIdentity(identity)" />
-                            <UBadge v-else
-                                    label="Connected"
-                                    color="success" />
-                        </UFormField>
+                 class="flex flex-col gap-4">
+                <UCard :ui="{ body: 'flex flex-col gap-4' }">
+                    <template #header>
+                        <CardHeader title="Sign in"
+                                    description="The accounts you sign in to Interloper with." />
                     </template>
-                    <UEmpty v-if="!identities.length"
-                            variant="naked"
-                            size="sm"
-                            title="No sign-in method"
-                            description="Nothing signs in to your account yet." />
+                    <LoadError v-if="identitiesError"
+                               title="Couldn't load your sign-in methods"
+                               :error="identitiesError"
+                               @retry="loadIdentities" />
+                    <USkeleton v-else-if="identities === null"
+                               class="h-16 w-full" />
+                    <template v-else>
+                        <template v-for="(identity, index) in identities"
+                                  :key="identity.id">
+                            <USeparator v-if="index > 0" />
+                            <UFormField :label="identityLabel(identity)"
+                                        :description="identity.created_at ? `Added ${formatDay(identity.created_at)}` : undefined"
+                                        orientation="horizontal">
+                                <template #label>
+                                    <span class="flex items-center gap-2">
+                                        <UIcon :name="providerIcon(identity.provider?.name ?? '')"
+                                               class="size-4" />
+                                        {{ identityLabel(identity) }}
+                                    </span>
+                                </template>
+                                <UButton v-if="identities.length > 1"
+                                         label="Remove"
+                                         color="error"
+                                         variant="soft"
+                                         size="sm"
+                                         @click="removeIdentity(identity)" />
+                                <UBadge v-else
+                                        label="Connected"
+                                        color="success" />
+                            </UFormField>
+                        </template>
+                        <UEmpty v-if="!identities.length"
+                                variant="naked"
+                                size="sm"
+                                title="No sign-in method"
+                                description="Nothing signs in to your account yet." />
+                    </template>
                 </UCard>
             </div>
 

@@ -145,7 +145,8 @@ onMounted(loadData)
 </script>
 
 <template>
-    <UDashboardPanel id="admin-organisations">
+    <UDashboardPanel id="admin-organisations"
+                     class="page-column">
         <template #header>
             <AppNavbar title="Organisations" />
         </template>

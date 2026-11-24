@@ -48,28 +48,28 @@ async function save() {
 </script>
 
 <template>
-    <UDashboardPanel id="profile">
+    <UDashboardPanel id="profile"
+                     class="page-narrow">
         <template #header>
             <AppNavbar title="Profile" />
         </template>
         <template #body>
             <UForm id="profile"
                    :state="state"
-                   class="mx-auto flex w-full max-w-2xl flex-col gap-4"
+                   class="flex flex-col gap-4"
                    @submit="save">
-                <UPageCard variant="naked"
-                           orientation="horizontal"
-                           title="Profile"
-                           description="How other members see you, and how times are shown to you.">
-                    <UButton form="profile"
-                             type="submit"
-                             label="Save changes"
-                             class="w-fit lg:ms-auto"
-                             :disabled="!canSave"
-                             :loading="saving" />
-                </UPageCard>
-
                 <UCard :ui="{ body: 'flex flex-col gap-4' }">
+                    <template #header>
+                        <CardHeader title="Personal details"
+                                    description="How other members see you, and how times are shown to you.">
+                            <UButton form="profile"
+                                     type="submit"
+                                     label="Save changes"
+                                     size="sm"
+                                     :disabled="!canSave"
+                                     :loading="saving" />
+                        </CardHeader>
+                    </template>
                     <UFormField label="Name"
                                 name="name"
                                 description="Shown to other members of your organisations."

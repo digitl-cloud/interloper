@@ -183,7 +183,8 @@ onMounted(loadData)
 </script>
 
 <template>
-    <UDashboardPanel id="admin-users">
+    <UDashboardPanel id="admin-users"
+                     class="page-column">
         <template #header>
             <AppNavbar title="Users" />
         </template>

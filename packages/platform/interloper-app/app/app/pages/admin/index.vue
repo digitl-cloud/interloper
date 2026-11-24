@@ -234,7 +234,8 @@ const activity = computed(() => {
 </script>
 
 <template>
-    <UDashboardPanel id="admin">
+    <UDashboardPanel id="admin"
+                     class="page-column">
         <template #header>
             <AppNavbar title="Overview" />
         </template>
