@@ -98,11 +98,13 @@ class DevCommand(Command):
 
         if sys.platform == "win32":
             raise SystemExit("Error: interloper dev runs on macOS and Linux; on Windows, run it inside WSL.")
-        configure_console_logging(logging.DEBUG if args.verbose else logging.INFO, log_format=LogSettings.get().format)
         files = [Path(file).resolve() for file in args.files]
         if missing := [str(file) for file in files if not file.is_file()]:
             raise SystemExit(f"Error: no such spec file: {', '.join(missing)}")
         project = DevProject.discover(Path.cwd(), files)
+        configure_console_logging(
+            logging.DEBUG if args.verbose else logging.INFO, log_format=LogSettings.get().format, project=project.root
+        )
         port = Port(args.port or ServerSettings.get().port)
         if port.in_use:
             raise SystemExit(f"Error: port {port.number} is already in use. Stop what listens on it, or pass --port.")

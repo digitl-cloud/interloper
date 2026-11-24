@@ -160,8 +160,9 @@ is set:
 ```
 
 The source is the package that wrote the record, without its `interloper` prefix. The
-platform's packages and every installed extension's print from INFO up; every other library
-prints only its warnings and errors. A request is a line of its own only when it fails with a
+platform's packages and every installed extension's print from INFO up, and so do your own
+project's modules under `interloper dev` and `interloper run`; every other library prints only
+its warnings and errors. A request is a line of its own only when it fails with a
 5xx. `-v` shows debug lines, every request and the other libraries' INFO lines. Both formats
 follow the same rule.
 

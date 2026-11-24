@@ -7,6 +7,7 @@ import logging
 import re
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -138,6 +139,27 @@ class TestConfigureConsoleLogging:
         configure_console_logging()
 
         assert logging.getLogger("uvicorn.error").getEffectiveLevel() == logging.WARNING
+
+    def test_a_project_s_own_modules_print_info_like_ours(self, tmp_path: Path) -> None:
+        (tmp_path / "weather.py").write_text("")
+        (tmp_path / "shop").mkdir()
+        (tmp_path / "shop" / "__init__.py").write_text("")
+        (tmp_path / "src" / "acme").mkdir(parents=True)
+        (tmp_path / "src" / "acme" / "__init__.py").write_text("")
+        (tmp_path / "notes").mkdir()
+
+        configure_console_logging(project=tmp_path)
+
+        levels = {name: logging.getLogger(name).getEffectiveLevel() for name in ("weather", "shop.models", "acme")}
+        assert levels == {"weather": logging.INFO, "shop.models": logging.INFO, "acme": logging.INFO}
+        assert logging.getLogger("notes").getEffectiveLevel() == logging.WARNING
+
+    def test_without_a_project_only_the_manifests_packages_print_info(self, tmp_path: Path) -> None:
+        (tmp_path / "weather.py").write_text("")
+
+        configure_console_logging()
+
+        assert logging.getLogger("weather").getEffectiveLevel() == logging.WARNING
 
     def test_verbose_lowers_both(self) -> None:
         configure_console_logging(logging.DEBUG)

@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import sys
+from pathlib import Path
 from typing import ClassVar, Literal
 
 from opentelemetry import trace
@@ -137,11 +138,14 @@ class JsonLogFormatter(logging.Formatter):
         return json.dumps(entry)
 
 
-def configure_console_logging(level: int = logging.INFO, *, log_format: Literal["text", "json"] = "text") -> None:
+def configure_console_logging(
+    level: int = logging.INFO, *, log_format: Literal["text", "json"] = "text", project: Path | None = None
+) -> None:
     """Print log records to stderr, ours at *level* and every library's from warnings up.
 
     The packages the manifests name (the platform's and every installed
-    extension's) log at *level*; every other logger at WARNING, or INFO when
+    extension's) log at *level*, and so do the project's own modules when a
+    command serves or runs one; every other logger at WARNING, or INFO when
     *level* is DEBUG, so ``-v`` lowers both and ``--quiet`` raises both. The
     levels are set on the loggers, so JSON follows the same rule.
 
@@ -157,6 +161,9 @@ def configure_console_logging(level: int = logging.INFO, *, log_format: Literal[
         log_format: ``text`` for a terminal (see `ConsoleFormatter`, coloured
             when stderr is a terminal and ``NO_COLOR`` is unset), ``json`` for
             a log collector (see `JsonLogFormatter`).
+        project: The directory of the project the command serves or runs:
+            the modules and packages at its top and under its ``src/`` log at
+            *level* too. ``None`` for a command that serves no project of its own.
     """
     from interloper.extension import MANIFESTS
 
@@ -171,5 +178,9 @@ def configure_console_logging(level: int = logging.INFO, *, log_format: Literal[
         console.setFormatter(ConsoleFormatter(color=sys.stderr.isatty() and not os.environ.get("NO_COLOR")))
     root.addHandler(console)
     root.setLevel(logging.INFO if level <= logging.DEBUG else max(level, logging.WARNING))
-    for package in {extension.package.partition(".")[0] for extension in MANIFESTS.extensions()}:
+    packages = {extension.package.partition(".")[0] for extension in MANIFESTS.extensions()}
+    for folder in (project, project / "src") if project is not None else ():
+        modules = [*folder.glob("*.py"), *(path.parent for path in folder.glob("*/*.py"))]
+        packages |= {module.stem for module in modules if module.stem.isidentifier()}
+    for package in packages:
         logging.getLogger(package).setLevel(level)

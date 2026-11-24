@@ -130,7 +130,9 @@ class TestServe:
             ),
         )
         monkeypatch.setattr(
-            platform_module, "configure_console_logging", lambda level, **kwargs: built.update(level=level)
+            platform_module,
+            "configure_console_logging",
+            lambda level, **kwargs: built.update(level=level, project=kwargs["project"]),
         )
         monkeypatch.setattr(SignIn, "ensure", lambda self, store: (mock.Mock(), mock.Mock()))
         app = SimpleNamespace(services={}, run=mock.Mock())
@@ -173,6 +175,11 @@ class TestServe:
         assert ready.started == 1000.0
         assert "parent-watchdog" not in ready.services
         assert ready.logger.name == "interloper_app.dev.platform"
+
+    def test_the_project_s_own_modules_log_at_info(self, spec: PlatformSpec, monkeypatch: pytest.MonkeyPatch):
+        _, built, _, _ = self._serve(spec, monkeypatch)
+
+        assert built["project"] == Path("/work/acme")
 
     def test_verbose_prints_debug_lines(self, spec: PlatformSpec, monkeypatch: pytest.MonkeyPatch):
         spec.verbose = True
