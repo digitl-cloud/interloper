@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import nullcontext
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -26,7 +27,9 @@ logger = logging.getLogger(__name__)
 def configure_logging(*, quiet: bool = False, verbose: bool = False) -> None:
     """Set up the one logging stack everything the command prints goes through.
 
-    Framework log lines and run events share the same format, stream and level.
+    Framework log lines and run events share the same format, stream and level,
+    and the modules of the project the command runs from log like the
+    platform's.
 
     Args:
         quiet: Only warnings and errors; takes precedence over *verbose*.
@@ -36,7 +39,9 @@ def configure_logging(*, quiet: bool = False, verbose: bool = False) -> None:
     from interloper.settings import LogSettings
 
     configure_console_logging(
-        logging.WARNING if quiet else logging.DEBUG if verbose else logging.INFO, log_format=LogSettings.get().format
+        logging.WARNING if quiet else logging.DEBUG if verbose else logging.INFO,
+        log_format=LogSettings.get().format,
+        project=Path.cwd(),
     )
 
 

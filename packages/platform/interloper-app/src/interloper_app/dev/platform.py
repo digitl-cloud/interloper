@@ -100,7 +100,9 @@ class PlatformSpec(BaseModel):
         watchdog = ParentWatchdog(parent=self.parent)
         root = Path(self.root)
         sys.path.insert(0, self.root)
-        configure_console_logging(logging.DEBUG if self.verbose else logging.INFO, log_format=LogSettings.get().format)
+        configure_console_logging(
+            logging.DEBUG if self.verbose else logging.INFO, log_format=LogSettings.get().format, project=root
+        )
         ServerSettings.activate(
             ServerSettings.get().model_copy(
                 update={"host": Port.HOST, "port": self.port, "enabled": True, "external_url": self.public_url}

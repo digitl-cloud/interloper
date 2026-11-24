@@ -182,6 +182,19 @@ def test_the_ready_line_is_the_platform_s_and_dev_prints_nothing_of_its_own(
     assert capsys.readouterr().out == ""
 
 
+def test_the_project_s_own_modules_log_at_info(project: DevProject, served, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(DevProject, "extensions", lambda self: [])
+    configured: list[Path | None] = []
+    monkeypatch.setattr(
+        "interloper.cli.console.configure_console_logging",
+        lambda *args, **kwargs: configured.append(kwargs.get("project")),
+    )
+
+    DevCommand().run(_args())
+
+    assert configured == [project.root]
+
+
 def test_verbose_reaches_the_platform(project: DevProject, served, monkeypatch: pytest.MonkeyPatch):
     built, _, _ = served
     monkeypatch.setattr(DevProject, "extensions", lambda self: [])
