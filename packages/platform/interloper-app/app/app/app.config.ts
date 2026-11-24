@@ -267,20 +267,17 @@ export default defineAppConfig({
       // Borderless tables: rows divided by the line color. The table reaches 8px
       // into its surface's padding and its first and last cells pad themselves
       // back, so the text aligns with the surface's while a row's highlight
-      // (and a sortable header's) runs past it. The highlight is drawn by the
-      // row's cells, the outer two rounded, since a table row cannot round its
-      // own background. Headers label quietly; the first column carries the
-      // row's name. A row is a `group/row`, so what it holds can answer its
+      // (and a sortable header's) runs past it. Headers label quietly; the
+      // first column carries the row's name. A row is a `group/row`, so what it holds can answer its
       // hover (the options menu). A sticky header takes the tone of the
       // surface it scrolls over (`--surface`: the page's, or a card's), so rows
       // scrolling beneath don't show through.
       slots: {
         root: '-mx-2',
-        tbody: '[&>tr]:data-[selectable=true]:hover:bg-transparent',
         separator: 'bg-(--ui-border)',
-        tr: 'group/row data-[selected=true]:bg-transparent',
+        tr: 'group/row',
         th: 'py-3 first:ps-2 last:pe-2 text-muted font-normal',
-        td: 'py-3 first:ps-2 last:pe-2 first:text-highlighted first:font-medium first:rounded-s-md last:rounded-e-md [tr[data-selectable=true]:hover>&]:bg-elevated/50 [tr[data-selected=true]>&]:bg-elevated/50'
+        td: 'py-3 first:ps-2 last:pe-2 first:text-highlighted first:font-medium'
       },
       variants: {
         sticky: {
