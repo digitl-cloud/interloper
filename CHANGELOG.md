@@ -2,6 +2,34 @@
 
 <!-- version list -->
 
+## v0.143.0 (2026-11-24)
+
+### Bug Fixes
+
+- **api**: Require the FastAPI that lists route contexts
+  ([`7beb3ca`](https://github.com/digitl-cloud/interloper/commit/7beb3ca6340eb8465ca6dcc0f91c45692a4cdb13))
+
+- **mcp**: Serve through uvicorn without log handlers of its own
+  ([`de639bc`](https://github.com/digitl-cloud/interloper/commit/de639bcfe0b2cd9d142fa5541c20a3d8413f621c))
+
+### Features
+
+- Log a project's own modules at the command's level
+  ([`60dd47c`](https://github.com/digitl-cloud/interloper/commit/60dd47cf196ed7e0d160a7a065afaabc3b6481a1))
+
+- Print one log format from every command
+  ([`74b500e`](https://github.com/digitl-cloud/interloper/commit/74b500e6e7d480320dd535082834ed2c3af6d184))
+
+- **app**: Drop the border from cards
+  ([`6fce483`](https://github.com/digitl-cloud/interloper/commit/6fce4838a5e4f224839ccbee4df62dfa697ea956))
+
+- **app**: Pad and space pages 16px at every width
+  ([`a6bb21d`](https://github.com/digitl-cloud/interloper/commit/a6bb21dc3cb4acaca3d9ca6bec34d0dbec832612))
+
+- **app**: Say when dev installs dependencies
+  ([`45b2847`](https://github.com/digitl-cloud/interloper/commit/45b28476a237285978efc79688bf073e470ee00b))
+
+
 ## v0.142.0 (2026-11-24)
 
 ### Bug Fixes
