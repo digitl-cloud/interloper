@@ -31,7 +31,7 @@ export function sortableHeader<T>(label: string) {
             label,
             icon,
             trailing: true,
-            class: 'group -mx-2.5 font-semibold text-highlighted',
+            class: ['group -mx-2 px-2 font-normal hover:text-highlighted', sorted ? 'text-highlighted' : 'text-muted'],
             ui: sorted ? undefined : { trailingIcon: 'opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100' },
             'aria-label': `Sort by ${label}`,
             onClick: () => column.toggleSorting(column.getIsSorted() === 'asc'),

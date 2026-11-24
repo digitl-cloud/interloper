@@ -30,7 +30,8 @@ const wide = useMediaQuery('(min-width: 640px)')
                                     class="sm:w-60" />
             <UButton v-if="agentHost && userStore.agentAvailable"
                      :icon="appConfig.icons.agent"
-                     :variant="agentOpen ? 'soft' : 'solid'"
+                     color="neutral"
+                     :variant="agentOpen ? 'soft' : 'ghost'"
                      square
                      aria-label="Toggle agent panel"
                      @click="agentOpen = !agentOpen" />

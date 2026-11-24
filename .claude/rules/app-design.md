@@ -51,8 +51,10 @@ The reference for "default" is the Nuxt UI dashboard template.
 **Surfaces**
 - `bg-default`: the panel
 - `bg-muted`: the card tone (cards, sidebar)
-- `bg-elevated`: hover and insets inside a card
-- `bg-accented`: tracks
+- `bg-elevated`: hover, insets inside a card, and the fill of a control (an input, a select, a segmented control's track)
+- `bg-accented`: tracks, and the chosen value of a segmented control in dark mode
+
+**Blue is for meaning, not for action:** links, focus, the current selection and the info status. The primary button is the inverted tone (`neutral`, solid: white on dark, black on light), so a page's one main action stands out without colour.
 
 **Tints:** `/10` for soft fills, `/50` for hover rings. Nothing else.
 
@@ -82,13 +84,13 @@ Never for ids, names, numbers, dates or captions.
 Titles of cards, page cards, modals, drawers, empty states and the navbar take the size their Nuxt UI slot ships. No arbitrary sizes.
 
 **Weights**
-- `font-normal`: body
-- `font-medium`: labels and names
-- `font-semibold`: titles and emphasised values
+- `font-normal`: body, and a table's column headers
+- `font-medium`: titles (cards, section headers, modals, drawers, empty states), labels and names
+- `font-semibold`: a page's title (the navbar's, a standalone page's heading), KPI numbers, and emphasised values (a count or a time a row exists for, a recap's values, a word stressed in a sentence). The graph's node titles and the logo keep theirs.
 
 No `font-bold`.
 
-**Captions.** A section's label, the name over a block ("Input", "History", a list's group header, a separator's label, a sidebar's portal badge), is the `caption` class from main.css: `text-xs`, `font-medium`, wider tracking, capitals. It takes a text colour, `text-muted` or a state colour, and nothing else that sizes it. It is the app's only uppercase and only letter-spacing: templates never write `uppercase` or `tracking-*`. A label beside its control ("Status", "Window") is not a caption: `text-sm text-muted`. The source writes a caption in sentence case, like every other label.
+**Captions.** A section's label, the name over a block ("Input", "History", a list's group header, a separator's label, a sidebar's portal badge), is the `caption` class from main.css: `text-xs`, `font-medium`, in sentence case like every other label. It takes a text colour, `text-muted` or a state colour, and nothing else that sizes it. The app has no capitals and no letter-spacing: templates never write `uppercase` or `tracking-*`. A control in a toolbar or a card header names itself (its value, its options' words) and takes no label beside it; a form's fields keep their `UFormField` labels.
 
 **No** line-height utilities except on text clamped in a fixed box.
 
@@ -182,16 +184,16 @@ Show the one fact a row, tile or line exists for; the rest waits for hover, a to
 
 | Job | Use |
 |---|---|
-| Page frame | `UDashboardPanel`; `#header` is `AppNavbar`: Nuxt UI's default navbar (its height and bottom border; the theme only lines its edges up with the content), the same on every page (sidebar toggle, title, search, agent toggle) and never given actions. Detail pages put a `UBreadcrumb` in its `#title`. `UDashboardToolbar` holds a page's view switch (`PageTabs`) on its left and a detail page's own actions (cancel, retry, open) on its right; the theme makes it the first row of the page's content (no rule, the content's top spacing). |
+| Page frame | `UDashboardPanel`; `#header` is `AppNavbar`: Nuxt UI's default navbar (its height; the theme drops its bottom rule, so it and the page are one surface, and lines its edges up with the content), the same on every page (sidebar toggle, title, search, agent toggle) and never given actions. Detail pages put a `UBreadcrumb` in its `#title`. `UDashboardToolbar` holds a page's view switch (`PageTabs`) on its left and a detail page's own actions (cancel, retry, open) on its right; the theme makes it the first row of the page's content (no rule, the content's top spacing). |
 | Where an action goes | With the card it acts on: a list's create action in `DataTable` `#actions`, a canvas's in its toolbar's `#actions` (CollectionTable, GraphToolbar), a card's in its `CardHeader`. A page with no data repeats its create action in its `UEmpty`. |
-| Section header above a card | `UPageCard variant="naked" orientation="horizontal"`: title, description, actions in its default slot |
+| Section header above a card | `UPageCard variant="naked" orientation="horizontal"`: title, description, actions in its default slot. The title and description take the row and wrap only when it runs out; the actions keep their own width (the theme). |
 | Toolbar above a list or canvas | `FilterBar`: search in `#search`, filters in its default slot, the card's actions in `#actions`, and `active` / `@reset` for the filters' count and reset (`DataTable` forwards them as `active-filters` / `@reset-filters`). Every action has an icon: on a phone it is all that shows. No `ms-auto` or margin hacks between groups. |
-| Labelled filter | `FilterBarField label="Status"` around a bare `<UTabs v-model :items>`: the field sets the tabs' look, compact pills inline and a full-width list in the phone's sheet. A select that names its choice ("All types") takes `:inline-label="false"` and `w-full sm:w-40`; the shared `KindFilter`, `TypeFilter`, `StatusFilter` and `EnabledFilter` carry their field. In a `CardHeader` the fields stay inline. |
+| Filter | `FilterBarField label="Status"` around a bare `<UTabs v-model :items>`: the field sets the tabs' look, a segmented control inline and a full-width list in the phone's sheet. Inline, the label is only the group's name for screen readers; the sheet shows it over the section. A segmented control stands as tall as the controls beside it: 36px in a `FilterBar` (beside the inputs), 28px in a `CardHeader` (beside small buttons). A select names its choice ("All types") and takes `w-full sm:w-40`; the shared `KindFilter`, `TypeFilter`, `StatusFilter` and `EnabledFilter` carry their field. |
 | Header inside a card | `CardHeader` in the `UCard #header` |
 | Section label | `caption text-muted` on the label; `USeparator label` and navigation `type: 'label'` items take it from the theme |
 | Container | `UCard` (the card tone) |
-| Settings and key/value rows | `UFormField orientation="horizontal"` rows separated by `USeparator`, inside a `UCard`; a read-only value is the field's content |
-| List of records | `DataTable`. A raw `UTable` only inside a card that is not a list page (detail sub-tables, overview cards). |
+| Settings and key/value rows | `UFormField orientation="horizontal"` rows separated by `USeparator`, inside a `UCard`; a read-only value is the field's content. A card of editable rows saves once, with "Save changes" in its section header, never a Save per row. |
+| List of records | `DataTable`. A raw `UTable` only inside a card that is not a list page (detail sub-tables, overview cards). Column headers are quiet (`text-muted`, normal weight; a sortable one brightens while it sorts); the first column holds the row's name, bright and medium. The table reaches 8px into its card's padding and its outer cells pad back, so a row's highlight runs past its text (the theme). A row's options menu shows on its hover or focus, and always on a touch screen. |
 | Status | `StatusBadge` (a badge in the status's colour); `StatusDot` where a word does not fit |
 | Entity reference | `EntityBadge` (outline neutral, with the kind's icon). Outline is reserved for it. |
 | Tags, counts, kinds in a row | Text: tags and counts `text-muted`, a kind or a count beside a name `text-dimmed` |
@@ -211,15 +213,15 @@ Show the one fact a row, tile or line exists for; the rest waits for hover, a to
 | Loading, refetch | the component's `loading` prop |
 | Failed load | `LoadError` (error UAlert with Retry). Never only `console.error`. |
 | Failed action | `toast.add(errorToast(error, 'Couldn't …'))` |
-| Primary action | `UButton`, theme default (solid primary) |
+| Primary action | `UButton`, theme default (solid neutral: the inverted tone). One per card or toolbar. |
 | Secondary action | `color="neutral" variant="outline"` |
 | Utility and icon-only action | `color="neutral" variant="ghost"`. Icon-only buttons always carry `aria-label`. |
 | Destructive action | `color="error"`: solid in the confirm dialog, `variant="soft"` elsewhere |
 | Inline text action | `variant="link"` |
 | Button size | the theme default for toolbar, table-toolbar and overlay actions; `size="sm"` for actions beside a card title (`CardHeader`) and in rows |
-| A page's views | Views of the same records that share their filters (Assets: Graph, Table) switch with a `FilterBarField label="View"` right after the search, its tabs carrying the views' icons, so every filter beside it reads as applying to both; on a phone it joins the other fields in the filter sheet, and the selection stays across the views. A side pane closes from its own header, never from the toolbar. Otherwise `PageTabs` over `usePageView`: `UNavigationMenu variant="pill"` in the toolbar, labels without icons, themed in app.config to the same segmented look as the pill `UTabs` (real links, so views open in new tabs). Either way the view rides `?view=`, absent for the default, and the views are declared once in `composables/navigation.ts`, which also lists them in the command palette. |
-| Views inside a card | `UTabs variant="pill" size="xs" :content="false"` |
-| Form | `UForm` + `UFormField` (`label`, `description`, `required`, `error`) for every field; no hand-built labels or error text. Vertical in modals and drawers, horizontal in settings. Inputs are `w-full` in vertical forms. |
+| A page's views | Views of the same records that share their filters (Assets: Graph, Table) switch with a `FilterBarField label="View"` right after the search, its tabs carrying the views' icons, so every filter beside it reads as applying to both; on a phone it joins the other fields in the filter sheet, and the selection stays across the views. A side pane closes from its own header, never from the toolbar. Otherwise `PageTabs` over `usePageView`: `UNavigationMenu variant="pill"` in the toolbar, labels without icons, themed in app.config as navigation, not a control: no track, the current view a lighter pill, as tall as the toolbar's buttons (real links, so views open in new tabs). Either way the view rides `?view=`, absent for the default, and the views are declared once in `composables/navigation.ts`, which also lists them in the command palette. |
+| Views inside a card | `UTabs variant="pill" size="xs" :content="false"`: the 28px segmented control |
+| Form | `UForm` + `UFormField` (`label`, `description`, `required`, `error`) for every field; no hand-built labels or error text. Vertical in modals and drawers, horizontal in settings. Inputs are `w-full` in vertical forms. Inputs and selects are filled (the theme's `soft` variant, on `bg-elevated`) and ringed only while focused; the chat prompt keeps its outline. |
 | Confirm | `useConfirm()` (ConfirmModal) |
 | Short form | `UModal`; footer right-aligned by the theme: Cancel (neutral outline), then the primary button |
 | Multi-step or long form | right `UDrawer` (`WizardDrawer`), with its `close` prop; the steps in a `UStepper` with Nuxt UI's own look |

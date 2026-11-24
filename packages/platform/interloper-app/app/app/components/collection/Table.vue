@@ -292,7 +292,7 @@ function onRowClick(row: any) {
                     <template v-if="tierOf(row) === 'source_type'">
                         <UIcon :name="typeInfoByKey.get(row.original.groupKey)?.icon ?? appConfig.icons.source"
                                class="size-5 shrink-0" />
-                        <span class="font-semibold">{{ typeInfoByKey.get(row.original.groupKey)?.name ?? row.original.groupKey }}</span>
+                        <span class="font-medium">{{ typeInfoByKey.get(row.original.groupKey)?.name ?? row.original.groupKey }}</span>
                         <MaturityBadge :maturity="typeInfoByKey.get(row.original.groupKey)?.maturity" />
                         <UTooltip :text="countLabel(typeInfoByKey.get(row.original.groupKey)?.sourceCount ?? 0, 'source')">
                             <UBadge :label="String(typeInfoByKey.get(row.original.groupKey)?.sourceCount ?? 0)"
@@ -320,7 +320,7 @@ function onRowClick(row: any) {
                         <UIcon :name="sourceInfoById.get(row.original.sourceId)?.icon ?? appConfig.icons.source"
                                class="size-5 shrink-0" />
                         <span class="flex min-w-0 items-center gap-2">
-                            <span class="truncate font-semibold">{{ sourceInfoById.get(row.original.sourceId)?.name }}</span>
+                            <span class="truncate font-medium">{{ sourceInfoById.get(row.original.sourceId)?.name }}</span>
                             <UBadge v-if="sourceInfoById.get(row.original.sourceId)?.discriminator"
                                     color="neutral"
                                     size="sm"
@@ -475,7 +475,7 @@ function onRowClick(row: any) {
             <!-- Actions (source and asset rows) -->
             <template #actions-cell="{ row }">
                 <div v-if="headsSourceOrAsset(row) && (tierOf(row) !== 'source_id' || canEdit)"
-                     class="flex justify-end">
+                     class="flex justify-end opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
                     <UDropdownMenu :items="tierOf(row) === 'source_id'
                         ? buildSourceActions(row.original.sourceId)
                         : buildAssetActions(row.original.assetId, row.original.sourceId)">

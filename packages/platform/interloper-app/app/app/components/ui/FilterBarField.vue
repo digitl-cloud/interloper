@@ -1,30 +1,34 @@
 <script setup lang="ts">
 /**
- * A labelled filter, and the look of the pill tabs it holds. Inline (a wide
- * `FilterBar`, a `CardHeader`), the label sits beside compact pills that scroll
- * sideways when they outgrow their room. In the phone's filter sheet the label
- * heads the section and the pills become a full-width list, sized for a thumb.
+ * A filter, and the look of the pill tabs it holds. Inline (a wide
+ * `FilterBar`, a `CardHeader`), the control names itself: its label is only
+ * the group's name for screen readers, and its pills stand as tall as the
+ * controls beside them, a toolbar's inputs in a `FilterBar`, a card header's
+ * small buttons elsewhere, scrolling sideways when they outgrow their room.
+ * In the phone's filter sheet the label heads the section and the pills
+ * become a full-width list, sized for a thumb.
  */
-withDefaults(defineProps<{
+defineProps<{
     label: string
-    /** False for a control that names itself inline (a select reading "All types"): the label then shows only in the sheet. */
-    inlineLabel?: boolean
-}>(), { inlineLabel: true })
+}>()
 
-const stacked = inject(FILTER_BAR_STACKED, ref(false))
+// Provided only inside a FilterBar; a field without it stands in a card header.
+const bar = inject(FILTER_BAR_STACKED, null)
+const stacked = computed(() => bar?.value ?? false)
+const size = computed(() => stacked.value ? 'md' : bar ? 'sm' : 'xs')
 </script>
 
 <template>
-    <UTheme :props="{ tabs: { variant: 'pill', content: false, size: stacked ? 'md' : 'sm', orientation: stacked ? 'vertical' : 'horizontal' } }">
+    <UTheme :props="{ tabs: { variant: 'pill', content: false, size, orientation: stacked ? 'vertical' : 'horizontal' } }">
         <div v-if="stacked"
              class="flex flex-col gap-2">
             <span class="caption text-muted">{{ label }}</span>
             <slot />
         </div>
         <div v-else
-             class="flex min-w-0 max-w-full items-center gap-2">
-            <span v-if="inlineLabel"
-                  class="shrink-0 text-sm text-muted">{{ label }}</span>
+             role="group"
+             :aria-label="label"
+             class="flex min-w-0 max-w-full items-center">
             <slot />
         </div>
     </UTheme>

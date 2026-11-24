@@ -229,7 +229,7 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
                     :on-select="noRowClick ? undefined : (_e: Event, row: any) => emit('edit', row.original)"
                     @contextmenu="onRowContextMenu">
                 <template #actions-cell="{ row }">
-                    <div class="flex justify-end">
+                    <div class="flex justify-end opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
                         <UDropdownMenu v-if="buildRowActions(row.original).length" :items="buildRowActions(row.original)">
                             <UButton :icon="appConfig.icons.options"
                                      color="neutral"

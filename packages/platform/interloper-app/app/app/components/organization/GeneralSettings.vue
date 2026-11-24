@@ -1,19 +1,19 @@
 <script setup lang="ts">
 /**
- * An organisation's display name and key, each saved on its own, as settings
- * rows in a card. Given a `title`, the section header above the card comes
- * with it. Rows the page adds about the same organisation go in the default
+ * An organisation's display name and key, as settings rows in a card under a
+ * section header, saved together by the header's "Save changes", as the
+ * profile is. Rows the page adds about the same organisation go in the default
  * slot, as more horizontal `UFormField`s; a separator comes before them.
  */
 import type { Organisation } from '~/types/organisation'
 
-const props = withDefaults(defineProps<{
+const props = defineProps<{
     organisation: Pick<Organisation, 'id' | 'name' | 'key'>
-    /** The section header's title; without it, the page heads the card itself. */
-    title?: string
+    /** The section header's title. */
+    title: string
     /** The section header's description. */
-    description?: string
-}>(), { title: undefined, description: undefined })
+    description: string
+}>()
 
 const emit = defineEmits<{
     saved: [organisation: Organisation]
@@ -22,16 +22,17 @@ const emit = defineEmits<{
 const organisationStore = useOrganisationStore()
 const toast = useToast()
 const origin = window.location.host
+const formId = useId()
 
 const name = ref(props.organisation.name)
-const nameError = ref<string | null>(null)
-const savingName = ref(false)
-const nameChanged = computed(() => name.value.trim() !== props.organisation.name)
-
 const key = ref(props.organisation.key)
+const nameError = ref<string | null>(null)
 const keyError = ref<string | null>(null)
-const savingKey = ref(false)
+const saving = ref(false)
+
+const nameChanged = computed(() => name.value.trim() !== props.organisation.name)
 const keyChanged = computed(() => key.value.trim() !== props.organisation.key)
+const canSave = computed(() => (nameChanged.value || keyChanged.value) && !!name.value.trim() && !!key.value.trim())
 
 watch(() => props.organisation, (organisation) => {
     name.value = organisation.name
@@ -44,98 +45,79 @@ watch(key, () => {
     keyError.value = null
 })
 
-async function saveName() {
-    const next = name.value.trim()
-    if (!next || !nameChanged.value) return
-    savingName.value = true
+async function save() {
+    if (!canSave.value || saving.value) return
+    const patch = {
+        ...(nameChanged.value ? { name: name.value.trim() } : {}),
+        ...(keyChanged.value ? { key: key.value.trim() } : {}),
+    }
+    saving.value = true
     try {
-        const updated = await organisationStore.updateOrganisation(props.organisation.id, { name: next })
-        toast.add({ title: 'Organisation renamed', color: 'success' })
+        const updated = await organisationStore.updateOrganisation(props.organisation.id, patch)
+        toast.add({ title: 'Organisation saved', color: 'success' })
         emit('saved', updated)
     }
     catch (err) {
-        nameError.value = errorDetail(err) ?? GENERIC_ERROR
+        // The API refuses only a key (taken, malformed or reserved); a name is refused only empty, which never leaves.
+        const detail = errorDetail(err) ?? GENERIC_ERROR
+        if (patch.key) keyError.value = detail
+        else nameError.value = detail
     }
     finally {
-        savingName.value = false
-    }
-}
-
-async function saveKey() {
-    const next = key.value.trim()
-    if (!next || !keyChanged.value) return
-    savingKey.value = true
-    try {
-        const updated = await organisationStore.updateOrganisation(props.organisation.id, { key: next })
-        toast.add({ title: `Organisation key changed to ${updated.key}`, color: 'success' })
-        emit('saved', updated)
-    }
-    catch (err) {
-        keyError.value = errorDetail(err) ?? GENERIC_ERROR
-    }
-    finally {
-        savingKey.value = false
+        saving.value = false
     }
 }
 </script>
 
 <template>
     <div class="flex flex-col gap-4">
-        <UPageCard v-if="title"
-                   :title="title"
+        <UPageCard :title="title"
                    :description="description"
                    variant="naked"
-                   orientation="horizontal" />
+                   orientation="horizontal">
+            <UButton :form="formId"
+                     type="submit"
+                     label="Save changes"
+                     class="w-fit lg:ms-auto"
+                     :disabled="!canSave"
+                     :loading="saving" />
+        </UPageCard>
 
         <UCard>
-            <div class="flex flex-col gap-4">
-                <form @submit.prevent="saveName">
-                    <UFormField label="Display name"
-                                description="Members see this name everywhere in the app."
-                                :error="nameError ?? undefined"
-                                required
-                                orientation="horizontal">
-                        <div class="flex items-center gap-2">
-                            <UInput v-model="name"
-                                    class="w-60"
-                                    :disabled="savingName" />
-                            <UButton type="submit"
-                                     label="Save"
-                                     :disabled="!name.trim() || !nameChanged || savingName"
-                                     :loading="savingName" />
-                        </div>
-                    </UFormField>
-                </form>
+            <form :id="formId"
+                  class="flex flex-col gap-4"
+                  @submit.prevent="save">
+                <UFormField label="Display name"
+                            description="Members see this name everywhere in the app."
+                            :error="nameError ?? undefined"
+                            required
+                            orientation="horizontal">
+                    <UInput v-model="name"
+                            class="w-60"
+                            :disabled="saving" />
+                </UFormField>
 
                 <USeparator />
 
-                <form @submit.prevent="saveKey">
-                    <UFormField label="Key"
-                                :error="keyError ?? undefined"
-                                required
-                                orientation="horizontal">
-                        <template #description>
-                            Identifies the organisation in the app's addresses, as in
-                            <span class="text-default">{{ origin }}/{{ organisation.key }}</span>.
-                            Links with the old key stop working once it changes.
-                        </template>
-                        <div class="flex items-center gap-2">
-                            <UInput v-model="key"
-                                    class="w-60"
-                                    :disabled="savingKey" />
-                            <UButton type="submit"
-                                     label="Save"
-                                     :disabled="!key.trim() || !keyChanged || savingKey"
-                                     :loading="savingKey" />
-                        </div>
-                    </UFormField>
-                </form>
+                <UFormField label="Key"
+                            :error="keyError ?? undefined"
+                            required
+                            orientation="horizontal">
+                    <template #description>
+                        Identifies the organisation in the app's addresses, as in
+                        <span class="text-default">{{ origin }}/{{ organisation.key }}</span>.
+                        Links with the old key stop working once it changes.
+                    </template>
+                    <UInput v-model="key"
+                            class="w-60"
+                            :disabled="saving" />
+                </UFormField>
 
                 <template v-if="$slots.default">
                     <USeparator />
                     <slot />
                 </template>
-            </div>
+            </form>
         </UCard>
     </div>
 </template>

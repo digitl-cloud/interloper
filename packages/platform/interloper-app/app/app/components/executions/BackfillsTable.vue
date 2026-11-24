@@ -145,8 +145,7 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
                     </template>
                     <StatusFilter v-model="status"
                                   :statuses="BACKFILL_STATUSES" />
-                    <FilterBarField label="Partitions"
-                                    :inline-label="false">
+                    <FilterBarField label="Partitions">
                         <UCheckbox v-model="showSinglePartition"
                                    label="Show single partition" />
                     </FilterBarField>
