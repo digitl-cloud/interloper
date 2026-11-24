@@ -2601,17 +2601,18 @@ range, so every partitioned asset must allow windows; for one run per partition,
 shell or in Python (see <a href="../backfilling/">Backfilling</a>).</p>
 <h2 id="output">Output<a class="headerlink" href="#output" title="Permanent link">&para;</a></h2>
 <p>Run and operation events flow through the logging stack, sharing one format and stream with
-ordinary log lines on stderr:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>19:39:52.368 INFO    Running DAG with 3 enabled operation(s) (3 total) using AsyncRunner
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>19:39:52.370 INFO    RUN_STARTED      -  Run started (3 operations)
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>19:39:52.370 INFO    OPERATION_STARTED users  Operation 'users' started
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>19:39:52.371 INFO    OPERATION_STARTED orders  Operation 'orders' started
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>19:39:52.692 INFO    OPERATION_COMPLETED users  Operation 'users' completed
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>19:39:52.692 INFO    OPERATION_COMPLETED orders  Operation 'orders' completed
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>19:39:52.692 INFO    OPERATION_STARTED order_count  Operation 'order_count' started
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>19:39:52.694 ERROR   OPERATION_FAILED order_count  Operation 'order_count' failed: AssetError: No destination found for upstream asset 'orders'
-</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>19:39:52.694 ERROR   RUN_FAILED       -  Run failed (1 operation(s) failed)
-</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>19:39:52.694 INFO    Run completed: FAILED
+ordinary log lines on stderr: time, level, the source that speaks (<code>run</code> for the run's events,
+<code>cli</code> for the command) and the message:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>19:39:52  INFO   cli        Running DAG with 3 enabled operation(s) (3 total) using AsyncRunner
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>19:39:52  INFO   run        RUN_STARTED      -  Run started (3 operations)
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>19:39:52  INFO   run        OPERATION_STARTED users  Operation 'users' started
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>19:39:52  INFO   run        OPERATION_STARTED orders  Operation 'orders' started
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>19:39:52  INFO   run        OPERATION_COMPLETED users  Operation 'users' completed
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>19:39:52  INFO   run        OPERATION_COMPLETED orders  Operation 'orders' completed
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>19:39:52  INFO   run        OPERATION_STARTED order_count  Operation 'order_count' started
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>19:39:52  ERROR  run        OPERATION_FAILED order_count  Operation 'order_count' failed: AssetError: No destination found for upstream asset 'orders'
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>19:39:52  ERROR  run        RUN_FAILED       -  Run failed (1 operation(s) failed)
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>19:39:52  INFO   cli        Run completed: FAILED
 </span></code></pre></div>
 <p>The failure above is the one a <code>paths</code> run without destinations produces; a spec file with
 destinations fixes it.</p>
