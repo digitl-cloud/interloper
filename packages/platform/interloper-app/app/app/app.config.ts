@@ -26,8 +26,8 @@ export default defineAppConfig({
       }
     },
     card: {
-      // Section cards: the card tone, no rules between header, body and
-      // footer. CardHeader reads `title` / `description` from here so a card
+      // Section cards: the card tone alone sets them off the panel, with no
+      // edge and no rules between header, body and footer. CardHeader reads `title` / `description` from here so a card
       // with controls reads the same as one using the title props.
       slots: {
         // overflow-hidden zeroes a flex item's auto min-height, so without this
@@ -41,7 +41,7 @@ export default defineAppConfig({
       variants: {
         variant: {
           outline: {
-            root: 'bg-muted ring ring-default divide-y-0'
+            root: 'bg-muted ring-0 divide-y-0'
           }
         }
       },
@@ -54,7 +54,7 @@ export default defineAppConfig({
       variants: {
         variant: {
           outline: {
-            root: 'bg-muted'
+            root: 'bg-muted ring-0'
           }
         }
       }
