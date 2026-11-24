@@ -27,10 +27,6 @@
        content does: the panel body's padding. */
     --agent-inset: --spacing(4);
 
-    @variant sm {
-        --agent-inset: --spacing(6);
-    }
-
     /* Text sits one neutral step darker than Nuxt UI's defaults: its dimmed
        neutral-400 on white is about 2.5:1 and fails WCAG AA for small text. */
     --ui-text-dimmed: var(--ui-color-neutral-500);

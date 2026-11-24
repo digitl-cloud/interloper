@@ -46,7 +46,7 @@ onUnmounted(() => overviewStore.$reset())
                                        :generated-at="overview?.generated_at ?? null" />
                 <OverviewTimelineSection :upcoming="overview?.upcoming ?? []" />
                 <OverviewCoverageCalendar />
-                <div class="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
+                <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
                     <OverviewUpcomingList :items="overview?.upcoming ?? null" />
                     <OverviewRecentList :runs="overview?.recent ?? null" />
                 </div>

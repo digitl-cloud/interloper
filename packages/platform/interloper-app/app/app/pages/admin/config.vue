@@ -154,7 +154,7 @@ const sections = computed<ConfigSection[]>(() => {
             <AppNavbar title="Instance configuration" />
         </template>
         <template #body>
-            <div class="mx-auto flex w-full max-w-2xl flex-col gap-4 sm:gap-6">
+            <div class="mx-auto flex w-full max-w-2xl flex-col gap-4">
                 <p class="text-sm text-muted">
                     How this deployment is wired, read from the running instance: the installed packages, then one
                     card per settings section they declare. A secret shows only whether it is configured.

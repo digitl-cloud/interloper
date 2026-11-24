@@ -26,17 +26,19 @@ export default defineAppConfig({
       }
     },
     card: {
-      // Section cards: the card tone alone sets them off the panel, with no
-      // edge and no rules between header, body and footer. CardHeader reads `title` / `description` from here so a card
-      // with controls reads the same as one using the title props.
+      // Section cards: the card tone alone sets them off the panel, with no edge and no rules between
+      // header, body and footer, and they pad 16px at every width, as the page does (the theme steps
+      // up to 24px from `sm`). CardHeader reads `title` / `description` from here so a card with
+      // controls reads the same as one using the title props.
       slots: {
         // overflow-hidden zeroes a flex item's auto min-height, so without this
         // cards squash to fit a page body instead of letting it scroll.
         root: 'shrink-0',
+        header: 'sm:px-4',
         title: 'text-highlighted font-semibold',
         description: 'mt-1 text-muted text-sm',
-        body: '[[data-slot=header]+&]:pt-0 sm:[[data-slot=header]+&]:pt-0',
-        footer: '[[data-slot=body]+&]:pt-0'
+        body: 'sm:p-4 [[data-slot=header]+&]:pt-0 sm:[[data-slot=header]+&]:pt-0',
+        footer: 'sm:px-4 [[data-slot=body]+&]:pt-0'
       },
       variants: {
         variant: {
@@ -67,11 +69,18 @@ export default defineAppConfig({
         footer: 'border-t border-default'
       }
     },
+    // A page is padded and spaced 16px at every width (the theme steps up to 24px from `sm`), and its
+    // navbar and toolbar keep their edges in line with it.
     // The agent panel slides in below the navbar: the toolbar and the body make room for it
     // (the panel sizes `agent-room` from its own stylesheet), the navbar keeps the full width.
     dashboardPanel: {
       slots: {
-        body: 'agent-room transition-[margin,padding]'
+        body: 'agent-room transition-[margin,padding] sm:gap-4 sm:p-4'
+      }
+    },
+    dashboardNavbar: {
+      slots: {
+        root: 'sm:px-4'
       }
     },
     // A page's toolbar (its sub-page tabs, a detail page's actions) is the first row of the page's
@@ -79,7 +88,7 @@ export default defineAppConfig({
     // keeps the theme's sideways scroll for tabs wider than a phone.
     dashboardToolbar: {
       slots: {
-        root: 'agent-room transition-[margin,padding] min-h-0 border-b-0 pt-4 sm:pt-6'
+        root: 'agent-room transition-[margin,padding] min-h-0 border-b-0 pt-4 sm:px-4'
       }
     },
     // The navbar's search field reads as a filled control, not an outlined button.

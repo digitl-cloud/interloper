@@ -99,8 +99,7 @@ No `font-bold`.
 **Spacing.** Tailwind scale only. Our own markup uses 0.5, 1, 1.5, 2, 3, 4, 6, 8 and 12 for gaps, padding and margins. Nothing arbitrary.
 
 **Page rhythm**
-- `UDashboardPanel` pads the body.
-- Sections stack at `gap-4 sm:gap-6`.
+- One step, 16px, at every width: `UDashboardPanel` pads the body `p-4` and stacks its sections at `gap-4`, a card pads itself `p-4`, and the navbar and toolbar keep their edges in line (the theme holds Nuxt UI's 24px step from `sm` down).
 - In a drawer (a wizard, an edit form), header, stepper, body sections and footer stack at `gap-6`: the theme spaces the drawer and the stepper, and a step's own sections (summary card, controls, tiles or list) follow. Tiles in a grid sit at `gap-4`, a list's rows at `gap-2`, a group's caption at `gap-3` above its tiles.
 - A component's internal padding is its own; our markup only places it.
 
@@ -183,7 +182,7 @@ Show the one fact a row, tile or line exists for; the rest waits for hover, a to
 
 | Job | Use |
 |---|---|
-| Page frame | `UDashboardPanel`; `#header` is `AppNavbar`: Nuxt UI's default navbar (its height and bottom border, no theme override), the same on every page (sidebar toggle, title, search, agent toggle) and never given actions. Detail pages put a `UBreadcrumb` in its `#title`. `UDashboardToolbar` holds a page's view switch (`PageTabs`) on its left and a detail page's own actions (cancel, retry, open) on its right; the theme makes it the first row of the page's content (no rule, the content's top spacing). |
+| Page frame | `UDashboardPanel`; `#header` is `AppNavbar`: Nuxt UI's default navbar (its height and bottom border; the theme only lines its edges up with the content), the same on every page (sidebar toggle, title, search, agent toggle) and never given actions. Detail pages put a `UBreadcrumb` in its `#title`. `UDashboardToolbar` holds a page's view switch (`PageTabs`) on its left and a detail page's own actions (cancel, retry, open) on its right; the theme makes it the first row of the page's content (no rule, the content's top spacing). |
 | Where an action goes | With the card it acts on: a list's create action in `DataTable` `#actions`, a canvas's in its toolbar's `#actions` (CollectionTable, GraphToolbar), a card's in its `CardHeader`. A page with no data repeats its create action in its `UEmpty`. |
 | Section header above a card | `UPageCard variant="naked" orientation="horizontal"`: title, description, actions in its default slot |
 | Toolbar above a list or canvas | `FilterBar`: search in `#search`, filters in its default slot, the card's actions in `#actions`, and `active` / `@reset` for the filters' count and reset (`DataTable` forwards them as `active-filters` / `@reset-filters`). Every action has an icon: on a phone it is all that shows. No `ms-auto` or margin hacks between groups. |
@@ -255,4 +254,4 @@ Show the one fact a row, tile or line exists for; the rest waits for hover, a to
 - semantic colours and the status table
 - icon maps
 
-The agent panel slides in from the right below the navbar, which keeps the full width; the page's toolbar and body make room for it: the theme marks them `agent-room`, and the panel sizes `agent-room`, itself and its handle from a small stylesheet it owns. A resize then re-renders nothing and restyles only those few elements; no size that changes on every pointer move goes into a template binding, a cookie or a variable on a shared ancestor. The panel sits `--agent-inset` (the page body's own padding) from the navbar and the window's edges, so it lines up with the page's content; inside, it is padded like a card (`p-4 sm:px-6`). The graph's own colours and shadows are `--graph-*` tokens in main.css, defined from the palette, never inline. A graph node's border is always its card line: its state shows in its status dot, and the only coloured ring on a node is the selection's. The agent's code blocks and tool payloads are the code that `font-mono` exists for.
+The agent panel slides in from the right below the navbar, which keeps the full width; the page's toolbar and body make room for it: the theme marks them `agent-room`, and the panel sizes `agent-room`, itself and its handle from a small stylesheet it owns. A resize then re-renders nothing and restyles only those few elements; no size that changes on every pointer move goes into a template binding, a cookie or a variable on a shared ancestor. The panel sits `--agent-inset` (the page body's own padding) from the navbar and the window's edges, so it lines up with the page's content; inside, it is padded like a card (`p-4`). The graph's own colours and shadows are `--graph-*` tokens in main.css, defined from the palette, never inline. A graph node's border is always its card line: its state shows in its status dot, and the only coloured ring on a node is the selection's. The agent's code blocks and tool payloads are the code that `font-mono` exists for.

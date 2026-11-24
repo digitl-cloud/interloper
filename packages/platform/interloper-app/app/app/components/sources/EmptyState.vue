@@ -42,7 +42,7 @@ const connectorCards = computed(() => catalogStore.sourceDefinitions
 </script>
 
 <template>
-    <div class="flex flex-col gap-4 sm:gap-6">
+    <div class="flex flex-col gap-4">
         <UEmpty :icon="appConfig.icons.source"
                 title="No sources yet"
                 description="A source is a connector Interloper pulls from. Authenticate once and it materialises its assets into your own warehouse."

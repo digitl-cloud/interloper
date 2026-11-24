@@ -33,7 +33,7 @@ async function submitDelete() {
 </script>
 
 <template>
-    <div class="mx-auto flex w-full max-w-2xl flex-col gap-4 sm:gap-6">
+    <div class="mx-auto flex w-full max-w-2xl flex-col gap-4">
         <OrganizationGeneralSettings v-if="org"
                                      :organisation="org"
                                      title="General"

@@ -37,7 +37,7 @@ onMounted(() => {
                      class="relative min-h-0"
                      :ui="{ body: 'p-0 sm:p-0 overscroll-none' }">
         <template #body>
-            <UContainer class="flex-1 flex flex-col gap-4 sm:gap-6 pt-6"
+            <UContainer class="flex-1 flex flex-col gap-4 pt-4"
                         :ui="{ base: 'max-w-3xl' }">
                 <LoadError v-if="loadError"
                            title="Couldn't load the conversation"
@@ -55,7 +55,7 @@ onMounted(() => {
                                should-auto-scroll
                                :spacing-offset="120"
                                :assistant="{ ui: { body: 'flex-1' } }"
-                               class="pb-4 sm:pb-6">
+                               class="pb-4">
                     <template #indicator>
                         <AgentThinking />
                     </template>
