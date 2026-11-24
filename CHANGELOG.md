@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.145.0 (2026-11-24)
+
+### Features
+
+- **app**: Lay pages out on a content column
+  ([`93e3cb8`](https://github.com/digitl-cloud/interloper/commit/93e3cb8ede9c81b1621436b715007a767f9e64e1))
+
+
 ## v0.144.0 (2026-11-24)
 
 ### Continuous Integration
