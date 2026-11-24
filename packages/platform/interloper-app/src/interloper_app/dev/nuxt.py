@@ -10,6 +10,7 @@ made to import code from elsewhere.
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from collections.abc import Mapping
@@ -17,6 +18,8 @@ from pathlib import Path
 
 from interloper_app.dev.port import Port
 from interloper_app.dev.process import ProcessGroup
+
+logger = logging.getLogger(__name__)
 
 
 class NuxtServer:
@@ -87,6 +90,7 @@ class NuxtServer:
                 the server exits or stays silent past the timeout.
         """
         if not (self.directory / "node_modules").is_dir():
+            logger.info("Installing the app's dependencies (pnpm install)")
             self._start(["pnpm", "--loglevel", "warn", "install"])
             if self._group.wait() != 0:
                 raise SystemExit(f"`pnpm install` failed in {self.directory}.")

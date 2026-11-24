@@ -6,11 +6,14 @@ Vite's to apply, a Python edit is the platform's.
 
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 
 from interloper_app.dev.port import Port
 from interloper_app.dev.process import ProcessGroup
+
+logger = logging.getLogger(__name__)
 
 
 class ViteServer:
@@ -102,6 +105,7 @@ class ViteServer:
                 exits or stays silent past the timeout.
         """
         if not (self.directory / "node_modules").is_dir():
+            logger.info("Installing the %s UI's dependencies (%s install)", self.key, "pnpm" if self.pnpm else "npm")
             self._start(self.install_command())
             if self._group.wait() != 0:
                 raise SystemExit(f"`{' '.join(self.install_command())}` failed in {self.directory}.")
