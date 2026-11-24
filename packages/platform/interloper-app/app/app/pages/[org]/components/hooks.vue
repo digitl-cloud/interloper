@@ -93,7 +93,8 @@ function matchesFilters(hook: ComponentRecord): boolean {
 </script>
 
 <template>
-    <UDashboardPanel id="hooks">
+    <UDashboardPanel id="hooks"
+                     class="page-column">
         <template #header>
             <AppNavbar title="Hooks" />
         </template>

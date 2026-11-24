@@ -188,33 +188,32 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
             <slot name="empty" />
         </div>
 
-        <UCard v-if="showTable"
-               :ui="fill ? FILL_CARD_UI : undefined">
-            <template #header>
-                <FilterBar :active="activeFilters"
-                           @reset="emit('resetFilters')">
-                    <template #search>
-                        <UInput v-model="globalFilter"
-                                :placeholder="searchPlaceholder ?? 'Search…'"
-                                :icon="appConfig.ui.icons.search"
-                                class="w-full max-w-sm sm:w-auto"
-                                @update:model-value="tableRef?.tableApi?.setGlobalFilter($event)" />
-                    </template>
-                    <template v-if="$slots.filters"
-                              #default>
-                        <slot name="filters" />
-                    </template>
-                    <template #actions>
-                        <UButton v-if="selectedCount > 0"
-                                 color="error"
-                                 variant="soft"
-                                 :icon="appConfig.icons.delete"
-                                 :label="`Delete (${selectedCount})`"
-                                 @click="requestBulkDelete" />
-                        <slot name="actions" />
-                    </template>
-                </FilterBar>
-            </template>
+        <div v-if="showTable"
+             class="flex flex-col gap-3"
+             :class="fill && 'min-h-0 flex-1'">
+            <FilterBar :active="activeFilters"
+                       @reset="emit('resetFilters')">
+                <template #search>
+                    <UInput v-model="globalFilter"
+                            :placeholder="searchPlaceholder ?? 'Search…'"
+                            :icon="appConfig.ui.icons.search"
+                            class="w-full max-w-sm sm:w-auto"
+                            @update:model-value="tableRef?.tableApi?.setGlobalFilter($event)" />
+                </template>
+                <template v-if="$slots.filters"
+                          #default>
+                    <slot name="filters" />
+                </template>
+                <template #actions>
+                    <UButton v-if="selectedCount > 0"
+                             color="error"
+                             variant="soft"
+                             :icon="appConfig.icons.delete"
+                             :label="`Delete (${selectedCount})`"
+                             @click="requestBulkDelete" />
+                    <slot name="actions" />
+                </template>
+            </FilterBar>
 
             <UTable ref="table"
                     v-model:pagination="pagination"
@@ -241,14 +240,12 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
                 </template>
             </UTable>
 
-            <template #footer>
-                <TableFooter :page="pagination.pageIndex + 1"
-                             :total="totalCount"
-                             :page-size="PAGE_SIZE"
-                             :selected="selectedCount"
-                             @update:page="(p: number) => pagination = { ...pagination, pageIndex: p - 1 }" />
-            </template>
-        </UCard>
+            <TableFooter :page="pagination.pageIndex + 1"
+                         :total="totalCount"
+                         :page-size="PAGE_SIZE"
+                         :selected="selectedCount"
+                         @update:page="(p: number) => pagination = { ...pagination, pageIndex: p - 1 }" />
+        </div>
 
         <!-- Right-click context menu -->
         <UDropdownMenu v-model:open="ctxMenuOpen"

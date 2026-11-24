@@ -1,17 +1,17 @@
 <script setup lang="ts">
 /**
- * An organisation's display name and key, as settings rows in a card under a
- * section header, saved together by the header's "Save changes", as the
- * profile is. Rows the page adds about the same organisation go in the default
+ * An organisation's display name and key, as settings rows in a card whose
+ * header names it and saves them together with "Save changes", as the profile
+ * does. Rows the page adds about the same organisation go in the default
  * slot, as more horizontal `UFormField`s; a separator comes before them.
  */
 import type { Organisation } from '~/types/organisation'
 
 const props = defineProps<{
     organisation: Pick<Organisation, 'id' | 'name' | 'key'>
-    /** The section header's title. */
+    /** The card's title. */
     title: string
-    /** The section header's description. */
+    /** The card's description. */
     description: string
 }>()
 
@@ -71,19 +71,18 @@ async function save() {
 
 <template>
     <div class="flex flex-col gap-4">
-        <UPageCard :title="title"
-                   :description="description"
-                   variant="naked"
-                   orientation="horizontal">
-            <UButton :form="formId"
-                     type="submit"
-                     label="Save changes"
-                     class="w-fit lg:ms-auto"
-                     :disabled="!canSave"
-                     :loading="saving" />
-        </UPageCard>
-
         <UCard>
+            <template #header>
+                <CardHeader :title="title"
+                            :description="description">
+                    <UButton :form="formId"
+                             type="submit"
+                             label="Save changes"
+                             size="sm"
+                             :disabled="!canSave"
+                             :loading="saving" />
+                </CardHeader>
+            </template>
             <form :id="formId"
                   class="flex flex-col gap-4"
                   @submit.prevent="save">

@@ -37,16 +37,16 @@ watch(orgId, loadActivity, { immediate: true })
 
 <template>
     <div class="flex flex-col gap-4">
-        <UPageCard variant="naked"
-                   orientation="horizontal"
-                   title="Activity"
-                   description="Derived from membership, invitation, quota and run records." />
-        <LoadError v-if="loadError"
-                   title="Couldn't load the activity"
-                   :error="loadError"
-                   @retry="loadActivity" />
-        <UCard v-else>
-            <div v-if="loading && activity.length === 0"
+        <UCard>
+            <template #header>
+                <CardHeader title="Activity"
+                            description="Derived from membership, invitation, quota and run records." />
+            </template>
+            <LoadError v-if="loadError"
+                       title="Couldn't load the activity"
+                       :error="loadError"
+                       @retry="loadActivity" />
+            <div v-else-if="loading && activity.length === 0"
                  class="flex justify-center py-6">
                 <UIcon :name="appConfig.ui.icons.loading"
                        class="size-5 animate-spin text-dimmed" />

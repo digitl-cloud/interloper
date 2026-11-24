@@ -154,59 +154,55 @@ watch(orgId, reloadQuotas, { immediate: true })
                 <UProgress :model-value="periodElapsed.pct" />
             </UCard>
 
-            <section class="flex flex-col gap-4">
-                <UPageCard variant="naked"
-                           orientation="horizontal"
-                           title="Ledger"
-                           :description="ledgerInSync
-                               ? 'The runs counter and a recount from the runs table agree.'
-                               : 'The runs counter and a recount from the runs table disagree, so inspect recent runs.'" />
-                <UCard :ui="{ body: 'flex flex-col gap-4' }">
-                    <UFormField label="Status"
+            <UCard :ui="{ body: 'flex flex-col gap-4' }">
+                <template #header>
+                    <CardHeader title="Ledger"
+                                :description="ledgerInSync
+                                    ? 'The runs counter and a recount from the runs table agree.'
+                                    : 'The runs counter and a recount from the runs table disagree, so inspect recent runs.'" />
+                </template>
+                <UFormField label="Status"
+                            orientation="horizontal">
+                    <StatusBadge :label="ledgerInSync ? 'In sync' : 'Drift'"
+                                 :color="ledgerInSync ? 'success' : 'warning'" />
+                </UFormField>
+                <template v-for="row in ledgerRows"
+                          :key="row.label">
+                    <USeparator />
+                    <UFormField :label="row.label"
                                 orientation="horizontal">
-                        <StatusBadge :label="ledgerInSync ? 'In sync' : 'Drift'"
-                                     :color="ledgerInSync ? 'success' : 'warning'" />
+                        <span class="font-medium text-highlighted tabular-nums">{{ row.value.toLocaleString() }}</span>
                     </UFormField>
-                    <template v-for="row in ledgerRows"
-                              :key="row.label">
-                        <USeparator />
-                        <UFormField :label="row.label"
-                                    orientation="horizontal">
-                            <span class="font-medium text-highlighted tabular-nums">{{ row.value.toLocaleString() }}</span>
-                        </UFormField>
-                    </template>
-                </UCard>
-            </section>
+                </template>
+            </UCard>
 
-            <section class="flex flex-col gap-4">
-                <UPageCard variant="naked"
-                           orientation="horizontal"
-                           title="Limits"
-                           :description="`The current period started ${periodStartLabel}.`">
-                    <UButton :icon="appConfig.icons.edit"
-                             label="Edit limits"
-                             color="neutral"
-                             variant="outline"
-                             class="w-fit lg:ms-auto"
-                             @click="editOpen = true" />
-                </UPageCard>
-                <UCard :ui="{ body: 'flex flex-col gap-4' }">
-                    <template v-for="(row, index) in limitRows"
-                              :key="row.key">
-                        <USeparator v-if="index > 0" />
-                        <UFormField :label="row.label"
-                                    :description="row.note"
-                                    orientation="horizontal">
-                            <div class="flex items-center gap-2">
-                                <span class="font-medium text-highlighted tabular-nums">{{ row.value }}</span>
-                                <UBadge :label="row.overridden ? 'Override' : 'Inherited'"
-                                        :color="row.overridden ? 'info' : 'neutral'"
-                                        size="sm" />
-                            </div>
-                        </UFormField>
-                    </template>
-                </UCard>
-            </section>
+            <UCard :ui="{ body: 'flex flex-col gap-4' }">
+                <template #header>
+                    <CardHeader title="Limits"
+                                :description="`The current period started ${periodStartLabel}.`">
+                        <UButton :icon="appConfig.icons.edit"
+                                 label="Edit limits"
+                                 color="neutral"
+                                 variant="outline"
+                                 size="sm"
+                                 @click="editOpen = true" />
+                    </CardHeader>
+                </template>
+                <template v-for="(row, index) in limitRows"
+                          :key="row.key">
+                    <USeparator v-if="index > 0" />
+                    <UFormField :label="row.label"
+                                :description="row.note"
+                                orientation="horizontal">
+                        <div class="flex items-center gap-2">
+                            <span class="font-medium text-highlighted tabular-nums">{{ row.value }}</span>
+                            <UBadge :label="row.overridden ? 'Override' : 'Inherited'"
+                                    :color="row.overridden ? 'info' : 'neutral'"
+                                    size="sm" />
+                        </div>
+                    </UFormField>
+                </template>
+            </UCard>
         </template>
 
         <AdminQuotaDrawer v-model:open="editOpen"

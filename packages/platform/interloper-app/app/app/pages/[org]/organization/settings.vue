@@ -24,7 +24,8 @@ async function onSaved(updated: Organisation) {
 </script>
 
 <template>
-    <UDashboardPanel id="organization-settings">
+    <UDashboardPanel id="organization-settings"
+                     class="page-narrow">
         <template #header>
             <AppNavbar title="Organisation settings" />
         </template>
@@ -32,7 +33,6 @@ async function onSaved(updated: Organisation) {
             <OrganizationGeneralSettings :organisation="organisationStore.requireOrganisation()"
                                          title="General"
                                          description="How the organisation is named and addressed."
-                                         class="mx-auto w-full max-w-2xl"
                                          @saved="onSaved" />
         </template>
     </UDashboardPanel>

@@ -96,7 +96,8 @@ onMounted(loadData)
 </script>
 
 <template>
-    <UDashboardPanel id="admin-oauth-clients">
+    <UDashboardPanel id="admin-oauth-clients"
+                     class="page-column">
         <template #header>
             <AppNavbar title="OAuth clients" />
         </template>

@@ -92,11 +92,6 @@ onUnmounted(() => timelineStore.$reset())
                     <UTabs v-model="activeSpan"
                            :items="spanItems" />
                 </FilterBarField>
-                <UButton label="Open timeline"
-                         :to="{ path: organisationStore.path('/executions/runs'), query: { view: 'timeline' } }"
-                         color="neutral"
-                         variant="link"
-                         size="sm" />
             </CardHeader>
         </template>
         <LoadError v-if="error"

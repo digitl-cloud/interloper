@@ -149,12 +149,13 @@ const sections = computed<ConfigSection[]>(() => {
 </script>
 
 <template>
-    <UDashboardPanel id="admin-config">
+    <UDashboardPanel id="admin-config"
+                     class="page-narrow">
         <template #header>
             <AppNavbar title="Instance configuration" />
         </template>
         <template #body>
-            <div class="mx-auto flex w-full max-w-2xl flex-col gap-4">
+            <div class="flex flex-col gap-4">
                 <p class="text-sm text-muted">
                     How this deployment is wired, read from the running instance: the installed packages, then one
                     card per settings section they declare. A secret shows only whether it is configured.
@@ -175,18 +176,16 @@ const sections = computed<ConfigSection[]>(() => {
                     <section v-for="section in sections"
                              :key="section.title"
                              class="flex flex-col gap-4">
-                        <UPageCard variant="naked"
-                                   orientation="horizontal"
-                                   :title="section.title"
-                                   :description="section.description">
-                            <div v-if="section.extension"
-                                 class="flex sm:justify-end">
-                                <UBadge color="neutral"
-                                        size="sm"
-                                        :label="section.extension" />
-                            </div>
-                        </UPageCard>
                         <UCard :ui="{ body: 'flex flex-col gap-4' }">
+                            <template #header>
+                                <CardHeader :title="section.title"
+                                            :description="section.description">
+                                    <UBadge v-if="section.extension"
+                                            color="neutral"
+                                            size="sm"
+                                            :label="section.extension" />
+                                </CardHeader>
+                            </template>
                             <template v-for="(row, index) in section.rows"
                                       :key="row.label">
                                 <USeparator v-if="index > 0" />

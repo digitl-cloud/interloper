@@ -121,9 +121,10 @@ No arbitrary radii.
 
 Buttons, badges and empty states size their own icons.
 
-**Widths**
-- data pages: full width
-- settings and forms: one column, `max-w-2xl mx-auto`
+**Widths.** A page names its column once, on its `UDashboardPanel`; its toolbar, body and navbar title line up on it (`page-gutter` and `page-title-offset` in main.css, applied by the theme), so no page centres its own content:
+- `page-column` (64rem): lists, the overview, the admin's lists
+- `page-narrow` (42rem): settings and forms
+- none, the panel's full width: canvases and detail pages (assets, a timeline, a run, a backfill)
 - auth pages: `max-w-sm`
 - the chat: `max-w-3xl`
 - drawers: one width, from the theme
@@ -132,7 +133,7 @@ Buttons, badges and empty states size their own icons.
 **Phones** (below `sm`). Every page reads at 390px wide; layout comes from the shared pieces, never from page-level breakpoint hacks:
 - toolbars are `FilterBar`, on every list, grid or picker a user narrows (a wizard's included): one row of the search, a Filters button counting the active filters, and the actions as icon buttons (their labels stay for screen readers); the filters open in a bottom sheet with Reset;
 - sub-page tabs, and any pill control left inline, scroll sideways when too wide (the theme);
-- tables scroll inside their card;
+- tables scroll inside their own box;
 - a splitter's side pane (`useSlidingPane`) opens over the whole splitter as a detail view, with a visible way back; a pixel-sized rail starts folded, under its own saved layout;
 - the agent panel covers the page instead of making room.
 
@@ -184,16 +185,17 @@ Show the one fact a row, tile or line exists for; the rest waits for hover, a to
 
 | Job | Use |
 |---|---|
-| Page frame | `UDashboardPanel`; `#header` is `AppNavbar`: Nuxt UI's default navbar (its height; the theme drops its bottom rule, so it and the page are one surface, and lines its edges up with the content), the same on every page (sidebar toggle, title, search, agent toggle) and never given actions. Detail pages put a `UBreadcrumb` in its `#title`. `UDashboardToolbar` holds a page's view switch (`PageTabs`) on its left and a detail page's own actions (cancel, retry, open) on its right; the theme makes it the first row of the page's content (no rule, the content's top spacing). |
+| Page frame | `UDashboardPanel`; `#header` is `AppNavbar`: Nuxt UI's default navbar (its height; the theme drops its bottom rule, so it and the page are one surface, and lines its edges up with the content), the same on every page (sidebar toggle, title, search, agent toggle) and never given actions. Its title stands where the page's column starts, never before the sidebar toggle. Detail pages put a `UBreadcrumb` in its `#title`. `UDashboardToolbar` holds a page's view switch (`PageTabs`) on its left and a detail page's own actions (cancel, retry, open) on its right; the theme makes it the first row of the page's content (no rule, the content's top spacing). |
 | Where an action goes | With the card it acts on: a list's create action in `DataTable` `#actions`, a canvas's in its toolbar's `#actions` (CollectionTable, GraphToolbar), a card's in its `CardHeader`. A page with no data repeats its create action in its `UEmpty`. |
-| Section header above a card | `UPageCard variant="naked" orientation="horizontal"`: title, description, actions in its default slot. The title and description take the row and wrap only when it runs out; the actions keep their own width (the theme). |
-| Toolbar above a list or canvas | `FilterBar`: search in `#search`, filters in its default slot, the card's actions in `#actions`, and `active` / `@reset` for the filters' count and reset (`DataTable` forwards them as `active-filters` / `@reset-filters`). Every action has an icon: on a phone it is all that shows. No `ms-auto` or margin hacks between groups. |
+| Label over a group of cards | `UPageCard variant="naked" orientation="horizontal"`, only above several cards: the overview's sections, a catalog's grid. Title, description, and a way to all of what the group sums up ("Open timeline", a `link` button with a trailing arrow) in its default slot. The title and description take the row and wrap only when it runs out; the actions keep their own width (the theme). A group's cards stack at `gap-4` under it, groups at `gap-8`. |
+| Toolbar above a list or canvas | `FilterBar`: search in `#search`, filters in its default slot, the list's actions in `#actions`, and `active` / `@reset` for the filters' count and reset (`DataTable` forwards them as `active-filters` / `@reset-filters`). Every action has an icon: on a phone it is all that shows. No `ms-auto` or margin hacks between groups. |
 | Filter | `FilterBarField label="Status"` around a bare `<UTabs v-model :items>`: the field sets the tabs' look, a segmented control inline and a full-width list in the phone's sheet. Inline, the label is only the group's name for screen readers; the sheet shows it over the section. A segmented control stands as tall as the controls beside it: 36px in a `FilterBar` (beside the inputs), 28px in a `CardHeader` (beside small buttons). A select names its choice ("All types") and takes `w-full sm:w-40`; the shared `KindFilter`, `TypeFilter`, `StatusFilter` and `EnabledFilter` carry their field. |
-| Header inside a card | `CardHeader` in the `UCard #header` |
+| Filter behind a button | `FilterMenu`, for a filter or a choice of how a list shows that is used less often than the toolbar's others (Assets: the status, the grouping): a soft button naming the current choice ("Filter" until one narrows the list, "Grouped by type") opens a menu of the options, counts beside them; in the phone's sheet it is a labelled list like every other filter. |
+| Header inside a card | `CardHeader` in the `UCard #header`: a single card carries its own title, description and actions (a settings card's "Save changes", a section's "Edit limits"), never a label above it. |
 | Section label | `caption text-muted` on the label; `USeparator label` and navigation `type: 'label'` items take it from the theme |
 | Container | `UCard` (the card tone) |
-| Settings and key/value rows | `UFormField orientation="horizontal"` rows separated by `USeparator`, inside a `UCard`; a read-only value is the field's content. A card of editable rows saves once, with "Save changes" in its section header, never a Save per row. |
-| List of records | `DataTable`. A raw `UTable` only inside a card that is not a list page (detail sub-tables, overview cards). Column headers are quiet (`text-muted`, normal weight; a sortable one brightens while it sorts); the first column holds the row's name, bright and medium. The table reaches 8px into its card's padding and its outer cells pad back, so a row's highlight runs past its text (the theme). A row's options menu shows on its hover or focus, and always on a touch screen. |
+| Settings and key/value rows | `UFormField orientation="horizontal"` rows separated by `USeparator`, inside a `UCard`; a read-only value is the field's content. A card of editable rows saves once, with "Save changes" in its `CardHeader`, never a Save per row. |
+| List of records | `DataTable` (the runs and backfills lists draw the same frame): it sits on the page, its toolbar, table and footer with no card around them. A raw `UTable` only inside a card that is not a list page (detail sub-tables, overview cards); a canvas page's table (Assets) keeps its card beside the canvas. Column headers are quiet (`text-muted`, normal weight; a sortable one brightens while it sorts); the first column holds the row's name, bright and medium. The table reaches 8px into its surface's padding and its outer cells pad back, so a row's highlight runs past its text; the highlight is the row's cells, the outer two rounded `md`. A sticky header takes its surface's tone (`--surface`, set by the page body and by cards). A row's options menu shows on its hover or focus, and always on a touch screen (the theme). |
 | Status | `StatusBadge` (a badge in the status's colour); `StatusDot` where a word does not fit |
 | Entity reference | `EntityBadge` (outline neutral, with the kind's icon). Outline is reserved for it. |
 | Tags, counts, kinds in a row | Text: tags and counts `text-muted`, a kind or a count beside a name `text-dimmed` |

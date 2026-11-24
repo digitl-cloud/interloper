@@ -35,8 +35,9 @@ export default defineAppConfig({
       // controls reads the same as one using the title props.
       slots: {
         // overflow-hidden zeroes a flex item's auto min-height, so without this
-        // cards squash to fit a page body instead of letting it scroll.
-        root: 'shrink-0',
+        // cards squash to fit a page body instead of letting it scroll. A card is
+        // the surface a sticky table header inside it takes the tone of.
+        root: 'shrink-0 [--surface:var(--ui-bg-muted)]',
         header: 'sm:px-4',
         title: 'text-highlighted font-medium',
         description: 'mt-1 text-muted text-sm',
@@ -77,22 +78,26 @@ export default defineAppConfig({
     // are one surface.
     // The agent panel slides in below the navbar: the toolbar and the body make room for it
     // (the panel sizes `agent-room` from its own stylesheet), the navbar keeps the full width.
+    // The body centres the page's column (`page-column` / `page-narrow` on the panel, see main.css)
+    // and is the surface a sticky table header on it takes the tone of.
     dashboardPanel: {
       slots: {
-        body: 'agent-room transition-[margin,padding] sm:gap-4 sm:p-4'
+        body: 'agent-room transition-[margin,padding] sm:gap-4 sm:p-4 page-gutter sm:page-gutter [--surface:var(--ui-bg)]'
       }
     },
     dashboardNavbar: {
       slots: {
-        root: 'sm:px-4 border-b-0'
+        root: 'sm:px-4 border-b-0 @container',
+        title: 'page-title-offset'
       }
     },
     // A page's toolbar (its sub-page tabs, a detail page's actions) is the first row of the page's
-    // content, not a band of its own: no rule, and as far below the navbar as the content sits. It
+    // content, not a band of its own: no rule, as far below the navbar as the content sits, and in
+    // line with the page's column (its side padding is the gutter's, so the theme's own goes). It
     // keeps the theme's sideways scroll for tabs wider than a phone.
     dashboardToolbar: {
       slots: {
-        root: 'agent-room transition-[margin,padding] min-h-0 border-b-0 pt-4 sm:px-4'
+        root: 'agent-room transition-[margin,padding] min-h-0 border-b-0 p-0 sm:p-0 pt-4 page-gutter sm:page-gutter'
       }
     },
     // The navbar's search field reads as a filled control, not an outlined button.
@@ -259,28 +264,31 @@ export default defineAppConfig({
       }
     },
     table: {
-      // Borderless tables: rows sit on the card tone, divided by the line
-      // color. The table reaches 8px into the card's padding and its first and
-      // last cells pad themselves back, so the text aligns with the card's
-      // while a row's highlight (and a sortable header's) runs past it.
-      // Headers label quietly; the first column carries the row's name. A row
-      // is a `group/row`, so what it holds can answer its hover (the options
-      // menu). Sticky headers take the card tone so rows scrolling beneath
-      // don't show through.
+      // Borderless tables: rows divided by the line color. The table reaches 8px
+      // into its surface's padding and its first and last cells pad themselves
+      // back, so the text aligns with the surface's while a row's highlight
+      // (and a sortable header's) runs past it. The highlight is drawn by the
+      // row's cells, the outer two rounded, since a table row cannot round its
+      // own background. Headers label quietly; the first column carries the
+      // row's name. A row is a `group/row`, so what it holds can answer its
+      // hover (the options menu). A sticky header takes the tone of the
+      // surface it scrolls over (`--surface`: the page's, or a card's), so rows
+      // scrolling beneath don't show through.
       slots: {
         root: '-mx-2',
+        tbody: '[&>tr]:data-[selectable=true]:hover:bg-transparent',
         separator: 'bg-(--ui-border)',
-        tr: 'group/row',
+        tr: 'group/row data-[selected=true]:bg-transparent',
         th: 'py-3 first:ps-2 last:pe-2 text-muted font-normal',
-        td: 'py-3 first:ps-2 last:pe-2 first:text-highlighted first:font-medium'
+        td: 'py-3 first:ps-2 last:pe-2 first:text-highlighted first:font-medium first:rounded-s-md last:rounded-e-md [tr[data-selectable=true]:hover>&]:bg-elevated/50 [tr[data-selected=true]>&]:bg-elevated/50'
       },
       variants: {
         sticky: {
           true: {
-            thead: 'bg-muted'
+            thead: 'bg-(--surface)'
           },
           header: {
-            thead: 'bg-muted'
+            thead: 'bg-(--surface)'
           }
         }
       }

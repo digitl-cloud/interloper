@@ -56,22 +56,20 @@ async function submitDelete() {
             </UFormField>
         </OrganizationGeneralSettings>
 
-        <section class="flex flex-col gap-4">
-            <UPageCard variant="naked"
-                       orientation="horizontal"
-                       title="Danger zone"
-                       description="Irreversible actions. Proceed only if you are certain." />
-            <UCard>
-                <UFormField label="Delete organisation"
-                            :description="`Permanently deletes ${org?.name ?? 'this organisation'} with all its members, invitations, components and execution history.`"
-                            orientation="horizontal">
-                    <UButton label="Delete organisation"
-                             color="error"
-                             variant="soft"
-                             @click="deleteOpen = true" />
-                </UFormField>
-            </UCard>
-        </section>
+        <UCard>
+            <template #header>
+                <CardHeader title="Danger zone"
+                            description="Irreversible actions. Proceed only if you are certain." />
+            </template>
+            <UFormField label="Delete organisation"
+                        :description="`Permanently deletes ${org?.name ?? 'this organisation'} with all its members, invitations, components and execution history.`"
+                        orientation="horizontal">
+                <UButton label="Delete organisation"
+                         color="error"
+                         variant="soft"
+                         @click="deleteOpen = true" />
+            </UFormField>
+        </UCard>
 
         <UModal v-model:open="deleteOpen"
                 :title="`Delete ${org?.name ?? 'organisation'}?`"
