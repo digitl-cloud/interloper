@@ -3,10 +3,14 @@
 A release takes two workflows, one responsibility each:
 
 - **Release** ([`.github/workflows/release.yaml`](.github/workflows/release.yaml)),
-  dispatched by hand (`stable` or `release-candidate`), cuts the version: it
-  runs the checks, then `python-semantic-release` bumps the shared version,
-  commits, tags and creates the GitHub release. It publishes nothing; re-running
-  it after a release finds the tag and does nothing.
+  dispatched by hand (`stable` or `release-candidate`), cuts the version:
+  `python-semantic-release` (run with `uvx`) bumps the shared version, commits,
+  tags and creates the GitHub release. It runs no checks of its own: it fails
+  unless the Checks workflow passed for the commit it releases. Checks skips a
+  commit that touches only the paths it ignores (docs, Markdown) and a
+  `[skip ci]` one such as a release commit; to release one of those, run Checks
+  on main first (`gh workflow run checks.yaml --ref main`). Release publishes
+  nothing; re-running it after a release finds the tag and does nothing.
 - **Publish** ([`.github/workflows/publish.yaml`](.github/workflows/publish.yaml)),
   triggered by that GitHub release, publishes the tag everywhere:
   1. **Build**: the `build` job builds the SPA and the extension UIs, every
@@ -17,14 +21,17 @@ A release takes two workflows, one responsibility each:
      trusted publishing (see below).
   3. **npm**: the `npm` job publishes `@interloper/ui`, the SDK extension UIs
      build with, with trusted publishing and provenance (see below).
-  4. **Docker images → GHCR**: the `docker` job builds each role's images and
-     pushes them to `ghcr.io/<owner>/interloper-<role>` (see below).
+  4. **Docker images → GHCR**: the `docker` job builds each role's images once
+     per architecture and pushes them by digest to
+     `ghcr.io/<owner>/interloper-<role>`; the `docker-merge` job then tags each
+     image's two digests as one multi-arch image (see below).
   5. **Helm chart → GHCR**: the `helm` job packages `chart/interloper` and
      pushes it as an OCI artifact beside the images (stable releases only; see
      below).
 
-  PyPI and npm wait on the build, and no publish job waits on another, so one
-  registry's outage holds up only its own job.
+  PyPI and npm wait on the build, the image merges on the image builds, and no
+  publish job waits on another, so one registry's outage holds up only its own
+  job.
 
 A release candidate gets a prerelease version (`<version>-rc.<n>`): PyPI
 publishes it as a prerelease, npm under the `rc` dist-tag so it never becomes
@@ -167,15 +174,30 @@ outside the workspace; CI runs the same check.
 
 ## Docker images (GitHub Container Registry)
 
-The `docker` job builds one image per role and pushes it to GHCR. Each role
-ships two variants: the **loaded** image on the bare tag, carrying the role's
-packages plus every component class a catalog can name (the vendor SDKs only
-on the roles that execute assets), and the extras-free **slim** one on a
-`-slim` tag. The matrix
-mirrors the image catalog in the [`Makefile`](Makefile) (`ROLES` +
+The `docker` and `docker-merge` jobs publish one image per role to GHCR. Each
+role ships two variants: the **loaded** image on the bare tag, carrying the
+role's packages plus every component class a catalog can name (the vendor SDKs
+only on the roles that execute assets), and the extras-free **slim** one on a
+`-slim` tag. The image list (one YAML anchor, `&images`, that both jobs'
+matrices use) mirrors the image catalog in the [`Makefile`](Makefile) (`ROLES` +
 `SLIM_ROLES`), keep the two in sync if a role or variant is added or removed.
 No build args are passed: the dockerfile's `ARG` defaults define what loaded
 means, and the slim stages declare no extras `ARG` at all.
+
+Every image is `linux/amd64` and `linux/arm64`, each built natively, with no
+emulation: the `docker` job builds an image per architecture, amd64 on
+`ubuntu-latest` and arm64 on GitHub's ARM runner (`ubuntu-24.04-arm`), and
+pushes it by digest, untagged. Each architecture keeps its own build cache
+(`docker-<target>-<arch>`), whose export never fails the build. The
+`docker-merge` job then creates, per image, the multi-arch index from its two
+digests under the release tags (`docker buildx imagetools create`). A merge
+waits on every build but runs whenever its own two digests exist, so a failed
+build holds back only its own image, and **Re-run failed jobs** rebuilds it and
+merges again. To check a published image:
+
+```bash
+docker buildx imagetools inspect ghcr.io/digitl-cloud/interloper-api:<version>
+```
 
 | Image:tag | Dockerfile target | Carries |
 | --- | --- | --- |
