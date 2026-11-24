@@ -1,10 +1,10 @@
 name: Release
 
-# Cuts a version: checks, then semantic-release (version bump, release commit,
-# tag, changelog, GitHub release). It publishes nothing: the GitHub release it
-# creates triggers the Publish workflow, which builds the tag and publishes it
-# to PyPI, npm and GHCR. Re-running it after a release finds the tag and does
-# nothing.
+# Cuts a version with semantic-release (version bump, release commit, tag,
+# changelog, GitHub release). It runs no checks of its own: it releases only a
+# commit that main's Checks workflow passed. It publishes nothing: the GitHub
+# release it creates triggers the Publish workflow, which builds the tag and
+# publishes it to PyPI, npm and GHCR.
 
 on:
   workflow_dispatch:
@@ -37,8 +37,27 @@ jobs:
 
     permissions:
       contents: "write"
+      actions: "read"
 
     steps:
+      - name: Require Checks to have passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          runs="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow checks.yaml --commit "$GITHUB_SHA" \
+            --json status,conclusion,url)"
+          if jq -e 'any(.[]; .conclusion == "success")' <<<"$runs" >/dev/null; then
+            echo "Checks passed for ${GITHUB_SHA}."
+            exit 0
+          fi
+          if [ "$(jq length <<<"$runs")" -eq 0 ]; then
+            echo "::error::Checks has not run for ${GITHUB_SHA}. It skips a commit that touches only the paths it" \
+              "ignores, and a [skip ci] one. Run it on main (gh workflow run checks.yaml --ref main), then release."
+          else
+            echo "::error::Checks has not passed for ${GITHUB_SHA}: $(jq -r '.[0] | "\(if .conclusion == "" then .status else .conclusion end), \(.url)"' <<<"$runs")"
+          fi
+          exit 1
+
       - name: Get GitHub App token
         uses: actions/create-github-app-token@v3
         id: app-token
@@ -61,42 +80,38 @@ jobs:
       - name: UV setup
         uses: astral-sh/setup-uv@v10.3.3
         with:
-          enable-cache: true
+          enable-cache: false
           python-version: "3.11"
-          cache-suffix: "3.11"
 
-      - name: UV sync
-        run: uv sync --all-packages --all-extras
-
-      - name: Ruff
-        run: uv run ruff check packages
-
-      - name: Ruff format
-        run: uv run ruff format --check
-
-      - name: ty
-        run: uv run ty check
-
-      - name: Pytest
-        run: uv run pytest -n auto --maxprocesses 4
-
+      # Sets the outputs the python-semantic-release action set (released,
+      # version, tag, ...): the CLI writes them itself under GitHub Actions.
       - name: Release
-        uses: python-semantic-release/python-semantic-release@v10
-        with:
-          prerelease: ${{ inputs.release_type == 'release-candidate' }}
-          prerelease_token: rc
-          # Force a bump level when the commit history alone wouldn't trigger a
-          # release (only chore/refactor since the last tag). Empty = let PSR
-          # decide from the Conventional Commits, the normal path.
-          force: ${{ inputs.force != 'auto' && inputs.force || '' }}
-          # Runs the configured build_command (`uv lock`) so the release
-          # commit carries a lock file consistent with the stamped versions.
+        id: release
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          COMMITTER_NAME: "Semantic Release"
+          COMMITTER_EMAIL: "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+          RELEASE_TYPE: ${{ inputs.release_type }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          git config --global user.name "$COMMITTER_NAME"
+          git config --global user.email "$COMMITTER_EMAIL"
+          export GIT_COMMIT_AUTHOR="${COMMITTER_NAME} <${COMMITTER_EMAIL}>"
+
+          # No --skip-build: the configured build_command (`uv lock`) gives the
+          # release commit a lock file consistent with the stamped versions.
           # The packages themselves are built by the Publish workflow.
-          build: true
-          changelog: ${{ inputs.release_type == 'stable' }}
-          commit: true
-          tag: true
-          vcs_release: true
-          github_token: ${{ steps.app-token.outputs.token }}
-          git_committer_email: "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
-          git_committer_name: "Semantic Release"
+          args=(--commit --tag --vcs-release --prerelease-token rc)
+          if [ "$RELEASE_TYPE" = "release-candidate" ]; then
+            args+=(--as-prerelease --no-changelog)
+          else
+            args+=(--changelog)
+          fi
+          # Force a bump level when the commit history alone wouldn't trigger a
+          # release (only chore/refactor since the last tag). "auto" lets PSR
+          # decide from the Conventional Commits, the normal path.
+          if [ "$FORCE" != "auto" ]; then
+            args+=("--${FORCE}")
+          fi
+
+          uvx --from 'python-semantic-release>=10,<11' semantic-release -v version "${args[@]}"

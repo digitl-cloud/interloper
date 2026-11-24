@@ -218,13 +218,19 @@ jobs:
   # One image per role, tagged with the released version (plus `latest` on
   # stable releases only). Each Python role ships two variants: the loaded
   # image on the bare tag, and the extras-free one on a "-slim" tag. The
-  # matrix mirrors the image catalog in the Makefile (ROLES + SLIM_ROLES),
+  # image list mirrors the image catalog in the Makefile (ROLES + SLIM_ROLES),
   # keep the two in sync.
+  #
+  # Each image builds once per architecture, each on a runner of that
+  # architecture, and is pushed by digest only. `docker-merge` then tags the
+  # two digests as one multi-arch index. A merge waits on every build, but
+  # runs whenever its own two digests exist, so one image's failed build
+  # holds back only that image.
   # ────────────────────────────────────────────────────────────────────
   docker:
-    name: Docker (${{ matrix.target }})
+    name: Docker (${{ matrix.image.target }}, ${{ matrix.platform.arch }})
     needs: resolve
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.platform.runner }}
 
     permissions:
       contents: "read"
@@ -235,7 +241,7 @@ jobs:
       matrix:
         # target → dockerfile target (also the Makefile stem)
         # role   → image name (interloper-<role>); suffix → tag suffix
-        include:
+        image: &images
           - { target: api,            role: api,       suffix: "" }
           - { target: api-slim,       role: api,       suffix: "-slim" }
           - { target: frontend,       role: frontend,  suffix: "" }
@@ -245,17 +251,15 @@ jobs:
           - { target: mcp-slim,       role: mcp,       suffix: "-slim" }
           - { target: scheduler,      role: scheduler, suffix: "" }
           - { target: scheduler-slim, role: scheduler, suffix: "-slim" }
+        platform:
+          - { arch: amd64, runner: ubuntu-latest }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
 
     steps:
       - name: Checkout (released tag)
         uses: actions/checkout@v7
         with:
           ref: ${{ needs.resolve.outputs.tag }}
-
-      - name: Setup QEMU
-        # Registers binfmt handlers so the amd64 runner can build the
-        # linux/arm64 image via emulation.
-        uses: docker/setup-qemu-action@v4
 
       - name: Setup Buildx
         uses: docker/setup-buildx-action@v4
@@ -267,31 +271,95 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Compute tags
-        id: tags
+      - name: Image name
+        id: image
         run: |
           owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
-          repo="ghcr.io/${owner}/interloper-${{ matrix.role }}"
-          suffix="${{ matrix.suffix }}"
-          tags="${repo}:${{ needs.resolve.outputs.version }}${suffix}"
-          if [ "${{ needs.resolve.outputs.stable }}" = "true" ]; then
-            tags="${tags},${repo}:latest${suffix}"
-          fi
-          echo "tags=${tags}" >> "$GITHUB_OUTPUT"
+          echo "name=ghcr.io/${owner}/interloper-${{ matrix.image.role }}" >> "$GITHUB_OUTPUT"
 
       # No build args: the dockerfile's own defaults define what a loaded
       # image carries, and the slim targets take no extras at all.
-      - name: Build & Push (${{ matrix.target }})
+      - name: Build & Push (${{ matrix.image.target }}, ${{ matrix.platform.arch }})
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
           file: dockerfile
-          target: ${{ matrix.target }}
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.tags.outputs.tags }}
-          cache-from: type=gha,scope=docker-${{ matrix.target }}
-          cache-to: type=gha,scope=docker-${{ matrix.target }},mode=max,ignore-error=true
+          target: ${{ matrix.image.target }}
+          platforms: linux/${{ matrix.platform.arch }}
+          outputs: type=image,name=${{ steps.image.outputs.name }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=docker-${{ matrix.image.target }}-${{ matrix.platform.arch }}
+          cache-to: type=gha,scope=docker-${{ matrix.image.target }}-${{ matrix.platform.arch }},mode=max,ignore-error=true
+
+      - name: Record the digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+
+      - name: Upload the digest
+        uses: actions/upload-artifact@v7
+        with:
+          name: digest-${{ matrix.image.target }}.${{ matrix.platform.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          overwrite: true
+
+  docker-merge:
+    name: Docker merge (${{ matrix.image.target }})
+    needs: [resolve, docker]
+    if: ${{ !cancelled() && needs.resolve.result == 'success' }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      packages: "write"
+
+    strategy:
+      fail-fast: false
+      matrix:
+        image: *images
+
+    steps:
+      - name: Download the digests
+        uses: actions/download-artifact@v8
+        with:
+          pattern: digest-${{ matrix.image.target }}.*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag the multi-arch index
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          ROLE: ${{ matrix.image.role }}
+          SUFFIX: ${{ matrix.image.suffix }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+          STABLE: ${{ needs.resolve.outputs.stable }}
+        run: |
+          shopt -s nullglob
+          digests=(*)
+          if [ "${#digests[@]}" -ne 2 ]; then
+            echo "::error::Expected an amd64 and an arm64 digest, found ${#digests[@]}: a build of this image failed."
+            exit 1
+          fi
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          repo="ghcr.io/${owner}/interloper-${ROLE}"
+          tags=(--tag "${repo}:${VERSION}${SUFFIX}")
+          if [ "$STABLE" = "true" ]; then
+            tags+=(--tag "${repo}:latest${SUFFIX}")
+          fi
+          docker buildx imagetools create "${tags[@]}" "${digests[@]/#/${repo}@sha256:}"
+          docker buildx imagetools inspect "${repo}:${VERSION}${SUFFIX}"
 
   # ────────────────────────────────────────────────────────────────────
   # Helm chart → GitHub Container Registry (ghcr.io)
