@@ -164,7 +164,7 @@ jobs:
           push: false
           load: false
           cache-from: type=gha,scope=docker-${{ matrix.target }}
-          cache-to: type=gha,scope=docker-${{ matrix.target }},mode=max
+          cache-to: type=gha,scope=docker-${{ matrix.target }},mode=max,ignore-error=true
 
   helm:
     name: Helm lint
