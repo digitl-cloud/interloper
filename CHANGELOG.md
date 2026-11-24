@@ -2,6 +2,52 @@
 
 <!-- version list -->
 
+## v0.142.0 (2026-11-24)
+
+### Bug Fixes
+
+- **app**: Resize the agent panel from its border, clear of the scrollbar
+  ([`d126a40`](https://github.com/digitl-cloud/interloper/commit/d126a405c2d87ed37283160ae95278df09ce2436))
+
+### Chores
+
+- Leave migration revisions out of coverage
+  ([`acd6260`](https://github.com/digitl-cloud/interloper/commit/acd62607232869ed57dbb414072e857f8b8d4595))
+
+### Features
+
+- **api**: Relay a SQLite database's changes to the realtime socket
+  ([`6603cff`](https://github.com/digitl-cloud/interloper/commit/6603cffab53a6d887a92f8109963724ad45184cf))
+
+- **app**: Fold the completed coverage types behind one show-all button
+  ([`fcf2aea`](https://github.com/digitl-cloud/interloper/commit/fcf2aea93a7ef23898bf90eeea953b3cba8fe2d2))
+
+- **app**: Run interloper dev on SQLite unless a Postgres is configured
+  ([`06b4fce`](https://github.com/digitl-cloud/interloper/commit/06b4fce4f8e456039c58098cb4ceea1863ac5667))
+
+- **db**: Bring a SQLite database up to what a Postgres one holds
+  ([`334d093`](https://github.com/digitl-cloud/interloper/commit/334d093377584a6119c05cda111476f87c689cfd))
+
+### Performance Improvements
+
+- **api**: Keep the garbage collector off what the server loads before it starts
+  ([`50ca03d`](https://github.com/digitl-cloud/interloper/commit/50ca03d819d3ecea4291b2810eb0cfab8530a956))
+
+### Refactoring
+
+- **db**: Leave a SQLite file's folder to interloper dev
+  ([`1a28b81`](https://github.com/digitl-cloud/interloper/commit/1a28b81f6c86c99b0a8edfb166c7f847c413d41c))
+
+- **db**: Never migrate a SQLite database
+  ([`8f5adcc`](https://github.com/digitl-cloud/interloper/commit/8f5adcc209a22535eee54804d39abecb039ef28b))
+
+- **db**: Stamp an execution's partition key in the fold on Postgres
+  ([`8a8f078`](https://github.com/digitl-cloud/interloper/commit/8a8f078d0360d8151e7fa249e0ec25803e6adab3))
+
+- **db**: Write the SQLite fold triggers as plain SQL
+  ([`290e438`](https://github.com/digitl-cloud/interloper/commit/290e4386d6b65a74388b78205173cccb4109866e))
+
+
 ## v0.141.0 (2026-11-22)
 
 ### Bug Fixes
