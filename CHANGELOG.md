@@ -2,6 +2,32 @@
 
 <!-- version list -->
 
+## v0.144.0 (2026-11-24)
+
+### Continuous Integration
+
+- Keep a Docker build green when the build cache cannot be written
+  ([`7de406b`](https://github.com/digitl-cloud/interloper/commit/7de406b2eff4b7cb2ba6b828e65d5ec64b144f75))
+
+- Publish releases from the Publish workflow, idempotently
+  ([`2c4c495`](https://github.com/digitl-cloud/interloper/commit/2c4c495419f06ead441ba405b7cc9b89310bce49))
+
+### Features
+
+- **app**: Quieter controls
+  ([`b124c59`](https://github.com/digitl-cloud/interloper/commit/b124c590b1f5a3784970d374572807a3d00e7d03))
+
+### Refactoring
+
+- **assets**: Move the campaign matcher out of interloper-assets
+  ([`822a1d8`](https://github.com/digitl-cloud/interloper/commit/822a1d8d30748fc0e761b04cbe9dde6717984b81))
+
+### Breaking Changes
+
+- **assets**: Interloper-assets no longer ships CampaignMatcher; a deployment that uses the
+  campaign_matcher source installs the extension package that provides it.
+
+
 ## v0.143.0 (2026-11-24)
 
 ### Bug Fixes
