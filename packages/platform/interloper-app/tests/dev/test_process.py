@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import signal
 import subprocess
@@ -69,3 +70,42 @@ def test_signalling_a_group_that_already_ended_is_harmless():
     process.wait()
 
     ProcessGroup._signal(process, signal.SIGTERM)
+
+
+def test_output_is_logged_line_by_line_under_its_source(caplog: pytest.LogCaptureFixture):
+    script = (
+        "import sys\n"
+        "out = sys.stdout.buffer\n"
+        "out.write(b'hello\\r\\n')\n"
+        "out.write(b'\\x1b[32mgreen\\x1b[0m\\n')\n"
+        "out.write(b'\\n')\n"
+        "out.write(b'\\xff bad\\n')\n"
+        "out.write(b'step 1\\rstep 2\\n')\n"
+        "out.flush()\n"
+        "sys.stderr.buffer.write(b'\\x1b[33mcareful\\x1b[39m\\n')\n"
+        "out.write(b'last')\n"
+    )
+    caplog.set_level(logging.DEBUG, logger="nuxt")
+    group = ProcessGroup()
+
+    group.start([sys.executable, "-c", script], output="nuxt")
+
+    assert group.wait() == 0
+    lines = [(record.name, record.levelno, record.getMessage()) for record in caplog.records]
+    assert [line for line in lines if line[1] == logging.INFO] == [
+        ("nuxt", logging.INFO, "hello"),
+        ("nuxt", logging.INFO, "green"),
+        ("nuxt", logging.INFO, "\ufffd bad"),
+        ("nuxt", logging.INFO, "step 2"),
+        ("nuxt", logging.INFO, "last"),
+    ]
+    assert [line for line in lines if line[1] == logging.WARNING] == [("nuxt", logging.WARNING, "careful")]
+
+
+def test_without_a_source_the_output_is_the_terminal_s(capfd: pytest.CaptureFixture[str]):
+    group = ProcessGroup()
+
+    group.start([sys.executable, "-c", "print('straight through')"])
+
+    assert group.wait() == 0
+    assert "straight through" in capfd.readouterr().out

@@ -147,8 +147,23 @@ per line:
 
 `trace_id` and `span_id` are present when the record is written inside a span, so a collector
 can lift them onto the log record and link each line to its trace. A record with an exception
-carries the formatted traceback in `exception`. The default, `text`, is the human-readable line
-for a terminal.
+carries the formatted traceback in `exception`.
+
+The default, `text`, is one line per record for a terminal, the level coloured unless `NO_COLOR`
+is set:
+
+```
+19:53:44  INFO   db         Database up to date
+19:53:48  INFO   app        Ready in 4.4s on http://127.0.0.1:3000
+                            api, cron, hooks, renewal, worker, reaper · 88 definitions
+19:54:10  ERROR  api        GET /api/organisations/{org_id}/runs 500 (12 ms)
+```
+
+The source is the package that wrote the record, without its `interloper` prefix. The
+platform's packages and every installed extension's print from INFO up; every other library
+prints only its warnings and errors. A request is a line of its own only when it fails with a
+5xx. `-v` shows debug lines, every request and the other libraries' INFO lines. Both formats
+follow the same rule.
 
 ## Custom instrumentation
 

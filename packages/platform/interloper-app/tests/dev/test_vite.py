@@ -16,6 +16,7 @@ class _Group:
 
     def __init__(self, code: int | None = None, missing: bool = False) -> None:
         self.commands: list[list[str]] = []
+        self.outputs: list[str | None] = []
         self.stopped = 0
         self._code = code
         self._missing = missing
@@ -24,10 +25,13 @@ class _Group:
     def running(self) -> bool:
         return self._code is None
 
-    def start(self, command: list[str], *, cwd: Path | None = None, stdin: bytes | None = None) -> None:
+    def start(
+        self, command: list[str], *, cwd: Path | None = None, stdin: bytes | None = None, output: str | None = None
+    ) -> None:
         if self._missing:
             raise FileNotFoundError(command[0])
         self.commands.append(command)
+        self.outputs.append(output)
 
     def wait(self) -> int:
         return self._code or 0
@@ -47,10 +51,10 @@ def test_npm_runs_vite_on_the_loopback_without_clearing_the_terminal(tmp_path: P
     server = ViteServer("acme", tmp_path, pnpm=False)
     server.port = Port(5173)
 
-    assert server.install_command() == ["npm", "install", "--no-audit", "--no-fund"]
+    assert server.install_command() == ["npm", "install", "--no-audit", "--no-fund", "--loglevel", "warn"]
     assert server.command() == [
         *("npm", "exec", "--no", "--", "vite"),
-        *("--host", "127.0.0.1", "--port", "5173", "--strictPort", "--clearScreen", "false"),
+        *("--host", "127.0.0.1", "--port", "5173", "--strictPort", "--clearScreen", "false", "--logLevel", "warn"),
     ]
     assert server.entry == "http://127.0.0.1:5173/src/index.ts"
     assert server.origin == "http://127.0.0.1:5173"
@@ -59,7 +63,7 @@ def test_npm_runs_vite_on_the_loopback_without_clearing_the_terminal(tmp_path: P
 def test_a_pnpm_workspace_runs_it_with_pnpm(tmp_path: Path):
     server = ViteServer("acme", tmp_path, pnpm=True)
 
-    assert server.install_command() == ["pnpm", "install"]
+    assert server.install_command() == ["pnpm", "--loglevel", "warn", "install"]
     assert server.command()[:3] == ["pnpm", "exec", "vite"]
 
 
@@ -70,6 +74,14 @@ def test_dependencies_install_only_when_missing(tmp_path: Path, monkeypatch: pyt
     _server(tmp_path, group, monkeypatch).start()
 
     assert [command[:2] for command in group.commands] == [["npm", "install"], ["npm", "exec"], ["npm", "exec"]]
+
+
+def test_its_output_and_its_install_s_are_logged_under_vite(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    group = _Group()
+
+    _server(tmp_path, group, monkeypatch).start()
+
+    assert group.outputs == ["vite", "vite"]
 
 
 def test_the_install_runs_in_the_group_dev_stops(tmp_path: Path):
@@ -86,7 +98,7 @@ def test_a_server_that_exits_before_answering_stops_dev(tmp_path: Path, monkeypa
 
 
 def test_a_failed_install_stops_dev(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    with pytest.raises(SystemExit, match="`npm install --no-audit --no-fund` failed"):
+    with pytest.raises(SystemExit, match="`npm install --no-audit --no-fund --loglevel warn` failed"):
         _server(tmp_path, _Group(code=1), monkeypatch).start()
 
 

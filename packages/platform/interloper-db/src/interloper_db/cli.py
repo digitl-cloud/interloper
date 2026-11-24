@@ -8,6 +8,8 @@ from collections.abc import Mapping
 from typing import ClassVar
 
 from interloper.cli import Command
+from interloper.cli.console import configure_console_logging
+from interloper.settings import LogSettings
 
 from interloper_db.engine import init_engine
 from interloper_db.provision import bootstrap, downgrade, drop_database, upgrade
@@ -25,10 +27,10 @@ class DatabaseInitCommand(Command):
         Args:
             args: The parsed command line; this command takes no arguments.
         """
+        configure_console_logging(log_format=LogSettings.get().format)
         postgres = PostgresSettings.get()
         print(f"Bootstrapping the database at {postgres.location}...")
         bootstrap(postgres.dsn)
-        print("Done.")
 
 
 class DatabaseResetCommand(Command):
@@ -48,6 +50,7 @@ class DatabaseResetCommand(Command):
         Args:
             args: The parsed command line, carrying ``yes`` to skip the confirmation prompt.
         """
+        configure_console_logging(log_format=LogSettings.get().format)
         postgres = PostgresSettings.get()
 
         if not args.yes:
@@ -60,7 +63,6 @@ class DatabaseResetCommand(Command):
         drop_database(postgres.dsn)
         print(f"Bootstrapping the database at {postgres.location}...")
         bootstrap(postgres.dsn)
-        print("Done.")
 
 
 class DatabaseUpgradeCommand(Command):
@@ -80,10 +82,10 @@ class DatabaseUpgradeCommand(Command):
         Args:
             args: The parsed command line, carrying ``revision`` (the target, default ``head``).
         """
+        configure_console_logging(log_format=LogSettings.get().format)
         init_engine(PostgresSettings.get().dsn)
         print(f"Running migrations to {args.revision}...")
         upgrade(revision=args.revision)
-        print("Done.")
 
 
 class DatabaseDowngradeCommand(Command):
@@ -103,10 +105,10 @@ class DatabaseDowngradeCommand(Command):
         Args:
             args: The parsed command line, carrying ``revision`` (the target, default ``-1``).
         """
+        configure_console_logging(log_format=LogSettings.get().format)
         init_engine(PostgresSettings.get().dsn)
         print(f"Downgrading to {args.revision}...")
         downgrade(revision=args.revision)
-        print("Done.")
 
 
 class DatabaseCommand(Command):

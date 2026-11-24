@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from collections.abc import Callable
 from typing import Any
 from uuid import UUID
@@ -57,7 +58,10 @@ def services(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     monkeypatch.setattr(cli.Catalog, "from_settings", classmethod(lambda cls: cli.Catalog()))
     monkeypatch.setattr(Store, "from_settings", classmethod(lambda cls, catalog=None: object()))
     monkeypatch.setattr("interloper_scheduler.services.scheduler_services", scheduler_services)
-    monkeypatch.setattr(cli.Supervisor, "run", lambda self: recorded.setdefault("ran", list(self.services)))
+    monkeypatch.setattr(cli.Supervisor, "run", lambda self: recorded.update(ran=list(self.services), ready=self.ready))
+    monkeypatch.setattr(
+        cli, "configure_console_logging", lambda level=logging.INFO, **kwargs: recorded.update(level=level)
+    )
     return recorded
 
 
@@ -75,6 +79,18 @@ class TestScheduler:
         assert services["services"]["cron"] is True
         assert services["services"]["worker"] is False
         assert services["ran"] == ["stub"]
+
+    def test_a_start_ends_in_one_ready_line_without_a_url(self, services: dict[str, Any]) -> None:
+        cli.SchedulerCommand().run(_parse("scheduler"))
+
+        ready = services["ready"]
+        assert (ready.url, list(ready.services), ready.definitions) == (None, ["stub"], 0)
+        assert ready.logger.name == "interloper_scheduler.cli"
+
+    def test_verbose_prints_debug_lines(self, services: dict[str, Any]) -> None:
+        cli.SchedulerCommand().run(_parse("scheduler", "-v"))
+
+        assert services["level"] == logging.DEBUG
 
     def test_no_enabled_service_is_an_error(self, services: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
         CronSettings.activate(CronSettings(enabled=False))

@@ -27,7 +27,11 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> dict[str, list[Any]]:
         "drop_database": [],
         "upgrade": [],
         "downgrade": [],
+        "logging": [],
     }
+    monkeypatch.setattr(
+        db_command, "configure_console_logging", lambda **kwargs: recorded["logging"].append(kwargs["log_format"])
+    )
     monkeypatch.setattr(db_command, "bootstrap", lambda dsn, **kwargs: recorded["bootstrap"].append((dsn, kwargs)))
     monkeypatch.setattr(db_command, "init_engine", lambda dsn: recorded["init_engine"].append(dsn))
     monkeypatch.setattr(db_command, "drop_database", lambda dsn: recorded["drop_database"].append(dsn))
@@ -88,7 +92,8 @@ class TestInit:
         db_command.DatabaseInitCommand().run(_parse("db", "init"))
 
         assert calls["bootstrap"] == [(PostgresSettings.get().dsn, {})]
-        assert "Done." in capsys.readouterr().out
+        assert calls["logging"] == ["text"]
+        assert "Done." not in capsys.readouterr().out
 
     def test_reads_the_postgres_settings_alone(
         self, calls: dict[str, list[Any]], monkeypatch: pytest.MonkeyPatch
@@ -125,7 +130,7 @@ class TestReset:
 
         assert len(calls["drop_database"]) == 1
         assert len(calls["bootstrap"]) == 1
-        assert "Done." in capsys.readouterr().out
+        assert calls["logging"] == ["text"]
 
     def test_reset_never_prints_the_password(
         self,
@@ -178,6 +183,7 @@ class TestUpgradeDowngrade:
 
         assert calls["upgrade"] == ["head"]
         assert len(calls["init_engine"]) == 1
+        assert calls["logging"] == ["text"]
 
     def test_upgrade_targets_an_explicit_revision(self, calls: dict[str, list[Any]]) -> None:
         db_command.DatabaseUpgradeCommand().run(_parse("db", "upgrade", "0007"))
@@ -188,6 +194,7 @@ class TestUpgradeDowngrade:
         db_command.DatabaseDowngradeCommand().run(_parse("db", "downgrade"))
 
         assert calls["downgrade"] == ["-1"]
+        assert calls["logging"] == ["text"]
 
     def test_downgrade_targets_an_explicit_revision(self, calls: dict[str, list[Any]]) -> None:
         db_command.DatabaseDowngradeCommand().run(_parse("db", "downgrade", "base"))

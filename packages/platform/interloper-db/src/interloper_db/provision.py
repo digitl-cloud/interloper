@@ -23,7 +23,7 @@ FOLDED_INTO = "0003"
 
 
 def upgrade(engine: Engine | None = None, revision: str = "head") -> None:
-    """Run Alembic migrations up to the given revision.
+    """Run Alembic migrations up to the given revision, and say in one line what they did.
 
     A database still at the head of the folded migrations is stamped at the
     revision that folded them first, its schema already theirs, so it runs
@@ -39,22 +39,37 @@ def upgrade(engine: Engine | None = None, revision: str = "head") -> None:
     engine = engine or get_engine()
     config = _alembic_config(engine)
     with engine.connect() as connection:
-        current = MigrationContext.configure(connection).get_current_revision()
-    if current == FOLDED_HEAD:
+        before = MigrationContext.configure(connection).get_current_revision()
+    if before == FOLDED_HEAD:
         command.stamp(config, FOLDED_INTO, purge=True)
     command.upgrade(config, revision)
+    with engine.connect() as connection:
+        after = MigrationContext.configure(connection).get_current_revision()
+    if before is None:
+        logger.info("Database created at %s", after)
+    elif before == after:
+        logger.info("Database up to date")
+    else:
+        logger.info("Database migrated from %s to %s", before, after)
 
 
 def downgrade(engine: Engine | None = None, revision: str = "-1") -> None:
-    """Run Alembic downgrade.
+    """Run Alembic downgrade, and say in one line what it undid.
 
     Args:
         engine: The engine the migrations run against. Defaults to the global engine.
         revision: Target revision (default: one step back).
     """
     from alembic import command
+    from alembic.runtime.migration import MigrationContext
 
-    command.downgrade(_alembic_config(engine or get_engine()), revision)
+    engine = engine or get_engine()
+    with engine.connect() as connection:
+        before = MigrationContext.configure(connection).get_current_revision()
+    command.downgrade(_alembic_config(engine), revision)
+    with engine.connect() as connection:
+        after = MigrationContext.configure(connection).get_current_revision()
+    logger.info("Database downgraded from %s to %s", before, after)
 
 
 def create_all(engine: Engine | None = None) -> None:
@@ -177,21 +192,14 @@ def connect(dsn: str, *, statement_timeout: float | None = None) -> Engine:
     Raises:
         SystemExit: If the database has no schema, or one behind this release's migrations.
     """
-    engine = init_engine(dsn, statement_timeout=statement_timeout)
-    # Alembic notes its setup at INFO; a serving process only reads two revisions.
-    alembic_logger = logging.getLogger("alembic")
-    level = alembic_logger.level
-    alembic_logger.setLevel(logging.WARNING)
-    try:
-        from alembic.runtime.migration import MigrationContext
-        from alembic.script import ScriptDirectory
+    from alembic.runtime.migration import MigrationContext
+    from alembic.script import ScriptDirectory
 
-        script = ScriptDirectory.from_config(_alembic_config(engine))
-        with engine.connect() as connection:
-            current = MigrationContext.configure(connection).get_current_revision()
-        head = script.get_current_head()
-    finally:
-        alembic_logger.setLevel(level)
+    engine = init_engine(dsn, statement_timeout=statement_timeout)
+    script = ScriptDirectory.from_config(_alembic_config(engine))
+    with engine.connect() as connection:
+        current = MigrationContext.configure(connection).get_current_revision()
+    head = script.get_current_head()
     if current == head:
         return engine
     if current is None:

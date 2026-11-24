@@ -8,7 +8,7 @@ import threading
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
-from interloper.utils import Service, Supervisor
+from interloper.utils import ReadyLine, Service, Supervisor
 from interloper_api.server import ApiServer
 from interloper_scheduler.services import scheduler_services
 
@@ -101,9 +101,13 @@ class App:
         )
         return cls(services)
 
-    def run(self) -> None:
-        """Run every service until a signal or a service's death."""
-        Supervisor(self.services).run()
+    def run(self, ready: ReadyLine | None = None) -> None:
+        """Run every service until a signal or a service's death.
+
+        Args:
+            ready: The line to log once every service answers; ``None`` logs none.
+        """
+        Supervisor(self.services, ready=ready).run()
 
     # -- Internals -------------------------------------------------------------
 
@@ -142,7 +146,7 @@ class App:
                 logger.warning("Frontend not available: %s", error)
             else:
                 server.app.add_middleware(SpaFallback, directory=directory, dev_origins=dev_origins)
-                logger.info("Serving frontend from %s", directory)
+                logger.debug("Serving frontend from %s", directory)
         return server
 
 
@@ -167,6 +171,15 @@ class ParentWatchdog:
         self._parent = os.getppid() if parent is None else parent
         self._interval = interval
         self._stopping = threading.Event()
+
+    @property
+    def ready(self) -> bool:
+        """Whether the watchdog watches: it has nothing to wait for.
+
+        Returns:
+            Always True.
+        """
+        return True
 
     def start(self) -> None:
         """Poll the parent every ``interval`` seconds until stopped or reparented."""

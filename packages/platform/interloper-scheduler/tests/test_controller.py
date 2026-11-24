@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 
 from interloper_scheduler import controller
@@ -76,3 +77,32 @@ class TestKeyboardInterrupt:
             _InterruptingController().start()
 
         assert "Shutting down _InterruptingController" in caplog.text
+
+
+class _ReadyProbe(Controller):
+    """Records whether it was ready while it ticked, then stops."""
+
+    def __init__(self) -> None:
+        super().__init__(poll_interval=0)
+        self.ready_while_ticking: bool | None = None
+
+    def _tick(self) -> None:
+        self.stop()
+        self.ready_while_ticking = self.ready
+
+
+class TestReady:
+    def test_a_controller_is_ready_once_its_loop_runs(self):
+        probe = _ReadyProbe()
+        assert probe.ready is False
+
+        probe.start()
+
+        assert probe.ready_while_ticking is True
+
+    def test_starting_is_a_debug_line(self, caplog):
+        with caplog.at_level(logging.DEBUG, logger="interloper_scheduler.controller"):
+            _ReadyProbe().start()
+
+        (record,) = [record for record in caplog.records if record.getMessage().startswith("Starting")]
+        assert record.levelno == logging.DEBUG

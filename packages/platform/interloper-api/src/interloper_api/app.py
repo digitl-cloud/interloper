@@ -27,6 +27,7 @@ from starlette.concurrency import run_in_threadpool
 from interloper_api.auth import Login
 from interloper_api.dependencies import State, require_viewer, share_read_session
 from interloper_api.oauth import AuthorizationServer, CrossOriginMiddleware
+from interloper_api.requests import RequestLog
 from interloper_api.routes import (
     admin,
     apps,
@@ -232,6 +233,7 @@ def create_app(
         )
     # Added last, so it answers a client-facing endpoint's preflight before the policy above can refuse it.
     app.add_middleware(CrossOriginMiddleware)
+    app.add_middleware(RequestLog)
     login = _login(settings)
     if login is not None:
         login.install(app)
@@ -293,7 +295,7 @@ def _mount_agent(api: APIRouter, settings: ApiSettings) -> str | None:
         The model the mounted agent runs on, or ``None`` when the routes are not mounted.
     """
     if settings.agent is None or not settings.agent.enabled:
-        logger.info("Agent routes not mounted: the agent is not enabled (agent.enabled).")
+        logger.debug("Agent routes not mounted: the agent is not enabled (agent.enabled).")
         return None
 
     try:
@@ -323,13 +325,13 @@ def _mount_extensions(app: FastAPI, api: APIRouter) -> None:
     """
     for name, router in extensions.EXTENSION_ROUTERS.items():
         api.include_router(router, prefix=f"{ORG_PREFIX}/ext/{name}", dependencies=[Depends(require_viewer)])
-        logger.info("Extension routes '%s' mounted at /api%s/ext/%s.", name, ORG_PREFIX, name)
+        logger.debug("Extension routes '%s' mounted at /api%s/ext/%s.", name, ORG_PREFIX, name)
     for name, bundle in extensions.UI_BUNDLES.items():
         if not isinstance(bundle, extensions.UIBundle):
             continue
         path = extensions.UI_PATH.format(name=name, digest=bundle.digest)
         app.mount(path, extensions.BundleFiles(bundle), name=f"ext-ui-{name}")
-        logger.info("Extension UI '%s' served at %s.", name, path)
+        logger.debug("Extension UI '%s' served at %s.", name, path)
 
 
 def _state(

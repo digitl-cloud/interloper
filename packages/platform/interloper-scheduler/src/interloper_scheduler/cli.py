@@ -4,16 +4,15 @@ from __future__ import annotations
 
 import argparse
 import logging
+import time
 
 from interloper.catalog import Catalog
 from interloper.cli import Command
 from interloper.cli.console import configure_console_logging
 from interloper.settings import LogSettings
-from interloper.utils import Supervisor
+from interloper.utils import ReadyLine, Supervisor
 
 logger = logging.getLogger(__name__)
-
-_LOG_FORMAT = "%(asctime)s %(name)s %(levelname)s %(message)s"
 
 
 class SchedulerCommand(Command):
@@ -44,12 +43,13 @@ class SchedulerCommand(Command):
             default=None,
             help="Run the reaper (fails silent and overdue runs; singleton)",
         )
+        parser.add_argument("-v", "--verbose", action="store_true", help="Print debug lines and libraries' info lines")
 
     def run(self, args: argparse.Namespace) -> None:
         """Run the enabled scheduler services until a signal or a service's death.
 
         Args:
-            args: The parsed command line: the ``cron``/``worker``/``reaper`` toggles.
+            args: The parsed command line: the ``cron``/``worker``/``reaper`` toggles and ``verbose``.
 
         Raises:
             SystemExit: When no service is enabled.
@@ -61,16 +61,17 @@ class SchedulerCommand(Command):
         from interloper_scheduler.services import scheduler_services
         from interloper_scheduler.settings import SchedulerSettings
 
+        started = time.time()
         settings = SchedulerSettings.get()
         cron = settings.cron.enabled if args.cron is None else args.cron
         worker = settings.worker.enabled if args.worker is None else args.worker
         reaper = settings.reaper.enabled if args.reaper is None else args.reaper
         if not (cron or worker or reaper):
             raise SystemExit("Error: No scheduler service enabled. Enable at least one of: --cron, --worker, --reaper.")
-        configure_console_logging(logging.INFO, _LOG_FORMAT, log_format=LogSettings.get().format)
+        configure_console_logging(logging.DEBUG if args.verbose else logging.INFO, log_format=LogSettings.get().format)
         postgres = PostgresSettings.get()
         connect(postgres.dsn, statement_timeout=postgres.statement_timeout)
         catalog = Catalog.from_settings()
         store = Store.from_settings(catalog=catalog)
         services = scheduler_services(settings, store=store, catalog=catalog, cron=cron, worker=worker, reaper=reaper)
-        Supervisor(services).run()
+        Supervisor(services, ready=ReadyLine(logger, started, list(services), len(catalog.components))).run()

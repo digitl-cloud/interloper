@@ -7,7 +7,7 @@ description: Build, launch, and drive a seeded interloper dev instance headlessl
 
 ## Launch
 
-`make dev-up DEV_ARGS="--port 3100 --no-browser"` (background), which runs `interloper dev -f collection.yaml` from `dev/`. Needs local Postgres at `localhost:5432` (`postgres/postgres/interloper`). A taken port is an error naming it, never a move to another: free it or pick another. Wait for the `Ready. Sign in: http://127.0.0.1:3100/api/dev/sign-in?code=…` line; a Python edit restarts the platform and prints it again.
+`make dev-up DEV_ARGS="--port 3100 --no-browser"` (background), which runs `interloper dev -f collection.yaml` from `dev/`. Needs local Postgres at `localhost:5432` (`postgres/postgres/interloper`). A taken port is an error naming it, never a move to another: free it or pick another. Wait for the `INFO app Ready in …s on http://127.0.0.1:3100/api/dev/sign-in?code=…` line; a Python edit restarts the platform and prints it again. Add `-v` to `DEV_ARGS` to see every request line and libraries' info lines.
 
 ## Authenticate headlessly (no OAuth)
 

@@ -121,18 +121,18 @@ def _start_notify_listener(dsn: str, loop: asyncio.AbstractEventLoop) -> None:
         try:
             with psycopg.connect(dsn, autocommit=True) as connection:
                 connection.execute("LISTEN table_changes")
-                logger.info("[Realtime] NOTIFY listener started")
+                logger.debug("Realtime NOTIFY listener started")
 
                 for notify in connection.notifies():
                     try:
                         _relay(json.loads(notify.payload), loop)
                     except (json.JSONDecodeError, KeyError) as e:
-                        logger.warning("[Realtime] Invalid NOTIFY payload: %s", e)
+                        logger.warning("Invalid NOTIFY payload: %s", e)
         except Exception as e:  # noqa: BLE001
             # This thread is the only realtime path; letting anything escape
             # would end it for the life of the process, so every failure is
             # logged and the connection retried instead.
-            logger.error("[Realtime] NOTIFY listener error: %s, reconnecting in 5s...", e)
+            logger.error("Realtime NOTIFY listener failed, reconnecting in 5s: %s", e)
             time.sleep(5)
 
 
@@ -156,7 +156,7 @@ async def realtime_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         from interloper_db.sqlite import SQLiteListener
 
         SQLiteListener(engine, partial(_relay, loop=loop))
-        logger.info("[Realtime] SQLite listener started")
+        logger.debug("Realtime SQLite listener started")
         yield
         return
     # libpq refuses SQLAlchemy's driver name, and str(engine.url) would mask the password as '***'.

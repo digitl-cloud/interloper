@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import time
 from collections.abc import Mapping
 from typing import ClassVar
 
@@ -15,7 +16,9 @@ from interloper.catalog import Catalog
 from interloper.cli import Command
 from interloper.cli.console import configure_console_logging
 from interloper.settings import LogSettings, ServerSettings
-from interloper.utils import Supervisor
+from interloper.utils import ReadyLine, Supervisor
+
+logger = logging.getLogger(__name__)
 
 
 class ApiCommand(Command):
@@ -32,12 +35,15 @@ class ApiCommand(Command):
         """
         parser.add_argument("--host", default=None, help="Bind host (default: server.host, 0.0.0.0)")
         parser.add_argument("--port", type=int, default=None, help="Bind port (default: server.port, 3000)")
+        parser.add_argument(
+            "-v", "--verbose", action="store_true", help="Print debug lines, every request, and libraries' info lines"
+        )
 
     def run(self, args: argparse.Namespace) -> None:
-        """Serve the API until a signal or its death.
+        """Serve the API until a signal or its death, saying once when it answers.
 
         Args:
-            args: The parsed command line: ``host`` and ``port``.
+            args: The parsed command line: ``host``, ``port`` and ``verbose``.
         """
         from interloper_db import Store
         from interloper_db.provision import connect
@@ -46,12 +52,13 @@ class ApiCommand(Command):
         from interloper_api.server import ApiServer
         from interloper_api.settings import ApiSettings
 
-        if args.host is not None:
-            ServerSettings.activate(ServerSettings.get().model_copy(update={"host": args.host}))
-        settings = ApiSettings.get()
-        configure_console_logging(
-            logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s", log_format=LogSettings.get().format
+        started = time.time()
+        server = {"host": args.host, "port": args.port}
+        ServerSettings.activate(
+            ServerSettings.get().model_copy(update={name: value for name, value in server.items() if value is not None})
         )
+        settings = ApiSettings.get()
+        configure_console_logging(logging.DEBUG if args.verbose else logging.INFO, log_format=LogSettings.get().format)
         postgres = PostgresSettings.get()
         connect(postgres.dsn, statement_timeout=postgres.statement_timeout)
         catalog = Catalog.from_settings()
@@ -61,8 +68,9 @@ class ApiCommand(Command):
             access_token_expiry=settings.auth.access_token_expiry,
             refresh_token_expiry=settings.auth.refresh_token_expiry,
         )
-        port = settings.server.port if args.port is None else args.port
-        Supervisor({"api": ApiServer.from_settings(settings, store=store, catalog=catalog, port=port)}).run()
+        services = {"api": ApiServer.from_settings(settings, store=store, catalog=catalog, port=settings.server.port)}
+        ready = ReadyLine(logger, started, list(services), len(catalog.components), settings.server.public_url)
+        Supervisor(services, ready=ready).run()
 
 
 class OAuthCreateCommand(Command):

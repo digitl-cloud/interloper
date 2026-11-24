@@ -71,9 +71,9 @@ class NuxtServer:
         """Spell the command running the server on the loopback.
 
         Returns:
-            ``pnpm dev`` with the host and port.
+            ``pnpm dev`` with the host and port, pnpm saying only its warnings.
         """
-        return ["pnpm", "dev", "--host", Port.HOST, "--port", str(self.port.number)]
+        return ["pnpm", "--loglevel", "warn", "dev", "--host", Port.HOST, "--port", str(self.port.number)]
 
     def start(self, timeout: float = 180.0) -> None:
         """Install the app's dependencies when missing, start the server and wait until it answers.
@@ -87,7 +87,7 @@ class NuxtServer:
                 the server exits or stays silent past the timeout.
         """
         if not (self.directory / "node_modules").is_dir():
-            self._start(["pnpm", "install"])
+            self._start(["pnpm", "--loglevel", "warn", "install"])
             if self._group.wait() != 0:
                 raise SystemExit(f"`pnpm install` failed in {self.directory}.")
         if self.port.in_use:
@@ -117,6 +117,6 @@ class NuxtServer:
             SystemExit: When pnpm is not installed.
         """
         try:
-            self._group.start(command, cwd=self.directory, environment=environment)
+            self._group.start(command, cwd=self.directory, environment=environment, output="nuxt")
         except FileNotFoundError as error:
             raise SystemExit("Serving the app from its source needs pnpm, which was not found.") from error

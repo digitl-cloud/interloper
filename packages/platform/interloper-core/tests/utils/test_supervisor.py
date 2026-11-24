@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import signal
 import threading
@@ -10,18 +11,34 @@ from collections.abc import Iterator
 
 import pytest
 
-from interloper.utils import Supervisor
+from interloper.utils import ReadyLine, Supervisor
 
 
 class Loop:
-    """A service that loops until stopped, recording its lifecycle."""
+    """A service that loops until stopped, ready once it runs, recording its lifecycle."""
 
-    def __init__(self) -> None:
-        """Start unstopped."""
+    def __init__(self, ready_after: float = 0.0) -> None:
+        """Start unstopped.
+
+        Args:
+            ready_after: Seconds its loop runs before it answers.
+        """
         self.stopped = threading.Event()
+        self.ready_after = ready_after
+        self.ready_at: float | None = None
+
+    @property
+    def ready(self) -> bool:
+        """Whether it has run for ``ready_after`` seconds.
+
+        Returns:
+            True once it answers.
+        """
+        return self.ready_at is not None and time.monotonic() >= self.ready_at
 
     def start(self) -> None:
         """Block until stopped."""
+        self.ready_at = time.monotonic() + self.ready_after
         self.stopped.wait()
 
     def stop(self) -> None:
@@ -30,7 +47,9 @@ class Loop:
 
 
 class Exits:
-    """A service whose blocking call returns on its own."""
+    """A service whose blocking call returns on its own, never ready."""
+
+    ready = False
 
     def start(self) -> None:
         """Return at once."""
@@ -40,7 +59,9 @@ class Exits:
 
 
 class Raises:
-    """A service whose blocking call raises."""
+    """A service whose blocking call raises, never ready."""
+
+    ready = False
 
     def start(self) -> None:
         """Fail at once.
@@ -125,6 +146,8 @@ def test_stop_is_idempotent():
 class ExitsTheProcess:
     """A service whose blocking call calls ``sys.exit``, as uvicorn does when it cannot bind its port."""
 
+    ready = False
+
     def start(self) -> None:
         """Exit at once.
 
@@ -156,3 +179,74 @@ def test_a_service_calling_sys_exit_stops_the_process_with_failure():
     assert not thread.is_alive(), "the supervisor hung on a service that called sys.exit"
     assert outcome == [1]
     assert loop.stopped.is_set()
+
+
+def _ready_line(**overrides: object) -> ReadyLine:
+    fields: dict = {
+        "logger": logging.getLogger("interloper_app.cli"),
+        "started": time.time(),
+        "services": ["api", "cron"],
+        "definitions": 88,
+        "url": "http://127.0.0.1:3000",
+    } | overrides
+    return ReadyLine(**fields)
+
+
+def _ready_records(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    return [record for record in caplog.records if record.getMessage().startswith("Ready in")]
+
+
+def test_the_ready_line_follows_every_service_being_ready(caplog: pytest.LogCaptureFixture):
+    """The ready line is logged once, after the slowest service answers."""
+    caplog.set_level(logging.INFO)
+    quick, slow = Loop(), Loop(ready_after=0.3)
+    supervisor = Supervisor({"api": slow, "cron": quick}, grace=1.0, ready=_ready_line())
+    threading.Timer(0.8, supervisor.stop, args=["test"]).start()
+
+    supervisor.run()
+
+    (record,) = _ready_records(caplog)
+    assert slow.ready_at is not None and record.created >= time.time() - 0.8
+    assert record.levelno == logging.INFO
+    assert record.getMessage().endswith(" on http://127.0.0.1:3000\napi, cron · 88 definitions")
+
+
+def test_no_ready_line_when_a_service_dies_before_it_is_ready(caplog: pytest.LogCaptureFixture):
+    """A process that fails to start never says it is ready."""
+    caplog.set_level(logging.INFO)
+    supervisor = Supervisor({"loop": Loop(), "api": Raises()}, grace=1.0, ready=_ready_line())
+
+    with pytest.raises(SystemExit):
+        supervisor.run()
+
+    assert _ready_records(caplog) == []
+
+
+def test_starting_the_services_is_a_debug_line(caplog: pytest.LogCaptureFixture):
+    """The services starting is not news at INFO: the ready line is."""
+    caplog.set_level(logging.DEBUG)
+    supervisor = Supervisor({"loop": Loop()}, grace=1.0)
+    threading.Timer(0.2, supervisor.stop, args=["test"]).start()
+
+    supervisor.run()
+
+    (record,) = [record for record in caplog.records if record.getMessage().startswith("Started services")]
+    assert record.levelno == logging.DEBUG
+
+
+class TestReadyLine:
+    def test_it_names_the_time_to_start_the_url_the_services_and_the_catalog(self, caplog: pytest.LogCaptureFixture):
+        caplog.set_level(logging.INFO)
+
+        _ready_line(started=time.time() - 4.42).log()
+
+        (record,) = caplog.records
+        assert record.name == "interloper_app.cli"
+        assert record.getMessage() == "Ready in 4.4s on http://127.0.0.1:3000\napi, cron · 88 definitions"
+
+    def test_without_a_url_it_names_none(self, caplog: pytest.LogCaptureFixture):
+        caplog.set_level(logging.INFO)
+
+        _ready_line(started=time.time() - 1.02, url=None, services=["cron", "worker"]).log()
+
+        assert caplog.records[0].getMessage() == "Ready in 1.0s\ncron, worker · 88 definitions"

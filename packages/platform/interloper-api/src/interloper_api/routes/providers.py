@@ -53,7 +53,7 @@ def log_provider_status() -> None:
             active.append(key)
         elif any(os.environ.get(name) for name in OAuthAppCredentials.env_names(key).values()):
             logger.warning("OAuth provider '%s' is partially configured — missing %s", key, ", ".join(sorted(missing)))
-    logger.info("OAuth connection providers: %s", ", ".join(sorted(active)) if active else "none configured")
+    logger.debug("OAuth connection providers: %s", ", ".join(sorted(active)) if active else "none configured")
 
 
 # -- Routes --------------------------------------------------------------------

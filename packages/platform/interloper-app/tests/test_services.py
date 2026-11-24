@@ -175,6 +175,9 @@ class TestParentWatchdog:
 
         assert not thread.is_alive()
 
+    def test_it_is_ready_at_once(self) -> None:
+        assert ParentWatchdog(interval=0.01).ready is True
+
     def test_a_parent_gone_before_the_watchdog_was_built_is_noticed(self) -> None:
         watchdog = ParentWatchdog(interval=0.01, parent=os.getppid() + 100_000)
 

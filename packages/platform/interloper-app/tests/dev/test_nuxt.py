@@ -15,6 +15,7 @@ class _Group:
 
     def __init__(self, code: int | None = None, missing: bool = False) -> None:
         self.started: list[tuple[list[str], dict[str, str] | None]] = []
+        self.outputs: list[str | None] = []
         self.stopped = 0
         self._code = code
         self._missing = missing
@@ -30,10 +31,12 @@ class _Group:
         cwd: Path | None = None,
         stdin: bytes | None = None,
         environment: dict[str, str] | None = None,
+        output: str | None = None,
     ) -> None:
         if self._missing:
             raise FileNotFoundError(command[0])
         self.started.append((command, environment))
+        self.outputs.append(output)
 
     def wait(self) -> int:
         return self._code or 0
@@ -57,7 +60,7 @@ def test_it_serves_on_the_loopback_in_front_of_the_api(tmp_path: Path):
         tmp_path, port=Port(3100), api_port=Port(45678), ui_entries={"example": "http://127.0.0.1:5173/src/index.ts"}
     )
 
-    assert server.command() == ["pnpm", "dev", "--host", "127.0.0.1", "--port", "3100"]
+    assert server.command() == ["pnpm", "--loglevel", "warn", "dev", "--host", "127.0.0.1", "--port", "3100"]
     environment = server.environment()
     assert (environment["INTERLOPER_SERVER_PORT"], environment["INTERLOPER_API_PORT"]) == ("3100", "45678")
     assert environment["INTERLOPER_UI_DEV"] == "example=http://127.0.0.1:5173/src/index.ts"
@@ -69,10 +72,18 @@ def test_the_app_s_dependencies_install_when_missing(tmp_path: Path, monkeypatch
     _server(tmp_path, group, monkeypatch).start()
 
     assert [command for command, _ in group.started] == [
-        ["pnpm", "install"],
-        ["pnpm", "dev", "--host", "127.0.0.1", "--port", "3100"],
+        ["pnpm", "--loglevel", "warn", "install"],
+        ["pnpm", "--loglevel", "warn", "dev", "--host", "127.0.0.1", "--port", "3100"],
     ]
     assert group.started[1][1] is not None
+
+
+def test_its_output_and_its_install_s_are_logged_under_nuxt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    group = _Group()
+
+    _server(tmp_path, group, monkeypatch).start()
+
+    assert group.outputs == ["nuxt", "nuxt"]
 
 
 def test_a_failed_install_stops_dev(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

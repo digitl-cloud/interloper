@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from collections.abc import Iterator
 from types import SimpleNamespace
@@ -349,6 +350,20 @@ class TestNotifyListener:
 
 class TestRealtimeLifespan:
     """Startup arms the listener thread from the already-initialized engine."""
+
+    async def test_the_listener_starting_is_a_debug_line_without_a_tag(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        monkeypatch.setattr("interloper_db.get_engine", lambda: SimpleNamespace(url=make_url("sqlite://")))
+        monkeypatch.setattr("interloper_db.sqlite.SQLiteListener", lambda engine, callback: None)
+        caplog.set_level(logging.DEBUG, logger="interloper_api")
+
+        async with websocket_module.realtime_lifespan(FastAPI()):
+            pass
+
+        ((level, message),) = [(record.levelno, record.getMessage()) for record in caplog.records]
+        assert level == logging.DEBUG
+        assert "[" not in message
 
     @pytest.fixture
     def started(self, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:

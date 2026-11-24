@@ -50,6 +50,24 @@ def test_binds_the_settings_host_and_the_given_port():
     assert (server._server.config.host, server._server.config.port) == ("127.0.0.1", 3101)
 
 
+def test_uvicorn_logs_no_lines_of_its_own_at_info():
+    """Uvicorn's loggers follow the library rule, and its access log gives way to the API's own request line."""
+    server = ApiServer.from_settings(ApiSettings.get(), store=_store(), catalog=Catalog(), port=3101)
+
+    assert server._server.config.log_level is None
+    assert server._server.config.access_log is False
+
+
+def test_ready_once_uvicorn_listens():
+    """The server is ready when uvicorn has bound its socket, not when its thread starts."""
+    server = ApiServer.from_settings(ApiSettings.get(), store=_store(), catalog=Catalog(), port=3101)
+    assert server.ready is False
+
+    server._server.started = True
+
+    assert server.ready is True
+
+
 def test_stop_asks_uvicorn_to_exit():
     """``stop`` lets uvicorn finish its requests and return from ``start``."""
     server = ApiServer.from_settings(ApiSettings.get(), store=_store(), catalog=Catalog(), port=3101)

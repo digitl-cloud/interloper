@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
 import pytest
+from interloper.settings import ServerSettings
 from interloper_db import Store
 from interloper_db.crypto import hash_token
 
@@ -60,7 +62,10 @@ def wiring(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     monkeypatch.setattr(cli.Catalog, "from_settings", classmethod(lambda cls: cli.Catalog()))
     monkeypatch.setattr(Store, "from_settings", classmethod(store_from_settings))
     monkeypatch.setattr(ApiServer, "from_settings", classmethod(from_settings))
-    monkeypatch.setattr(cli.Supervisor, "run", lambda self: recorded.setdefault("ran", list(self.services)))
+    monkeypatch.setattr(cli.Supervisor, "run", lambda self: recorded.update(ran=list(self.services), ready=self.ready))
+    monkeypatch.setattr(
+        cli, "configure_console_logging", lambda level=logging.INFO, **kwargs: recorded.update(level=level)
+    )
     return recorded
 
 
@@ -78,6 +83,31 @@ def test_serves_one_api_on_the_port_and_host_flags(wiring: dict[str, Any]) -> No
     assert kwargs["port"] == 3101
     assert settings.server.host == "127.0.0.1"
     assert wiring["ran"] == ["api"]
+
+
+def test_a_start_ends_in_one_ready_line_naming_the_public_url(wiring: dict[str, Any]) -> None:
+    """The ready line names the address to open, the one service and the catalog's size."""
+    ServerSettings.activate(ServerSettings(external_url="https://app.example.com/"))
+
+    cli.ApiCommand().run(_parse("api"))
+
+    ready = wiring["ready"]
+    assert (ready.url, list(ready.services), ready.definitions) == ("https://app.example.com", ["api"], 0)
+    assert ready.logger.name == "interloper_api.cli"
+
+
+def test_the_ready_line_names_the_port_flag(wiring: dict[str, Any]) -> None:
+    """Without an external URL, the address to open is the port the API binds."""
+    cli.ApiCommand().run(_parse("api", "--port", "3101"))
+
+    assert wiring["ready"].url == "http://localhost:3101"
+
+
+def test_verbose_prints_debug_lines(wiring: dict[str, Any]) -> None:
+    """``-v`` lowers the console to DEBUG, which shows every request line."""
+    cli.ApiCommand().run(_parse("api", "-v"))
+
+    assert wiring["level"] == logging.DEBUG
 
 
 def test_the_port_defaults_to_the_settings(wiring: dict[str, Any]) -> None:

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import http.server
 import io
+import logging
 import os
 import runpy
 import socket
 import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -127,7 +129,9 @@ class TestServe:
                 classes=[], declares=declared is not None, declarations=lambda *a: declared or []
             ),
         )
-        monkeypatch.setattr(platform_module, "configure_console_logging", lambda *args, **kwargs: None)
+        monkeypatch.setattr(
+            platform_module, "configure_console_logging", lambda level, **kwargs: built.update(level=level)
+        )
         monkeypatch.setattr(SignIn, "ensure", lambda self, store: (mock.Mock(), mock.Mock()))
         app = SimpleNamespace(services={}, run=mock.Mock())
         composed: dict[str, Any] = {}
@@ -156,7 +160,26 @@ class TestServe:
         assert composed["dev_origins"] == ["http://127.0.0.1:5173"]
         assert len(composed["routers"]) == 1
         assert "parent-watchdog" in app.services
-        app.run.assert_called_once_with()
+        app.run.assert_called_once()
+
+    def test_the_ready_line_names_the_sign_in_link_and_not_the_watchdog(
+        self, spec: PlatformSpec, monkeypatch: pytest.MonkeyPatch
+    ):
+        spec.started = 1000.0
+        _, _, _, app = self._serve(spec, monkeypatch)
+
+        (ready,) = app.run.call_args.args
+        assert ready.url == spec.sign_in.link(3100)
+        assert ready.started == 1000.0
+        assert "parent-watchdog" not in ready.services
+        assert ready.logger.name == "interloper_app.dev.platform"
+
+    def test_verbose_prints_debug_lines(self, spec: PlatformSpec, monkeypatch: pytest.MonkeyPatch):
+        spec.verbose = True
+
+        _, built, _, _ = self._serve(spec, monkeypatch)
+
+        assert built["level"] == logging.DEBUG
 
     def test_without_files_the_app_edits_the_database_dev_brought_up(
         self, spec: PlatformSpec, monkeypatch: pytest.MonkeyPatch
@@ -180,6 +203,18 @@ class TestServe:
 
 
 class TestLifecycle:
+    def test_each_start_stamps_when_it_began(self, spec: PlatformSpec, monkeypatch: pytest.MonkeyPatch):
+        stamped: list[float] = []
+        group = SimpleNamespace(start=lambda command, *, stdin=None: stamped.append(spec.started))
+        platform = Platform(spec)
+        monkeypatch.setattr(platform, "_group", group)
+        spec.started = 0.0
+
+        before = time.time()
+        platform.start()
+
+        assert stamped and stamped[0] >= before
+
     def test_a_restart_stops_the_process_before_starting_another(
         self, spec: PlatformSpec, monkeypatch: pytest.MonkeyPatch
     ):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
@@ -12,6 +13,8 @@ from interloper_db.sqlite.notifications import SQLiteNotifications
 
 if TYPE_CHECKING:
     from alembic.config import Config
+
+logger = logging.getLogger(__name__)
 
 
 class SQLiteSchema:
@@ -30,7 +33,7 @@ class SQLiteSchema:
         self.engine = engine
 
     def create(self, migrations: Config) -> None:
-        """Create the tables and recreate the triggers, stamping a new database at the migration head.
+        """Create the tables and recreate the triggers, stamping a new database at the migration head, and say which.
 
         Args:
             migrations: The Alembic configuration of this package's migrations, run against the engine.
@@ -57,6 +60,9 @@ class SQLiteSchema:
                 connection.exec_driver_sql(statement)
         if revision is None:
             command.stamp(migrations, "head")
+            logger.info("Database created at %s", head)
+        else:
+            logger.info("Database up to date")
 
     def statements(self) -> Iterator[str]:
         """The statements that recreate every trigger a SQLite database carries.

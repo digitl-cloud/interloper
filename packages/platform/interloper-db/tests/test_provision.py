@@ -165,6 +165,78 @@ class TestMigrations:
         """
         return sqlalchemy.create_engine("sqlite://", poolclass=sqlalchemy.pool.StaticPool)
 
+    @staticmethod
+    def _at(engine: sqlalchemy.Engine, revision: str) -> None:
+        with engine.begin() as connection:
+            connection.exec_driver_sql("CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32))")
+            connection.exec_driver_sql("DELETE FROM alembic_version")
+            connection.exec_driver_sql("INSERT INTO alembic_version VALUES (?)", (revision,))
+
+    def _migrating_to(self, engine: sqlalchemy.Engine, revision: str, monkeypatch: pytest.MonkeyPatch) -> None:
+        from alembic import command
+
+        monkeypatch.setattr(command, "upgrade", lambda config, target: self._at(engine, revision))
+
+    def test_upgrade_says_what_it_migrated(
+        self,
+        alembic: dict[str, list[Any]],
+        engine: sqlalchemy.Engine,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        self._at(engine, "0003")
+        self._migrating_to(engine, "0004", monkeypatch)
+
+        with caplog.at_level(logging.INFO, logger="interloper_db"):
+            upgrade(engine=engine)
+
+        assert caplog.messages == ["Database migrated from 0003 to 0004"]
+
+    def test_upgrade_says_it_created_a_new_database(
+        self,
+        alembic: dict[str, list[Any]],
+        engine: sqlalchemy.Engine,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        self._migrating_to(engine, "0004", monkeypatch)
+
+        with caplog.at_level(logging.INFO, logger="interloper_db"):
+            upgrade(engine=engine)
+
+        assert caplog.messages == ["Database created at 0004"]
+
+    def test_upgrade_with_nothing_to_run_says_up_to_date(
+        self,
+        alembic: dict[str, list[Any]],
+        engine: sqlalchemy.Engine,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        self._at(engine, TestConnect._head())
+
+        with caplog.at_level(logging.INFO, logger="interloper_db"):
+            upgrade(engine=engine)
+
+        assert caplog.messages == ["Database up to date"]
+
+    def test_downgrade_says_what_it_undid(
+        self,
+        alembic: dict[str, list[Any]],
+        engine: sqlalchemy.Engine,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        from alembic import command
+
+        self._at(engine, "0004")
+        monkeypatch.setattr(command, "downgrade", lambda config, target: self._at(engine, "0003"))
+
+        with caplog.at_level(logging.INFO, logger="interloper_db"):
+            downgrade(engine=engine)
+
+        assert caplog.messages == ["Database downgraded from 0004 to 0003"]
+
     def test_upgrade_targets_head_by_default(
         self, alembic: dict[str, list[Any]], engine: sqlalchemy.Engine, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -585,16 +657,13 @@ class TestConnect:
 
         assert "ahead of this release" in caplog.text
 
-    def test_alembic_s_setup_notes_stay_out_of_the_serving_log(
-        self, database: Any, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_a_served_database_adds_no_line_of_its_own(self, database: Any, caplog: pytest.LogCaptureFixture) -> None:
         url = database(self._head())
 
-        with caplog.at_level("INFO"):
+        with caplog.at_level("INFO", logger="interloper_db"):
             connect(url)
 
-        assert not [record for record in caplog.records if record.name.startswith("alembic")]
-        assert logging.getLogger("alembic").level == logging.NOTSET
+        assert caplog.records == []
 
     def test_nothing_is_written(self, database: Any) -> None:
         url = database("0001")

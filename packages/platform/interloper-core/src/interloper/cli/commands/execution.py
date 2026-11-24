@@ -36,10 +36,7 @@ def configure_logging(*, quiet: bool = False, verbose: bool = False) -> None:
     from interloper.settings import LogSettings
 
     configure_console_logging(
-        logging.WARNING if quiet else logging.DEBUG if verbose else logging.INFO,
-        "%(asctime)s.%(msecs)03d %(levelname)-7s %(message)s",
-        "%H:%M:%S",
-        log_format=LogSettings.get().format,
+        logging.WARNING if quiet else logging.DEBUG if verbose else logging.INFO, log_format=LogSettings.get().format
     )
 
 
