@@ -1,21 +1,20 @@
 name: Publish
 
-# Publishes the artifacts for a released tag: the Docker images and the Helm
-# chart, all to GHCR. Decoupled from the Release workflow so a failed publish
-# can be
-# replayed without re-running semantic-release (which would find nothing to
-# release and skip everything).
+# Publishes a released tag everywhere: the Python packages to PyPI,
+# @interloper/ui to npm, the Docker images and the Helm chart to GHCR. Every
+# publish job makes the version present and skips what already is, and none
+# waits on another, so one registry's outage blocks only its own job. A failed
+# job is recovered with "Re-run failed jobs": the jobs that succeeded stay
+# done, and a re-run PyPI or npm job publishes the same build artifact.
 #
 # Triggers:
 #   - automatically when semantic-release publishes the GitHub release
 #     (created with the GitHub App token, so the event fires workflows).
 #     Not the tag push: the release commit message carries `[skip ci]`,
-#     which suppresses the push event for the tag pointing at it — the
+#     which suppresses the push event for the tag pointing at it, while the
 #     `release` event is immune to skip instructions;
-#   - manually via workflow_dispatch with an existing tag, to re-publish
-#     after a transient failure.
-#
-# Every job is idempotent: re-running it re-pushes the same tags.
+#   - manually via workflow_dispatch with an existing tag, which rebuilds the
+#     tag and publishes whatever is still missing.
 
 on:
   release:
@@ -55,6 +54,163 @@ jobs:
             echo "version=${version}"
             echo "stable=${stable}"
           } >> "$GITHUB_OUTPUT"
+
+  # ────────────────────────────────────────────────────────────────────
+  # Build: the wheels, sdists and SDK tarball the PyPI and npm jobs publish
+  #
+  # Built once from the tag into one artifact, so a re-run publish job uploads
+  # the very files the first attempt did, and a build that fails publishes
+  # nothing to either registry. interloper-app's wheel carries the SPA and
+  # each extension's wheel its UI bundle, so those build first.
+  # ────────────────────────────────────────────────────────────────────
+  build:
+    name: Build
+    needs: resolve
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: "read"
+
+    steps:
+      - name: Checkout (released tag)
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+
+      - name: UV setup
+        uses: astral-sh/setup-uv@v10.3.3
+        with:
+          python-version: "3.11"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Build the app and extension UIs
+        run: make build-app build-extensions
+
+      - name: Build the Python packages
+        run: uv build --all-packages --out-dir dist/pypi
+
+      - name: Pack the UI SDK
+        working-directory: packages/platform/interloper-app/sdk
+        run: pnpm pack --pack-destination "$GITHUB_WORKSPACE/dist/npm"
+
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  # ────────────────────────────────────────────────────────────────────
+  # Python packages → PyPI, with trusted publishing (no token)
+  #
+  # A file name PyPI lists can never take other content, so a file PyPI
+  # already has is skipped by name, whichever build uploaded it: a rebuild of
+  # the tag differs byte-wise in interloper-app (Nuxt stamps each SPA build
+  # with a fresh id), and `--check-url`, which compares hashes, would stop the
+  # whole upload there. `--check-url` still covers an upload that errors after
+  # PyPI stored the file.
+  # ────────────────────────────────────────────────────────────────────
+  pypi:
+    name: PyPI
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: "write"
+
+    steps:
+      - name: Download
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+
+      - name: Skip the files PyPI has
+        shell: python
+        run: |
+          import json
+          import pathlib
+          import urllib.error
+          import urllib.request
+
+          listed = {}
+          for path in sorted(pathlib.Path("dist/pypi").iterdir()):
+              project = path.name.split("-")[0].replace("_", "-")
+              if project not in listed:
+                  request = urllib.request.Request(
+                      f"https://pypi.org/simple/{project}/",
+                      headers={"Accept": "application/vnd.pypi.simple.v1+json"},
+                  )
+                  try:
+                      with urllib.request.urlopen(request) as response:
+                          listed[project] = {file["filename"] for file in json.load(response)["files"]}
+                  except urllib.error.HTTPError as error:
+                      if error.code != 404:
+                          raise
+                      listed[project] = set()
+              if path.name in listed[project]:
+                  print(f"{path.name} is on PyPI already")
+                  path.unlink()
+
+      - name: UV setup
+        uses: astral-sh/setup-uv@v10.3.3
+
+      - name: Publish
+        run: |
+          if [ -z "$(ls dist/pypi)" ]; then
+            echo "Every file is on PyPI already."
+            exit 0
+          fi
+          uv publish --trusted-publishing always --check-url https://pypi.org/simple/ dist/pypi/*
+
+  # ────────────────────────────────────────────────────────────────────
+  # @interloper/ui → npm, with trusted publishing and provenance (no token)
+  #
+  # npm never takes a version twice, so a version the registry answers for is
+  # published. A release candidate goes out under the `rc` dist-tag: npm
+  # refuses a prerelease without one, and it must never become `latest`.
+  # ────────────────────────────────────────────────────────────────────
+  npm:
+    name: npm
+    needs: [resolve, build]
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: "write"
+
+    steps:
+      - name: Download
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+
+      # Trusted publishing needs npm 11.5.1 or later.
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26
+
+      - name: Publish
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+          DIST_TAG: ${{ needs.resolve.outputs.stable == 'true' && 'latest' || 'rc' }}
+        run: |
+          if [ "$(npm view "@interloper/ui@${VERSION}" version 2>/dev/null)" = "$VERSION" ]; then
+            echo "@interloper/ui@${VERSION} is on npm already."
+            exit 0
+          fi
+          npm --version
+          npm publish "dist/npm/interloper-ui-${VERSION}.tgz" --provenance --access public --tag "$DIST_TAG"
 
   # ────────────────────────────────────────────────────────────────────
   # Docker images → GitHub Container Registry (ghcr.io)
