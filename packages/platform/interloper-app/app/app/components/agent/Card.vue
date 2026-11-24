@@ -19,7 +19,7 @@ defineSlots<{
 </script>
 
 <template>
-    <UCard class="mx-auto my-2 w-full min-w-80 max-w-md">
+    <UCard class="mx-auto my-2 w-full min-w-80 max-w-md bg-elevated">
         <template v-if="title"
                   #header>
             <div class="flex items-center gap-3">

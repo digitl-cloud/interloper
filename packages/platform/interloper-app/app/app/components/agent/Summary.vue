@@ -10,7 +10,7 @@ defineProps<{ text: string }>()
 <template>
     <AgentFold icon="i-lucide-message-square-text"
                text="Earlier conversation summarised">
-        <UCard class="mt-2">
+        <UCard class="mt-2 bg-elevated">
             <Markdown :value="text"
                       class="chat-prose *:first:mt-0 *:last:mb-0" />
         </UCard>

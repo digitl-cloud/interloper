@@ -56,7 +56,7 @@ The reference for "default" is the Nuxt UI dashboard template.
 
 **Tints:** `/10` for soft fills, `/50` for hover rings. Nothing else.
 
-**Edges:** `ring ring-default` around containers you draw; `border-default` only for dividers (`border-t`, `border-b`, `divide-y`).
+**Edges:** cards have none: the card tone alone sets a card off the panel, and a card inside a card takes `bg-elevated`. `ring ring-default` is for a container with no tone of its own (a bordered list) and for controls (a tab list); `border-default` only for dividers (`border-t`, `border-b`, `divide-y`).
 
 **Colour in script.** Use CSS expressions (`var(--ui-success)`, `color-mix(...)` of tokens). Canvas contexts (ECharts) resolve them at runtime through `useChartTheme()` / `resolveColor()`. Never keep hex mirrors of tokens.
 

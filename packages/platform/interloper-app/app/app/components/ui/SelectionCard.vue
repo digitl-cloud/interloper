@@ -35,7 +35,7 @@ const emit = defineEmits<{ select: [] }>()
                class="cursor-pointer rounded-lg text-left transition"
                :class="selected
                    ? (orientation === 'vertical' ? 'bg-primary/10 ring-2 ring-primary' : 'bg-primary/5 ring ring-primary/40')
-                   : 'bg-muted ring ring-default hover:ring-primary/50'"
+                   : 'bg-muted hover:ring hover:ring-primary/50'"
                @click="emit('select')">
         <div v-if="props.label && props.orientation === 'vertical'"
              class="relative flex flex-col items-center gap-2 px-3 py-4">

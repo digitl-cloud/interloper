@@ -134,7 +134,7 @@ const SUGGESTIONS = [
 
 <template>
     <aside ref="panel"
-           class="agent-panel fixed z-40 flex min-h-0 flex-col overflow-hidden rounded-lg bg-muted ring ring-default transition-transform duration-300"
+           class="agent-panel fixed z-40 flex min-h-0 flex-col overflow-hidden rounded-lg bg-muted transition-transform duration-300"
            :style="{
                top: 'calc(var(--ui-header-height) + var(--agent-inset))',
                right: 'var(--agent-inset)',
