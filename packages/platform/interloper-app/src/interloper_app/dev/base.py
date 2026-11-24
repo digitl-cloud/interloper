@@ -8,6 +8,7 @@ served from source and reloads; everything else runs as installed.
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import signal
 import sys
@@ -27,6 +28,8 @@ from interloper_app.dev.vite import ViteServer
 
 if TYPE_CHECKING:
     from interloper_app.dev.platform import Platform
+
+logger = logging.getLogger(__name__)
 
 
 class DevCommand(Command):
@@ -71,21 +74,31 @@ class DevCommand(Command):
         parser.add_argument(
             "--no-browser", action="store_true", default=False, help="Print the sign-in link without opening it"
         )
+        parser.add_argument(
+            "-v",
+            "--verbose",
+            action="store_true",
+            help="Print debug lines, every request, and the info lines of libraries and of Nuxt and Vite",
+        )
 
     def run(self, args: argparse.Namespace) -> None:
         """Serve the project until Ctrl-C, a terminal closed or a termination signal.
 
         Args:
-            args: The parsed command line: ``targets``, ``port`` and ``no_browser``.
+            args: The parsed command line: ``targets``, ``files``, ``port``, ``no_browser`` and ``verbose``.
 
         Raises:
             SystemExit: On Windows, when the port is taken or the database cannot be brought up.
         """
+        from interloper.cli.console import configure_console_logging
+        from interloper.settings import LogSettings
+
         from interloper_app.dev.platform import Platform, PlatformSpec
         from interloper_app.dev.signin import SignIn
 
         if sys.platform == "win32":
             raise SystemExit("Error: interloper dev runs on macOS and Linux; on Windows, run it inside WSL.")
+        configure_console_logging(logging.DEBUG if args.verbose else logging.INFO, log_format=LogSettings.get().format)
         files = [Path(file).resolve() for file in args.files]
         if missing := [str(file) for file in files if not file.is_file()]:
             raise SystemExit(f"Error: no such spec file: {', '.join(missing)}")
@@ -117,6 +130,7 @@ class DevCommand(Command):
                 targets=args.targets,
                 files=[str(file) for file in files],
                 sign_in=sign_in,
+                verbose=args.verbose,
             )
         )
         for signal_number in (signal.SIGTERM, signal.SIGHUP):
@@ -130,7 +144,7 @@ class DevCommand(Command):
                 nuxt.start()
             self._serve(project, platform, nuxt, uis, link=sign_in.link(port.number), browser=not args.no_browser)
         except KeyboardInterrupt:
-            print("\nStopping.", flush=True)
+            logger.info("Stopping")
         finally:
             # A second Ctrl-C must not cut the stop short and leave a server running.
             signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -198,7 +212,7 @@ class DevCommand(Command):
         Raises:
             SystemExit: When the Nuxt dev server stops.
         """
-        print(f"\n  interloper dev is serving {project.name} from {project.root}\n", flush=True)
+        logger.debug("Serving %s from %s", project.name, project.root)
         platform.start()
         browser = cls._announce(platform, link, browser=browser)
         for changes in watch(*project.watched, watch_filter=project.watches, yield_on_timeout=True, rust_timeout=2000):
@@ -207,7 +221,7 @@ class DevCommand(Command):
             if not changes:
                 continue
             edited = ", ".join(sorted({str(Path(path).relative_to(project.root)) for _, path in changes}))
-            print(f"\n  {edited} changed: restarting the platform.\n", flush=True)
+            logger.info("%s changed: restarting", edited)
             if any(Path(path).name == MANIFEST for _, path in changes):
                 cls._refresh_uis(project, platform, nuxt, uis)
             platform.restart()
@@ -229,7 +243,7 @@ class DevCommand(Command):
             uis: The running Vite servers, updated in place.
         """
         if unread := project.unread():
-            print(f"  The manifest of {', '.join(unread)} does not read: its UI stays as it is.", flush=True)
+            logger.warning("The manifest of %s does not read: its UI stays as it is.", ", ".join(unread))
             return
         declared = {
             extension.key: directory
@@ -245,7 +259,7 @@ class DevCommand(Command):
             try:
                 ui.start()
             except SystemExit as error:
-                print(f"  {error} The next save of its manifest tries again.", flush=True)
+                logger.warning("%s The next save of its manifest tries again.", error)
                 continue
             uis.append(ui)
         entries = {ui.key: ui.entry for ui in uis}
@@ -259,7 +273,10 @@ class DevCommand(Command):
 
     @staticmethod
     def _announce(platform: Platform, link: str, *, browser: bool) -> bool:
-        """Wait for the platform to answer, print the sign-in link, and open it the first time.
+        """Wait for the platform to answer, and open the sign-in link the first time.
+
+        The platform logs the ready line, with the link; a platform that does
+        not answer is an error line here.
 
         Args:
             platform: The platform process.
@@ -270,9 +287,8 @@ class DevCommand(Command):
             Whether it is still to be opened: until the platform first answers.
         """
         if not platform.wait_ready():
-            print("\n  The platform did not start; fix the error above and save to restart.\n", flush=True)
+            logger.error("The platform did not start: fix the error above and save to restart.")
             return browser
-        print(f"\n  Ready. Sign in: {link}\n", flush=True)
         if browser:
             webbrowser.open(link)
         return False

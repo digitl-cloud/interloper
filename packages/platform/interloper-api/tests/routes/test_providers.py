@@ -59,14 +59,14 @@ def test_startup_status_warns_on_a_partial_configuration(
     _configure(monkeypatch, "criteo", client_id="id-only")
     _configure(monkeypatch, "tiktok", redirect_uri="https://r")
 
-    with caplog.at_level("INFO", logger=providers_module.logger.name):
+    with caplog.at_level("DEBUG", logger=providers_module.logger.name):
         providers_module.log_provider_status()
 
     warnings = [r.message for r in caplog.records if r.levelname == "WARNING"]
     assert len(warnings) == 2
     assert "criteo" in warnings[0] and "INTERLOPER_CRITEO_CLIENT_SECRET" in warnings[0]
     assert "tiktok" in warnings[1] and "INTERLOPER_TIKTOK_CLIENT_ID, INTERLOPER_TIKTOK_CLIENT_SECRET" in warnings[1]
-    assert any("amazon" in r.message for r in caplog.records if r.levelname == "INFO")
+    assert any("amazon" in r.message for r in caplog.records if r.levelname == "DEBUG")
 
 
 def test_list_providers_returns_configured_only_with_registry_metadata(monkeypatch: pytest.MonkeyPatch) -> None:

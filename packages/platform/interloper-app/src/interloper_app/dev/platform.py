@@ -23,13 +23,14 @@ from uuid import UUID
 from interloper.catalog import Catalog
 from interloper.cli.console import configure_console_logging
 from interloper.settings import LogSettings, ServerSettings
+from interloper.utils import ReadyLine
 from interloper_api import DevServerUI
 from interloper_api.routes.extensions import UI_BUNDLES
 from interloper_api.settings import ApiSettings, AuthSettings
 from interloper_db import Store
 from interloper_db.store.components.declaration import Declarations
 from interloper_scheduler.settings import SchedulerSettings
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from interloper_app.dev.database import DevDatabase
 from interloper_app.dev.port import Port
@@ -60,6 +61,9 @@ class PlatformSpec(BaseModel):
         public_url: Where the browser reaches the app, ``http://127.0.0.1:<port>``:
             the platform's external URL, which OAuth flows send the browser
             back to, so the session cookie of that host comes along.
+        started: When ``dev`` started this process (``time.time()``), which
+            the ready line counts from: a restart counts from the edit.
+        verbose: Whether the console shows debug lines (``dev -v``).
     """
 
     port: int
@@ -71,6 +75,8 @@ class PlatformSpec(BaseModel):
     ui_entries: dict[str, str] = {}
     spa: bool = True
     public_url: str
+    started: float = Field(default_factory=time.time)
+    verbose: bool = False
 
     @property
     def dev_origins(self) -> list[str]:
@@ -94,9 +100,7 @@ class PlatformSpec(BaseModel):
         watchdog = ParentWatchdog(parent=self.parent)
         root = Path(self.root)
         sys.path.insert(0, self.root)
-        configure_console_logging(
-            logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s", log_format=LogSettings.get().format
-        )
+        configure_console_logging(logging.DEBUG if self.verbose else logging.INFO, log_format=LogSettings.get().format)
         ServerSettings.activate(
             ServerSettings.get().model_copy(
                 update={"host": Port.HOST, "port": self.port, "enabled": True, "external_url": self.public_url}
@@ -144,8 +148,10 @@ class PlatformSpec(BaseModel):
             routers=[self.sign_in.router()],
             dev_origins=self.dev_origins,
         )
+        link = self.sign_in.link(urlsplit(self.public_url).port or self.port)
+        ready = ReadyLine(logger, self.started, list(app.services), len(catalog.components), link)
         app.services["parent-watchdog"] = watchdog
-        app.run()
+        app.run(ready)
 
     # -- Internals -------------------------------------------------------------
 
@@ -195,7 +201,8 @@ class Platform:
         return self._group.running
 
     def start(self) -> None:
-        """Start a platform process and hand it its spec."""
+        """Start a platform process and hand it its spec, stamped with when it started."""
+        self.spec.started = time.time()
         self._group.start([sys.executable, "-m", "interloper_app.dev"], stdin=self.spec.model_dump_json().encode())
 
     def stop(self) -> None:

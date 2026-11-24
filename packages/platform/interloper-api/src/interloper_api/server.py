@@ -60,10 +60,20 @@ class ApiServer:
         """
         app = create_app(store=store, catalog=catalog, settings=settings, cors_origins=cors_origins)
         instrument_fastapi(app)
+        # Uvicorn's loggers follow the console's library rule, and its access log gives way to `RequestLog`.
         config = uvicorn.Config(
-            app, host=settings.server.host, port=port, log_level="info", log_config=None, ws="wsproto"
+            app, host=settings.server.host, port=port, log_level=None, log_config=None, access_log=False, ws="wsproto"
         )
         return cls(app, uvicorn.Server(config))
+
+    @property
+    def ready(self) -> bool:
+        """Whether the server listens.
+
+        Returns:
+            True once uvicorn has bound its socket.
+        """
+        return self._server.started
 
     def start(self) -> None:
         """Serve until stopped, the collector kept off what the process has loaded by now.

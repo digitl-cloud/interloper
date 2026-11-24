@@ -59,15 +59,19 @@ class ViteServer:
         """Spell the command installing the UI's dependencies.
 
         Returns:
-            ``pnpm install`` inside a pnpm workspace, ``npm install`` otherwise.
+            ``pnpm install`` inside a pnpm workspace, ``npm install`` otherwise,
+            either saying only its warnings.
         """
-        return ["pnpm", "install"] if self.pnpm else ["npm", "install", "--no-audit", "--no-fund"]
+        if self.pnpm:
+            return ["pnpm", "--loglevel", "warn", "install"]
+        return ["npm", "install", "--no-audit", "--no-fund", "--loglevel", "warn"]
 
     def command(self) -> list[str]:
         """Spell the command running the server.
 
-        It keeps the terminal's history (``--clearScreen false``) and fails
-        rather than move when its port is taken.
+        It keeps the terminal's history (``--clearScreen false``), says
+        only warnings and errors, and fails rather than move when its port is
+        taken.
 
         Returns:
             The command, Vite run through the UI's own package manager.
@@ -83,6 +87,8 @@ class ViteServer:
             "--strictPort",
             "--clearScreen",
             "false",
+            "--logLevel",
+            "warn",
         ]
 
     def start(self, timeout: float = 60.0) -> None:
@@ -124,6 +130,6 @@ class ViteServer:
             SystemExit: When its program is not installed.
         """
         try:
-            self._group.start(command, cwd=self.directory)
+            self._group.start(command, cwd=self.directory, output="vite")
         except FileNotFoundError as error:
             raise SystemExit(f"The {self.key} UI needs Node.js: {command[0]} was not found.") from error

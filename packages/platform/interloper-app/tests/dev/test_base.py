@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import signal
 from collections.abc import Callable
@@ -20,9 +21,15 @@ from interloper_app.dev.project import DevProject, HeldExtension
 
 
 def _args(
-    *targets: str, port: int | None = 3100, no_browser: bool = False, files: list[str] | None = None
+    *targets: str,
+    port: int | None = 3100,
+    no_browser: bool = False,
+    files: list[str] | None = None,
+    verbose: bool = False,
 ) -> argparse.Namespace:
-    return argparse.Namespace(targets=list(targets), port=port, no_browser=no_browser, files=files or [])
+    return argparse.Namespace(
+        targets=list(targets), port=port, no_browser=no_browser, files=files or [], verbose=verbose
+    )
 
 
 @pytest.fixture
@@ -31,6 +38,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DevProject:
     monkeypatch.setattr(DevProject, "discover", classmethod(lambda cls, directory, files=(): project))
     monkeypatch.setattr(base_module.Port, "in_use", property(lambda self: False))
     monkeypatch.setattr(DevCommand, "_check_database", staticmethod(lambda root: None))
+    monkeypatch.setattr("interloper.cli.console.configure_console_logging", lambda *args, **kwargs: None)
     for signal_number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         monkeypatch.setattr(base_module.signal, "signal", mock.Mock())
     return project
@@ -143,24 +151,60 @@ def test_a_termination_signal_takes_the_ctrl_c_path():
         DevCommand._interrupt(signal.SIGTERM, None)
 
 
-def test_the_command_takes_targets_a_port_and_no_browser():
+def test_the_command_takes_targets_a_port_no_browser_and_verbose():
     parser = argparse.ArgumentParser()
     DevCommand().add_arguments(parser)
 
-    args = parser.parse_args(["weather.OpenMeteo", "--port", "3100", "--no-browser"])
+    args = parser.parse_args(["weather.OpenMeteo", "--port", "3100", "--no-browser", "-v"])
 
-    assert (args.targets, args.port, args.no_browser) == (["weather.OpenMeteo"], 3100, True)
+    assert (args.targets, args.port, args.no_browser, args.verbose) == (["weather.OpenMeteo"], 3100, True, True)
 
 
-def test_ctrl_c_stops_everything(project: DevProject, served, monkeypatch: pytest.MonkeyPatch, capsys):
+def test_ctrl_c_stops_everything(project: DevProject, served, monkeypatch: pytest.MonkeyPatch, caplog):
     _, platform, _ = served
     monkeypatch.setattr(DevProject, "extensions", lambda self: [])
     platform.start.side_effect = KeyboardInterrupt
+    caplog.set_level(logging.INFO, logger="interloper_app")
 
     DevCommand().run(_args())
 
-    assert "Stopping." in capsys.readouterr().out
+    assert "Stopping" in caplog.messages
     platform.stop.assert_called_once_with()
+
+
+def test_the_ready_line_is_the_platform_s_and_dev_prints_nothing_of_its_own(
+    project: DevProject, served, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    monkeypatch.setattr(DevProject, "extensions", lambda self: [])
+
+    DevCommand().run(_args())
+
+    assert capsys.readouterr().out == ""
+
+
+def test_verbose_reaches_the_platform(project: DevProject, served, monkeypatch: pytest.MonkeyPatch):
+    built, _, _ = served
+    monkeypatch.setattr(DevProject, "extensions", lambda self: [])
+
+    DevCommand().run(_args(verbose=True))
+
+    assert built[0].verbose is True
+
+
+def test_an_edit_is_a_line_naming_the_files_and_a_failed_start_an_error(
+    project: DevProject, served, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+):
+    _, platform, _ = served
+    monkeypatch.setattr(DevProject, "extensions", lambda self: [])
+    platform.wait_ready.side_effect = [True, False]
+    monkeypatch.setattr(base_module, "watch", lambda *args, **kwargs: iter([{(1, str(project.root / "weather.py"))}]))
+    caplog.set_level(logging.INFO, logger="interloper_app")
+
+    DevCommand().run(_args())
+
+    lines = [(record.levelno, record.getMessage()) for record in caplog.records]
+    assert (logging.INFO, "weather.py changed: restarting") in lines
+    assert (logging.ERROR, "The platform did not start: fix the error above and save to restart.") in lines
 
 
 def test_a_missing_spec_file_is_refused_by_name(tmp_path: Path):
@@ -313,7 +357,7 @@ def test_a_manifest_caught_mid_edit_leaves_the_uis_as_they_are(
 
 
 def test_a_ui_that_fails_to_start_while_dev_runs_is_left_out(
-    project: DevProject, served, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    project: DevProject, served, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ):
     built, platform, _ = served
     (tmp_path / "ui").mkdir()
@@ -333,6 +377,6 @@ def test_a_ui_that_fails_to_start_while_dev_runs_is_left_out(
 
     DevCommand().run(_args())
 
-    assert "`npm install` failed in ui." in capsys.readouterr().out
+    assert any("`npm install` failed in ui." in message for message in caplog.messages)
     assert built[0].ui_entries == {}
     platform.restart.assert_called_once_with()

@@ -69,7 +69,17 @@ class Controller(ABC):
         """
         self._poll_interval = poll_interval
         self._stop_event = Event()
+        self._running = Event()
         _register_tick_gauge()
+
+    @property
+    def ready(self) -> bool:
+        """Whether the loop runs.
+
+        Returns:
+            True from the first moment of `start`.
+        """
+        return self._running.is_set()
 
     @property
     def _loop_name(self) -> str:
@@ -82,7 +92,8 @@ class Controller(ABC):
 
     def start(self) -> None:
         """Run the loop until stopped."""
-        logger.info("Starting %s (poll=%ds)...", type(self).__name__, self._poll_interval)
+        logger.debug("Starting %s (poll=%ds)...", type(self).__name__, self._poll_interval)
+        self._running.set()
         try:
             while not self._stop_event.is_set():
                 try:

@@ -58,19 +58,20 @@ shell or in Python (see [Backfilling](backfilling.md)).
 ## Output
 
 Run and operation events flow through the logging stack, sharing one format and stream with
-ordinary log lines on stderr:
+ordinary log lines on stderr: time, level, the source that speaks (`run` for the run's events,
+`cli` for the command) and the message:
 
 ```
-19:39:52.368 INFO    Running DAG with 3 enabled operation(s) (3 total) using AsyncRunner
-19:39:52.370 INFO    RUN_STARTED      -  Run started (3 operations)
-19:39:52.370 INFO    OPERATION_STARTED users  Operation 'users' started
-19:39:52.371 INFO    OPERATION_STARTED orders  Operation 'orders' started
-19:39:52.692 INFO    OPERATION_COMPLETED users  Operation 'users' completed
-19:39:52.692 INFO    OPERATION_COMPLETED orders  Operation 'orders' completed
-19:39:52.692 INFO    OPERATION_STARTED order_count  Operation 'order_count' started
-19:39:52.694 ERROR   OPERATION_FAILED order_count  Operation 'order_count' failed: AssetError: No destination found for upstream asset 'orders'
-19:39:52.694 ERROR   RUN_FAILED       -  Run failed (1 operation(s) failed)
-19:39:52.694 INFO    Run completed: FAILED
+19:39:52  INFO   cli        Running DAG with 3 enabled operation(s) (3 total) using AsyncRunner
+19:39:52  INFO   run        RUN_STARTED      -  Run started (3 operations)
+19:39:52  INFO   run        OPERATION_STARTED users  Operation 'users' started
+19:39:52  INFO   run        OPERATION_STARTED orders  Operation 'orders' started
+19:39:52  INFO   run        OPERATION_COMPLETED users  Operation 'users' completed
+19:39:52  INFO   run        OPERATION_COMPLETED orders  Operation 'orders' completed
+19:39:52  INFO   run        OPERATION_STARTED order_count  Operation 'order_count' started
+19:39:52  ERROR  run        OPERATION_FAILED order_count  Operation 'order_count' failed: AssetError: No destination found for upstream asset 'orders'
+19:39:52  ERROR  run        RUN_FAILED       -  Run failed (1 operation(s) failed)
+19:39:52  INFO   cli        Run completed: FAILED
 ```
 
 The failure above is the one a `paths` run without destinations produces; a spec file with

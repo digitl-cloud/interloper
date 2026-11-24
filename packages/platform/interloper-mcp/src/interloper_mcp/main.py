@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import argparse
 import logging
-import sys
 
 from interloper.catalog import Catalog
-from interloper.settings import ServerSettings
+from interloper.cli.console import configure_console_logging
+from interloper.settings import LogSettings, ServerSettings
 from interloper_db import Audience, Profile, Store
 
 from interloper_mcp.context import init_context, set_static_user
@@ -30,7 +30,7 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=None, help="Bind port (overrides INTERLOPER_MCP_PORT)")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, stream=sys.stderr)
+    configure_console_logging(log_format=LogSettings.get().format)
 
     mcp_settings = McpSettings.get()
     if args.host is not None:

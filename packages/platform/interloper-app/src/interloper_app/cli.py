@@ -10,11 +10,15 @@ from __future__ import annotations
 
 import argparse
 import logging
+import time
 
 from interloper.catalog import Catalog
 from interloper.cli import Command
 from interloper.cli.console import configure_console_logging
 from interloper.settings import LogSettings, ServerSettings
+from interloper.utils import ReadyLine
+
+logger = logging.getLogger(__name__)
 
 
 class AppCommand(Command):
@@ -45,12 +49,15 @@ class AppCommand(Command):
             default=None,
             help="Run the reaper (timed-out run cleanup; singleton)",
         )
+        parser.add_argument(
+            "-v", "--verbose", action="store_true", help="Print debug lines, every request, and libraries' info lines"
+        )
 
     def run(self, args: argparse.Namespace) -> None:
         """Run the application services together until a signal or a service's death.
 
         Args:
-            args: The parsed command line: the service toggles, ``host`` and ``port``.
+            args: The parsed command line: the service toggles, ``host``, ``port`` and ``verbose``.
         """
         from interloper_api.settings import ApiSettings
         from interloper_db import Store
@@ -60,10 +67,9 @@ class AppCommand(Command):
 
         from interloper_app.services import App
 
+        started = time.time()
         self._activate_flags(args)
-        configure_console_logging(
-            logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s", log_format=LogSettings.get().format
-        )
+        configure_console_logging(logging.DEBUG if args.verbose else logging.INFO, log_format=LogSettings.get().format)
         postgres = PostgresSettings.get()
         connect(postgres.dsn, statement_timeout=postgres.statement_timeout)
         api_settings = ApiSettings.get()
@@ -75,7 +81,7 @@ class AppCommand(Command):
             access_token_expiry=api_settings.auth.access_token_expiry,
             refresh_token_expiry=api_settings.auth.refresh_token_expiry,
         )
-        App.from_settings(
+        app = App.from_settings(
             api_settings,
             scheduler_settings,
             store=store,
@@ -84,7 +90,9 @@ class AppCommand(Command):
             cron=scheduler_settings.cron.enabled,
             worker=scheduler_settings.worker.enabled,
             reaper=scheduler_settings.reaper.enabled,
-        ).run()
+        )
+        url = api_settings.server.public_url if api_settings.server.enabled else None
+        app.run(ReadyLine(logger, started, list(app.services), len(catalog.components), url))
 
     def _activate_flags(self, args: argparse.Namespace) -> None:
         """Activate the sections the command's flags override, with the flags applied; an unset flag keeps its setting.

@@ -5,20 +5,61 @@ from __future__ import annotations
 import logging
 import signal
 import threading
-from collections.abc import Mapping
+import time
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Protocol
 
 logger = logging.getLogger(__name__)
 
 
 class Service(Protocol):
-    """Something a `Supervisor` runs: a blocking ``start`` and a ``stop`` that ends it."""
+    """Something a `Supervisor` runs: a blocking ``start``, a ``stop`` that ends it, and whether it answers yet."""
+
+    @property
+    def ready(self) -> bool:
+        """Whether what ``start`` serves answers: a server once it listens, a loop once it runs."""
+        ...
 
     def start(self) -> None:
         """Run until stopped."""
 
     def stop(self) -> None:
         """Ask the running ``start`` to return."""
+
+
+@dataclass(frozen=True)
+class ReadyLine:
+    """The one line a serving command prints once everything it runs answers.
+
+    ``Ready in 4.4s on http://127.0.0.1:3000``, then the services and the
+    catalog's size on a second line. The command builds it, since it knows
+    what to name; the `Supervisor` logs it, since it knows when.
+
+    Attributes:
+        logger: The command's logger, which names it in the source column.
+        started: When the command began, as ``time.time()``; the line says how long ago.
+        services: The services to name.
+        definitions: How many definitions the catalog holds.
+        url: The address to open; ``None`` for a process that serves none.
+    """
+
+    logger: logging.Logger
+    started: float
+    services: Sequence[str]
+    definitions: int
+    url: str | None = None
+
+    def log(self) -> None:
+        """Log the line at INFO, timed from `started`."""
+        where = f" on {self.url}" if self.url else ""
+        self.logger.info(
+            "Ready in %.1fs%s\n%s · %d definitions",
+            time.time() - self.started,
+            where,
+            ", ".join(self.services),
+            self.definitions,
+        )
 
 
 class Supervisor:
@@ -30,21 +71,25 @@ class Supervisor:
     restarts the process instead of keeping one that serves nothing.
     """
 
-    def __init__(self, services: Mapping[str, Service], *, grace: float = 5.0) -> None:
+    def __init__(self, services: Mapping[str, Service], *, grace: float = 5.0, ready: ReadyLine | None = None) -> None:
         """Hold the services to run.
 
         Args:
             services: The services, by the name their thread and log lines carry.
             grace: Seconds each thread is given to finish once stopped.
+            ready: The line to log once every service is ready; ``None`` logs none.
         """
         self.services = dict(services)
         self.grace = grace
+        self.ready = ready
         self._stopping = threading.Event()
         self._lock = threading.Lock()
         self._failed = False
 
     def run(self) -> None:
-        """Start every service and block until they are stopped.
+        """Start every service, log the ready line once they all answer, and block until they are stopped.
+
+        A process whose services stop before they are all ready never logs it.
 
         Raises:
             SystemExit: With status 1 when a service died rather than being stopped.
@@ -57,9 +102,12 @@ class Supervisor:
         ]
         for thread in threads:
             thread.start()
-        logger.info("Started services: %s", ", ".join(self.services))
-        while not self._stopping.wait(timeout=1):
-            pass
+        logger.debug("Started services: %s", ", ".join(self.services))
+        waiting = self.ready
+        while not self._stopping.wait(timeout=1 if waiting is None else 0.05):
+            if waiting is not None and all(service.ready for service in self.services.values()):
+                waiting.log()
+                waiting = None
         for thread in threads:
             thread.join(timeout=self.grace)
         logger.info("Shutdown complete.")

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from collections.abc import Callable
 from datetime import timedelta
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 from interloper.settings import ServerSettings
+from interloper.utils import ReadyLine
 from interloper_api.settings import AuthSettings
 from interloper_db import Store
 from interloper_db.settings import PostgresSettings
@@ -46,8 +48,11 @@ def wiring(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     recorded: dict[str, Any] = {"store": store}
 
     class FakeApp:
-        def run(self) -> None:
+        services: ClassVar[dict[str, object]] = {"api": object(), "cron": object()}
+
+        def run(self, ready: ReadyLine | None = None) -> None:
             recorded["ran"] = True
+            recorded["ready"] = ready
 
     def store_from_settings(cls: Any, catalog: object = None, **lifetimes: timedelta) -> object:
         recorded["lifetimes"] = lifetimes
@@ -67,6 +72,9 @@ def wiring(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     monkeypatch.setattr(cli.Catalog, "from_settings", classmethod(lambda cls: cli.Catalog()))
     monkeypatch.setattr(Store, "from_settings", classmethod(store_from_settings))
     monkeypatch.setattr(App, "from_settings", classmethod(from_settings))
+    monkeypatch.setattr(
+        cli, "configure_console_logging", lambda level=logging.INFO, **kwargs: recorded.update(level=level)
+    )
     return recorded
 
 
@@ -153,6 +161,23 @@ class TestRun:
             False,
         )
         assert "dev" not in wiring["app"]
+
+    def test_a_start_ends_in_one_ready_line_naming_the_services_and_the_url(self, wiring: dict[str, Any]) -> None:
+        cli.AppCommand().run(_parse("app", "--port", "3101"))
+
+        ready = wiring["ready"]
+        assert (ready.url, list(ready.services), ready.definitions) == ("http://localhost:3101", ["api", "cron"], 0)
+        assert ready.logger.name == "interloper_app.cli"
+
+    def test_without_the_api_the_ready_line_names_no_url(self, wiring: dict[str, Any]) -> None:
+        cli.AppCommand().run(_parse("app", "--no-api"))
+
+        assert wiring["ready"].url is None
+
+    def test_verbose_prints_debug_lines(self, wiring: dict[str, Any]) -> None:
+        cli.AppCommand().run(_parse("app", "-v"))
+
+        assert wiring["level"] == logging.DEBUG
 
     def test_there_is_no_flag_to_skip_a_bootstrap_that_no_longer_runs(self) -> None:
         with pytest.raises(SystemExit):

@@ -24,6 +24,7 @@ command share one way to see what printing its help imports.
 from __future__ import annotations
 
 import importlib
+import logging
 import subprocess
 import sys
 from collections.abc import Callable, Iterator
@@ -151,6 +152,31 @@ def _forget_settings() -> Iterator[None]:
     from interloper.settings import Settings
 
     Settings.clear_active()
+
+
+@pytest.fixture(autouse=True)
+def _restore_logging() -> Iterator[None]:
+    """Put back the root logger's handlers and every logger's level a command's console setup changed.
+
+    ``configure_console_logging`` sets levels on the package loggers; left
+    set, they would hide one test's debug records from the next.
+
+    Yields:
+        ``None``; the teardown restores what the test found.
+    """
+    root = logging.getLogger()
+    handlers, root_level = root.handlers[:], root.level
+    levels = {
+        name: logger.level
+        for name, logger in logging.Logger.manager.loggerDict.items()
+        if isinstance(logger, logging.Logger)
+    }
+    yield
+    root.handlers[:] = handlers
+    root.setLevel(root_level)
+    for name, logger in logging.Logger.manager.loggerDict.items():
+        if isinstance(logger, logging.Logger) and logger.level != levels.get(name, logging.NOTSET):
+            logger.setLevel(levels.get(name, logging.NOTSET))
 
 
 Install = Callable[..., None]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -51,6 +52,27 @@ def _triggers(engine: Engine) -> set[str]:
 
 class TestCreate:
     """Tables from the models, the migration revision, the triggers."""
+
+    def test_a_new_database_says_it_was_created(self, engine: Engine, caplog: pytest.LogCaptureFixture) -> None:
+        caplog.set_level(logging.INFO, logger="interloper_db")
+
+        SQLiteSchema(engine).create(_alembic_config(engine))
+
+        head = ScriptDirectory.from_config(_alembic_config(engine)).get_current_head()
+        assert [record.getMessage() for record in caplog.records if record.name.startswith("interloper_db")] == [
+            f"Database created at {head}"
+        ]
+
+    def test_an_existing_database_says_it_is_up_to_date(self, engine: Engine, caplog: pytest.LogCaptureFixture) -> None:
+        SQLiteSchema(engine).create(_alembic_config(engine))
+        caplog.clear()
+        caplog.set_level(logging.INFO, logger="interloper_db")
+
+        SQLiteSchema(engine).create(_alembic_config(engine))
+
+        assert [record.getMessage() for record in caplog.records if record.name.startswith("interloper_db")] == [
+            "Database up to date"
+        ]
 
     def test_a_new_database_holds_every_table_the_models_declare(self, engine: Engine) -> None:
         SQLiteSchema(engine).create(_alembic_config(engine))

@@ -441,3 +441,12 @@ class TestStartup:
             pass
 
         assert listener == [app]
+
+
+def test_the_api_logs_its_own_request_lines(fake_settings: ApiSettings, oauth_store: Store) -> None:
+    """Uvicorn's access log is off; `RequestLog` writes the request lines."""
+    from interloper_api.requests import RequestLog
+
+    app = create_app(store=oauth_store, catalog=Catalog(), settings=fake_settings)
+
+    assert RequestLog in [middleware.cls for middleware in app.user_middleware]
