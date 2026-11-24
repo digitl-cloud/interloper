@@ -19,18 +19,23 @@ const panel = useTemplateRef<HTMLElement>('panel')
 // has no room to leave, so the panel spans the page's width over it and does not resize.
 const sizing = new CSSStyleSheet()
 watchEffect(() => {
-    // The page's content stands an inset from the card, as from the window, and the page splits that
-    // inset with the card: half of it its own padding, half a gap before the card, so its scrollbar
-    // runs between the two, clear of the card.
+    // The page reserves the card and one and a half insets (`--agent-room`), and its column recentres
+    // in what is left (main.css), the navbar's title with it. The content stands an inset from the
+    // card, as from the window, split with the card: half of it the page's own padding, half a gap
+    // before the card, so the page's scrollbar runs between the two, clear of the card. A column
+    // narrower than the room left keeps its centring gutter instead.
+    const reserve = `calc(${width.value}px + var(--agent-inset) * 1.5)`
     const room = open.value
-        ? `margin-inline-end: calc(${width.value}px + var(--agent-inset) * 1.5); padding-inline-end: calc(var(--agent-inset) / 2)`
+        ? `--agent-room: ${reserve}; margin-inline-end: var(--agent-room); padding-inline-end: max(calc(var(--agent-inset) / 2), calc((100% - var(--agent-room) - var(--page-column, 100%)) / 2))`
         : ''
+    const duration = dragging.value ? '0ms' : '300ms'
     sizing.replaceSync(`
         .agent-panel { width: ${width.value}px }
         .agent-panel-handle { right: calc(${width.value}px + var(--agent-inset)) }
-        .agent-room { transition-duration: ${dragging.value ? '0ms' : '300ms'} }
+        .agent-room, .page-title-offset { transition-duration: ${duration} }
         @media (width >= 40rem) {
             .agent-room { ${room} }
+            .page-title-offset { ${open.value ? `--agent-room: ${reserve}` : ''} }
         }
         @media (width < 40rem) {
             .agent-panel { width: auto; left: var(--agent-inset) }

@@ -64,7 +64,7 @@ onMounted(loadData)
 
 <template>
     <UDashboardPanel id="organization-members"
-                     class="page-column">
+                     class="page-wide">
         <template #header>
             <AppNavbar title="Members" />
         </template>

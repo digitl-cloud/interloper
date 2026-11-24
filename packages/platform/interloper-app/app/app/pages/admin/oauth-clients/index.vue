@@ -97,7 +97,7 @@ onMounted(loadData)
 
 <template>
     <UDashboardPanel id="admin-oauth-clients"
-                     class="page-column">
+                     class="page-wide">
         <template #header>
             <AppNavbar title="OAuth clients" />
         </template>
