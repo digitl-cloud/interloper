@@ -2518,6 +2518,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#interloper.Relation.matches" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;matches
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#interloper.Relation.targets_from" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -6358,6 +6369,127 @@ normally the declaring class's module globals.</p>
 <div class="doc doc-object doc-function">
 
 
+<h3 id="interloper.Relation.matches" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">matches</span>
+
+
+<a href="#interloper.Relation.matches" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">matches</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">owner</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;ComponentIdentity&lt;/span&gt; (&lt;code&gt;interloper.component.relation.ComponentIdentity&lt;/code&gt;)" href="./#interloper.ComponentIdentity">ComponentIdentity</a></span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">candidates</span><span class="p">:</span> <span class="n"><span title="collections.abc.Mapping">Mapping</span></span><span class="p">[</span><span class="n"><span title="interloper.component.relation.K">K</span></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;ComponentIdentity&lt;/span&gt; (&lt;code&gt;interloper.component.relation.ComponentIdentity&lt;/code&gt;)" href="./#interloper.ComponentIdentity">ComponentIdentity</a></span><span class="p">],</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="o">*</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">siblings</span><span class="p">:</span> <span class="n"><span title="collections.abc.Collection">Collection</span></span><span class="p">[</span><span class="n"><span title="interloper.component.relation.K">K</span></span><span class="p">],</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="list">list</span></span><span class="p">[</span><span class="n"><span title="interloper.component.relation.K">K</span></span><span class="p">]</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The candidate assets this relation accepts for an owner asset, the one matching rule.</p>
+<p>What fills an unbound upstream relation is decided here, whatever the
+pool: the DAG passes its other nodes, the platform its organisation's
+assets. A candidate matches when <code>accepts</code> takes its identity as an
+asset; a <code>local</code> relation also keeps only the owner's siblings, since
+a bare key names an asset of the owner's own source instance. A
+relation declaring no key matches nothing: it says nothing about
+which assets fill it. How many of the matches a relation may hold is
+the caller's to judge.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>owner</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;ComponentIdentity&lt;/span&gt; (&lt;code&gt;interloper.component.relation.ComponentIdentity&lt;/code&gt;)" href="./#interloper.ComponentIdentity">ComponentIdentity</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The identity of the asset declaring this relation.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>candidates</code>
+            </td>
+            <td>
+                  <code><span title="collections.abc.Mapping">Mapping</span>[<span title="interloper.component.relation.K">K</span>, <a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;ComponentIdentity&lt;/span&gt; (&lt;code&gt;interloper.component.relation.ComponentIdentity&lt;/code&gt;)" href="./#interloper.ComponentIdentity">ComponentIdentity</a>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The pool, each candidate's handle (an id) mapped to its
+identity. The owner itself is left out by the caller.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>siblings</code>
+            </td>
+            <td>
+                  <code><span title="collections.abc.Collection">Collection</span>[<span title="interloper.component.relation.K">K</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The handles of the candidates owned by the owner's own
+source instance.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="list">list</span>[<span title="interloper.component.relation.K">K</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The handles of the matching candidates, in the pool's order.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="interloper.Relation.targets_from" class="doc doc-heading">
 <code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">targets_from</span>
 
@@ -6739,7 +6871,7 @@ deprecated whatever its source.</p>
 
 
 <a href="#interloper.component.base.KINDS" class="headerlink" title="Permanent link">&para;</a></h2>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">KINDS</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">registry</span><span class="o">.</span><span class="n">base</span><span class="o">.</span><span class="n">Registry</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7ad6daf85e80</span><span class="o">&gt;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">KINDS</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">registry</span><span class="o">.</span><span class="n">base</span><span class="o">.</span><span class="n">Registry</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x73cf1707de80</span><span class="o">&gt;</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents first">
