@@ -97,10 +97,9 @@ class TheTradeDeskStarSchema(il.Source):
     tracking tag, none of them primary and none known to be purchases, so the
     facts publish no conversions or purchases. Dimensions take their rows from
     the entity snapshots, then the report, then the facts' keys, so every key
-    a fact carries resolves. Every bound upstream's table must exist, or the
-    view fails when it is created. Views are recreated on every run, so they
-    follow the partners bound to them; a partner added to the organisation is
-    absent until it is bound.
+    a fact carries resolves. Views are recreated on every run
+    over every partner of the organisation, a partner added later included;
+    one with no table yet is skipped with a warning.
     """
 
     @ibis_view(

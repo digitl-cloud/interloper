@@ -1,7 +1,3 @@
-import type { Connection } from '@vue-flow/core'
-import { ANY_SOURCE, keysOf, parseQualifiedKey, qualifiedKey, upstreamRelations } from '~/types/catalog'
-import type { ComponentRecord, Relation } from '~/types/component'
-
 // ─── Types ───────────────────────────────────────────────────────────
 
 interface LayoutNode {
@@ -25,23 +21,6 @@ interface LayoutResult {
     positions: Map<string, { x: number; y: number }>
     width: number
     height: number
-}
-
-export interface DependencyPair {
-    upstreamAssetId: string
-    downstreamAssetId: string
-    paramName: string
-    many: boolean
-}
-
-interface UseGraphConnectionRulesOptions {
-    sources: Ref<ComponentRecord[]>
-    /** Persisted `upstream` relations (src = downstream asset, dst = upstream). */
-    assetDependencies: Ref<Relation[]>
-    assetToSource: Ref<Map<string, string | null>>
-    /** asset id → qualified key ("source_key.asset_key") */
-    qualifiedKeyById: Ref<Map<string, string>>
-    getAssetDefinition: (qualifiedKey: string) => AssetDefinition | undefined
 }
 
 // ─── Node presentation shared by the canvas and its nodes ────────────
@@ -216,100 +195,4 @@ export function useGraphLayout() {
     }
 
     return { layoutDag }
-}
-
-// ─── Connection Rules ────────────────────────────────────────────────
-
-export function useGraphConnectionRules(options: UseGraphConnectionRulesOptions) {
-    /**
-     * Whether this exact binding is already persisted, the one pair a drag
-     * cannot change. Any other pair stays connectable: a `many` relation
-     * fans in one more upstream, and a single-valued one is repointed by the
-     * API (it drops the binding it holds and inserts the new one).
-     */
-    function depExists(downstreamId: string, upstreamId: string, name: string): boolean {
-        return options.assetDependencies.value.some(
-            d => d.src_id === downstreamId && d.name === name && d.dst_id === upstreamId,
-        )
-    }
-
-    /** The relation name a candidate upstream's qualified key satisfies, if any. */
-    function matchingRelationName(spec: AssetDefinition, upstreamQk: string): string | undefined {
-        for (const [name, relation] of Object.entries(upstreamRelations(spec))) {
-            for (const declared of keysOf(relation)) {
-                const { sourceKey, assetKey } = parseQualifiedKey(declared)
-                // A bare key is a same-source sibling the framework binds on its
-                // own; it never pairs assets across sources on the graph.
-                if (!sourceKey) continue
-                if (sourceKey === ANY_SOURCE ? parseQualifiedKey(upstreamQk).assetKey === assetKey : declared === upstreamQk) {
-                    return name
-                }
-            }
-        }
-        return undefined
-    }
-
-    function resolveConnectionPairs(connection: Connection): DependencyPair[] {
-        const { source: srcNode, target: tgtNode } = connection
-        const srcIsAsset = options.assetToSource.value.has(srcNode)
-        const tgtIsAsset = options.assetToSource.value.has(tgtNode)
-
-        // Collect upstream assets (from source node or single asset)
-        const upstreamAssets: Array<{ id: string; qk: string }> = []
-        if (srcIsAsset) {
-            const qk = options.qualifiedKeyById.value.get(srcNode)
-            if (qk) upstreamAssets.push({ id: srcNode, qk })
-        }
-        else {
-            const source = options.sources.value.find(s => s.id === srcNode)
-            if (source) {
-                for (const a of source.children) {
-                    upstreamAssets.push({ id: a.id, qk: qualifiedKey(source.key, a.key) })
-                }
-            }
-        }
-
-        // Collect downstream assets (from target node or single asset)
-        const downstreamAssets: Array<{ id: string; qk: string }> = []
-        if (tgtIsAsset) {
-            const qk = options.qualifiedKeyById.value.get(tgtNode)
-            if (qk) downstreamAssets.push({ id: tgtNode, qk })
-        }
-        else {
-            const source = options.sources.value.find(s => s.id === tgtNode)
-            if (source) {
-                for (const a of source.children) {
-                    downstreamAssets.push({ id: a.id, qk: qualifiedKey(source.key, a.key) })
-                }
-            }
-        }
-
-        // Match: for each downstream, check if any upstream satisfies one of its relations
-        const pairs: DependencyPair[] = []
-        for (const downstream of downstreamAssets) {
-            const spec = options.getAssetDefinition(downstream.qk)
-            if (!spec) continue
-            const relations = upstreamRelations(spec)
-            for (const upstream of upstreamAssets) {
-                if (upstream.id === downstream.id) continue
-                const paramName = matchingRelationName(spec, upstream.qk)
-                if (!paramName) continue
-                if (depExists(downstream.id, upstream.id, paramName)) continue
-                pairs.push({
-                    upstreamAssetId: upstream.id,
-                    downstreamAssetId: downstream.id,
-                    paramName,
-                    many: relations[paramName]!.many,
-                })
-            }
-        }
-        return pairs
-    }
-
-    function isValidConnection(connection: Connection) {
-        if (connection.source === connection.target) return false
-        return resolveConnectionPairs(connection).length > 0
-    }
-
-    return { resolveConnectionPairs, isValidConnection }
 }

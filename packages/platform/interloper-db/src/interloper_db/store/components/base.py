@@ -1042,13 +1042,12 @@ class ComponentStore:
             )
 
         with session_scope(self._engine) as session:
-            self._sync_children_in(session, db_source, source_cls, all_keys, child_keys, child_id)
+            self._sync_children_in(session, db_source, all_keys, child_keys, child_id)
 
     def _sync_children_in(
         self,
         session: Session,
         db_source: Component,
-        source_cls: type[il.Source],
         all_keys: set[str],
         child_keys: Sequence[str] | None,
         child_id: Callable[[UUID, str], UUID] | None,
@@ -1058,7 +1057,6 @@ class ComponentStore:
         Args:
             session: The open session.
             db_source: The source row whose children are synced.
-            source_cls: The source's catalog class.
             all_keys: Every asset key the class declares.
             child_keys: The exact asset keys to keep enabled, or ``None`` for all.
             child_id: Derives a new asset's id, or ``None`` for a fresh one.
@@ -1098,16 +1096,12 @@ class ComponentStore:
                 session.delete(existing[key])
             session.flush()
 
-        children = {key: child for key, child in existing.items() if key in target}
         for key in to_create:
             child = Component(org_id=db_source.org_id, kind="asset", key=key, parent_id=db_source.id)
             if child_id is not None:
                 child.id = child_id(db_source.id, key)
-            children[key] = child
             session.add(child)
         session.flush()
-
-        self._relations.bind_siblings(source_cls, children)
 
     def job_partition_granularities(self, job_ids: Sequence[UUID]) -> dict[UUID, set[TimeGranularity]]:
         """The granularities each job's window-partitioned targets declare, in three queries.

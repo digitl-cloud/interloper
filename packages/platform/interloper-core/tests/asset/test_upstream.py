@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
+from contextlib import contextmanager
 from typing import Any, ClassVar
 
 import pytest
 
 import interloper as il
 from interloper.asset.upstream import Upstream
+from interloper.errors import DataNotFoundError
 from interloper.events import Event, EventBus
 
 
@@ -61,6 +64,27 @@ def _clear_memory() -> None:
     il.MemoryDestination.clear()
 
 
+@contextmanager
+def _warnings() -> Generator[list[str], None, None]:
+    """Collect the messages of the WARNING events emitted inside the block.
+
+    Yields:
+        The messages, filled once the block exits.
+    """
+    seen: list[str] = []
+
+    def handler(event: Event) -> None:
+        if event.metadata.get("level") == "WARNING":
+            seen.append(event.metadata.get("message", ""))
+
+    EventBus.subscribe(handler)
+    try:
+        yield seen
+        EventBus.flush(timeout=5.0)
+    finally:
+        EventBus.unsubscribe(handler)
+
+
 class TestRead:
     async def test_reads_the_upstreams_default_destination(self):
         destination = il.MemoryDestination()
@@ -105,9 +129,23 @@ class TestRead:
         assert leg.data is None
         assert any("found no data in upstream" in event.metadata.get("message", "") for event in warnings_seen)
 
+    async def test_read_of_an_upstream_without_destination_is_passed_as_none_with_a_warning(self):
+        @il.asset
+        def orders() -> list[dict[str, Any]]:
+            return []
+
+        @il.asset
+        def revenue(orders: il.Upstream) -> list[dict[str, Any]]:
+            return []
+
+        with _warnings() as seen:
+            leg = await Upstream.read(orders(), revenue(), None, {}, parameter="orders")
+        assert leg.data is None
+        assert any("found no data in upstream 'orders'" in message for message in seen)
+
 
 class TestReference:
-    def test_the_data_is_the_destinations_reference(self):
+    async def test_the_data_is_the_readers_destinations_reference(self):
         class Referencing(il.MemoryDestination):
             def reference(self, asset: il.Asset) -> Any:
                 return f"ref:{asset.key}"
@@ -116,8 +154,48 @@ class TestReference:
         def orders() -> list[dict[str, Any]]:
             return []
 
-        leg = Upstream.reference(orders(), Referencing())
+        @il.asset
+        def revenue(orders: il.Upstream) -> list[dict[str, Any]]:
+            return []
+
+        reader = revenue(destinations=[Referencing()])
+        leg = await Upstream.reference(orders(), reader, None, {}, parameter="orders")
         assert leg.data == "ref:orders"
+
+    async def test_reference_to_a_missing_table_is_passed_as_none_with_a_warning(self):
+        class Tableless(il.MemoryDestination):
+            def reference(self, asset: il.Asset) -> Any:
+                raise DataNotFoundError(f"'{asset.key}' has no table")
+
+        @il.asset
+        def orders() -> list[dict[str, Any]]:
+            return []
+
+        @il.asset
+        def revenue(orders: il.Upstream) -> list[dict[str, Any]]:
+            return []
+
+        with _warnings() as seen:
+            leg = await Upstream.reference(orders(), revenue(destinations=[Tableless()]), None, {}, parameter="orders")
+        assert leg.data is None
+        assert any("'orders'" in message and "parameter 'orders'" in message for message in seen)
+
+    async def test_the_reference_warning_says_why_and_that_the_upstream_is_left_out(self):
+        class Unreachable(il.MemoryDestination):
+            def reference(self, asset: il.Asset) -> Any:
+                raise DataNotFoundError("none of its destinations is reachable")
+
+        @il.asset
+        def orders() -> list[dict[str, Any]]:
+            return []
+
+        @il.asset
+        def revenue(orders: il.Upstream) -> list[dict[str, Any]]:
+            return []
+
+        with _warnings() as seen:
+            await Upstream.reference(orders(), revenue(destinations=[Unreachable()]), None, {}, parameter="orders")
+        assert any("none of its destinations is reachable" in message and "left out" in message for message in seen)
 
 
 class _Rows(il.Asset):

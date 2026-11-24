@@ -395,29 +395,34 @@ class TestAdd:
 class TestRemove:
     """``remove`` refuses to empty a non-optional relation."""
 
-    def test_last_row_of_a_required_relation_is_refused(self, store: Store):
+    def test_unbinding_the_last_row_returns_the_relation_to_automatic(self, store: Store, component_db: Engine):
         upstream = store.components.create(_ORG, kind="asset", key="guard_upstream")
         required = store.components.create(_ORG, kind="asset", key="guard_required", relations={"up": [upstream.id]})
 
-        with pytest.raises(ConfigError, match="non-optional"):
-            store.relations.delete(required.id, name="up", dst_id=upstream.id)
-        assert len(store.relations.list(_ORG, RelationQuery(name="up", limit=None)).items) == 1
+        store.relations.delete(required.id, name="up", dst_id=upstream.id)
 
-    def test_last_row_of_an_optional_relation_detaches(self, store: Store):
+        with Session(component_db) as session:
+            assert _relations(session, required.id) == []
+        (edge,) = store.relations.list(_ORG, RelationQuery(name="up", limit=None)).items
+        assert (edge.src_id, edge.dst_id) == (required.id, upstream.id)
+
+    def test_last_row_of_an_optional_relation_detaches(self, store: Store, component_db: Engine):
         upstream = store.components.create(_ORG, kind="asset", key="guard_upstream")
         optional = store.components.create(_ORG, kind="asset", key="guard_optional", relations={"up": [upstream.id]})
 
         store.relations.delete(optional.id, name="up", dst_id=upstream.id)
 
-        assert store.relations.list(_ORG, RelationQuery(name="up", limit=None)).items == []
+        with Session(component_db) as session:
+            assert _relations(session, optional.id) == []
 
-    def test_an_absent_row_is_a_no_op(self, store: Store):
+    def test_an_absent_row_is_a_no_op(self, store: Store, component_db: Engine):
         upstream = store.components.create(_ORG, kind="asset", key="guard_upstream")
         optional = store.components.create(_ORG, kind="asset", key="guard_optional")
 
         store.relations.delete(optional.id, name="up", dst_id=upstream.id)
 
-        assert store.relations.list(_ORG, RelationQuery(limit=None)).items == []
+        with Session(component_db) as session:
+            assert _relations(session, optional.id) == []
 
 
 class TestList:
@@ -620,3 +625,91 @@ class TestIntraSourceWiring:
 
         (row,) = store.relations.list(_ORG, RelationQuery(name="rows", limit=None)).items
         assert (row.src_id, row.dst_id) == (_child(source, "totals").id, _child(source, "rows").id)
+
+
+def _edges(store: Store, org_id: UUID = _ORG) -> set[tuple[UUID, str, UUID]]:
+    return {(edge.src_id, edge.name, edge.dst_id) for edge in store.relations.automatic(org_id)}
+
+
+class TestAutomatic:
+    """An upstream relation holding no row follows every matching asset of the organisation."""
+
+    def test_automatic_lists_every_matching_asset_of_the_organisation(self, store: Store):
+        first = store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "a"})
+        second = store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "b"})
+        qualified = _child(store.components.create(_ORG, kind="source", key="consumer_source"), "qualified")
+
+        assert {(src, dst) for src, name, dst in _edges(store) if src == qualified.id and name == "rows"} == {
+            (qualified.id, _child(first, "rows").id),
+            (qualified.id, _child(second, "rows").id),
+        }
+
+    def test_automatic_skips_a_relation_with_a_curated_row(self, store: Store):
+        first = store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "a"})
+        store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "b"})
+        qualified = _child(store.components.create(_ORG, kind="source", key="consumer_source"), "qualified")
+        store.relations.add(qualified.id, name="rows", dst_id=_child(first, "rows").id)
+
+        assert not any(src == qualified.id and name == "rows" for src, name, _ in _edges(store))
+        listed = store.relations.list(_ORG, RelationQuery(name="rows", src_kind="asset", limit=None)).items
+        assert {edge.dst_id for edge in listed if edge.src_id == qualified.id} == {_child(first, "rows").id}
+
+    def test_automatic_matches_a_disabled_asset_but_never_a_drifted_one(self, store: Store, component_db: Engine):
+        disabled = store.components.create(
+            _ORG, kind="source", key="instance_source", config={"account_id": "a", "enabled": False}
+        )
+        drifted = store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "b"})
+        wild = _child(store.components.create(_ORG, kind="source", key="consumer_source"), "wild")
+        with Session(component_db) as session:
+            row = session.get(Component, drifted.id)
+            assert row is not None
+            row.key = "gone_source"
+            session.add(row)
+            session.commit()
+
+        assert {dst for src, name, dst in _edges(store) if src == wild.id} == {_child(disabled, "rows").id}
+
+    def test_automatic_never_crosses_organisations(self, store: Store):
+        store.components.create(uuid4(), kind="source", key="instance_source", config={"account_id": "a"})
+        qualified = _child(store.components.create(_ORG, kind="source", key="consumer_source"), "qualified")
+
+        assert not any(src == qualified.id for src, _, _ in _edges(store))
+
+    def test_list_returns_rows_and_matches_in_one_window(self, store: Store, connection: Component):
+        store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "a"})
+        store.components.create(_ORG, kind="source", key="consumer_source")
+        query = RelationQuery(src_kind="asset", dst_kind="asset", limit=None)
+        every = store.relations.list(_ORG, query).items
+
+        page = store.relations.list(_ORG, RelationQuery(src_kind="asset", dst_kind="asset", limit=1, offset=1))
+        assert page.total == len(every) == 3
+        assert [(edge.src_id, edge.dst_id) for edge in page.items] == [(every[1].src_id, every[1].dst_id)]
+
+    def test_creating_a_source_writes_no_sibling_rows(self, store: Store, component_db: Engine):
+        source = store.components.create(_ORG, kind="source", key="wire_up_source")
+
+        with Session(component_db) as session:
+            assert _relations(session, _child(source, "totals").id) == []
+        assert _edges(store) == {(_child(source, "totals").id, "rows", _child(source, "rows").id)}
+
+    def test_automatic_matches_each_relation_against_its_own_keys_only(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch
+    ):
+        store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "a"})
+        store.components.create(_ORG, kind="source", key="wire_up_source")
+        store.components.create(_ORG, kind="source", key="first_campaign_source")
+        store.components.create(_ORG, kind="source", key="consumer_source")
+        pools: list[set[str]] = []
+        original = il.Relation.matches
+
+        def recorded(self: il.Relation, owner: il.ComponentIdentity, candidates, *, siblings):
+            pools.append({identity.key for identity in candidates.values()})
+            return original(self, owner, candidates, siblings=siblings)
+
+        monkeypatch.setattr(il.Relation, "matches", recorded)
+        store.relations.automatic(_ORG)
+
+        assert pools and all(pool <= {"rows"} for pool in pools)
+
+    def test_check_bound_accepts_an_unbound_upstream_relation(self, store: Store):
+        store.components.create(_ORG, kind="asset", key="matcher")

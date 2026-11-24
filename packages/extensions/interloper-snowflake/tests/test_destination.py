@@ -448,3 +448,10 @@ class TestCount:
     def test_missing_table_raises(self, session):
         with pytest.raises(DataNotFoundError):
             _destination().partition_row_counts(_ctx(daily()))
+
+
+class TestHasTable:
+    def test_has_table_is_false_before_the_first_write_and_true_after(self, session):
+        assert _destination().has_table("ads_stats", "marts") is False
+        session.tables.add(("marts", "ads_stats"))
+        assert _destination().has_table("ads_stats", "marts") is True

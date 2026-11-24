@@ -337,3 +337,10 @@ class TestCoerce:
 
     def test_type_without_python_type_passes_through(self):
         assert _coerce(self._column(NullType()), "x") == "x"
+
+
+class TestHasTable:
+    def test_has_table_is_false_before_the_first_write_and_true_after(self, destination):
+        assert destination.has_table("plain_asset", None) is False
+        destination.write(_ctx(plain_asset()), [{"a": 1}])
+        assert destination.has_table("plain_asset", None) is True

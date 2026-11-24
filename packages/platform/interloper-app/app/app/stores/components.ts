@@ -1,4 +1,4 @@
-import type { ComponentRecord, ComponentInput, DeleteImpact, Relation, RelationInput } from '~/types/component'
+import type { ComponentRecord, ComponentInput, DeleteImpact, Relation } from '~/types/component'
 
 /** The key an unfiltered listing is held under, beside the kinds. */
 const ALL_KINDS = '*'
@@ -242,41 +242,6 @@ export const useComponentsStore = defineStore('components', () => {
         return request
     }
 
-    /**
-     * Add one relation binding (`{ name, dst_id }`).
-     *
-     * Pass `many: false` when the name is single-valued: the API repoints it,
-     * dropping the binding it held, so the mirror has to drop that row too
-     * or the old binding lingers. Otherwise only the identical binding is
-     * replaced, since a `many` name accumulates.
-     */
-    async function addRelation(
-        id: string,
-        input: { name: string } & RelationInput,
-        options?: { many: boolean },
-    ): Promise<Relation> {
-        const relation = await apiFetch<Relation>(`/components/${id}/relations`, {
-            method: 'POST',
-            body: input,
-        })
-        const repoints = options?.many === false
-        relations.value = [
-            ...relations.value.filter(
-                r => !(r.src_id === id && r.name === input.name && (repoints || r.dst_id === input.dst_id)),
-            ),
-            relation,
-        ]
-        return relation
-    }
-
-    /** Remove one relation binding by name and destination id. */
-    async function removeRelation(id: string, name: string, dstId: string) {
-        await apiFetch(`/components/${id}/relations/${name}/${dstId}`, { method: 'DELETE' })
-        relations.value = relations.value.filter(
-            r => !(r.src_id === id && r.name === name && r.dst_id === dstId),
-        )
-    }
-
     async function fetchPartitionRowCounts(id: string) {
         return apiFetch<{
             asset_key: string
@@ -392,14 +357,34 @@ export const useComponentsStore = defineStore('components', () => {
         fetchOne(record.parent_id ?? record.id).catch(() => {})
     }
 
+    let relationsRefresh: ReturnType<typeof setTimeout> | undefined
+
+    /**
+     * Refetch the held relations, once per burst of messages. An asset's
+     * upstream edges follow the organisation, so a component added or removed,
+     * or an upstream binding written, changes edges no relation message carries.
+     */
+    function _refreshRelations() {
+        if (relationsListing === undefined) return
+        clearTimeout(relationsRefresh)
+        relationsRefresh = setTimeout(() => {
+            relationsListing = undefined
+            fetchRelations()
+        }, 250)
+    }
+
     useRealtimeSubscription({
         table: 'components',
         scope: () => orgStore.organisation?.id,
-        onInsert: _refetchChanged,
+        onInsert: (record: Record<string, any>) => {
+            _refetchChanged(record)
+            _refreshRelations()
+        },
         onUpdate: _refetchChanged,
         onDelete: (record: Record<string, any>) => {
             _remove(record.id)
             relations.value = relations.value.filter(r => r.src_id !== record.id && r.dst_id !== record.id)
+            _refreshRelations()
         },
         // Relations included: the one reload covers both subscriptions.
         onReconnect: reload,
@@ -414,6 +399,7 @@ export const useComponentsStore = defineStore('components', () => {
             const incoming = record as Relation
             if (!relations.value.some(r => key(r) === key(incoming))) relations.value.push(incoming)
             _embed(incoming)
+            if (incoming.src_kind === 'asset') _refreshRelations()
         },
         onUpdate: () => {},
         onDelete: (record: Record<string, any>) => {
@@ -421,6 +407,7 @@ export const useComponentsStore = defineStore('components', () => {
                 r => !(r.src_id === record.src_id && r.name === record.name && r.dst_id === record.dst_id),
             )
             _unembed(record as Relation)
+            if (record.src_kind === 'asset') _refreshRelations()
         },
     })
 
@@ -440,8 +427,6 @@ export const useComponentsStore = defineStore('components', () => {
         remove,
         fetchRelations,
         reload,
-        addRelation,
-        removeRelation,
         fetchPartitionRowCounts,
         byKind,
         byId,

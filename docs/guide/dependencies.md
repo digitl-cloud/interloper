@@ -178,6 +178,12 @@ fin.revenue.unbind("orders", shop.orders)   # refused if it would empty a non-op
 Binding goes through `bind()` everywhere, so an explicit binding is never overwritten by the
 DAG, and a hydrated one is never overwritten by construction.
 
+A binding is a curation; a relation left unbound follows every asset it matches. In the platform
+the pool is the organisation rather than the DAG: a stored binding narrows a relation to exactly
+what it names, and an upstream relation with none reads every matching asset of the organisation,
+accounts added later included, whether the run materializes them or only reads them. Nothing is
+written for it; removing a relation's last binding returns it to following them all.
+
 In a spec, a bound upstream is a `{ref: id}` under the relation's name, since an asset always
 travels inside its own source's document. See [Specs](specs.md).
 
@@ -196,9 +202,10 @@ to the window the upstream consumes, joined into one table when it covers severa
 A view's upstreams are not read at all: `data` holds the destination's reference to the upstream instead. See [Views & references](views.md).
 
 `data` is `None`, with a `LOG` warning naming the leg, when the upstream has nothing
-materialized where the destination looks: no table or object for that scope at all
-(`MemoryDestination` and the file destinations key storage per partition, so a missing partition
-is exactly this; `BigQueryDestination` reaches it only when the table itself does not exist). An
+materialized where the destination looks: no destination at all, or no table or object for that
+scope (`MemoryDestination` and the file destinations key storage per partition, so a missing
+partition is exactly this; `BigQueryDestination` reaches it only when the table itself does not
+exist). An
 existing but empty scope is not this case, and comes back as whatever the destination returns
 for an empty read, an empty list or frame. `optional` governs wiring only, never data: the asset
 decides what a missing leg means. Any other read failure fails the asset.

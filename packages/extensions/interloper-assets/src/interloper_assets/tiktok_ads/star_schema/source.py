@@ -55,10 +55,9 @@ class TiktokAdsStarSchema(il.Source):
     its rows from the entity snapshot where one is collected, else from the
     ad report's names, else from the facts' keys, so every key a fact carries
     resolves. TikTok schedules the ad group, in UTC; its dates are read in the
-    advertiser's own timezone. Every bound upstream's table must exist, or
-    the view fails when it is created. Views are recreated on every run, so
-    they follow the advertisers bound to them; an advertiser added to the
-    organisation is absent until it is bound.
+    advertiser's own timezone. Views are recreated on every run
+    over every advertiser of the organisation, an advertiser added later included;
+    one with no table yet is skipped with a warning.
     """
 
     @ibis_view(

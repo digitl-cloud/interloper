@@ -99,10 +99,9 @@ class AmazonAdsStarSchema(il.Source):
     dimensions take each entity's own row where it is collected, else its
     latest report, and the campaigns are completed by the fact's keys; the
     account dimension comes from each profile's entity row, else the facts.
-    Every bound upstream's table must exist, or the view fails when it is
-    created. Views are recreated on every run, so they follow the profiles
-    bound to them; a profile added to the organisation is absent until it
-    is bound.
+    Views are recreated on every run
+    over every profile of the organisation, a profile added later included;
+    one with no table yet is skipped with a warning.
     """
 
     @ibis_view(
@@ -141,7 +140,7 @@ class AmazonAdsStarSchema(il.Source):
             )
 
         if not campaigns_stats:
-            raise ConfigError("no upstream bound: the fact needs at least one profile's campaign report")
+            raise ConfigError("no readable upstream: the fact needs at least one profile's campaign report")
         measures = {
             "products_campaigns_stats": from_products,
             "brands_campaigns_stats": from_report,
@@ -376,7 +375,7 @@ class AmazonAdsStarSchema(il.Source):
             )
 
         if not ad_groups and not ad_groups_stats:
-            raise ConfigError("no upstream bound: the ad group dimension needs at least one profile's ad groups")
+            raise ConfigError("no readable upstream: the ad group dimension needs at least one profile's ad groups")
         rows = ibis.union(
             *(from_entity(upstream) for upstream in ad_groups),
             *(from_report(upstream) for upstream in ad_groups_stats),
@@ -454,7 +453,7 @@ class AmazonAdsStarSchema(il.Source):
             )
 
         if not ads and not ads_stats:
-            raise ConfigError("no upstream bound: the ad dimension needs at least one profile's ads")
+            raise ConfigError("no readable upstream: the ad dimension needs at least one profile's ads")
         rows = ibis.union(
             *(from_entity(upstream) for upstream in ads),
             *(from_report(upstream) for upstream in ads_stats),

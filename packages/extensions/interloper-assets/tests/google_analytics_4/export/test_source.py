@@ -29,6 +29,9 @@ class RecordingWarehouse(DatabaseDestination):
     def count(self, table, dataset, column):
         return {}
 
+    def has_table(self, table, dataset):
+        return True
+
     def table_parts(self, table, dataset):
         return ("proj", dataset or "main", table)
 

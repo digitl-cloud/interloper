@@ -11,8 +11,11 @@ memory: the declared kinds, and the identity the declared keys expect
 bare key stays inside the owner's own source instance, which identities
 alone cannot tell apart. Single-valued names hold one edge and repoint on
 rewrite; ``many`` names accumulate. A non-optional name cannot be
-emptied, only repointed. Every write takes the source row's lock, so the
-guards cannot be read around concurrently. Rows are stamped with the
+emptied, only repointed, except an asset's upstream relation: a row is a
+curation, and an upstream relation holding none follows every asset of the
+organisation it matches (:meth:`RelationStore.automatic`), never written.
+Every write takes the source row's lock, so the guards cannot be read around
+concurrently. Rows are stamped with the
 denormalized ``org_id``/``src_kind``/``dst_kind`` triple the composite
 foreign keys verify.
 """
@@ -27,6 +30,8 @@ import interloper as il
 from interloper.catalog import Catalog
 from interloper.errors import ConfigError
 from sqlalchemy import Engine
+from sqlalchemy import select as sa_select
+from sqlalchemy.orm import aliased
 from sqlmodel import Session, col, select
 
 from interloper_db.errors import NotFoundError, ReadOnlyError
@@ -97,8 +102,94 @@ class RelationStore:
             statement = statement.where(ComponentRelation.dst_kind == query.dst_kind)
         if query.dst_id:
             statement = statement.where(col(ComponentRelation.dst_id).in_(query.dst_id))
+        if query.src_kind not in {None, "asset"} or query.dst_kind not in {None, "asset"}:
+            with session_scope(self._engine) as session:
+                return Page.read(session, statement, query)
         with session_scope(self._engine) as session:
-            return Page.read(session, statement, query)
+            rows = builtins.list(session.exec(statement).all())
+        automatic = [
+            edge
+            for edge in self.automatic(org_id)
+            if (not query.name or edge.name == query.name) and (not query.dst_id or edge.dst_id in query.dst_id)
+        ]
+        merged = sorted([*rows, *automatic], key=lambda edge: (edge.src_id, edge.name, edge.dst_id))
+        return Page.window(merged, query)
+
+    def automatic(self, org_id: UUID) -> builtins.list[ComponentRelation]:
+        """The edges an organisation's unbound upstream relations follow, never written.
+
+        For every asset and every upstream relation it holds no row under, one
+        unsaved row per asset filling it: a sibling the source's declaration
+        names (`SourceDefinition.sibling_bindings`), else every asset of the
+        organisation the relation matches (`Relation.matches`). Candidates are
+        the asset rows whose catalog key resolves, enabled or not: a drifted
+        asset cannot be loaded, and one stale row must not fail every reader of
+        a wildcard.
+
+        Args:
+            org_id: Organisation whose edges are resolved.
+
+        Returns:
+            The unsaved edges, ordered by source, name and destination.
+        """
+        parent = aliased(Component)
+        assets_statement = (
+            sa_select(col(Component.id), col(Component.key), col(Component.parent_id), col(parent.key))
+            .outerjoin(parent, col(parent.id) == col(Component.parent_id))
+            .where(col(Component.org_id) == org_id, col(Component.kind) == "asset")
+        )
+        curated_statement = (
+            sa_select(col(ComponentRelation.src_id), col(ComponentRelation.name))
+            .where(col(ComponentRelation.org_id) == org_id, col(ComponentRelation.src_kind) == "asset")
+            .distinct()
+        )
+        with session_scope(self._engine) as session:
+            rows = session.connection().execute(assets_statement).all()
+            curated = {(src_id, name) for src_id, name in session.connection().execute(curated_statement).all()}
+        definitions: dict[UUID, il.AssetDefinition] = {}
+        identities: dict[UUID, il.ComponentIdentity] = {}
+        for asset_id, key, _, source_key in rows:
+            definition = self._catalog.get(f"{source_key}.{key}" if source_key else key)
+            if isinstance(definition, il.AssetDefinition):
+                definitions[asset_id] = definition
+                identities[asset_id] = il.ComponentIdentity(source_key, key)
+        parents = {asset_id: parent_id for asset_id, _, parent_id, _ in rows if asset_id in identities}
+        by_parent: dict[UUID | None, dict[str, UUID]] = {}
+        by_key: dict[str, dict[UUID, il.ComponentIdentity]] = {}
+        for asset_id, parent_id in parents.items():
+            by_parent.setdefault(parent_id, {})[identities[asset_id].key] = asset_id
+            by_key.setdefault(identities[asset_id].key, {})[asset_id] = identities[asset_id]
+        wiring: dict[str, dict[str, dict[str, str]]] = {}
+        edges: builtins.list[ComponentRelation] = []
+        for asset_id, definition in definitions.items():
+            identity = identities[asset_id]
+            siblings = by_parent[parents[asset_id]]
+            source_key = identity.source_key
+            if source_key is not None and source_key not in wiring:
+                source = self._catalog.get(source_key)
+                wiring[source_key] = source.sibling_bindings() if isinstance(source, il.SourceDefinition) else {}
+            wired = wiring.get(source_key, {}).get(identity.key, {}) if source_key else {}
+            for name, relation in definition.relations.items():
+                if "asset" not in relation.kinds or (asset_id, name) in curated:
+                    continue
+                if name in wired:
+                    matched = [siblings[wired[name]]] if wired[name] in siblings else []
+                else:
+                    # A declared key names one asset key whatever its source part, so only those can match.
+                    pool = {
+                        candidate_id: candidate
+                        for declared in relation.keys
+                        for candidate_id, candidate in by_key.get(declared.rpartition(".")[2], {}).items()
+                        if candidate_id != asset_id
+                    }
+                    matched = relation.matches(identity, pool, siblings=set(siblings.values()))
+                edges.extend(
+                    ComponentRelation(
+                        src_id=asset_id, name=name, dst_id=dst_id, org_id=org_id, src_kind="asset", dst_kind="asset"
+                    )
+                    for dst_id in matched
+                )
+        return sorted(edges, key=lambda edge: (edge.src_id, edge.name, edge.dst_id))
 
     def add(self, component_id: UUID, *, name: str, dst_id: UUID) -> ComponentRelation:
         """Bind one component to another under a declared relation name.
@@ -166,7 +257,7 @@ class RelationStore:
             if row is None:
                 return
             relation = self._vocabulary(src).get(name)
-            if len(rows) == 1 and relation is not None and not relation.optional:
+            if len(rows) == 1 and relation is not None and not relation.optional and not self._follows(src, relation):
                 raise ConfigError(
                     f"'{src.key}'.{name} is non-optional and cannot be emptied; "
                     f"repoint it or remove the dependent component instead"
@@ -191,41 +282,6 @@ class RelationStore:
                 for row in self._rows(src.id, name):
                     session.delete(row)
             session.flush()
-
-    def bind_siblings(self, source_cls: type[il.Source], children_by_key: dict[str, Component]) -> None:
-        """Top up the intra-source edges a source class binds between its own assets.
-
-        The wiring is read from
-        :meth:`~interloper.source.base.Source.sibling_bindings`, the same
-        classmethod a live source binds its assets from, so a persisted source
-        holds exactly the edges its in-memory counterpart does: one edge per
-        relation name, never onto the declaring asset itself, and nothing for a
-        declared key that reaches outside the source. Idempotent over the full
-        child set, so an asset enabled after its siblings still gets the edges
-        into it wired, while a name that already holds an edge is left alone
-        and a binding made by hand survives.
-
-        Part of the caller's transaction: the edges are added, neither flushed
-        nor committed here.
-
-        Args:
-            source_cls: Catalog class whose declaration decides the wiring.
-            children_by_key: The source's enabled child rows, keyed by asset key.
-        """
-        statement = select(ComponentRelation.src_id, ComponentRelation.name).where(
-            col(ComponentRelation.src_id).in_([child.id for child in children_by_key.values()])
-        )
-        with session_scope(self._engine) as session:
-            bound = {(row[0], row[1]) for row in session.exec(statement).all()}
-        for asset_key, names in source_cls.sibling_bindings().items():
-            child = children_by_key.get(asset_key)
-            if child is None:
-                continue
-            for name, sibling_key in names.items():
-                sibling = children_by_key.get(sibling_key)
-                if sibling is None or (child.id, name) in bound:
-                    continue
-                self._insert(child, sibling, name)
 
     def sync(self, src: Component, bindings: Mapping[str, Sequence[Binding]] | None) -> None:
         """Replace the relation names present in *bindings* (empty list clears).
@@ -301,7 +357,7 @@ class RelationStore:
             ConfigError: If a non-optional relation has no row.
         """
         for name, relation in self._vocabulary(src).items():
-            if not relation.optional and not self._rows(src.id, name):
+            if not relation.optional and not self._follows(src, relation) and not self._rows(src.id, name):
                 raise ConfigError(f"'{src.key}'.{name} is required: bind a {' or '.join(relation.kinds)}")
 
     def detaches(self, referrer: Component, relation_row: ComponentRelation) -> bool:
@@ -336,6 +392,19 @@ class RelationStore:
         """
         if self._served_from is not None:
             raise ReadOnlyError(f"The collection is served from {self._served_from}: change it there")
+
+    @staticmethod
+    def _follows(src: Component, relation: il.Relation) -> bool:
+        """Whether a relation with no row is filled by :meth:`automatic`, so emptying it is no gap.
+
+        Args:
+            src: Component row declaring the relation.
+            relation: The declared relation.
+
+        Returns:
+            True for an asset's upstream relation declaring the keys it matches.
+        """
+        return src.kind == "asset" and "asset" in relation.kinds and bool(relation.keys)
 
     def _vocabulary(self, row: Component) -> dict[str, il.Relation]:
         """The relation vocabulary governing a component row.

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ContextMenuItem } from '@nuxt/ui'
 import { VueFlow, useVueFlow, Panel } from '@vue-flow/core'
-import type { Node, Edge, Connection } from '@vue-flow/core'
+import type { Node, Edge } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import type { ComponentRecord } from '~/types/component'
@@ -13,13 +13,11 @@ import type { ComponentRecord } from '~/types/component'
  */
 const props = withDefaults(defineProps<{
     model: GraphModel
-    /** Allow dependency editing (drag-connect, edge delete) + source CRUD affordances. */
+    /** Offer the source CRUD affordances (new, edit, delete). */
     editable?: boolean
     /** Group sources by catalog type — only types with ≥2 instances form a group. */
     groupBy?: GroupBy
     loading?: boolean
-    /** Connection validator, supplied by an editable host. */
-    isValidConnection?: (connection: Connection) => boolean
     /** Asset ids currently materialising (spinner overlay). */
     materializingAssetIds?: Set<string>
     /** Show the in-canvas "New Source" button (off once a toolbar owns it). */
@@ -36,7 +34,6 @@ const props = withDefaults(defineProps<{
     editable: false,
     groupBy: 'source',
     loading: false,
-    isValidConnection: undefined,
     materializingAssetIds: undefined,
     showNewSourceButton: true,
     selectedId: null,
@@ -51,8 +48,6 @@ const emit = defineEmits<{
     'asset-click': [asset: ComponentRecord, assetDefn: AssetDefinition | undefined, source: ComponentRecord | null]
     'pane-click': []
     'delete-source': [sourceId: string]
-    'connect': [connection: Connection]
-    'delete-dependency': [payload: { upstreamAssetId: string; downstreamAssetId: string; name?: string }]
 }>()
 
 const flowId = `asset-graph-${useId()}`
@@ -455,7 +450,6 @@ function pushSourceNodes(result: Node[], entry: GraphSourceEntry, pos: { x: numb
         parentNode: parent,
         width: dims.width,
         height: dims.height,
-        connectable: !container,
         zIndex: container ? undefined : CARD_Z,
         data: {
             source,
@@ -482,7 +476,6 @@ function pushSourceNodes(result: Node[], entry: GraphSourceEntry, pos: { x: numb
                         y: assetPos.y + (parent ? HEAD_H : TOP_SOURCE_HEAD_H) + ASSET_GAP,
                     },
                     data: { asset: child.asset, assetDefn: child.assetDefn, source, status: child.status },
-                    connectable: true,
                     zIndex: CARD_Z,
                 })
             }
@@ -503,7 +496,6 @@ const nodes = computed<Node[]>(() => {
                 type: 'asset',
                 position: { x: pos.x, y: pos.y },
                 data: { asset: entry.asset, assetDefn: entry.assetDefn, source: entry.source, status: entry.status },
-                connectable: true,
                 zIndex: CARD_Z,
             })
         }
@@ -523,7 +515,6 @@ const nodes = computed<Node[]>(() => {
             position: { x: pos.x, y: pos.y },
             width: dims.width,
             height: dims.height,
-            connectable: false,
             zIndex: open ? undefined : CARD_Z,
             data: {
                 groupKey,
@@ -560,7 +551,6 @@ const nodes = computed<Node[]>(() => {
             type: 'asset',
             position: { x: pos.x, y: pos.y },
             data: { asset: entry.asset, assetDefn: entry.assetDefn, source: null, status: entry.status },
-            connectable: true,
             zIndex: CARD_Z,
         })
     }
@@ -693,53 +683,12 @@ watch(nodes, (next) => {
     vueFlow.setViewport({ x: x - dx * zoom, y: y - dy * zoom, zoom })
 })
 
-// ── Connection plumbing provided to child node components ──
-const validateConnection = (connection: Connection) => props.isValidConnection?.(connection) ?? false
-provide('isValidConnection', validateConnection)
 provide('graphReadonly', toRef(() => !props.editable))
 
 const materializing = computed(() => props.materializingAssetIds ?? new Set<string>())
 provide('materializingAssetIds', materializing)
 
-function onConnect(connection: Connection) {
-    if (!props.editable) return
-    emit('connect', connection)
-}
-
-// ── Edge context menu ──
-const edgeMenuOpen = ref(false)
-const edgeMenuVirtual = ref({ getBoundingClientRect: () => new DOMRect() })
-const edgeMenuEdge = ref<{ source: string; target: string; name?: string } | null>(null)
-
-const { confirm } = useConfirm()
 const appConfig = useAppConfig()
-
-const edgeMenuItems = computed<ContextMenuItem[][]>(() => {
-    const edge = edgeMenuEdge.value
-    if (!edge) return []
-    return [
-        [
-            {
-                label: 'Delete dependency',
-                icon: appConfig.icons.delete,
-                color: 'error' as const,
-                onSelect: async () => {
-                    const confirmed = await confirm({
-                        title: 'Delete dependency',
-                        description: 'This will remove the dependency between these assets. This action cannot be undone.',
-                    })
-                    if (confirmed) {
-                        emit('delete-dependency', {
-                            downstreamAssetId: edge.target,
-                            upstreamAssetId: edge.source,
-                            name: edge.name,
-                        })
-                    }
-                },
-            },
-        ],
-    ]
-})
 
 // ── Pane context menu ──
 const paneMenuOpen = ref(false)
@@ -783,33 +732,6 @@ function onPaneContextMenu(event: MouseEvent) {
     }
     paneMenuOpen.value = true
 }
-
-function onEdgeContextMenu({ edge, event }: { edge: Edge; event: MouseEvent | TouchEvent }) {
-    event.preventDefault()
-    event.stopPropagation()
-
-    if (!props.editable) return
-    if (!('clientX' in event)) return
-
-    // Only allow delete on asset-to-asset edges (not source-level collapsed edges)
-    const isSourceAsset = assetToSource.value.has(edge.source)
-    const isTargetAsset = assetToSource.value.has(edge.target)
-    if (!isSourceAsset || !isTargetAsset) return
-
-    edgeMenuEdge.value = {
-        source: edge.source,
-        target: edge.target,
-        name: dependencies.value.find(
-            d => d.upstreamAssetId === edge.source && d.downstreamAssetId === edge.target,
-        )?.name,
-    }
-
-    const { clientX: x, clientY: y } = event
-    edgeMenuVirtual.value = {
-        getBoundingClientRect: () => new DOMRect(x, y, 0, 0),
-    }
-    edgeMenuOpen.value = true
-}
 </script>
 
 <template>
@@ -825,13 +747,10 @@ function onEdgeContextMenu({ edge, event }: { edge: Edge; event: MouseEvent | To
                  :nodes-draggable="false"
                  :select-nodes-on-drag="false"
                  :elevate-nodes-on-select="false"
-                 :connection-radius="80"
-                 :auto-connect="false"
+                 :nodes-connectable="false"
                  @node-click="onNodeClick"
                  @node-mouse-enter="onNodeMouseEnter"
                  @node-mouse-leave="onNodeMouseLeave"
-                 @connect="onConnect"
-                 @edge-context-menu="onEdgeContextMenu"
                  @pane-click="emit('pane-click')"
                  @pane-context-menu="onPaneContextMenu">
             <template #node-sourceGroup="{ data }">
@@ -899,13 +818,6 @@ function onEdgeContextMenu({ edge, event }: { edge: Edge; event: MouseEvent | To
             <UIcon :name="appConfig.ui.icons.loading"
                    class="size-5 animate-spin text-dimmed" />
         </div>
-
-        <UDropdownMenu v-model:open="edgeMenuOpen"
-                       :items="edgeMenuItems"
-                       :modal="false"
-                       :content="{ reference: edgeMenuVirtual, side: 'bottom', align: 'start', sideOffset: 4 }">
-            <div class="hidden" />
-        </UDropdownMenu>
 
         <UDropdownMenu v-model:open="paneMenuOpen"
                        :items="paneMenuItems"

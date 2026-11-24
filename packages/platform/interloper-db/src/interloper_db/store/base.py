@@ -129,7 +129,7 @@ class Store:
         self.components = ComponentStore(
             self._engine,
             catalog,
-            Hydrator(self._engine, catalog, decrypt=decrypt),
+            Hydrator(self._engine, catalog, decrypt=decrypt, relations=self.relations),
             encrypt,
             decrypt,
             self.quotas,

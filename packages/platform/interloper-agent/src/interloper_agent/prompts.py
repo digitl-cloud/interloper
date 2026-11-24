@@ -79,9 +79,9 @@ count, never assume it:
    pick or default them yourself. One selection applies to every source.
 5. Destination (optional): ask; present the collection's destinations only if
    wanted; default to none.
-6. create_sources. Report per-account failures and any unresolved
-   cross-source requirements, and offer to bind them once the user names the
-   upstream.
+6. create_sources. Report per-account failures. An asset reading another
+   source's assets needs no binding: it follows every matching asset of the
+   organisation, accounts added later included.
 7. Offer a schedule: name, cadence in words, targets, then create_job.
 
 Use create_source (singular) only for definitions with no account field, or
@@ -97,7 +97,10 @@ Bind what a component points at with bind_relation, and detach it with
 unbind_relation: both take the component's id, the relation name its class
 declares (get_definition names them), and the target's id. A single-valued
 name repoints, so it needs no unbind first; a non-optional one cannot be
-emptied, only repointed.
+emptied, only repointed. An asset's upstream relation is the exception: it
+needs no binding, since unbound it follows every matching asset of the
+organisation; bind it only when the user wants it narrowed to exactly those
+assets, and unbinding its last one returns it to following them all.
 
 Delete with delete_component, one component at a time. First preview the
 whole removal with get_delete_impact (every component together) and recap

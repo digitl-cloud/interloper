@@ -32,13 +32,19 @@ no dialect.
 
 A view is unpartitioned and reads no upstream data, so it may sit on partitioned upstreams: it
 refers to the whole table, and the warehouse resolves the query. It is recreated on every run,
-cheaply and idempotently, so it follows the accounts bound to it. Put it in a job after its
-connectors.
+cheaply and idempotently, so it follows the accounts its relations follow, those added later
+included. Put it in a job after its connectors.
 
-What the graph checks, when it is built: the view has one destination; its dialect, when declared,
-is the destination's; every bound upstream is reachable from that destination (`reaches`, decided
-from configuration: same BigQuery location, same DuckDB database). Anything the query gets wrong is
-the warehouse's verdict when the view is created, reported as the view's failure.
+An upstream the view cannot refer to is left out of what `data()` receives, with a `LOG` warning
+naming it: one with no destination, none this destination reaches (`reaches`, decided from
+configuration: same BigQuery location, same DuckDB database), or no table there yet. A
+many-valued relation's list holds only the upstreams that remain; a single-valued one receives
+`None`. This is judged when the view runs, after its upstreams in the same run, so a table created
+earlier in the run is there.
+
+What the graph checks, when it is built: the view has one destination, and its dialect, when
+declared, is the destination's. Anything the query gets wrong is the warehouse's verdict when the
+view is created, reported as the view's failure.
 
 ### Portable views
 

@@ -136,10 +136,9 @@ class SnapchatAdsStarSchema(il.Source):
     views give amounts in the account currency, taken from the account
     snapshot. Dimensions take their rows from the entity snapshots and fall
     back to the facts' keys, so every key a fact carries resolves; schedules
-    are read in the account's own timezone. Every bound upstream's table must
-    exist, or the view fails when it is created. Views are recreated on every
-    run, so they follow the accounts bound to them; an account added to the
-    organisation is absent until it is bound.
+    are read in the account's own timezone. Views are recreated on every run
+    over every account of the organisation, an account added later included;
+    one with no table yet is skipped with a warning.
     """
 
     @ibis_view(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import time
 from typing import Any, ClassVar
 
 import pytest
@@ -31,11 +32,26 @@ class RecordingWarehouse(DatabaseDestination):
     def count(self, table, dataset, column):
         return {}
 
+    def has_table(self, table, dataset):
+        return True
+
     def table_parts(self, table, dataset):
         return (dataset or "main", table)
 
     def replace_view(self, table, dataset, sql):
         self.views.append((table, dataset, sql))
+
+
+class TrackingWarehouse(RecordingWarehouse):
+    """Warehouse double holding exactly the tables written to it."""
+
+    tables: ClassVar[set[tuple[str | None, str]]] = set()
+
+    def insert(self, table, dataset, data, context):
+        self.tables.add((dataset, table))
+
+    def has_table(self, table, dataset):
+        return (dataset, table) in self.tables
 
 
 class BigQueryLike(RecordingWarehouse):
@@ -65,6 +81,7 @@ class Reporting(il.Source):
 @pytest.fixture(autouse=True)
 def _reset() -> None:
     RecordingWarehouse.views.clear()
+    TrackingWarehouse.tables.clear()
     il.MemoryDestination.clear()
 
 
@@ -131,6 +148,57 @@ class TestRun:
             TableReference(name='"reporting"."order_totals"', parts=("reporting", "order_totals"), schema=None)
         ]
 
+    def test_a_view_skips_an_upstream_it_cannot_reference(self):
+        warehouse = RecordingWarehouse(id="warehouse")
+        reachable = Shop(id="a", destinations=[warehouse], enabled=False)
+        unreachable = Shop(id="b", destinations=[RecordingWarehouse(id="elsewhere")], enabled=False)
+        reporting = Reporting(destinations=[warehouse])
+
+        result = il.DAG(reachable, unreachable, reporting).materialize()
+
+        assert result.status is ExecutionStatus.COMPLETED
+        created = [sql for table, _, sql in RecordingWarehouse.views if table == "order_totals"]
+        assert created == ['SELECT date, total FROM "shop"."orders"']
+
+    def test_a_view_reads_an_upstream_materialized_earlier_in_the_same_run(self):
+        warehouse = TrackingWarehouse(id="warehouse")
+        shop = Shop(destinations=[warehouse])
+        reporting = Reporting(destinations=[warehouse])
+
+        il.DAG(shop, reporting).materialize(il.TimePartition(dt.date(2026, 1, 1)))
+
+        created = [sql for table, _, sql in RecordingWarehouse.views if table == "order_totals"]
+        assert created == ['SELECT date, total FROM "shop"."orders"']
+
+    def test_a_required_single_valued_upstream_with_nothing_to_refer_to_fails_clearly(self):
+        warehouse = TrackingWarehouse(id="warehouse")
+        reporting = Reporting(destinations=[warehouse])
+
+        @il.view(relations={"order_totals": il.Relation("asset", "reporting.order_totals")})
+        def probe(order_totals: il.Upstream) -> str:
+            return f"SELECT * FROM {order_totals.data.name}"
+
+        view = probe(destinations=[warehouse])
+        view.bind("order_totals", reporting.order_totals)
+        result = il.DAG(view).materialize()
+        error = result.executions[view.id].error
+        assert error is not None and "'order_totals' has no readable upstream" in error
+
+    def test_a_view_refers_to_its_upstreams_concurrently(self):
+        class SlowWarehouse(RecordingWarehouse):
+            def has_table(self, table, dataset):
+                time.sleep(0.3)
+                return True
+
+        warehouse = SlowWarehouse(id="warehouse")
+        shops = [Shop(id=str(i), destinations=[warehouse], enabled=False) for i in range(4)]
+        reporting = Reporting(destinations=[warehouse])
+        dag = il.DAG(*shops, reporting.order_totals)
+
+        started = time.monotonic()
+        dag.materialize()
+        assert time.monotonic() - started < 0.9
+
     def test_a_partitioned_run_recreates_the_same_view(self):
         warehouse = RecordingWarehouse(id="warehouse")
         reporting = Reporting(destinations=[warehouse])
@@ -170,20 +238,12 @@ class TestRun:
 
 
 class TestValidation:
-    def test_an_upstream_in_an_unreachable_destination_is_a_config_error(self):
+    def test_validate_relations_no_longer_references_upstreams(self):
         here = RecordingWarehouse(id="here")
-        elsewhere = RecordingWarehouse(id="elsewhere")
-        shop = Shop(destinations=[elsewhere])
-        reporting = Reporting(destinations=[here])
-        with pytest.raises(ConfigError, match=r"shop\.orders"):
-            il.DAG(shop, reporting)
-
-    def test_an_upstream_in_a_viewless_destination_is_a_config_error(self):
-        warehouse = RecordingWarehouse(id="warehouse")
-        shop = Shop(destinations=[il.MemoryDestination(id="memory")])
-        reporting = Reporting(destinations=[warehouse])
-        with pytest.raises(ConfigError, match=r"shop\.orders"):
-            il.DAG(shop, reporting)
+        unreachable = Shop(id="a", destinations=[RecordingWarehouse(id="elsewhere")])
+        viewless = Shop(id="b", destinations=[il.MemoryDestination(id="memory")])
+        undestined = Shop(id="c")
+        il.DAG(unreachable, viewless, undestined, Reporting(destinations=[here]))
 
     def test_a_view_needs_exactly_one_destination(self):
         shop = Shop(destinations=[RecordingWarehouse(id="a")])

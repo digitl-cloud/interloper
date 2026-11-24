@@ -361,6 +361,19 @@ class FabricWarehouseDestination(DatabaseDestination):
                 names, rows = _fetch(session, f"SELECT * FROM {ref} WHERE {predicate}", parameters)
         return [dict(zip(names, row, strict=True)) for row in rows]
 
+    def has_table(self, table: str, dataset: str | None) -> bool:
+        """Whether the table exists, read from the catalog views.
+
+        Args:
+            table: Target table name.
+            dataset: The schema, or ``None`` for the destination's default.
+
+        Returns:
+            True when the table exists.
+        """
+        with self._session() as session:
+            return bool(self._columns(session, table, self._schema(dataset)))
+
     def count(self, table: str, dataset: str | None, column: str) -> dict[str, int]:
         """Return row counts grouped by a column's values, cast to text.
 

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { SplitterItem } from '@nuxt/ui'
 import type { ComponentRecord } from '~/types/component'
-import type { DependencyPair } from '~/composables/graph'
 import { qualifiedKey } from '~/types/catalog'
 
 /**
@@ -98,42 +97,6 @@ async function onDeleteSource(sourceId: string) {
     }
     catch (e) {
         toast.add(inUseToast(e, 'Source') ?? errorToast(e, "Couldn't delete the source"))
-    }
-}
-
-// -- The graph's dependency editing ---------------------------------------------
-
-async function onCreateDependencies(pairs: DependencyPair[]) {
-    try {
-        await Promise.all(
-            pairs.map(({ downstreamAssetId, upstreamAssetId, paramName, many }) =>
-                componentsStore.addRelation(
-                    downstreamAssetId,
-                    { name: paramName, dst_id: upstreamAssetId },
-                    { many },
-                ),
-            ),
-        )
-    }
-    catch (e) {
-        toast.add(errorToast(e, "Couldn't create the dependency"))
-    }
-}
-
-async function onDeleteDependency(payload: { upstreamAssetId: string; downstreamAssetId: string; name?: string }) {
-    if (!payload.name) {
-        toast.add({
-            title: "Couldn't delete the dependency",
-            description: 'The relation was not found. Reload the page and try again.',
-            color: 'error',
-        })
-        return
-    }
-    try {
-        await componentsStore.removeRelation(payload.downstreamAssetId, payload.name, payload.upstreamAssetId)
-    }
-    catch (e) {
-        toast.add(errorToast(e, "Couldn't delete the dependency"))
     }
 }
 
@@ -240,8 +203,6 @@ function closePane() {
                                              @edit-source="onEditSource"
                                              @asset-click="onAssetClick"
                                              @delete-source="onDeleteSource"
-                                             @create-dependencies="onCreateDependencies"
-                                             @delete-dependency="onDeleteDependency"
                                              @pane-click="panelOpen && closePane()" />
                         </UCard>
                     </template>

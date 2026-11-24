@@ -159,10 +159,9 @@ class FacebookAdsStarSchema(il.Source):
     one is collected, else from the report, else from the fact's own keys, so
     every key a fact carries resolves. Budgets, which Facebook sends in
     hundredths of most currencies but whole yen or won, are given in the
-    account's currency using its own offset. Every bound upstream's table must
-    exist, or the view fails when it is created. Views are recreated on every
-    run, so they follow the accounts bound to them; an account added to the
-    organisation is absent until it is bound.
+    account's currency using its own offset. Views are recreated on every run
+    over every account of the organisation, an account added later included;
+    one with no table yet is skipped with a warning.
     """
 
     @ibis_view(

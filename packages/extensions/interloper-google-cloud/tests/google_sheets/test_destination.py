@@ -311,3 +311,10 @@ class TestRetry:
         api = sheets._SheetsAPI("sheet-id", cast(Any, object()))
 
         assert api._client.retry == il.HttpRetryPolicy()
+
+
+class TestHasTable:
+    def test_has_table_is_false_before_the_first_write_and_true_after(self, fake, dest):
+        assert dest.has_table("report", "sales") is False
+        fake.tabs["sales.report"] = []
+        assert dest.has_table("report", "sales") is True

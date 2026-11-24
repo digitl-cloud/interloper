@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection, Hashable, Mapping
 from types import UnionType
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Union, get_args, get_origin, overload
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, TypeVar, Union, get_args, get_origin, overload
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from pydantic_settings import BaseSettings
@@ -12,6 +13,7 @@ if TYPE_CHECKING:
     from interloper.component.base import Component
 
 ANY_SOURCE = "*"
+K = TypeVar("K", bound=Hashable)
 
 
 def unwrap_optional(hint: Any, namespace: dict[str, Any]) -> tuple[Any, bool]:
@@ -350,6 +352,39 @@ class Relation(BaseModel):
         """
         keys = self.keys
         return bool(keys) and all("." not in key for key in keys)
+
+    def matches(
+        self, owner: ComponentIdentity, candidates: Mapping[K, ComponentIdentity], *, siblings: Collection[K]
+    ) -> list[K]:
+        """The candidate assets this relation accepts for an owner asset, the one matching rule.
+
+        What fills an unbound upstream relation is decided here, whatever the
+        pool: the DAG passes its other nodes, the platform its organisation's
+        assets. A candidate matches when `accepts` takes its identity as an
+        asset; a `local` relation also keeps only the owner's siblings, since
+        a bare key names an asset of the owner's own source instance. A
+        relation declaring no key matches nothing: it says nothing about
+        which assets fill it. How many of the matches a relation may hold is
+        the caller's to judge.
+
+        Args:
+            owner: The identity of the asset declaring this relation.
+            candidates: The pool, each candidate's handle (an id) mapped to its
+                identity. The owner itself is left out by the caller.
+            siblings: The handles of the candidates owned by the owner's own
+                source instance.
+
+        Returns:
+            The handles of the matching candidates, in the pool's order.
+        """
+        if not self.keys:
+            return []
+        local = self.local
+        return [
+            handle
+            for handle, identity in candidates.items()
+            if self.accepts("asset", identity, owner=owner) and (not local or handle in siblings)
+        ]
 
     @property
     def has_fallback(self) -> bool:

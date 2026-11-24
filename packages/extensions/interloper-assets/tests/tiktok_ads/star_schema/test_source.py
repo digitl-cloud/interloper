@@ -302,17 +302,18 @@ class TestOnDuckDB:
         for (table, key), expected in keys.items():
             assert {row[key] for row in _rows(warehouse, table)} == expected
 
-    def test_a_missing_advertiser_table_fails_the_view(self, warehouse):
-        first = _advertiser("111", warehouse)
+    def test_a_missing_advertiser_table_is_skipped(self, warehouse):
+        missing = _advertiser("111", warehouse)
+        present = _advertiser("222", warehouse)
+        _seed(warehouse, "222")
         star = TiktokAdsStarSchema(destinations=[warehouse])
-        result = il.DAG(first, star).materialize()
-        assert result.status is ExecutionStatus.FAILED
-        error = result.executions[star.fact_campaign_performance.id].error
-        assert error is not None and "ads_stats__111" in error
+        result = il.DAG(missing, present, star).materialize()
+        assert result.executions[star.fact_campaign_performance.id].status is ExecutionStatus.COMPLETED
+        assert {row["account_id"] for row in _rows(warehouse, "fact_campaign_performance")} == {"222"}
 
     def test_a_fact_with_no_advertiser_bound_fails_clearly(self, warehouse):
         star = TiktokAdsStarSchema(destinations=[warehouse])
         result = il.DAG(star).materialize()
         assert result.status is ExecutionStatus.FAILED
         error = result.executions[star.fact_campaign_performance.id].error
-        assert error is not None and "no upstream bound" in error
+        assert error is not None and "no readable upstream" in error

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from interloper.asset.base import Asset
 from interloper.asset.output import Output
@@ -58,21 +58,21 @@ class View(Asset):
     def validate_relations(self, nodes: Mapping[str, Component] | None = None) -> None:
         """Check the relations as any asset, then what only a view needs.
 
-        The view's own checks need the graph: one destination; a dialect, when
-        declared, that the destination shares; every bound upstream reachable
-        from that destination. They run at graph build, where the DAG supplies
-        ``nodes``, and not when a component is rebuilt from its spec, so a view
-        source hydrates before a job supplies its destination. A manifest
-        loaded through ``DAG.from_spec_file`` still gets them because it
-        builds a DAG.
+        The view's own checks need the graph: one destination, and a dialect,
+        when declared, that the destination shares. They run at graph build,
+        where the DAG supplies ``nodes``, and not when a component is rebuilt
+        from its spec, so a view source hydrates before a job supplies its
+        destination. A manifest loaded through ``DAG.from_spec_file`` still
+        gets them because it builds a DAG. Whether each upstream can be
+        referenced is not checked here: it is judged when the view runs,
+        where one that cannot be is skipped with a warning.
 
         Args:
             nodes: Every node materializing in the same run, keyed by id, or ``None``.
 
         Raises:
-            ConfigError: If the view has no single destination, its dialect
-                does not match the destination's, or an upstream cannot be
-                referenced from it.
+            ConfigError: If the view has no single destination, or its dialect
+                does not match the destination's.
         """
         super().validate_relations(nodes)
         if nodes is None:
@@ -88,12 +88,6 @@ class View(Asset):
                 problems.append(
                     f"written in dialect '{self.dialect}' but destination '{destination.key}' speaks {declared!r}"
                 )
-            for name in self.upstream_relations():
-                for target in cast("list[Asset]", self._bound.get(name, [])):
-                    try:
-                        destination.reference(target)
-                    except ConfigError as error:
-                        problems.append(f"'{name}' upstream '{target.qualified_key}': {error}")
         if problems:
             raise ConfigError(f"View '{self.qualified_key}': " + "; ".join(problems))
 

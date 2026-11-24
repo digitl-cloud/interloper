@@ -81,7 +81,7 @@ const props = withDefaults(defineProps<{
     optionsContext?: Record<string, { label: string, value: string }[]>
     /** Page-owned payload contributions (children, extra relations), read at submit. */
     extraInput?: () => { children?: string[], relations?: Record<string, RelationInput[]> }
-    /** Post-save work needing the saved record (e.g. wiring asset dependencies). */
+    /** Post-save work needing the saved record (e.g. selecting what was just created). */
     afterSave?: (saved: ComponentRecord) => Promise<void>
 }>(), {
     definitionKey: undefined,

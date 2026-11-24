@@ -23,22 +23,12 @@ export function useAssetWarnings() {
     const sources = computed(() => componentsStore.byKind('source'))
 
     /** Recorded upstream asset IDs per asset. */
-    const upstreamsByAssetId = computed(() => {
+    /** asset id → the upstream relation names that follow at least one asset. */
+    const followedByAssetId = computed(() => {
         const map = new Map<string, Set<string>>()
         for (const dep of componentsStore.upstreams) {
             if (!map.has(dep.src_id)) map.set(dep.src_id, new Set())
-            map.get(dep.src_id)!.add(dep.dst_id)
-        }
-        return map
-    })
-
-    /** asset id → asset record, across all sources. */
-    const assetById = computed(() => {
-        const map = new Map<string, ComponentRecord>()
-        for (const source of sources.value) {
-            for (const asset of source.children) {
-                map.set(asset.id, asset)
-            }
+            map.get(dep.src_id)!.add(dep.name)
         }
         return map
     })
@@ -93,26 +83,11 @@ export function useAssetWarnings() {
 
         // --- Dependency warnings ---
         if (defn) {
-            const recorded = upstreamsByAssetId.value.get(assetId) ?? new Set()
-            for (const [_param, depQk] of Object.entries(requiredUpstreams(defn))) {
-                // A dep is satisfied by a recorded upstream matching the declared
-                // identity — a sibling of this source instance for intra-source
-                // deps, any instance of the named source for cross-source ones.
-                const { sourceKey: depSourceKey, assetKey: depAssetKey } = parseQualifiedKey(depQk)
-                const anySource = depSourceKey === ANY_SOURCE
-                const intraSource = !depSourceKey || depSourceKey === source?.key
-                const satisfied = [...recorded].some((upstreamId) => {
-                    const upstream = assetById.value.get(upstreamId)
-                    if (!upstream || upstream.key !== depAssetKey) return false
-                    const upstreamSource = sourceByAssetId.value.get(upstreamId)
-                    if (anySource) return !!upstreamSource
-                    return intraSource ? upstreamSource?.id === source?.id : upstreamSource?.key === depSourceKey
-                })
-                if (!satisfied) {
-                    const depDefn = getAssetDefinition(depQk)
-                    const depName = depDefn?.name ?? depQk
-                    warnings.push({ category: 'dependency', message: `Missing dependency: ${depName}` })
-                }
+            const followed = followedByAssetId.value.get(assetId) ?? new Set()
+            for (const [name, depQk] of Object.entries(requiredUpstreams(defn))) {
+                if (followed.has(name)) continue
+                const depName = getAssetDefinition(depQk)?.name ?? depQk
+                warnings.push({ category: 'dependency', message: `No matching upstream: ${depName}` })
             }
         }
 
