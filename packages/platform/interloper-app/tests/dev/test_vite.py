@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -82,6 +83,18 @@ def test_its_output_and_its_install_s_are_logged_under_vite(tmp_path: Path, monk
     _server(tmp_path, group, monkeypatch).start()
 
     assert group.outputs == ["vite", "vite"]
+
+
+def test_an_install_says_so_since_it_runs_quiet(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+):
+    caplog.set_level(logging.INFO, logger="interloper_app")
+
+    _server(tmp_path, _Group(), monkeypatch).start()
+    (tmp_path / "node_modules").mkdir()
+    _server(tmp_path, _Group(), monkeypatch).start()
+
+    assert caplog.messages == ["Installing the acme UI's dependencies (npm install)"]
 
 
 def test_the_install_runs_in_the_group_dev_stops(tmp_path: Path):
