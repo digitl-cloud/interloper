@@ -201,8 +201,7 @@ onMounted(loadData)
                        @reset-filters="orgFilter = ALL_ORGS"
                        @retry="loadData">
                 <template #filters>
-                    <FilterBarField label="Organisation"
-                                    :inline-label="false">
+                    <FilterBarField label="Organisation">
                         <USelect v-model="orgFilter"
                                  :items="orgOptions"
                                  value-key="value"

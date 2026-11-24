@@ -23,7 +23,7 @@ const open = ref(true)
                     :aria-expanded="open"
                     @click="open = !open">
                 <slot name="title">
-                    <span class="font-semibold text-highlighted">{{ title }}</span>
+                    <span class="font-medium text-highlighted">{{ title }}</span>
                 </slot>
                 <UBadge v-if="count"
                         color="neutral"

@@ -166,15 +166,13 @@
     }
 }
 
-/* A section's label (Input, History, a separator's label): one size, weight and spacing for all of
-   them, the colour from a text utility. Outside the layers, so it holds against a component's own
-   label size. */
+/* A section's label (Input, History, a separator's label): one size and weight for all of them, in
+   sentence case, the colour from a text utility. Outside the layers, so it holds against a
+   component's own label size. */
 .caption {
     font-size: --theme(--text-xs);
     line-height: --theme(--text-xs--line-height);
     font-weight: --theme(--font-weight-medium);
-    letter-spacing: --theme(--tracking-wider);
-    text-transform: uppercase;
 }
 
 /* Scrollbar */

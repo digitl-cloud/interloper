@@ -210,7 +210,7 @@ const dependencyRows = computed(() => {
                                class="size-6" />
                     </span>
                     <span class="min-w-0 flex-1">
-                        <span class="block truncate font-semibold text-highlighted">
+                        <span class="block truncate font-medium text-highlighted">
                             {{ assetDefn?.name ?? asset.key }}
                         </span>
                         <span class="mt-0.5 flex min-w-0 items-center gap-2">

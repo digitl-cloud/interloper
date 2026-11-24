@@ -19,9 +19,12 @@ export default defineAppConfig({
         variant: 'soft'
       }
     },
+    // The primary action is the inverted tone (white on dark, black on light): blue stays for links,
+    // focus, selection and the info status.
     button: {
       defaultVariants: {
         size: 'lg',
+        color: 'neutral',
         variant: 'solid'
       }
     },
@@ -35,7 +38,7 @@ export default defineAppConfig({
         // cards squash to fit a page body instead of letting it scroll.
         root: 'shrink-0',
         header: 'sm:px-4',
-        title: 'text-highlighted font-semibold',
+        title: 'text-highlighted font-medium',
         description: 'mt-1 text-muted text-sm',
         body: 'sm:p-4 [[data-slot=header]+&]:pt-0 sm:[[data-slot=header]+&]:pt-0',
         footer: 'sm:px-4 [[data-slot=body]+&]:pt-0'
@@ -70,7 +73,8 @@ export default defineAppConfig({
       }
     },
     // A page is padded and spaced 16px at every width (the theme steps up to 24px from `sm`), and its
-    // navbar and toolbar keep their edges in line with it.
+    // navbar and toolbar keep their edges in line with it. The navbar draws no rule: it and the page
+    // are one surface.
     // The agent panel slides in below the navbar: the toolbar and the body make room for it
     // (the panel sizes `agent-room` from its own stylesheet), the navbar keeps the full width.
     dashboardPanel: {
@@ -80,7 +84,7 @@ export default defineAppConfig({
     },
     dashboardNavbar: {
       slots: {
-        root: 'sm:px-4'
+        root: 'sm:px-4 border-b-0'
       }
     },
     // A page's toolbar (its sub-page tabs, a detail page's actions) is the first row of the page's
@@ -131,16 +135,15 @@ export default defineAppConfig({
             link: 'before:ring before:ring-default'
           }
         },
-        // Horizontal pills (a page's sub-page tabs) are a segmented control, the same as the
-        // pill UTabs below: a card-toned track, the active view a raised chip. The ring sits
-        // inside the track so a scrolling toolbar cannot clip it.
+        // Horizontal pills (a page's sub-page tabs) are navigation, not a control: no track, the
+        // current view a lighter pill, each as tall as the buttons beside them in the toolbar.
         {
           orientation: 'horizontal',
           variant: 'pill',
           class: {
-            list: 'gap-1 rounded-lg bg-muted p-1 ring ring-inset ring-default',
+            list: 'gap-1',
             item: 'py-0',
-            link: 'px-3 py-1',
+            link: 'px-3 py-2',
             linkLeadingIcon: 'size-4'
           }
         },
@@ -149,8 +152,7 @@ export default defineAppConfig({
           variant: 'pill',
           active: true,
           class: {
-            link: 'before:bg-default before:shadow-xs dark:before:bg-inverted dark:text-inverted',
-            linkLeadingIcon: 'dark:text-inverted'
+            link: 'text-highlighted before:bg-elevated'
           }
         }
       ]
@@ -165,40 +167,112 @@ export default defineAppConfig({
         }
       }
     },
+    // Inputs and selects are filled, the same fill at rest and on hover, and ringed only while focused.
     input: {
+      variants: {
+        variant: {
+          soft: 'bg-elevated hover:bg-elevated'
+        }
+      },
+      compoundVariants: [
+        {
+          color: 'primary',
+          variant: 'soft',
+          class: 'focus-visible:ring focus-visible:ring-inset focus-visible:ring-primary'
+        }
+      ],
       defaultVariants: {
-        size: 'lg'
+        size: 'lg',
+        variant: 'soft'
       }
     },
     textarea: {
+      variants: {
+        variant: {
+          soft: 'bg-elevated hover:bg-elevated'
+        }
+      },
+      compoundVariants: [
+        {
+          color: 'primary',
+          variant: 'soft',
+          class: 'focus-visible:ring focus-visible:ring-inset focus-visible:ring-primary'
+        }
+      ],
       defaultVariants: {
-        size: 'lg'
+        size: 'lg',
+        variant: 'soft'
       }
     },
     inputTags: {
+      variants: {
+        variant: {
+          soft: 'bg-elevated hover:bg-elevated'
+        }
+      },
+      compoundVariants: [
+        {
+          color: 'primary',
+          variant: 'soft',
+          class: 'has-focus-visible:ring has-focus-visible:ring-inset has-focus-visible:ring-primary'
+        }
+      ],
       defaultVariants: {
-        size: 'lg'
+        size: 'lg',
+        variant: 'soft'
       }
     },
     select: {
+      variants: {
+        variant: {
+          soft: 'bg-elevated hover:bg-elevated'
+        }
+      },
+      compoundVariants: [
+        {
+          color: 'primary',
+          variant: 'soft',
+          class: 'focus-visible:ring focus-visible:ring-inset focus-visible:ring-primary'
+        }
+      ],
       defaultVariants: {
-        size: 'lg'
+        size: 'lg',
+        variant: 'soft'
       }
     },
     selectMenu: {
+      variants: {
+        variant: {
+          soft: 'bg-elevated hover:bg-elevated'
+        }
+      },
+      compoundVariants: [
+        {
+          color: 'primary',
+          variant: 'soft',
+          class: 'focus-visible:ring focus-visible:ring-inset focus-visible:ring-primary'
+        }
+      ],
       defaultVariants: {
-        size: 'lg'
+        size: 'lg',
+        variant: 'soft'
       }
     },
     table: {
       // Borderless tables: rows sit on the card tone, divided by the line
-      // color, and the first and last columns align with the card's padding.
-      // Sticky headers take the card tone so rows scrolling beneath don't
-      // show through.
+      // color. The table reaches 8px into the card's padding and its first and
+      // last cells pad themselves back, so the text aligns with the card's
+      // while a row's highlight (and a sortable header's) runs past it.
+      // Headers label quietly; the first column carries the row's name. A row
+      // is a `group/row`, so what it holds can answer its hover (the options
+      // menu). Sticky headers take the card tone so rows scrolling beneath
+      // don't show through.
       slots: {
+        root: '-mx-2',
         separator: 'bg-(--ui-border)',
-        th: 'py-3 first:ps-0 last:pe-0',
-        td: 'py-3 first:ps-0 last:pe-0'
+        tr: 'group/row',
+        th: 'py-3 first:ps-2 last:pe-2 text-muted font-normal',
+        td: 'py-3 first:ps-2 last:pe-2 first:text-highlighted first:font-medium'
       },
       variants: {
         sticky: {
@@ -220,8 +294,23 @@ export default defineAppConfig({
         variant: 'soft'
       }
     },
+    // Section headers above a card: title and description take the row and wrap only when it runs
+    // out; the actions keep their own width (the theme splits the row in two equal columns).
+    pageCard: {
+      slots: {
+        title: 'font-medium'
+      },
+      variants: {
+        orientation: {
+          horizontal: {
+            container: 'lg:flex lg:flex-row'
+          }
+        }
+      }
+    },
     modal: {
       slots: {
+        title: 'font-medium',
         footer: 'justify-end'
       }
     },
@@ -236,8 +325,10 @@ export default defineAppConfig({
         root: 'gap-6'
       }
     },
-    // Segmented control: the active pill takes the panel tone on a card-toned track
-    // (theme default is a solid primary pill). A track wider than its room scrolls sideways.
+    // Segmented control (a filter, a view switch): a track filled like the inputs, the chosen value a
+    // raised chip (theme default is a solid primary pill). A track wider than its room scrolls
+    // sideways. It stands as tall as the controls beside it: a toolbar's inputs and buttons (sm,
+    // 36px), a card header's small buttons (xs, 28px).
     tabs: {
       compoundVariants: [
         {
@@ -245,9 +336,26 @@ export default defineAppConfig({
           variant: 'pill',
           class: {
             root: 'min-w-0',
-            list: 'max-w-full overflow-x-auto bg-muted ring ring-inset ring-default',
-            indicator: 'bg-default shadow-xs dark:bg-inverted',
-            trigger: 'shrink-0 data-[state=active]:text-highlighted dark:data-[state=active]:text-inverted'
+            list: 'max-w-full overflow-x-auto bg-elevated',
+            indicator: 'bg-default shadow-xs dark:bg-accented',
+            trigger: 'shrink-0 data-[state=active]:text-highlighted'
+          }
+        },
+        {
+          color: 'primary',
+          variant: 'pill',
+          size: 'sm',
+          class: {
+            trigger: 'h-7'
+          }
+        },
+        {
+          color: 'primary',
+          variant: 'pill',
+          size: 'xs',
+          class: {
+            list: 'p-0.5',
+            trigger: 'h-6'
           }
         },
         // Vertical, the pills are a list (the phone's filter sheet): full-width rows, counts at the end.
@@ -270,6 +378,7 @@ export default defineAppConfig({
     // of what scrolls in it are not clipped at its edge. Side drawers share one width.
     drawer: {
       slots: {
+        title: 'font-medium',
         container: 'overflow-hidden',
         body: '-mx-4 -my-1 min-h-0 overflow-y-auto px-4 py-1'
       },

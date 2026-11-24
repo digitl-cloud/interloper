@@ -17,8 +17,7 @@ const items = computed(() => [
 </script>
 
 <template>
-    <FilterBarField label="Status"
-                    :inline-label="false">
+    <FilterBarField label="Status">
         <USelect :model-value="status ?? ALL"
                  :items="items"
                  value-key="value"

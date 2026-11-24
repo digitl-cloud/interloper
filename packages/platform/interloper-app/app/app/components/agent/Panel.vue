@@ -148,7 +148,7 @@ const SUGGESTIONS = [
                        class="size-5" />
             </div>
             <div class="min-w-0 flex-1">
-                <div class="font-semibold text-highlighted">Agent</div>
+                <div class="font-medium text-highlighted">Agent</div>
                 <div class="text-xs text-muted">Reads your sources, jobs and runs</div>
             </div>
             <UButton :icon="appConfig.ui.icons.plus"

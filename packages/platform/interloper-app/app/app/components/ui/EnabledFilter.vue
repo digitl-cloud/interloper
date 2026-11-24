@@ -14,8 +14,7 @@ const items = [
 </script>
 
 <template>
-    <FilterBarField label="State"
-                    :inline-label="false">
+    <FilterBarField label="State">
         <USelect :model-value="enabled === null ? ALL : enabled ? 'enabled' : 'disabled'"
                  :items="items"
                  value-key="value"

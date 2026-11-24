@@ -84,7 +84,7 @@ function outcome(attempt: RunAttempt): string {
                 :ui="{
                     root: 'flex w-full flex-col gap-3',
                     item: 'overflow-hidden rounded-lg border-b-0 bg-muted',
-                    trigger: 'px-4 py-3 text-sm font-semibold',
+                    trigger: 'px-4 py-3 text-sm font-medium',
                     content: 'flex flex-col',
                 }">
         <template #trailing="{ item, ui }">
@@ -142,7 +142,7 @@ function outcome(attempt: RunAttempt): string {
                          class="flex-col items-stretch gap-2 rounded-none px-4 py-2 text-left">
                     <span class="flex items-center gap-2">
                         <StatusDot :status="attempt.run.status" />
-                        <span class="text-sm font-semibold">Attempt {{ attempt.run.attempt }}</span>
+                        <span class="text-sm font-medium">Attempt {{ attempt.run.attempt }}</span>
                         <span class="text-xs font-normal tabular-nums slashed-zero text-dimmed">{{ shortId(attempt.run.id) }}</span>
                         <span class="ms-auto text-xs font-normal tabular-nums text-muted">{{ attempt.stats.duration ?? '—' }}</span>
                     </span>
