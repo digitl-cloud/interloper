@@ -1,10 +1,10 @@
 name: Release
 
-# Cuts the release only: checks, semantic-release (version bump, tag,
-# changelog, GitHub release) and the PyPI publish. Docker images and the
-# Helm chart are published by the Publish workflow, which fires on the
-# GitHub release semantic-release publishes — and can be re-run for that
-# tag independently.
+# Cuts a version: checks, then semantic-release (version bump, release commit,
+# tag, changelog, GitHub release). It publishes nothing: the GitHub release it
+# creates triggers the Publish workflow, which builds the tag and publishes it
+# to PyPI, npm and GHCR. Re-running it after a release finds the tag and does
+# nothing.
 
 on:
   workflow_dispatch:
@@ -37,7 +37,6 @@ jobs:
 
     permissions:
       contents: "write"
-      id-token: "write"
 
     steps:
       - name: Get GitHub App token
@@ -82,7 +81,6 @@ jobs:
         run: uv run pytest -n auto --maxprocesses 4
 
       - name: Release
-        id: release
         uses: python-semantic-release/python-semantic-release@v10
         with:
           prerelease: ${{ inputs.release_type == 'release-candidate' }}
@@ -93,7 +91,7 @@ jobs:
           force: ${{ inputs.force != 'auto' && inputs.force || '' }}
           # Runs the configured build_command (`uv lock`) so the release
           # commit carries a lock file consistent with the stamped versions.
-          # The actual package build happens in the publish step below.
+          # The packages themselves are built by the Publish workflow.
           build: true
           changelog: ${{ inputs.release_type == 'stable' }}
           commit: true
@@ -102,40 +100,3 @@ jobs:
           github_token: ${{ steps.app-token.outputs.token }}
           git_committer_email: "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
           git_committer_name: "Semantic Release"
-
-      - name: Setup pnpm
-        if: steps.release.outputs.released == 'true'
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node
-        if: steps.release.outputs.released == 'true'
-        uses: actions/setup-node@v7
-        with:
-          node-version: 26
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      # interloper-app's wheel carries the SPA and each extension's wheel its UI
-      # bundle, so they build first.
-      - name: Build the app and extension UIs
-        if: steps.release.outputs.released == 'true'
-        run: make build-app build-extensions
-
-      # Packed before the PyPI publish, so an SDK that does not pack stops both publishes.
-      - name: Pack the UI SDK
-        if: steps.release.outputs.released == 'true'
-        working-directory: packages/platform/interloper-app/sdk
-        run: pnpm pack --pack-destination "$RUNNER_TEMP/sdk"
-
-      - name: Build & Publish
-        if: steps.release.outputs.released == 'true'
-        run: |
-          uv build --all-packages
-          uv publish --trusted-publishing always
-
-      - name: Publish the UI SDK
-        if: steps.release.outputs.released == 'true'
-        # npm refuses a prerelease without a dist-tag; a release candidate must never become `latest`.
-        run: |
-          npm --version
-          npm publish "$RUNNER_TEMP"/sdk/*.tgz --provenance --access public --tag ${{ inputs.release_type == 'release-candidate' && 'rc' || 'latest' }}

@@ -1,24 +1,34 @@
 # Releasing
 
-Releases are automated by the **Release** workflow
-([`.github/workflows/release.yaml`](.github/workflows/release.yaml)), triggered
-manually (`workflow_dispatch`, `stable` or `release-candidate`). The `release`
-job runs `python-semantic-release` to bump the shared version, tag, and create
-the GitHub release. When a release is cut, four sets of artifacts are then
-published:
+A release takes two workflows, one responsibility each:
 
-1. **PyPI** — `uv build --all-packages` + `uv publish --trusted-publishing always`
-   publishes every workspace package (in the `release` job).
-2. **npm**: the `release` job packs `@interloper/ui`, the SDK extension UIs
-   build with, before the PyPI publish, so a pack failure stops both publishes,
-   and publishes it after, with npm trusted publishing and provenance (see
-   below). The tag, the GitHub release and the images it triggers are out by
-   then either way.
-3. **Docker images → GHCR** — the `docker` job builds each component image and
-   pushes it to `ghcr.io/<owner>/interloper-<role>` (see below).
-4. **Helm chart → GHCR** — the `helm` job packages `chart/interloper` and
-   pushes it as an OCI artifact beside the images (stable releases only; see
-   below).
+- **Release** ([`.github/workflows/release.yaml`](.github/workflows/release.yaml)),
+  dispatched by hand (`stable` or `release-candidate`), cuts the version: it
+  runs the checks, then `python-semantic-release` bumps the shared version,
+  commits, tags and creates the GitHub release. It publishes nothing; re-running
+  it after a release finds the tag and does nothing.
+- **Publish** ([`.github/workflows/publish.yaml`](.github/workflows/publish.yaml)),
+  triggered by that GitHub release, publishes the tag everywhere:
+  1. **Build**: the `build` job builds the SPA and the extension UIs, every
+     workspace package (`uv build --all-packages`) and the `@interloper/ui`
+     tarball (`pnpm pack`) once, into one artifact. A build that fails
+     publishes nothing.
+  2. **PyPI**: the `pypi` job publishes the artifact's wheels and sdists with
+     trusted publishing (see below).
+  3. **npm**: the `npm` job publishes `@interloper/ui`, the SDK extension UIs
+     build with, with trusted publishing and provenance (see below).
+  4. **Docker images → GHCR**: the `docker` job builds each role's images and
+     pushes them to `ghcr.io/<owner>/interloper-<role>` (see below).
+  5. **Helm chart → GHCR**: the `helm` job packages `chart/interloper` and
+     pushes it as an OCI artifact beside the images (stable releases only; see
+     below).
+
+  PyPI and npm wait on the build, and no publish job waits on another, so one
+  registry's outage holds up only its own job.
+
+A release candidate gets a prerelease version (`<version>-rc.<n>`): PyPI
+publishes it as a prerelease, npm under the `rc` dist-tag so it never becomes
+`latest`, the images without moving `latest`, and the chart not at all.
 
 `semantic-release` bumps the chart's `version` and `appVersion` in
 [`chart/interloper/Chart.yaml`](chart/interloper/Chart.yaml) and the `version`
@@ -26,58 +36,87 @@ of [`packages/platform/interloper-app/sdk/package.json`](packages/platform/inter
 alongside the Python version, so the published chart, the image tag it deploys
 and the SDK always match the release.
 
-Things to configure on the repo before the first release:
+## Recovering a failed publish
 
-- **GitHub App credentials** — secrets `SEMANTIC_RELEASE_APP_ID` and
-  `SEMANTIC_RELEASE_APP_KEY` (a GitHub App with `contents: write`), used to author
-  the release commit and tag. These may be set at the repo or org level; if set
-  on the org, make sure the `interloper` repository is granted access.
-- **PyPI trusted publishing** for each published package — see below.
+Every publish job makes the version present and skips what already is: the
+`pypi` job skips the files PyPI lists, the `npm` job a version npm has, and
+the image and chart pushes overwrite the same tags. So a failed job is
+recovered with **Re-run failed jobs** on the Publish run: the jobs that
+succeeded stay done, and a re-run `pypi` or `npm` job publishes the same build
+artifact.
+
+GitHub re-runs a workflow run for 30 days. Past that, or if the release event
+never started the Publish workflow, dispatch it with the tag; it rebuilds the
+tag and publishes whatever is still missing:
+
+```bash
+gh workflow run publish.yaml -f tag=v<version>
+```
+
+A rebuild of interloper-app is not byte-identical to the first (Nuxt stamps
+each SPA build with a fresh id), which is why the `pypi` job skips a file by
+its name: a file name PyPI lists can never take other content.
+
+Never cut another version to retry a publish.
+
+## Before the first release
+
+Things to configure on the repo:
+
+- **GitHub App credentials**: secrets `SEMANTIC_RELEASE_APP_ID` and
+  `SEMANTIC_RELEASE_APP_KEY` (a GitHub App with `contents: write`), used to
+  author the release commit and tag and to create the GitHub release, whose
+  event starts the Publish workflow (an event created with the built-in token
+  starts none). These may be set at the repo or org level; if set on the org,
+  make sure the `interloper` repository is granted access.
+- **PyPI trusted publishing** for each published package: see below.
 - **npm trusted publishing** for `@interloper/ui`: see below.
-- **Package visibility** — the first chart push creates the `charts/interloper`
+- **Package visibility**: the first chart push creates the `charts/interloper`
   package as private. Make it public (repo → *Packages* → the package →
   *Package settings*) so unauthenticated clients can pull it.
 
-The Docker and Helm pushes use the built-in `GITHUB_TOKEN` (`packages: write`)
-— no extra secret needed.
+The Docker and Helm pushes use the built-in `GITHUB_TOKEN` (`packages: write`),
+so they need no extra secret.
 
 ## PyPI trusted publishing (one-time bootstrap)
 
-The workflow publishes via [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/)
+The `pypi` job publishes via [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/)
 (OIDC), so no long-lived API tokens live in CI. Each published package needs a
-trusted publisher on PyPI pointing at this repository and the Release workflow.
+trusted publisher on PyPI pointing at this repository and the Publish workflow.
+Every workspace package (`packages/*/*`) is published.
 
 ### The monorepo limitation
 
 PyPI's account-level **pending publisher** page
 (`https://pypi.org/manage/account/publishing/`) does not allow registering
 multiple pending publishers that share the same **owner + repository + workflow**.
-Because every package here is released from the same repo and the same
-`release.yaml`, the packages cannot all be pre-registered as pending publishers
+Because every package here is published from the same repo and the same
+`publish.yaml`, the packages cannot all be pre-registered as pending publishers
 from that global page.
 
 ### Workaround: token-publish once, then add the publisher per project
 
 A trusted publisher *can* be added on an existing project's own settings page even
-when it shares the repo + workflow with other projects. So bootstrap each package
-once with a token to create the project, then attach the trusted publisher there.
+when it shares the repo + workflow with other projects. So bootstrap each new
+package once with a token to create the project, then attach the trusted
+publisher there.
 
-For each package that does not yet exist on PyPI:
+The first release that carries a new package fails its `pypi` job on that
+package. Then:
 
-1. Create a PyPI **API token** (account-scoped — the project doesn't exist yet):
-   PyPI → *Account settings* → *API tokens*.
+1. Create a PyPI **API token** (account-scoped, since the project doesn't exist
+   yet): PyPI → *Account settings* → *API tokens*.
 
-2. Build and publish that single package with the token (this creates the project):
+2. Publish that package's files from the failed run's artifact with the token
+   (this creates the project):
 
    ```bash
-   uv build --package <package-name> -o dist/
-   uv publish --token <pypi-token> dist/<dist-prefix>-*
+   gh run download <run-id> --name dist --dir dist
+   uv publish --token <pypi-token> dist/pypi/<dist-prefix>-*
    ```
 
    Distribution filenames normalize hyphens to underscores, e.g.
-   `interloper-google-cloud` → `dist/interloper_google_cloud-*`,
-   `interloper-k8s` → `dist/interloper_k8s-*`. Use `-o dist/` (and keep `dist/`
-   clean) so the glob uploads only the intended package.
+   `interloper-google-cloud` → `dist/pypi/interloper_google_cloud-*`.
 
 3. On the now-existing project, add the trusted publisher:
    PyPI → *your project* → *Manage* → *Publishing* → *Add a new publisher*
@@ -85,62 +124,43 @@ For each package that does not yet exist on PyPI:
 
    - **Owner:** `digitl-cloud`
    - **Repository:** `interloper`
-   - **Workflow name:** `release.yaml`
-   - **Environment:** *(leave blank — the workflow uses none)*
+   - **Workflow name:** `publish.yaml`
+   - **Environment:** *(leave blank, the workflow uses none)*
 
-4. (Recommended) Revoke the temporary API token once trusted publishing is verified.
+4. **Re-run failed jobs** on the Publish run: the `pypi` job skips what PyPI
+   has and publishes the rest.
 
-Once every package has a trusted publisher, the Release workflow's
-`uv publish --trusted-publishing always` succeeds for all of them and no tokens are
-needed again.
-
-### Published packages
-
-All workspace packages are published:
-
-`interloper-core`, `interloper-assets`, `interloper-pandas`, `interloper-db`,
-`interloper-google-cloud`, `interloper-docker`, `interloper-k8s`,
-`interloper-scheduler`, `interloper-api`, `interloper-agent`, `interloper-app`.
+5. (Recommended) Revoke the temporary API token.
 
 ## npm trusted publishing (one-time bootstrap)
 
-The release publishes `@interloper/ui` with
+The `npm` job publishes `@interloper/ui` with
 [npm trusted publishing](https://docs.npmjs.com/trusted-publishers) (OIDC) and
 provenance, so no npm token lives in CI. The package belongs to the npm
 organisation `interloper`. npm adds a trusted publisher on the package's own
-settings page, so the package must exist first. The first version is published
-by hand, from a release tag:
+settings page, so a package must exist before CI can publish it. A new
+package's first version is the one by-hand publish:
 
-1. Run the first release that carries the npm step. Its PyPI publish goes
-   through and its npm step fails: the package does not exist yet.
+1. The first release that carries the package fails its `npm` job: the package
+   does not exist yet.
 
-2. From a checkout of that release's tag, build and pack the SDK and publish the
-   tarball, signed in to npm with an account that can publish to the
-   `interloper` organisation:
+2. Publish the tarball from that run's artifact, signed in to npm with an
+   account that can publish to the `interloper` organisation:
 
    ```bash
-   git checkout v<version>
-   pnpm install
-   pnpm --filter @interloper/ui build
-   PACK=$(mktemp -d)
-   (cd packages/platform/interloper-app/sdk && pnpm pack --pack-destination "$PACK")
-   npm publish "$PACK"/interloper-ui-*.tgz --access public
+   gh run download <run-id> --name dist --dir dist
+   npm publish dist/npm/interloper-ui-<version>.tgz --access public
    ```
 
-   Only a tag carries a `package.json` whose version matches its content: on
-   `main`, the version is the last release's and the content is newer, and npm
-   never lets a version be published twice. Publish what `pnpm pack` writes,
-   never the directory itself: the packed `package.json` takes its `exports`
-   from `publishConfig`, which points at the compiled preset in `dist/`.
+   Publish what `pnpm pack` wrote, never the package directory itself: the
+   packed `package.json` takes its `exports` from `publishConfig`, which points
+   at the compiled preset in `dist/`.
 
 3. In the package's settings on npmjs.com, add a trusted publisher for GitHub
-   Actions: repository `digitl-cloud/interloper`, workflow `release.yaml`, no
+   Actions: repository `digitl-cloud/interloper`, workflow `publish.yaml`, no
    environment (the workflow uses none).
 
-The same by-hand publish, from the release's tag, recovers any release whose npm
-step failed after PyPI published. A release candidate's version is a
-prerelease, which npm publishes only with `--tag rc`, so it never becomes
-`latest`; the release passes that tag itself.
+Every later version goes out from the `npm` job.
 
 `make check-sdk-package` checks the package as npm installs it, from a project
 outside the workspace; CI runs the same check.

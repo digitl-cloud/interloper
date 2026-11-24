@@ -177,8 +177,8 @@ allow_zero_version = true
 # Stay on 0.x: a breaking change bumps the minor (0.2.0 → 0.3.0) instead of
 # graduating to 1.0.0. Flip to true (the default) when ready to commit to 1.0.
 major_on_zero = false
-# Runs between version stamping and the release commit. The package build
-# itself happens in the workflow's publish step; this only refreshes uv.lock
+# Runs between version stamping and the release commit. The packages
+# themselves are built by the Publish workflow; this only refreshes uv.lock
 # so the locked workspace versions match the ones just stamped — `assets`
 # then folds the regenerated lock into the release commit. The PSR GitHub
 # action runs in its own docker container without uv, hence the pip bootstrap.
