@@ -59,7 +59,7 @@ const jobs = computed(() => {
                :error="error"
                @retry="overviewStore.fetchOverview()" />
     <div v-else
-         class="grid grid-cols-2 gap-4 sm:gap-6 xl:grid-cols-4">
+         class="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <OverviewHealthTile label="Runs · last 24h"
                             :to="organisationStore.path('/executions/runs')"
                             :loading="!overview"

@@ -142,7 +142,7 @@ const SUGGESTIONS = [
                transform: open ? 'none' : 'translateX(calc(100% + var(--agent-inset)))',
            }">
         <!-- Header -->
-        <div class="flex shrink-0 items-center gap-3 p-4 sm:px-6">
+        <div class="flex shrink-0 items-center gap-3 p-4">
             <div class="flex size-8 items-center justify-center rounded-md bg-primary text-inverted">
                 <UIcon :name="appConfig.icons.agent"
                        class="size-5" />
@@ -169,7 +169,7 @@ const SUGGESTIONS = [
         <!-- Messages. The relative wrapper (not the scroll container itself) anchors
              the floating scroll-to-bottom button to the visible area. -->
         <div class="relative flex min-h-0 flex-1 flex-col">
-            <div class="min-h-0 flex-1 overflow-y-auto px-4 pb-4 sm:px-6 sm:pb-6">
+            <div class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
                 <UEmpty v-if="unavailable"
                         variant="naked"
                         size="sm"
@@ -236,7 +236,7 @@ const SUGGESTIONS = [
         </div>
 
         <!-- Composer -->
-        <div class="shrink-0 border-t border-default p-4 sm:px-6">
+        <div class="shrink-0 border-t border-default p-4">
             <UChatPrompt v-model="input"
                          variant="outline"
                          placeholder="Ask about your workspace…"

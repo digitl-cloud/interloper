@@ -234,7 +234,7 @@ const typeKey = useQueryParam('type', null)
 
                 <template #empty>
                     <div v-if="canEdit"
-                         class="flex flex-col gap-4 sm:gap-6">
+                         class="flex flex-col gap-4">
                         <UEmpty :icon="resourceKindIcon(kind)"
                                 :title="`No ${pageTitle.toLowerCase()} yet`"
                                 :description="emptyCopy.hero"

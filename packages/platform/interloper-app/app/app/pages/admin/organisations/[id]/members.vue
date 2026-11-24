@@ -43,7 +43,7 @@ async function resendInvite(member: OrgMember) {
 </script>
 
 <template>
-    <div class="flex flex-col gap-4 sm:gap-6">
+    <div class="flex flex-col gap-4">
         <OrganizationMembersTable :members="members"
                                   :loading="loading"
                                   is-admin

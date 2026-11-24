@@ -278,7 +278,7 @@ onUnmounted(() => {
                        @retry="load" />
             <template v-else>
                 <!-- The splitter's panes pad their cards by 1px for the ring; the splitter's -mt-px keeps the page's gap. -->
-                <div class="flex min-h-0 flex-1 flex-col gap-4 sm:gap-6">
+                <div class="flex min-h-0 flex-1 flex-col gap-4">
                     <UAlert v-if="run?.error"
                             :color="statusMeta(run.status).color"
                             variant="subtle"

@@ -251,7 +251,7 @@ const activity = computed(() => {
                        @retry="load" />
 
             <template v-else>
-                <div class="grid grid-cols-2 gap-4 sm:gap-6 xl:grid-cols-4">
+                <div class="grid grid-cols-2 gap-4 xl:grid-cols-4">
                     <UCard v-for="tile in tiles"
                            :key="tile.label"
                            :ui="{ body: 'flex flex-col gap-3' }">
@@ -263,7 +263,7 @@ const activity = computed(() => {
                     </UCard>
                 </div>
 
-                <div class="grid items-start gap-4 sm:gap-6 lg:grid-cols-2">
+                <div class="grid items-start gap-4 lg:grid-cols-2">
                     <UCard title="Needs attention"
                            :description="`${attention.length} item${attention.length === 1 ? '' : 's'}`">
                         <UEmpty v-if="attention.length === 0"
@@ -328,7 +328,7 @@ const activity = computed(() => {
                     </UCard>
                 </div>
 
-                <div class="grid items-start gap-4 sm:gap-6 lg:grid-cols-2">
+                <div class="grid items-start gap-4 lg:grid-cols-2">
                     <UCard title="Top organisations by usage"
                            :description="periodLabel">
                         <UTable :data="topOrgs"

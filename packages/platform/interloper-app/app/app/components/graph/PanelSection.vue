@@ -17,7 +17,7 @@ const open = ref(true)
 <template>
     <div class="rounded-lg bg-muted">
         <div class="flex items-center">
-            <button class="group flex min-w-0 flex-1 cursor-pointer items-center gap-2 p-4 sm:px-6"
+            <button class="group flex min-w-0 flex-1 cursor-pointer items-center gap-2 p-4"
                     :class="$slots.actions && 'pe-2 sm:pe-2'"
                     :data-state="open ? 'open' : 'closed'"
                     :aria-expanded="open"
@@ -42,7 +42,7 @@ const open = ref(true)
 
         <UCollapsible v-model:open="open">
             <template #content>
-                <div class="px-4 pb-4 sm:px-6 sm:pb-6">
+                <div class="px-4 pb-4">
                     <slot />
                 </div>
             </template>

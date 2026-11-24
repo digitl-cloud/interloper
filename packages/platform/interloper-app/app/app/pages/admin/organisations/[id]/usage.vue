@@ -115,7 +115,7 @@ watch(orgId, reloadQuotas, { immediate: true })
 </script>
 
 <template>
-    <div class="mx-auto flex w-full max-w-2xl flex-col gap-4 sm:gap-6">
+    <div class="mx-auto flex w-full max-w-2xl flex-col gap-4">
         <div v-if="loading && !quotas"
              class="flex items-center justify-center py-12">
             <UIcon :name="appConfig.ui.icons.loading"
@@ -128,7 +128,7 @@ watch(orgId, reloadQuotas, { immediate: true })
                    @retry="reloadQuotas" />
 
         <template v-else-if="quotaRow">
-            <div class="grid grid-cols-2 gap-4 sm:gap-6">
+            <div class="grid grid-cols-2 gap-4">
                 <UCard v-for="tile in usageTiles"
                        :key="tile.label"
                        :ui="{ body: 'flex flex-col gap-3' }">

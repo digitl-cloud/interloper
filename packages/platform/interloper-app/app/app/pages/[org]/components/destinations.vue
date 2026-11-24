@@ -102,7 +102,7 @@ const typeKey = useQueryParam('type', null)
 
                 <template #empty>
                     <div v-if="canEdit"
-                         class="flex flex-col gap-4 sm:gap-6">
+                         class="flex flex-col gap-4">
                         <UEmpty :icon="appConfig.icons.destination"
                                 title="No destinations yet"
                                 description="A destination is wherever Interloper materializes your typed assets — a warehouse, a database, or plain files, all running on infrastructure you control. Pick one from the catalog below to start landing data."
