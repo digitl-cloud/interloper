@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 
+import uvicorn
 from interloper.catalog import Catalog
 from interloper.cli.console import configure_console_logging
 from interloper.settings import LogSettings, ServerSettings
@@ -50,7 +51,15 @@ def main() -> None:
     else:
         mcp = create_mcp_server(public_url, store=store)
         logger.info("Serving streamable HTTP on %s:%s/mcp", mcp_settings.host, mcp_settings.port)
-        mcp.run(transport="streamable-http", port=mcp_settings.port, **http_options(mcp_settings))
+        # Served here rather than by the SDK's runner, whose uvicorn logs in its own format beside the console's.
+        uvicorn.run(
+            mcp.streamable_http_app(**http_options(mcp_settings)),
+            host=mcp_settings.host,
+            port=mcp_settings.port,
+            log_config=None,
+            log_level=None,
+            access_log=False,
+        )
 
 
 def _resolve_stdio_user(store: Store, token: str) -> Profile:

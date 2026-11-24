@@ -35,8 +35,8 @@ INSTRUCTIONS = (
 def http_options(settings: McpSettings) -> dict[str, Any]:
     """Options the streamable HTTP transport is served with.
 
-    Passed to ``run()`` and ``streamable_http_app()`` alike, so the app a test
-    drives is the one production serves.
+    Passed to ``streamable_http_app()`` by the entry point and the tests alike,
+    so the app a test drives is the one production serves.
 
     Args:
         settings: The MCP settings (host).
