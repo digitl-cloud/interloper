@@ -104,58 +104,50 @@ four forms:
 
 ```py
 @il.source(tags=["Analytics"])
-class CampaignMatcher(il.Source):
-    @il.asset(relations={"campaigns": il.Relation("asset", "*.dim_campaigns", many=True)})
-    def campaign_matches(self, campaigns: list[il.Upstream]) -> list[dict]:
-        return [row for leg in campaigns if leg.data is not None for row in leg.data]
+class Revenue(il.Source):
+    @il.asset(relations={"orders": il.Relation("asset", "*.orders", many=True)})
+    def daily_revenue(self, orders: list[il.Upstream]) -> list[dict]:
+        return [row for leg in orders if leg.data is not None for row in leg.data]
 ```
 
-The DAG binds every `dim_campaigns` asset it holds, so the set of legs is decided by wiring, not by
-the class. `list[il.Upstream]` on its own infers the same relation on the parameter's bare key,
-which is a many-valued sibling; `relations=` is what reaches outside the source.
+The DAG binds every `orders` asset it holds, so the set of legs is decided by wiring, not by the
+class. `list[il.Upstream]` on its own infers the same relation on the parameter's bare key, which
+is a many-valued sibling; `relations=` is what reaches outside the source.
 
 ### Fan-in across sources
 
-The relation above is not hypothetical: `interloper_assets.CampaignMatcher` declares exactly this
-wildcard (same `campaign_matches` decorator shown above, plus `schema=schemas.CampaignMatches`),
-matching campaigns across every advertising platform into one lookup table. It reads each
-platform's star schema rather than its connector: not every connector collects a `campaigns`
-entity, so a star schema's `dim_campaigns` is built from whatever carries the campaigns (a
-snapshot, a campaign report, the ad facts), and the matcher always finds them under one key.
-Each row names the
-campaign's `platform` and `account`, the normalised `canonical_name` it is matched on and the
-`match_id` shared by every campaign matched to it. A `key_pattern` on the source selects the part
-of a name that identifies the campaign under a naming convention, and a `similarity_threshold`
-below `1.0` also merges names that merely resemble each other.
+A wildcard key reads the same asset from every source that declares it: `Revenue` above takes the
+`orders` of a shop, of a marketplace and of a warehouse feed alike, one leg per source instance,
+without any of them knowing it exists. Each leg carries its asset, so `leg.asset.source` says which
+source a row came from.
 
 A star schema fans in one level below, with a qualified key: `FacebookAdsStarSchema` declares
 `facebook_ads.ads_stats` with `many=True` on its `fact_ad_performance`, one leg per Facebook Ads
 account. Facebook Ads and Amazon Ads materialize their star schemas as views; the other platforms
 declare the same wiring and materialize nothing yet.
 
-Building a DAG over the star schemas and the matcher wires every `dim_campaigns` asset held into
-the `campaigns` relation, one leg per platform:
+Building a DAG over the sources wires every `orders` asset held into the `orders` relation, one
+leg per source:
 
 ```py
-fb = FacebookAdsStarSchema(...)   # declares a dim_campaigns asset
-tt = TiktokAdsStarSchema(...)     # declares a dim_campaigns asset
-matcher = CampaignMatcher(destinations=[dest])
+shop = Shop(...)              # declares an orders asset
+marketplace = Marketplace(...)  # declares an orders asset
+revenue = Revenue(destinations=[dest])
 
-dag = il.DAG(fb, tt, matcher)   # binds matcher.campaign_matches.campaigns to [fb.dim_campaigns, tt.dim_campaigns]
+dag = il.DAG(shop, marketplace, revenue)   # binds revenue.daily_revenue.orders to [shop.orders, marketplace.orders]
 ```
 
-A matcher built against upstreams already materialized elsewhere reads them read-only instead of
+A source built against upstreams already materialized elsewhere reads them read-only instead of
 running them, the same explicit-bind pattern as any other relation:
 
 ```py
-matcher.campaign_matches.bind("campaigns", fb.dim_campaigns)
-dag = il.DAG(matcher)   # fb.dim_campaigns joins the DAG as enabled=False
+revenue.daily_revenue.bind("orders", shop.orders)
+dag = il.DAG(revenue)   # shop.orders joins the DAG as enabled=False
 ```
 
-`examples/campaign_matcher.yaml` is the same wiring written as a manifest: two star schemas each
-override their `dim_campaigns` asset to `enabled: false`, and `campaign_matches` names both by
-`{ref: ...}` since an asset always travels under its own source. See [Specs](specs.md) for the
-manifest format.
+In a spec file, an upstream that is read rather than run is overridden to `enabled: false` under
+its own source, and the asset that fans in names each one by `{ref: ...}`, since an asset always
+travels under its own source. See [Specs](specs.md) for the format.
 
 ## How wiring works
 

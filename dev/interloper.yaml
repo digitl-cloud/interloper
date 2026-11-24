@@ -25,7 +25,6 @@ catalog:
     - interloper_assets.bing_ads.star_schema.source.BingAdsStarSchema
     - interloper_assets.brandwatch.connector.source.Brandwatch
     - interloper_assets.campaign_manager_360.connector.source.CampaignManager360
-    - interloper_assets.campaign.matcher.source.CampaignMatcher
     - interloper_assets.campaign.performance_analysis.source.CampaignPerformanceAnalysis
     - interloper_assets.criteo.connector.source.Criteo
     - interloper_assets.criteo.star_schema.source.CriteoStarSchema

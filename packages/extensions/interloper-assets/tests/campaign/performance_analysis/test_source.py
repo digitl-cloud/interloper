@@ -9,10 +9,22 @@ import interloper as il
 import pytest
 from interloper.errors import DataNotFoundError
 
-from interloper_assets.campaign.matcher.source import CampaignMatcher
 from interloper_assets.campaign.performance_analysis.source import CampaignPerformanceAnalysis
 from interloper_assets.facebook_ads.star_schema.source import FacebookAdsStarSchema
 from interloper_assets.thetradedesk.star_schema.source import TheTradeDeskStarSchema
+
+
+class CampaignMatches(il.Schema):
+    match_id: str
+
+
+@il.source
+class CampaignMatcher(il.Source):
+    """Stands in for the campaign matcher extension, which ships outside this package under the same key."""
+
+    @il.asset(schema=CampaignMatches)
+    def campaign_matches(self, context: il.ExecutionContext) -> list[dict[str, str]]:
+        return []
 
 
 @pytest.fixture(autouse=True)
