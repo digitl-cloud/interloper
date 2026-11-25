@@ -163,10 +163,7 @@ class EventBus:
 
         if bus._worker is not None and bus._worker.is_alive():
             bus._queue.put(_Sentinel(done=threading.Event(), stop=True))
-            try:
-                bus._queue.join()
-            except Exception:  # noqa: BLE001, S110
-                pass
+            bus._queue.join()
             bus._worker.join(timeout=2.0)
 
     # -- Internals -------------------------------------------------------------

@@ -384,9 +384,11 @@ class InsightStore:
             sources = session.exec(
                 select(Component).where(col(Component.org_id) == org_id, col(Component.kind) == "source")
             ).all()
-            for source in sources:
-                if source.created_at:
-                    entries.append(ActivityEntry("source_added", source.created_at, source.name or source.key))
+            entries.extend(
+                ActivityEntry("source_added", source.created_at, source.name or source.key)
+                for source in sources
+                if source.created_at
+            )
             # func.date() buckets per calendar day on both Postgres and SQLite.
             day = func.date(col(Run.completed_at)).label("day")
             run_days = session.exec(

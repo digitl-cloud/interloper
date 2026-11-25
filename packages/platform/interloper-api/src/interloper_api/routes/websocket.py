@@ -21,7 +21,7 @@ import logging
 import threading
 import time
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from functools import partial
 from typing import Any
 from uuid import UUID
@@ -85,12 +85,11 @@ class ConnectionManager:
         async with self._lock:
             connections = list(self._connections.get(org_id, []))
         for websocket in connections:
-            try:
+            # One dead peer must not fail the broadcast. A client that vanished
+            # mid-broadcast is unremarkable: the socket's own disconnect handler
+            # unregisters it.
+            with suppress(Exception):
                 await websocket.send_json(message)
-            except Exception:  # noqa: BLE001, S110 — one dead peer must not fail the broadcast
-                # A client that vanished mid-broadcast is unremarkable: the
-                # socket's own disconnect handler unregisters it.
-                pass
 
 
 _manager = ConnectionManager()

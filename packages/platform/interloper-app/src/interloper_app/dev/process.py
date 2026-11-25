@@ -15,6 +15,7 @@ import signal
 import subprocess
 import threading
 import time
+from contextlib import suppress
 from pathlib import Path
 from typing import IO, ClassVar
 
@@ -181,7 +182,5 @@ class ProcessGroup:
             process: The process leading the group.
             signal_number: The signal.
         """
-        try:
+        with suppress(ProcessLookupError):
             os.killpg(process.pid, signal_number)
-        except ProcessLookupError:
-            pass

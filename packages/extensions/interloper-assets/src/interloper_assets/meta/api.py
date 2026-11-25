@@ -82,9 +82,11 @@ class Attempts:
         """
         lockouts = [dt.timedelta()]
         if business := headers.get("x-business-use-case-usage"):
-            for limits in json.loads(business).values():
-                for limit in limits:
-                    lockouts.append(dt.timedelta(minutes=float(limit.get("estimated_time_to_regain_access", 0))))
+            lockouts.extend(
+                dt.timedelta(minutes=float(limit.get("estimated_time_to_regain_access", 0)))
+                for limits in json.loads(business).values()
+                for limit in limits
+            )
         return max(lockouts)
 
 

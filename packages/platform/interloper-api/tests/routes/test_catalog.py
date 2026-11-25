@@ -333,14 +333,14 @@ class TestHandleError:
             catalog_module.handle_error(self._status_error(status), "resolving ads_source.account_id")
 
         assert excinfo.value.status_code == status
-        assert "Authorization failed while resolving ads_source.account_id." == excinfo.value.detail
+        assert excinfo.value.detail == "Authorization failed while resolving ads_source.account_id."
 
     def test_a_provider_404_stays_a_404(self) -> None:
         with pytest.raises(HTTPException) as excinfo:
             catalog_module.handle_error(self._status_error(404), "resolving x")
 
         assert excinfo.value.status_code == 404
-        assert "Resource not found while resolving x." == excinfo.value.detail
+        assert excinfo.value.detail == "Resource not found while resolving x."
 
     def test_another_provider_status_falls_through_to_500(self) -> None:
         with pytest.raises(HTTPException) as excinfo:

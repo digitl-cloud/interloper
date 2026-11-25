@@ -44,7 +44,7 @@ def load_authorized(
     try:
         entity = fetch(entity_id)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail=detail)
+        raise HTTPException(status_code=404, detail=detail) from None
     if entity.org_id != scope.organisation.id:
         raise HTTPException(status_code=404, detail=detail)
     scope.require(minimum)

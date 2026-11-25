@@ -111,9 +111,7 @@ def get_full_lineage(ctx: ToolkitContext, asset_id: str, direction: str = "upstr
             if current != target:
                 info = asset_info.get(current, {})
                 result.append(LineageItem(asset_id=str(current), depth=depth, **info))
-            for neighbor in adj.get(current, []):
-                if neighbor not in visited:
-                    queue.append((neighbor, depth + 1))
+            queue.extend((neighbor, depth + 1) for neighbor in adj.get(current, []) if neighbor not in visited)
 
         return LineageResult(
             asset_id=asset_id,
@@ -149,9 +147,7 @@ def impact_analysis(ctx: ToolkitContext, asset_id: str) -> ImpactAnalysis | Tool
             if current != target:
                 info = asset_info.get(current, {})
                 affected.append(LineageItem(asset_id=str(current), depth=depth, **info))
-            for neighbor in adj.get(current, []):
-                if neighbor not in visited:
-                    queue.append((neighbor, depth + 1))
+            queue.extend((neighbor, depth + 1) for neighbor in adj.get(current, []) if neighbor not in visited)
 
         # Group by source
         by_source: dict[str, list[LineageItem]] = defaultdict(list)

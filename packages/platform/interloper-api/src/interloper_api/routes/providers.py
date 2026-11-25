@@ -156,12 +156,12 @@ async def exchange_authorization_code(
             response = await client.send(request)
         response.raise_for_status()
         tokens = spec.parse_authorization_code_response(response.json())
-        logger.info("Successfully exchanged auth code for provider %s", provider)
-        return tokens
     except httpx2.HTTPStatusError as exception:
         detail = exception.response.text
         logger.error("Token exchange failed for %s: %s %s", provider, exception.response.status_code, detail)
-        raise HTTPException(status_code=500, detail=f"Failed to exchange auth code: {detail}")
+        raise HTTPException(status_code=500, detail=f"Failed to exchange auth code: {detail}") from None
     except Exception as exception:  # noqa: BLE001 - any provider failure becomes a 500
         logger.error("Token exchange failed for %s: %s", provider, exception)
-        raise HTTPException(status_code=500, detail=f"Failed to exchange auth code: {exception}")
+        raise HTTPException(status_code=500, detail=f"Failed to exchange auth code: {exception}") from None
+    logger.info("Successfully exchanged auth code for provider %s", provider)
+    return tokens

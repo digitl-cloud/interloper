@@ -68,7 +68,7 @@ async def test_every_tool_is_titled_annotated_and_credentials_never_travel_as_ar
     shared = {t.name for t in TOOLKIT_TOOLS if not t.carries_secrets}
     assert set(by_name) == shared | {"request_connection_setup", "list_organisations"}
     assert "create_connections" not in by_name
-    assert WRITES <= set(by_name)
+    assert set(by_name) >= WRITES
     assert all(t.annotations is not None for t in tools)
     assert all(t.title for t in tools)
     assert by_name["trigger_run"].title == "Trigger a run"

@@ -108,4 +108,4 @@ class TestToFields:
 
 class TestTimePartitionable:
     def test_the_time_types(self):
-        assert TIME_PARTITIONABLE == {"DATE", "DATETIME", "TIMESTAMP"}
+        assert sorted(TIME_PARTITIONABLE) == ["DATE", "DATETIME", "TIMESTAMP"]

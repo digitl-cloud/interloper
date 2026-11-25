@@ -81,7 +81,8 @@ class InstagramInsights(il.Source):
         """Daily Instagram account insights: new followers and reach."""
         metrics = list(constants.ACCOUNT_METRICS)
         # follower_count only answers for the last 30 days and fails the whole request beyond
-        if context.partition_date < dt.date.today() - dt.timedelta(days=constants.FOLLOWER_COUNT_MAX_AGE_DAYS):
+        oldest = dt.datetime.now(dt.UTC).date() - dt.timedelta(days=constants.FOLLOWER_COUNT_MAX_AGE_DAYS)
+        if context.partition_date < oldest:
             metrics.remove("follower_count")
         insights = await self.connection.api.report(
             f"/{self.account_id}/insights",

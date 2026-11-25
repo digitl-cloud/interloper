@@ -84,7 +84,9 @@ class SearchConsoleApi:
         for search_type in search_types:
             query = {**window, "dimensions": dimensions, "type": search_type, **body}
             for row in await self._rows(site_url, query):
-                record = {dimension.lower(): key for dimension, key in zip(dimensions, row.get("keys") or [])}
+                record = {
+                    dimension.lower(): key for dimension, key in zip(dimensions, row.get("keys") or [], strict=False)
+                }
                 record.update({name: value for name, value in row.items() if name != "keys"})
                 record["search_type"] = search_type.lower()
                 records.append(record)

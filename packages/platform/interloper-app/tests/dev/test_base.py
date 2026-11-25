@@ -39,8 +39,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DevProject:
     monkeypatch.setattr(base_module.Port, "in_use", property(lambda self: False))
     monkeypatch.setattr(DevCommand, "_check_database", staticmethod(lambda root: None))
     monkeypatch.setattr("interloper.cli.console.configure_console_logging", lambda *args, **kwargs: None)
-    for signal_number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
-        monkeypatch.setattr(base_module.signal, "signal", mock.Mock())
+    monkeypatch.setattr(base_module.signal, "signal", mock.Mock())
     return project
 
 

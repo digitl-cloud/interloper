@@ -7,6 +7,7 @@ import inspect
 import json
 import warnings
 from collections.abc import Sequence
+from contextlib import suppress
 from functools import cached_property
 from typing import Any, ClassVar
 
@@ -176,10 +177,8 @@ class BigQueryDestination(DatabaseDestination):
         bq_table = bigquery.Table(self._table_ref(table, dataset), schema=bq_schema)
         bq_table.time_partitioning = time_partitioning
         bq_table.description = description
-        try:
+        with suppress(Conflict):  # Created by a concurrent run of the same asset
             self.client.create_table(bq_table)
-        except Conflict:
-            pass  # Created by a concurrent run of the same asset
 
     def _sync_table_metadata(
         self,
@@ -225,10 +224,8 @@ class BigQueryDestination(DatabaseDestination):
         except NotFound:
             bq_dataset = bigquery.Dataset(dataset_ref)
             bq_dataset.location = self.client.location
-            try:
+            with suppress(Conflict):  # Created by a concurrent asset, already exists
                 self.client.create_dataset(bq_dataset)
-            except Conflict:
-                pass  # Created by a concurrent asset — already exists
 
     # -- Views -----------------------------------------------------------------
 
@@ -660,17 +657,12 @@ def _partition_param(
         A scalar parameter with the matching type.
     """
     field = next((f for f in bq_table.schema if f.name == column), None)
-    if field is not None:
-        param_type = parameter_type(field.field_type)
-    else:
-        param_type = column_type(type(value))
+    param_type = parameter_type(field.field_type) if field is not None else column_type(type(value))
     if param_type in ("TIMESTAMP", "DATETIME") and isinstance(value, str):
         # The client serializes these from datetime objects; a date-only
         # string like "2024-01-01" (a TimePartition id) fails to format.
-        try:
+        with suppress(ValueError):
             value = datetime.datetime.fromisoformat(value)
-        except ValueError:
-            pass
     if (
         param_type in ("TIMESTAMP", "DATETIME")
         and isinstance(value, datetime.date)

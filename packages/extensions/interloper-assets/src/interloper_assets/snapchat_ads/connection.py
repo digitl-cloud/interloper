@@ -66,9 +66,11 @@ class SnapchatAdsConnection(il.RefreshTokenOAuthConnection):
             if not organization_id:
                 continue
             path = f"/organizations/{organization_id}/adaccounts"
-            for account in await self.api.rows(path, "adaccounts", "adaccount"):
-                if account.get("status") == "ACTIVE":
-                    accounts.append({"id": account["id"], "name": account.get("name", account["id"])})
+            accounts.extend(
+                {"id": account["id"], "name": account.get("name", account["id"])}
+                for account in await self.api.rows(path, "adaccounts", "adaccount")
+                if account.get("status") == "ACTIVE"
+            )
         return accounts
 
     async def check(self) -> bool:

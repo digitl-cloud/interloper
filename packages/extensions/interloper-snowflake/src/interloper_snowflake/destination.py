@@ -424,7 +424,7 @@ class SnowflakeDestination(DatabaseDestination):
         cursor = self._execute(
             f"SELECT TO_VARCHAR({_quote(column)}) AS partition_value, COUNT(*) AS cnt FROM {ref} GROUP BY 1"
         )
-        return {value: count for value, count in cursor.fetchall()}
+        return dict(cursor.fetchall())
 
 
 # -- Utility functions ---------------------------------------------------------------

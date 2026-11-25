@@ -145,7 +145,7 @@ class UsageStore:
         ).subquery()
         statement = select(per_source.c.org_id, func.max(per_source.c.n)).group_by(per_source.c.org_id)
         with session_scope(self._engine) as session:
-            return {org_id: count for org_id, count in session.exec(statement).all()}
+            return dict(session.exec(statement).all())
 
     def reconcile(self) -> builtins.list[UsageDrift]:
         """Compare the current period's ledger against the runs table.
