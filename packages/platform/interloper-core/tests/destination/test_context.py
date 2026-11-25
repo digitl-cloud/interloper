@@ -17,17 +17,17 @@ from interloper.partitioning import (
 
 
 @il.asset(partitioning=il.TimePartitionConfig(column="date"))
-def daily(context: il.ExecutionContext) -> list:  # noqa: D103
+def daily(context: il.ExecutionContext) -> list:
     return []
 
 
 @il.asset(partitioning=ListPartitionConfig(column="region", values=("eu", "us", "apac")))
-def regional(context: il.ExecutionContext) -> list:  # noqa: D103
+def regional(context: il.ExecutionContext) -> list:
     return []
 
 
 @il.asset
-def whole() -> list:  # noqa: D103
+def whole() -> list:
     return []
 
 

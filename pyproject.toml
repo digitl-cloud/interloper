@@ -89,6 +89,7 @@ include = ["packages"]
 [tool.ty.rules]
 incompatible-method-override = "ignore"
 incompatible-mutable-override = "ignore"
+unused-ignore-comment = "error"
 
 [tool.ty.analysis]
 # Optional vendor SDKs ship no type information and are only pulled in via
@@ -125,11 +126,28 @@ line-length = 120
 exclude = ["*.md"]
 
 [tool.ruff.lint]
-extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202"]
+preview = true
+extend-select = [
+    "E", "I", "UP", "ANN001", "ANN201", "ANN202", "D", "DOC",
+    # What agents leave behind: commented-out code, swallowed exceptions, blanket
+    # suppressions, debugger calls and noqa comments that no longer suppress anything.
+    "ERA001", "BLE001", "S110", "S112", "PGH", "T10", "RUF100",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+# Raw database access lives in interloper-db alone; the packages that select
+# TID251 read and write through the store's facets.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"sqlalchemy".msg = "Database access goes through interloper_db.Store facets"
+"sqlmodel".msg = "Database access goes through interloper_db.Store facets"
+"interloper_db.session".msg = "Database access goes through interloper_db.Store facets"
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
-"tests/**" = ["ANN", "D102", "RUF069", "PLW0108"]
+"**/tests/**" = ["ANN", "TID251", "F811", "D101", "D102", "D103", "D104", "D107", "B018", "RUF069", "PLW0108"]
+"{dev,examples}/**" = ["D", "DOC"]
 
 # ###############
 # PYTEST

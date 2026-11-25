@@ -11,12 +11,12 @@ from interloper.partitioning import TimePartition, TimePartitionWindow
 
 
 @il.asset(partitioning=il.TimePartitionConfig(column="date"))
-def partitioned_asset(context: il.ExecutionContext) -> list:  # noqa: D103
+def partitioned_asset(context: il.ExecutionContext) -> list:
     return []
 
 
 @pytest.fixture(autouse=True)
-def clear_storage():  # noqa: D103
+def clear_storage():
     MemoryDestination.clear()
     yield
     MemoryDestination.clear()
