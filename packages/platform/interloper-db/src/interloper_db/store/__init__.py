@@ -64,7 +64,7 @@ from interloper_db.store.organisations import OrganisationQuery, OrganisationSto
 from interloper_db.store.page import Page, PageQuery
 from interloper_db.store.profiles import ProfileQuery, ProfileStore
 from interloper_db.store.quotas import QuotaStore, UsageDrift, UsageQuery, UsageStore
-from interloper_db.store.relations import RelationQuery, RelationStore
+from interloper_db.store.relations import Edge, RelationQuery, RelationStore
 from interloper_db.store.runs import RunQuery, RunStore
 from interloper_db.store.tokens import TokenStore
 
@@ -76,6 +76,7 @@ __all__ = [
     "ComponentStore",
     "ConversationStore",
     "DeleteImpact",
+    "Edge",
     "EventQuery",
     "EventStore",
     "ExecutionQuery",

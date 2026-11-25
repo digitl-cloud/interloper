@@ -1,4 +1,5 @@
 import type { ComponentRecord, ComponentInput, DeleteImpact, Relation } from '~/types/component'
+import type { Page } from '~/composables/api'
 
 /** The key an unfiltered listing is held under, beside the kinds. */
 const ALL_KINDS = '*'
@@ -159,7 +160,8 @@ export const useComponentsStore = defineStore('components', () => {
 
     async function _fetchRelations(): Promise<boolean> {
         try {
-            relations.value = await fetchPages<Relation>('/relations')
+            // One request: followed edges are derived per read, so each page would pay for all of them.
+            relations.value = (await apiFetch<Page<Relation>>('/relations')).items
             return true
         }
         catch (e) {

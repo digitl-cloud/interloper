@@ -147,6 +147,15 @@ class TestListRelations:
         assert [row["name"] for row in body["items"]] == ["r2"]
         assert body["total"] == 3
 
+    def test_no_limit_reads_the_whole_set_in_one_page(self, client: TestClient, store: RelationStore) -> None:
+        store.rows = [_relation(f"r{i}", "asset", "asset") for i in range(3)]
+
+        body = client.get("/relations").json()
+
+        ((_, query),) = store.listed
+        assert query.limit is None
+        assert len(body["items"]) == body["total"] == 3
+
     def test_a_page_larger_than_the_cap_is_a_422(self, client: TestClient, store: RelationStore) -> None:
         assert client.get("/relations", params={"limit": 501}).status_code == 422
         assert store.listed == []

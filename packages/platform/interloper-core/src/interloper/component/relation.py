@@ -358,10 +358,11 @@ class Relation(BaseModel):
     ) -> list[K]:
         """The candidate assets this relation accepts for an owner asset, the one matching rule.
 
-        What fills an unbound upstream relation is decided here, whatever the
-        pool: the DAG passes its other nodes, the platform its organisation's
-        assets. A candidate matches when `accepts` takes its identity as an
-        asset; a `local` relation also keeps only the owner's siblings, since
+        What fills an unbound upstream relation is decided here and by its
+        identity half, `fills`: the DAG passes its other nodes here, the
+        platform asks `fills` per pair of identities and keeps siblings in SQL.
+        A candidate matches when it `fills` the relation; a `local` relation
+        also keeps only the owner's siblings, since
         a bare key names an asset of the owner's own source instance. A
         relation declaring no key matches nothing: it says nothing about
         which assets fill it. How many of the matches a relation may hold is
@@ -383,8 +384,27 @@ class Relation(BaseModel):
         return [
             handle
             for handle, identity in candidates.items()
-            if self.accepts("asset", identity, owner=owner) and (not local or handle in siblings)
+            if self.fills(owner, identity) and (not local or handle in siblings)
         ]
+
+    def fills(self, owner: ComponentIdentity, identity: ComponentIdentity) -> bool:
+        """Whether an asset of this identity fills this relation for an owner asset, siblings aside.
+
+        The half of `matches` that identities alone decide, so a caller that
+        knows its pool only later (the platform, which expands identities to
+        an organisation's rows in SQL) asks it once per pair of identities and
+        applies the other half itself: a `local` relation keeps only the
+        owner's siblings.
+
+        Args:
+            owner: The identity of the asset declaring this relation.
+            identity: The candidate asset's identity.
+
+        Returns:
+            True when the relation declares a key and `accepts` takes the
+            identity as an asset.
+        """
+        return bool(self.keys) and self.accepts("asset", identity, owner=owner)
 
     @property
     def has_fallback(self) -> bool:

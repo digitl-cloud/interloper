@@ -192,3 +192,13 @@ class TestMatches:
     def test_a_relation_without_keys_matches_nothing(self) -> None:
         candidates = {1: ComponentIdentity("shop", "orders")}
         assert Relation("asset").matches(ComponentIdentity("shop", "revenue"), candidates, siblings={1}) == []
+
+    def test_fills_answers_from_identities_alone_leaving_siblings_to_the_caller(self) -> None:
+        relation = Relation("asset", "orders")
+        owner = ComponentIdentity("shop", "revenue")
+        assert relation.fills(owner, ComponentIdentity("shop", "orders"))
+        assert not relation.fills(owner, ComponentIdentity("crm", "orders"))
+        assert not relation.fills(owner, ComponentIdentity("shop", "refunds"))
+
+    def test_a_relation_without_keys_fills_nothing(self) -> None:
+        assert not Relation("asset").fills(ComponentIdentity("shop", "revenue"), ComponentIdentity("shop", "orders"))
