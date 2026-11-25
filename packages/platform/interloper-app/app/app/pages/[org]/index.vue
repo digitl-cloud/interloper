@@ -29,7 +29,7 @@ onUnmounted(() => overviewStore.$reset())
 
 <template>
     <UDashboardPanel id="overview"
-                     class="page-column"
+                     class="page-wide"
                      :ui="{ body: 'gap-8 sm:gap-8' }">
         <template #header>
             <AppNavbar title="Overview" />
