@@ -51,7 +51,7 @@ The reference for "default" is the Nuxt UI dashboard template.
 **Surfaces**
 - `bg-default`: the panel
 - `bg-muted`: the card tone (cards, sidebar)
-- `bg-elevated`: hover, insets inside a card, and the fill of a control (an input, a select, a segmented control's track)
+- `bg-elevated`: hover, insets inside a card (a user's chat message among them), and the fill of a control (an input, a select, a segmented control's track)
 - `bg-accented`: tracks, and the chosen value of a segmented control in dark mode
 
 **Blue is for meaning, not for action:** links, focus, the current selection and the info status. The primary button is the inverted tone (`neutral`, solid: white on dark, black on light), so a page's one main action stands out without colour.
