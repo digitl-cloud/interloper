@@ -75,7 +75,8 @@ const columns = withSkeletons<Row>([
                         title="Nothing scheduled"
                         description="Enabled jobs list their next firing here."
                         variant="naked"
-                        size="sm" />
+                        size="sm"
+                        :style="{ minHeight: `${skeletonEmptyHeight(LIMIT)}px` }" />
             </template>
         </UTable>
     </UCard>

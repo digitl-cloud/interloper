@@ -76,7 +76,8 @@ const columns = withSkeletons<Row>([
                         title="No runs yet"
                         description="The latest runs land here as they finish."
                         variant="naked"
-                        size="sm" />
+                        size="sm"
+                        :style="{ minHeight: `${skeletonEmptyHeight(SKELETON_ROWS)}px` }" />
             </template>
         </UTable>
     </UCard>

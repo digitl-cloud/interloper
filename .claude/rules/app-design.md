@@ -220,7 +220,7 @@ Show the one fact a row, tile or line exists for; the rest waits for hover, a to
 | Empty: no data on a page | `UEmpty variant="outline"` with `actions` |
 | Empty: inside a card or panel | `UEmpty variant="naked" size="sm"` |
 | Empty: inside a wizard step | `UEmpty variant="subtle" size="sm"` with `actions` |
-| Loading, first load | `USkeleton` shaped like the content where the layout is known (`withSkeletons` and `skeletonRowId` for tables), the content fading in as it replaces it; otherwise one centred spinner, `appConfig.ui.icons.loading` at `size-5 animate-spin text-dimmed` |
+| Loading, first load | `USkeleton` shaped like the content where the layout is known (`withSkeletons` and `skeletonRowId` for tables), the content fading in as it replaces it; otherwise one centred spinner, `appConfig.ui.icons.loading` at `size-5 animate-spin text-dimmed`. A skeleton is as tall as what replaces it, row for row and line for line: a table's bars as tall as a line of its text, a card header's in its description's own line, a tile keeping its footer's room. An empty state holds the skeleton's height, so nothing below moves as a page lands. |
 | Loading, refetch | the component's `loading` prop |
 | Failed load | `LoadError` (error UAlert with Retry). Never only `console.error`. |
 | Failed action | `toast.add(errorToast(error, 'Couldn't …'))` |
