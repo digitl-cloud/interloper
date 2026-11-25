@@ -2,6 +2,73 @@
 
 <!-- version list -->
 
+## v0.147.0 (2026-11-25)
+
+### Bug Fixes
+
+- **app**: A user's chat message stands out from the panel
+  ([`34aa082`](https://github.com/digitl-cloud/interloper/commit/34aa082b032c4aa504ecb1162ba30b7a74bac040))
+
+- **app**: Chat tables and inline code on the app's type scale
+  ([`509150d`](https://github.com/digitl-cloud/interloper/commit/509150db707da6fad78c7b033d0b7076b84a6ff1))
+
+- **app**: Overview skeletons as tall as what replaces them
+  ([`6d6366f`](https://github.com/digitl-cloud/interloper/commit/6d6366f6ad117463a04ff26c46cc18ba5af428d1))
+
+- **app**: Pad the agent panel's chat bubbles
+  ([`543180d`](https://github.com/digitl-cloud/interloper/commit/543180d87037f7d1da73acdd410365133d746f72))
+
+- **app**: Space the asset pane at 16px
+  ([`bc3100e`](https://github.com/digitl-cloud/interloper/commit/bc3100ee242d5b9ef45bd9573f6040f1a5843792))
+
+### Chores
+
+- Cap function complexity at today's maximum
+  ([`e2d7f6f`](https://github.com/digitl-cloud/interloper/commit/e2d7f6f7b0d68d97b8166e2aaec303dc84454cd1))
+
+- One ruff config for the workspace
+  ([`5c7917d`](https://github.com/digitl-cloud/interloper/commit/5c7917dff75f05cb062f1173f455b28f050df066))
+
+### Continuous Integration
+
+- Trigger a downstream build once a release's images are tagged
+  ([`2a1c357`](https://github.com/digitl-cloud/interloper/commit/2a1c357b77a881b7a409682c566f2ddb768643b0))
+
+- Wait for a running Checks before releasing
+  ([`1beb2f3`](https://github.com/digitl-cloud/interloper/commit/1beb2f3babd9688b0e8454cbf6b23934e27e45ef))
+
+### Features
+
+- **app**: A connection's last renewal before its next
+  ([`22e228d`](https://github.com/digitl-cloud/interloper/commit/22e228d4ec45cf1169acb71410052ac17a20865c))
+
+- **app**: Fade pages and content in, on one easing
+  ([`62b467e`](https://github.com/digitl-cloud/interloper/commit/62b467e210f2d37593c2a8358c7175282da0646a))
+
+- **app**: Gray Alpha and Beta badges
+  ([`7391c1c`](https://github.com/digitl-cloud/interloper/commit/7391c1c368f55bf86813ce32fe86a85faaac7d6f))
+
+- **app**: The agent panel as a full-height column
+  ([`cdf7beb`](https://github.com/digitl-cloud/interloper/commit/cdf7beb978fd6bfde193e2e2c47b4cbada742903))
+
+- **app**: The Assets status filter back inline
+  ([`81fc31f`](https://github.com/digitl-cloud/interloper/commit/81fc31f6eadcf63ae61b31fb006522e28ac1c6ad))
+
+- **app**: The overview on the list pages' width
+  ([`e974e41`](https://github.com/digitl-cloud/interloper/commit/e974e412cf324d4a6e8a316ccd42434ab2984c3a))
+
+- **google-cloud**: Describe the BigQuery destination
+  ([`3e9e727`](https://github.com/digitl-cloud/interloper/commit/3e9e727911282b2aa4c7862598b4ae0588de0d1e))
+
+- **sql**: The SQL database destination leaves alpha
+  ([`1f14c9d`](https://github.com/digitl-cloud/interloper/commit/1f14c9d4d83900cd1bba37b589e2ad843d70ac86))
+
+### Refactoring
+
+- Enable bugbear, simplify, comprehension, perf and clock rules
+  ([`181cbb1`](https://github.com/digitl-cloud/interloper/commit/181cbb1d76f3043b4387f690a2e45110f13e649e))
+
+
 ## v0.146.0 (2026-11-25)
 
 ### Bug Fixes
