@@ -76,19 +76,19 @@ export default defineAppConfig({
     // A page is padded and spaced 16px at every width (the theme steps up to 24px from `sm`), and its
     // navbar and toolbar keep their edges in line with it. The navbar draws no rule: it and the page
     // are one surface.
-    // The agent panel slides in below the navbar: the toolbar and the body make room for it
-    // (the panel sizes `agent-room` from its own stylesheet), the navbar keeps the full width.
-    // The body centres the page's column (`page-column` / `page-narrow` on the panel, see main.css)
-    // and is the surface a sticky table header on it takes the tone of.
+    // The body centres the page's column (`page-wide` / `page-column` / `page-narrow` on the panel,
+    // see main.css) and is the surface a sticky table header on it takes the tone of. The panel draws
+    // no edge after it: the agent column, the one thing that follows it, draws its own as it slides.
     dashboardPanel: {
       slots: {
-        body: 'agent-room transition-[margin,padding] sm:gap-4 sm:p-4 page-gutter sm:page-gutter [--surface:var(--ui-bg)]'
+        root: 'lg:not-last:border-e-0',
+        body: 'sm:gap-4 sm:p-4 page-gutter sm:page-gutter [--surface:var(--ui-bg)]'
       }
     },
     dashboardNavbar: {
       slots: {
         root: 'sm:px-4 border-b-0 @container',
-        title: 'page-title-offset transition-[margin] text-xl'
+        title: 'page-title-offset text-xl'
       }
     },
     // A page's toolbar (its sub-page tabs, a detail page's actions) is the first row of the page's
@@ -97,7 +97,7 @@ export default defineAppConfig({
     // keeps the theme's sideways scroll for tabs wider than a phone.
     dashboardToolbar: {
       slots: {
-        root: 'agent-room transition-[margin,padding] min-h-0 border-b-0 p-0 sm:p-0 pt-4 page-gutter sm:page-gutter'
+        root: 'min-h-0 border-b-0 p-0 sm:p-0 pt-4 page-gutter sm:page-gutter'
       }
     },
     // The navbar's search field reads as a filled control, not an outlined button.
