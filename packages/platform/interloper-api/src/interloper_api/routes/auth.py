@@ -550,7 +550,7 @@ def update_me(
         try:
             ZoneInfo(body.timezone)
         except (KeyError, ValueError):
-            raise HTTPException(status_code=422, detail=f"Unknown timezone {body.timezone!r}")
+            raise HTTPException(status_code=422, detail=f"Unknown timezone {body.timezone!r}") from None
     profile = store.profiles.update(user.id, name=body.name, timezone=body.timezone)
     return AuthUserResponse.from_profile(profile, store, login, features)
 

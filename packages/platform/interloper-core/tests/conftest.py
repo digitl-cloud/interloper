@@ -28,7 +28,7 @@ class ColumnarRepresentation(Representation):
         return isinstance(data, Columnar)
 
     def to_rows(self, data: Columnar) -> list[dict[str, Any]]:
-        return [dict(zip(data.data, values)) for values in zip(*data.data.values())]
+        return [dict(zip(data.data, values, strict=True)) for values in zip(*data.data.values(), strict=True)]
 
     def from_rows(self, rows: list[dict[str, Any]]) -> Columnar:
         return Columnar({name: [row.get(name) for row in rows] for name in self._rows.columns(rows)})

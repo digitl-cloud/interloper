@@ -504,7 +504,7 @@ def get_partition_row_counts(
     try:
         il_asset = store.components.load(component_id)
     except ComponentDriftError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
     if not isinstance(il_asset, il.Asset) or il_asset.partitioning is None:
         raise HTTPException(status_code=400, detail="Component is not a partitioned asset")
@@ -513,11 +513,11 @@ def get_partition_row_counts(
     try:
         counts = il_asset.partition_row_counts()
     except NotImplementedError:
-        raise HTTPException(status_code=400, detail="Destination does not support partition row counts")
+        raise HTTPException(status_code=400, detail="Destination does not support partition row counts") from None
     except DataNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:  # noqa: BLE001 — any destination failure is a 500, never a traceback
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:  # any destination failure is a 500, never a traceback
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
     return PartitionRowCountsResponse(
         asset_key=type(il_asset).key,

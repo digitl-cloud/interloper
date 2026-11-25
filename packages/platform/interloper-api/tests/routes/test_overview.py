@@ -958,11 +958,11 @@ class TestCoverage:
         """
         start = min(dt.date.fromisoformat(source["start"]) for source in sources)
         offsets = [(dt.date.fromisoformat(source["start"]) - start).days for source in sources]
-        length = max(offset + len(source["successful"]) for offset, source in zip(offsets, sources))
+        length = max(offset + len(source["successful"]) for offset, source in zip(offsets, sources, strict=True))
         summed: dict[str, Any] = {"start": start.isoformat()}
         for state in ("successful", "failed", "missing", "missed"):
             summed[state] = [0] * length
-            for offset, source in zip(offsets, sources):
+            for offset, source in zip(offsets, sources, strict=True):
                 for i, count in enumerate(source[state]):
                     summed[state][offset + i] += count
         return summed

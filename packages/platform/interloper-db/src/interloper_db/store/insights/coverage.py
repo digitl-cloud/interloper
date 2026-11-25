@@ -555,7 +555,7 @@ class DayCoverage:
                     days.failed[i] += 1
                     if result.failed_run_id is not None:
                         days._keep_failed_run(i, result.failed_run_id)
-        for i, (slots, count) in enumerate(zip(cls._slots(asset, first, length, now), attempted)):
+        for i, (slots, count) in enumerate(zip(cls._slots(asset, first, length, now), attempted, strict=True)):
             days.missing[i] = max(slots, count) - days.successful[i] - days.failed[i]
         return days
 
@@ -575,7 +575,7 @@ class DayCoverage:
         for part in parts:
             offset = (part.start - start).days
             for i, (successful, failed, missing, missed) in enumerate(
-                zip(part.successful, part.failed, part.missing, part.missed)
+                zip(part.successful, part.failed, part.missing, part.missed, strict=True)
             ):
                 merged.successful[offset + i] += successful
                 merged.failed[offset + i] += failed

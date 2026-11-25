@@ -114,7 +114,7 @@ class TestIteration:
         """Without ``__iter__``, ``__getitem__`` alone makes Python try ``registry[0]``."""
         registry: Registry[str] = Registry()
         registry.register("alpha", "A")
-        assert [name for name in registry] == ["alpha"]
+        assert list(registry) == ["alpha"]
 
     def test_empty_registry_iterates_empty(self):
         registry: Registry[str] = Registry()

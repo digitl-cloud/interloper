@@ -30,9 +30,7 @@ class TiktokStatsNormalizer(DataFrameNormalizer):
             merged = {}
             merged.update(row.get("dimensions") or {})
             merged.update({key: None if value == "-" else value for key, value in (row.get("metrics") or {}).items()})
-            for key, value in row.items():
-                if key not in ("dimensions", "metrics"):
-                    merged[key] = value
+            merged.update({key: value for key, value in row.items() if key not in ("dimensions", "metrics")})
             flat.append(merged)
 
         df = super().normalize(flat)

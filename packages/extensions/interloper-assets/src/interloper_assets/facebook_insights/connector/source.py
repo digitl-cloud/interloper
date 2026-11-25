@@ -133,8 +133,7 @@ class FacebookInsights(il.Source):
                 if not insight.get("id", "").endswith("/day")
             ]
             for insight in [*lifetime, *breakdowns.get(item["id"], [])]:
-                for _, column, value in _insight_values(insight):
-                    row[column] = value
+                row.update({column: value for _, column, value in _insight_values(insight)})
             row["date"] = context.partition_date
             rows.append(row)
         return rows

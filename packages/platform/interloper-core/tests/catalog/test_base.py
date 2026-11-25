@@ -78,7 +78,7 @@ class TestDiscovery:
     def test_discovers_the_components_installed_packages_declare(self):
         # Core declares its jobs and hooks in its manifest's components section
         # the way any package declares its own, so it is the discovery end to end.
-        assert _FRAMEWORK <= set(Catalog.discover().components)
+        assert set(Catalog.discover().components) >= _FRAMEWORK
 
     def test_an_entry_naming_a_module_declares_the_component_classes_in_it(self, monkeypatch):
         module = ModuleType("demo_components")

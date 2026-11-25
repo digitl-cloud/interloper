@@ -50,7 +50,7 @@ def _make_destination(**overrides: Any) -> tuple[BigQueryDestination, MagicMock]
         id=destination_id,
         project=project,
         location="EU",
-        default_dataset=overrides.get("dataset", None),
+        default_dataset=overrides.get("dataset"),
         connection=conn,
     )
     object.__setattr__(dest, "client", mock_client)  # noqa: PLC2801 - bypasses pydantic's __setattr__
@@ -116,6 +116,31 @@ class TestResolveDataset:
         """Empty string is falsy, so it should fall back to dataset."""
         dest, _ = _make_destination(dataset="fallback")
         assert dest._resolve_dataset("") == "fallback"
+
+
+# -- _ensure_dataset -----------------------------------------------------------
+
+
+class TestEnsureDataset:
+    """A missing dataset is created, and one created concurrently is not an error."""
+
+    def test_a_missing_dataset_is_created_in_the_client_location(self):
+        from google.cloud.exceptions import NotFound
+
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.get_dataset.side_effect = NotFound("nope")
+        dest._ensure_dataset(None)
+        (created,), _ = mock_client.create_dataset.call_args
+        assert (created.dataset_id, created.location) == ("ds", "EU")
+
+    def test_a_dataset_created_by_a_concurrent_asset_is_not_an_error(self):
+        from google.cloud.exceptions import Conflict, NotFound
+
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.get_dataset.side_effect = NotFound("nope")
+        mock_client.create_dataset.side_effect = Conflict("Already Exists: Dataset test-proj:ds")
+        dest._ensure_dataset(None)
+        mock_client.create_dataset.assert_called_once()
 
 
 # -- _table_ref ----------------------------------------------------------------

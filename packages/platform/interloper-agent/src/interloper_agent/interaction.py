@@ -41,7 +41,7 @@ def request_user_selection(
         return ToolError(error="options must carry at least one {label, value} entry")
     if len(options) > MAX_CHOICES:
         return ToolError(error=f"Too many options ({len(options)} > {MAX_CHOICES}): narrow them down first")
-    raise CallDeferred()
+    raise CallDeferred
 
 
 def request_connection_setup(ctx: ToolkitContext, connection_key: str, name: str | None = None) -> ToolError:
@@ -63,4 +63,4 @@ def request_connection_setup(ctx: ToolkitContext, connection_key: str, name: str
     definition = connection_definition(ctx, connection_key)
     if isinstance(definition, ToolError):
         return definition
-    raise CallDeferred()
+    raise CallDeferred

@@ -134,7 +134,7 @@ class ClickHouseDestination(DatabaseDestination):
             "ORDER BY position",
             parameters={"database": database, "table": table},
         )
-        return {name: type_name for name, type_name in result.result_rows}
+        return {name: type_name for name, type_name in result.result_rows}  # noqa: C416 - rows are typed Sequence[Sequence], which dict() rejects
 
     def _existing(self, table: str, database: str) -> dict[str, str]:
         """Read the columns of a table that must exist.
@@ -502,7 +502,7 @@ class ClickHouseDestination(DatabaseDestination):
             f"SELECT toString({_quote(column)}) AS partition_value, count() AS cnt "
             f"FROM {self._ref(table, database)} GROUP BY partition_value"
         )
-        return {value: count for value, count in result.result_rows}
+        return {value: count for value, count in result.result_rows}  # noqa: C416 - rows are typed Sequence[Sequence], which dict() rejects
 
 
 # -- Utility functions -------------------------------------------------------------
@@ -572,7 +572,7 @@ def _predicate(where: PartitionFilter, columns: dict[str, str]) -> tuple[str, di
     if where.values is not None:
         names = [f"value{index}" for index in range(len(where.values))]
         placeholders = ", ".join(f"{{{name}:{type_name}}}" for name in names)
-        return f"{column} IN ({placeholders})", dict(zip(names, where.values))
+        return f"{column} IN ({placeholders})", dict(zip(names, where.values, strict=True))
     assert where.bounds is not None
     start, end = where.bounds
     if base_type(type_name) == STRING:

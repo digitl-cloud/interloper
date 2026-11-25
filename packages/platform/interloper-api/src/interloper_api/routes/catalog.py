@@ -207,7 +207,7 @@ async def resolve_fetch_field(
         raise HTTPException(
             status_code=400,
             detail=f"Cannot resolve '{body.field}' from the '{name}' credentials given: {format_exception(error)}",
-        )
+        ) from None
 
     fn = getattr(resource, method, None)
     if not is_fetch_field_provider(fn):

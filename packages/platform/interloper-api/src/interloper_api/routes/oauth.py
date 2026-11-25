@@ -259,7 +259,7 @@ def describe_consent(
     try:
         grant = server.get_consent_grant(oauth_request, end_user=user)
     except OAuth2Error as error:
-        raise HTTPException(status_code=400, detail=error.get_error_description() or error.error)
+        raise HTTPException(status_code=400, detail=error.get_error_description() or error.error) from error
     return ConsentResponse.from_grant(grant)
 
 
