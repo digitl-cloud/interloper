@@ -56,6 +56,8 @@ const activeSpan = computed({
 const timezone = computed(() => userStore.user?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone)
 const rangeLabel = computed(() => `${formatDayTime(rangeStart.value)} → ${formatDayTime(rangeEnd.value)}`)
 const height = computed(() => AXIS_HEIGHT + (loaded.value && rows.value.length ? Math.min(rows.value.length, MAX_ROWS) : SKELETON_ROWS) * ROW_HEIGHT + 1)
+// A timeline with fewer rows than the skeleton drew keeps its lanes' room, so the page doesn't move.
+const SKELETON_HEIGHT = AXIS_HEIGHT + SKELETON_ROWS * ROW_HEIGHT + 1
 
 function refresh() {
     now.value = new Date()
@@ -122,7 +124,7 @@ onUnmounted(() => timelineStore.$reset())
         <div v-else
              class="animate-appear transition-opacity"
              :class="switching ? 'opacity-50' : ''"
-             :style="{ height: `${height}px` }">
+             :style="{ height: `${height}px`, marginBottom: `${Math.max(0, SKELETON_HEIGHT - height)}px` }">
             <ChartExecutionTimeline :rows="rows"
                                     :range-start="rangeStart"
                                     :range-end="rangeEnd"

@@ -13,6 +13,9 @@ defineProps<{
 }>()
 
 const SKELETON_ROWS = 3
+const SKELETON_ROW_HEIGHT = 60
+// "All clear" holds the skeleton's height, so a healthy organisation's page doesn't move as it lands.
+const SKELETON_HEIGHT = SKELETON_ROWS * SKELETON_ROW_HEIGHT
 
 const editor = useCanEdit()
 
@@ -79,7 +82,8 @@ function when(item: AttentionItem): string {
              class="divide-y divide-default">
             <div v-for="i in SKELETON_ROWS"
                  :key="i"
-                 class="flex items-center gap-3 py-3">
+                 class="flex items-center gap-3"
+                 :style="{ height: `${SKELETON_ROW_HEIGHT}px` }">
                 <USkeleton class="size-5 shrink-0 rounded-full" />
                 <div class="flex min-w-0 flex-1 flex-col gap-1.5">
                     <USkeleton class="h-4 w-2/3" />
@@ -126,6 +130,7 @@ function when(item: AttentionItem): string {
         </div>
         <UEmpty v-else
                 class="animate-appear"
+                :style="{ minHeight: `${SKELETON_HEIGHT}px` }"
                 :icon="ui.icons.success"
                 title="All clear"
                 :description="`No failures, drift or overdue jobs. Last checked ${formatClockTime(new Date(generatedAt ?? Date.now()))}.`"

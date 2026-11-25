@@ -134,6 +134,19 @@ const option = computed(() => {
 
 /** Gaps are drawn as cell borders, so one row or week is exactly `cell` pixels. */
 const chartHeight = computed(() => CALENDAR_TOP + 7 * cell.value + 2)
+// The skeleton draws the day's detail under the calendar, 16px below it: a caption and its rows,
+// 12px apart. "No partitions" has no detail, so it holds that room and the card keeps its height.
+const DETAIL_SKELETON_HEIGHT = 16 + 16 + SKELETON_DETAIL_ROWS * (32 + 12)
+const emptyHeight = computed(() => chartHeight.value + DETAIL_SKELETON_HEIGHT)
+// The header describes the selected day; with no partitions there is no day, so it names the window
+// and keeps its line.
+const description = computed(() => {
+    if (coverageError.value || !coverage.value) return undefined
+    if (!empty.value) return selectedLabel.value
+    const { since, until } = coverage.value
+    const year = since.slice(0, 4) !== until.slice(0, 4)
+    return `${formatCalendarDay(since, { year })} – ${formatCalendarDay(until, { year })}`
+})
 
 /**
  * Without `right`, ECharts keeps `cellSize` and the canvas must be as wide as the week columns. The
@@ -182,7 +195,7 @@ watch(coverage, (value) => {
     <UCard>
         <template #header>
             <CardHeader title="Partition coverage"
-                        :description="!coverageError && !empty ? selectedLabel : undefined"
+                        :description="description"
                         :loading="!coverage && !coverageError">
                 <UIcon v-if="switching"
                        :name="appConfig.ui.icons.loading"
@@ -214,7 +227,7 @@ watch(coverage, (value) => {
                     size="sm"
                     class="animate-appear transition-opacity"
                     :class="switching ? 'opacity-50' : ''"
-                    :style="{ minHeight: `${chartHeight}px` }" />
+                    :style="{ minHeight: `${emptyHeight}px` }" />
             <UTooltip v-else-if="coverage"
                       :open="tooltipOpen"
                       :reference="hovered?.reference"
