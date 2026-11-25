@@ -2489,8 +2489,8 @@ installed.</p>
 <h2 id="create-the-project">Create the project<a class="headerlink" href="#create-the-project" title="Permanent link">&para;</a></h2>
 <p>An extension starts as an ordinary uv library, with <code>interloper-app</code> as its one development
 dependency: it carries the platform you run locally and the <code>interloper extension</code> commands.</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>init<span class="w"> </span>--lib<span class="w"> </span>acme-interloper
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">cd</span><span class="w"> </span>acme-interloper
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>init<span class="w"> </span>--lib<span class="w"> </span>interloper-acme
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">cd</span><span class="w"> </span>interloper-acme
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>uv<span class="w"> </span>add<span class="w"> </span>--dev<span class="w"> </span>interloper-app
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>uv<span class="w"> </span>run<span class="w"> </span>interloper<span class="w"> </span>extension<span class="w"> </span>init
 </span></code></pre></div>
@@ -2498,7 +2498,7 @@ dependency: it carries the platform you run locally and the <code>interloper ext
 <ul>
 <li><code>pyproject.toml</code> gains the <code>interloper.extensions</code> entry point naming the package, and
   <code>interloper-core</code> as a dependency;</li>
-<li><code>src/acme_interloper/extension.yaml</code> is the manifest: the extension's key (<code>acme</code>), its name and
+<li><code>src/interloper_acme/extension.yaml</code> is the manifest: the extension's key (<code>acme</code>), its name and
   description, and later every part it declares;</li>
 <li><code>interloper.yaml</code> is the configuration every <code>interloper</code> command run in this directory reads,
   with a key that encrypts what the local instance stores. It holds that key, so <code>init</code> adds it
@@ -2526,32 +2526,32 @@ A name defaults to the extension's key.</p>
 <tbody>
 <tr>
 <td><code>source</code></td>
-<td><code>src/acme_interloper/weather/source.py</code>: a source and its assets</td>
+<td><code>src/interloper_acme/weather/source.py</code>: a source and its assets</td>
 <td><code>components</code></td>
 </tr>
 <tr>
 <td><code>connection</code></td>
-<td><code>src/acme_interloper/weather/connection.py</code>: the credentials a source reads</td>
+<td><code>src/interloper_acme/weather/connection.py</code>: the credentials a source reads</td>
 <td><code>components</code></td>
 </tr>
 <tr>
 <td><code>settings</code></td>
-<td><code>src/acme_interloper/settings/acme.py</code>: a settings section <code>interloper.yaml</code> fills</td>
+<td><code>src/interloper_acme/settings/acme.py</code>: a settings section <code>interloper.yaml</code> fills</td>
 <td><code>settings</code></td>
 </tr>
 <tr>
 <td><code>command</code></td>
-<td><code>src/acme_interloper/commands/sync.py</code>: an <code>interloper sync</code> command</td>
+<td><code>src/interloper_acme/commands/sync.py</code>: an <code>interloper sync</code> command</td>
 <td><code>cli</code></td>
 </tr>
 <tr>
 <td><code>routes</code></td>
-<td><code>src/acme_interloper/routes.py</code>: API routes under <code>/api/organisations/{org_id}/ext/acme</code></td>
+<td><code>src/interloper_acme/routes.py</code>: API routes under <code>/api/organisations/{org_id}/ext/acme</code></td>
 <td><code>routes</code></td>
 </tr>
 <tr>
 <td><code>ui</code></td>
-<td><code>ui/</code>, a Vue page built with <code>@interloper/ui</code>, and <code>src/acme_interloper/ui.py</code> declaring its build</td>
+<td><code>ui/</code>, a Vue page built with <code>@interloper/ui</code>, and <code>src/interloper_acme/ui.py</code> declaring its build</td>
 <td><code>ui</code></td>
 </tr>
 </tbody>
@@ -2581,7 +2581,7 @@ own; without them, <code>dev</code> serves the collection you build in the app.
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>uv<span class="w"> </span>run<span class="w"> </span>interloper<span class="w"> </span>extension<span class="w"> </span>build
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>uv<span class="w"> </span>run<span class="w"> </span>interloper<span class="w"> </span>extension<span class="w"> </span>check
 </span></code></pre></div>
-<p><code>build</code> installs the UI's dependencies, type-checks and builds it into <code>src/acme_interloper/static/</code>,
+<p><code>build</code> installs the UI's dependencies, type-checks and builds it into <code>src/interloper_acme/static/</code>,
 then builds the sdist and the wheel into <code>dist/</code>, and checks that the wheel carries the UI.
 <code>check</code> imports every entry of every installed manifest and names what fails or what nothing
 reads. Publish the wheel the way you publish any package (<code>uv publish</code>); a deployment installs it

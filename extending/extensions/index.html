@@ -2582,20 +2582,20 @@ newest Python on your machine, and the wheel would refuse to install on an older
 <p>A package names its import package under the <code>interloper.extensions</code> entry point, the one entry
 point interloper reads, and ships the manifest inside that package so it lands in the wheel:</p>
 <div class="language-toml highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">[project.entry-points.</span><span class="s2">"interloper.extensions"</span><span class="k">]</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">acme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"acme_interloper"</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">acme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"interloper_acme"</span>
 </span></code></pre></div>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># acme_interloper/extension.yaml</span>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># interloper_acme/extension.yaml</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nt">manifest_version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme</span>
 </span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Acme</span>
 </span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Acme</span><span class="nv"> </span><span class="s">sources,</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">Polars</span><span class="nv"> </span><span class="s">representation</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">Ray</span><span class="nv"> </span><span class="s">runner."</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="nt">components</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme_interloper</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="nt">components</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper_acme</span>
 </span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="nt">representations</span><span class="p">:</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme_interloper.polars:POLARS_REPRESENTATION</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper_acme.polars:POLARS_REPRESENTATION</span>
 </span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="nt">oauth_providers</span><span class="p">:</span>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme_interloper.oauth:ACME</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper_acme.oauth:ACME</span>
 </span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="nt">runners</span><span class="p">:</span>
-</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">  </span><span class="nt">ray</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme_interloper.runner:RayRunner</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">  </span><span class="nt">ray</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper_acme.runner:RayRunner</span>
 </span></code></pre></div>
 <p>Five keys say what the package is:</p>
 <table>
@@ -2724,7 +2724,7 @@ connection in <code>&lt;name&gt;/source.py</code> or <code>&lt;name&gt;/connecti
 the section's: its block of <code>interloper.yaml</code> and the prefix of its environment variables.
 <code>interloper extension add settings [name]</code> writes one in <code>settings/&lt;name&gt;.py</code> and declares it.</p>
 <div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">settings</span><span class="p">:</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">acme_widgets</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme_interloper.settings:WidgetSettings</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">acme_widgets</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper_acme.settings:WidgetSettings</span>
 </span></code></pre></div>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ClassVar</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
@@ -2754,7 +2754,7 @@ name (<code>config.image</code>) shows one key of a mapping field.</p>
 command's (<code>interloper extension add command [name]</code> writes one in <code>commands/&lt;name&gt;.py</code> and
 declares it):</p>
 <div class="language-yaml highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">cli</span><span class="p">:</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">backup</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme_interloper.cli:BackupCommand</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">backup</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper_acme.cli:BackupCommand</span>
 </span></code></pre></div>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">argparse</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
@@ -2793,7 +2793,7 @@ inside <code>run</code>, out of both.</p>
 <p>A <code>routes</code> entry names a FastAPI <code>APIRouter</code>. Declared as a single import string, it is named
 by the extension's key, and the API mounts it under the organisation the request acts in
 (<code>interloper extension add routes</code> writes <code>routes.py</code> with one route and declares it):</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nt">routes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme_interloper.routes:router</span>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nt">routes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper_acme.routes:router</span>
 </span></code></pre></div>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">uuid</span><span class="w"> </span><span class="kn">import</span> <span class="n">UUID</span>
 </span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
@@ -2829,9 +2829,9 @@ it, shipped inside its package. The host imports the entry, an ES module, and ad
 stylesheets beside it. <code>interloper extension add ui</code> writes one built with the SDK below (one
 page reading a route, one sidebar entry, routes added first when there are none), and
 <code>interloper extension build</code> builds it into the wheel.</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nt">ui</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme_interloper.ui:UI</span>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nt">ui</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper_acme.ui:UI</span>
 </span></code></pre></div>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># acme_interloper/ui.py</span>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># interloper_acme/ui.py</span>
 </span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 </span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
 </span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper_api</span><span class="w"> </span><span class="kn">import</span> <span class="n">UIBundle</span>
@@ -3007,7 +3007,7 @@ installed manifest and names each manifest, section or entry that fails, and eac
 registry reads, which is usually a misspelt section name. It exits non-zero when it names
 anything:</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>$<span class="w"> </span>interloper<span class="w"> </span>extension<span class="w"> </span>check
-</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>package<span class="w"> </span><span class="s1">'acme_interloper'</span>,<span class="w"> </span>section<span class="w"> </span><span class="s1">'runner'</span>:<span class="w"> </span>no<span class="w"> </span>registry<span class="w"> </span>reads<span class="w"> </span>this<span class="w"> </span>section
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>package<span class="w"> </span><span class="s1">'interloper_acme'</span>,<span class="w"> </span>section<span class="w"> </span><span class="s1">'runner'</span>:<span class="w"> </span>no<span class="w"> </span>registry<span class="w"> </span>reads<span class="w"> </span>this<span class="w"> </span>section
 </span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>Checked<span class="w"> </span><span class="m">48</span><span class="w"> </span>entries<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="m">8</span><span class="w"> </span>sections:<span class="w"> </span><span class="m">1</span><span class="w"> </span>problem<span class="o">(</span>s<span class="o">)</span>.
 </span></code></pre></div>
 <h2 id="the-registry-primitive">The registry primitive<a class="headerlink" href="#the-registry-primitive" title="Permanent link">&para;</a></h2>
