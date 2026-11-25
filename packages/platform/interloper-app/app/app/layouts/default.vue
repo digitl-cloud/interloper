@@ -57,6 +57,8 @@ const navItems = computed<NavigationMenuItem[][]>(() => sections.value.map(secti
 
             <slot />
 
+            <AgentPanel v-if="userStore.agentAvailable" />
+
             <UDashboardSearch v-model:open="searchOpen"
                               v-model:search-term="searchTerm"
                               :groups="searchGroups"
@@ -65,7 +67,5 @@ const navItems = computed<NavigationMenuItem[][]>(() => sections.value.map(secti
                               :fuse="{ fuseOptions: { keys: ['label', 'suffix', 'keywords'] } }"
                               placeholder="Search…" />
         </UDashboardGroup>
-
-        <AgentPanel v-if="userStore.agentAvailable" />
     </div>
 </template>

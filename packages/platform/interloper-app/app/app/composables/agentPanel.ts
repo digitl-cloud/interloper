@@ -5,9 +5,8 @@ const MIN_WIDTH = 320
 const MAX_WIDTH = 720
 
 /**
- * State of the docked agent chat panel (the page below the navbar makes room
- * for it): open flag plus a draggable width shared between the panel and the
- * layout's `--agent-offset`.
+ * State of the docked agent chat panel, the column at the window's right edge:
+ * its open flag and its draggable width.
  */
 export function useAgentPanel() {
     const open = useState('agent-panel-open', () => false)
@@ -19,8 +18,8 @@ export function useAgentPanel() {
     const dragging = useState('agent-panel-dragging', () => false)
 
     /**
-     * Drag the card's left border: width follows the pointer until release.
-     * `right` is the card's right edge, which stays put while it resizes.
+     * Drag the column's left border: width follows the pointer until release.
+     * `right` is the column's right edge, which stays put while it resizes.
      */
     function startResize(right: number) {
         dragging.value = true
