@@ -30,6 +30,11 @@ A release takes two workflows, one responsibility each:
   5. **Helm chart → GHCR**: the `helm` job packages `chart/interloper` and
      pushes it as an OCI artifact beside the images (stable releases only; see
      below).
+  6. **Downstream**: once every image is tagged, the `downstream` job triggers
+     the pipeline the `DOWNSTREAM_TRIGGER_URL` and `DOWNSTREAM_TRIGGER_TOKEN`
+     secrets name, a GitLab pipeline trigger, with the version as
+     `PLATFORM_VERSION` (stable releases only). A deployment that builds its
+     own images on top of these sets them; without them the job does nothing.
 
   PyPI and npm wait on the build, the image merges on the image builds, and no
   publish job waits on another, so one registry's outage holds up only its own

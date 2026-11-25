@@ -5,7 +5,9 @@ name: Publish
 # publish job makes the version present and skips what already is, and none
 # waits on another, so one registry's outage blocks only its own job. A failed
 # job is recovered with "Re-run failed jobs": the jobs that succeeded stay
-# done, and a re-run PyPI or npm job publishes the same build artifact.
+# done, and a re-run PyPI or npm job publishes the same build artifact. Once
+# every image is tagged, a stable release is announced to the downstream
+# pipeline trigger, when the repository configures one.
 #
 # Triggers:
 #   - automatically when semantic-release publishes the GitHub release
@@ -360,6 +362,40 @@ jobs:
           fi
           docker buildx imagetools create "${tags[@]}" "${digests[@]/#/${repo}@sha256:}"
           docker buildx imagetools inspect "${repo}:${VERSION}${SUFFIX}"
+
+  # ────────────────────────────────────────────────────────────────────
+  # Downstream: a deployment's own build on top of the published images
+  #
+  # A deployment that builds its images from these ones sets the secrets
+  # DOWNSTREAM_TRIGGER_URL and DOWNSTREAM_TRIGGER_TOKEN, a GitLab pipeline
+  # trigger; without them the job does nothing. It runs once every image is
+  # tagged, on stable releases, and passes the version as PLATFORM_VERSION.
+  # The response is discarded: it names the downstream project.
+  # ────────────────────────────────────────────────────────────────────
+  downstream:
+    name: Downstream
+    needs: [resolve, docker-merge]
+    if: needs.resolve.outputs.stable == 'true'
+    runs-on: ubuntu-latest
+
+    permissions: {}
+
+    steps:
+      - name: Trigger
+        env:
+          URL: ${{ secrets.DOWNSTREAM_TRIGGER_URL }}
+          TOKEN: ${{ secrets.DOWNSTREAM_TRIGGER_TOKEN }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$TOKEN" ]; then
+            echo "No downstream trigger configured."
+            exit 0
+          fi
+          curl --fail --silent --show-error --retry 3 --output /dev/null \
+            --form-string "token=${TOKEN}" \
+            --form-string "ref=main" \
+            --form-string "variables[PLATFORM_VERSION]=${VERSION}" \
+            "$URL"
 
   # ────────────────────────────────────────────────────────────────────
   # Helm chart → GitHub Container Registry (ghcr.io)
