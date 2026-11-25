@@ -111,13 +111,12 @@ watchEffect(() => {
     assetPane.pane.value = (splitterRef.value as unknown as SplitterHandle | null)?.panelsRef[1] ?? null
 })
 
-// p-px keeps the cards' outer rings inside the panes, which clip overflow.
 const splitterItems = computed<SplitterItem[]>(() => [
-    { slot: 'main', defaultSize: 100, minSize: wide.value ? 30 : 0, class: 'flex flex-col overflow-hidden p-px' },
+    { slot: 'main', defaultSize: 100, minSize: wide.value ? 30 : 0, class: 'flex flex-col overflow-hidden' },
     { slot: 'asset', defaultSize: 0, class: 'relative overflow-hidden' },
 ])
-/** The handle is the page's panel gap, less the 1px each pane pads its card with so the ring isn't clipped. */
-const handleClass = computed(() => `flex justify-center transition-all duration-200 ${panelOpen.value && wide.value ? 'w-3.5 sm:w-5.5' : 'w-0'}`)
+/** The handle is the gap between the panes, the page's own. */
+const handleClass = computed(() => `flex justify-center transition-all duration-200 ${panelOpen.value && wide.value ? 'w-4' : 'w-0'}`)
 
 /** The selected asset with its source and definition: only a source's assets open the pane. */
 const selection = computed(() => {
@@ -213,7 +212,7 @@ function closePane() {
 
                     <template #asset>
                         <div v-if="panelMounted && shown"
-                             class="absolute inset-y-0 right-0 p-px"
+                             class="absolute inset-y-0 right-0"
                              :style="assetPaneContentStyle">
                             <GraphAssetPanel class="h-full"
                                              :asset="shown.asset"

@@ -214,7 +214,7 @@ const upstreamCount = computed(() => upstreamGroups.value.reduce((count, group) 
 </script>
 
 <template>
-    <div class="flex flex-col gap-3">
+    <div class="flex flex-col gap-4">
         <!-- Folded, the header keeps the asset's identity: logo, name, source and type. -->
         <GraphPanelSection class="shrink-0">
             <template #title>
@@ -271,8 +271,7 @@ const upstreamCount = computed(() => upstreamGroups.value.reduce((count, group) 
             </UAlert>
         </GraphPanelSection>
 
-        <!-- p-px keeps the cards' rings inside the scroll box, which clips overflow -->
-        <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-px">
+        <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
             <!-- Drift notice: this asset no longer resolves against the catalog. -->
             <UAlert v-if="driftBadge"
                     :color="driftBadge.color"
