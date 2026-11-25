@@ -315,13 +315,20 @@ export default defineAppConfig({
     },
     // A user's message is an inset on the agent panel's card tone or on the page. Nuxt UI's soft
     // neutral fill, bg-elevated at half, all but vanishes on either, so it takes bg-elevated whole,
-    // as a card inside a card does.
+    // as a card inside a card does. In the panel's compact chat, Nuxt UI's 8px by 4px leaves the
+    // text pressed against the bubble's edge; it pads 12px by 8px.
     chatMessage: {
       compoundVariants: [{
         color: 'neutral',
         variant: 'soft',
         class: {
           content: 'bg-elevated'
+        }
+      }, {
+        variant: ['solid', 'outline', 'soft', 'subtle'],
+        compact: true,
+        class: {
+          content: 'px-3 py-2'
         }
       }]
     },
