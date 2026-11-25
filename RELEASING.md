@@ -5,12 +5,14 @@ A release takes two workflows, one responsibility each:
 - **Release** ([`.github/workflows/release.yaml`](.github/workflows/release.yaml)),
   dispatched by hand (`stable` or `release-candidate`), cuts the version:
   `python-semantic-release` (run with `uvx`) bumps the shared version, commits,
-  tags and creates the GitHub release. It runs no checks of its own: it fails
-  unless the Checks workflow passed for the commit it releases. Checks skips a
-  commit that touches only the paths it ignores (docs, Markdown) and a
-  `[skip ci]` one such as a release commit; to release one of those, run Checks
-  on main first (`gh workflow run checks.yaml --ref main`). Release publishes
-  nothing; re-running it after a release finds the tag and does nothing.
+  tags and creates the GitHub release. It runs no checks of its own: it
+  releases only a commit the Checks workflow passed. Dispatched while Checks is
+  still running for that commit, as right after a merge, it waits for it (up to
+  15 minutes) and fails if Checks fails. Checks skips a commit that touches only
+  the paths it ignores (docs, Markdown) and a `[skip ci]` one such as a release
+  commit; to release one of those, run Checks on main first
+  (`gh workflow run checks.yaml --ref main`). Release publishes nothing;
+  re-running it after a release finds the tag and does nothing.
 - **Publish** ([`.github/workflows/publish.yaml`](.github/workflows/publish.yaml)),
   triggered by that GitHub release, publishes the tag everywhere:
   1. **Build**: the `build` job builds the SPA and the extension UIs, every
