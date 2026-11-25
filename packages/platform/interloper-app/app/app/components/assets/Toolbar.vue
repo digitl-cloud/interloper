@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * The Assets page's toolbar, the same for both its views: a search and which
- * view shows, then the sources' status and the grouping behind their menus. The
- * search, status and grouping narrow the graph and the table alike.
+ * The Assets page's toolbar, the same for both its views: a search, which view
+ * shows and the sources' status, then the grouping behind its menu. The search,
+ * status and grouping narrow the graph and the table alike.
  */
 const view = defineModel<string>('view', { required: true })
 const query = defineModel<string>('query', { required: true })
@@ -36,11 +36,6 @@ const FILTERS: Array<{ value: StatusFilter; label: string; dot?: GraphNodeState 
 const filterItems = computed(() => FILTERS
     .filter(f => f.value === 'all' || props.counts[f.value] > 0)
     .map(f => ({ label: f.label, value: f.value, badge: props.counts[f.value], dot: f.dot })))
-// The button reads "Filter" until a status narrows the list, then names it.
-const statusTrigger = computed(() => statusFilter.value === 'all'
-    ? 'Filter'
-    : FILTERS.find(f => f.value === statusFilter.value)?.label ?? 'Filter')
-
 function dotOf(item: unknown): GraphNodeState | undefined {
     return (item as { dot?: GraphNodeState }).dot
 }
@@ -60,17 +55,16 @@ function dotOf(item: unknown): GraphNodeState | undefined {
             <UTabs v-model="view"
                    :items="viewItems" />
         </FilterBarField>
-        <FilterMenu v-model="statusFilter"
-                    label="Status"
-                    :items="filterItems"
-                    :trigger="statusTrigger"
-                    :icon="appConfig.icons.filter">
-            <template #leading="{ item }">
-                <StatusDot v-if="dotOf(item)"
-                           :color="nodeStateColor(dotOf(item)!)"
-                           :pulse="nodeStateExecuting(dotOf(item)!)" />
-            </template>
-        </FilterMenu>
+        <FilterBarField label="Status">
+            <UTabs v-model="statusFilter"
+                   :items="filterItems">
+                <template #leading="{ item }">
+                    <StatusDot v-if="dotOf(item)"
+                               :color="nodeStateColor(dotOf(item)!)"
+                               :pulse="nodeStateExecuting(dotOf(item)!)" />
+                </template>
+            </UTabs>
+        </FilterBarField>
         <FilterMenu v-model="groupBy"
                     label="Group by"
                     :items="groupOptions"
