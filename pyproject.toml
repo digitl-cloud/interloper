@@ -129,7 +129,7 @@ exclude = ["*.md"]
 preview = true
 extend-select = [
     "E", "I", "UP", "ANN001", "ANN201", "ANN202", "D", "DOC",
-    "B", "SIM", "C4", "PERF", "RSE", "TRY300",
+    "B", "SIM", "C4", "PERF", "RSE", "TRY300", "C901",
     # The local-clock subset of DTZ: naive UTC datetimes and calendar partition keys are deliberate here.
     "DTZ002", "DTZ003", "DTZ004", "DTZ005", "DTZ006", "DTZ011", "DTZ012",
     # What agents leave behind: commented-out code, swallowed exceptions, blanket
@@ -139,6 +139,10 @@ extend-select = [
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+# A ceiling at the most complex function today, lowered as functions are split, never raised.
+[tool.ruff.lint.mccabe]
+max-complexity = 14
 
 # Raw database access lives in interloper-db alone; the packages that select
 # TID251 read and write through the store's facets.
