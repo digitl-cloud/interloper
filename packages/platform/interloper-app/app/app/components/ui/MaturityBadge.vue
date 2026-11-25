@@ -19,12 +19,12 @@ const LEVELS = {
     },
     alpha: {
         label: 'Alpha',
-        color: 'warning',
+        color: 'neutral',
         description: 'Early work, not yet proven against a live service. Behaviour, configuration and output may still change.',
     },
     beta: {
         label: 'Beta',
-        color: 'info',
+        color: 'neutral',
         description: 'Works and is being proven in use. Changes are still possible.',
     },
 } as const

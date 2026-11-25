@@ -178,7 +178,7 @@ Graph node states (`idle`, `attention`, `paused`, ...) map onto the same colours
 Show the one fact a row, tile or line exists for; the rest waits for hover, a tooltip or the detail view.
 - **Colour belongs to status.** A status is a badge in its colour (`StatusBadge`), and so is when something last ran, its time in its outcome's colour (`LastRunBadge`). The rest of a row stays neutral.
 - **No zero counts, no line that restates its neighbour.** A tile is a label, a number and one line; a run's status chips list only the outcomes that occurred; a summary drops its zero parts.
-- **Text, not chips.** Tags and counts in a table are text (`text-muted`, `text-dimmed`). Badges are kept for a status and for what is an object or an identifier: an entity reference (`EntityBadge`), a component's discriminator, a count beside a title, and the few marks that must stand out (maturity).
+- **Text, not chips.** Tags and counts in a table are text (`text-muted`, `text-dimmed`). Badges are kept for a status and for what is an object or an identifier: an entity reference (`EntityBadge`), a component's discriminator, a count beside a title, and a component's maturity (gray, except Deprecated).
 - **Tooltips, not legends.** A timeline's bar names its status in its tooltip, and a summary card's bar its segments; neither carries a legend.
 - **Lists say when, not what time.** A time in a list is relative, the exact one on hover (`RelativeTime`); a time to the second or millisecond keeps the extra precision for hover.
 - **One navigation.** The sidebar names every page once, in captioned sections (Data, Automation, Activity, and Extensions when any), with two menus at its foot, each owning its pages: the organisation's menu its Members and Settings (then the organisations to switch to), your menu your own settings, which are the same in every organisation. A page's other views are tabs in its toolbar, never sidebar entries, and a sidebar link returns to its page as it was left (its view and filters).
@@ -209,7 +209,7 @@ Show the one fact a row, tile or line exists for; the rest waits for hover, a to
 | Time in a list | `RelativeTime` ("2d ago", "in 14h"), the exact time on hover; `dateColumn` and the state columns use it |
 | Sortable column | `withSortableHeaders`: the sorted column shows its arrow, the others on hover or focus |
 | Table footer | `TableFooter`: "21–40 of 119 runs" with previous and next arrows once the rows outrun a page, "3 of 12 selected" while rows are selected, and nothing for a list that fits one page |
-| Maturity | `MaturityBadge` |
+| Maturity | `MaturityBadge`: Alpha and Beta gray, like a discriminator; Deprecated in `error`, since it warns against a choice |
 | Empty: no data on a page | `UEmpty variant="outline"` with `actions` |
 | Empty: inside a card or panel | `UEmpty variant="naked" size="sm"` |
 | Empty: inside a wizard step | `UEmpty variant="subtle" size="sm"` with `actions` |
