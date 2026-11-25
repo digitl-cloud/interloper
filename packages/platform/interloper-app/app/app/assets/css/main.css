@@ -7,6 +7,24 @@
     --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
+/* Motion: one easing, quick to start and settling gently, and three durations: 150ms for colour
+   and hover (every `transition-*` class's default), 200ms for what fades in (`animate-appear`,
+   named apart from Nuxt UI's own `fade-in`), 300ms for a panel that moves. A fade is an animation
+   of opacity alone, so it never contends with an element's own transitions. Static, so the
+   variables exist for the utilities that read them at runtime. */
+@theme static {
+    --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+    --default-transition-duration: 150ms;
+    --default-transition-timing-function: var(--ease-standard);
+    --animate-appear: appear 200ms var(--ease-standard);
+
+    @keyframes appear {
+        from {
+            opacity: 0;
+        }
+    }
+}
+
 /* The app's blue, from the Claude Design project; ui.colors.primary points at it. */
 @theme static {
     --color-blue-50: #edf3fe;
@@ -276,7 +294,15 @@
     box-shadow: var(--graph-asset-shadow-raised);
 }
 
+/* With reduced motion, nothing moves or resizes over time: every transition is instant. Fades
+   stay, as the setting allows: they are animations of opacity alone. */
 @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+        transition-duration: 0s !important;
+    }
+
     .graph-node:hover .graph-raise,
     .graph-node:hover .graph-stack-layer {
         transform: none;

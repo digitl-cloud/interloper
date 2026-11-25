@@ -67,6 +67,7 @@ const columns = withSkeletons<Row>([
                    @retry="overviewStore.fetchOverview()" />
         <UTable v-else
                 :data="runs ? rows : skeletonRows(SKELETON_ROWS)"
+                :get-row-id="skeletonRowId"
                 :columns="columns"
                 :ui="{ tr: 'cursor-pointer' }"
                 @select="(_e: Event, row: any) => isSkeletonRow(row.original) || navigateTo(organisationStore.path(`/executions/runs/${row.original.run.id}`))">

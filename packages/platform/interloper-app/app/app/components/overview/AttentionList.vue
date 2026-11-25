@@ -89,7 +89,7 @@ function when(item: AttentionItem): string {
             </div>
         </div>
         <div v-else-if="items.length"
-             class="divide-y divide-default">
+             class="animate-appear divide-y divide-default">
             <div v-for="item in items"
                  :key="`${item.kind}:${item.run_id ?? item.component_id ?? ''}:${item.title}`"
                  class="flex items-center gap-3 py-3">
@@ -125,6 +125,7 @@ function when(item: AttentionItem): string {
             </div>
         </div>
         <UEmpty v-else
+                class="animate-appear"
                 :icon="ui.icons.success"
                 title="All clear"
                 :description="`No failures, drift or overdue jobs. Last checked ${formatClockTime(new Date(generatedAt ?? Date.now()))}.`"

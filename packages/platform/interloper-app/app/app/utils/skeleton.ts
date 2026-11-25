@@ -16,6 +16,14 @@ export function isSkeletonRow(row: unknown): row is SkeletonRow {
 }
 
 /**
+ * A table's row id that tells a skeleton row from a loaded one, so the loaded rows replace the
+ * skeleton's rather than patching them in place, and fade in as a table's new rows do.
+ */
+export function skeletonRowId(row: unknown, index: number): string {
+    return isSkeletonRow(row) ? `skeleton-${index}` : String(index)
+}
+
+/**
  * The same columns, drawing a skeleton bar in each cell of a placeholder row,
  * aligned like the column's own cells, so the table keeps its shape while it
  * loads.

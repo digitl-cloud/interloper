@@ -27,7 +27,7 @@ Use the Nuxt UI component for every job it covers. Change its look on the first 
 2. **`app.config.ts` `ui.<component>`:** `slots`, `variants`, `compoundVariants`, `defaultVariants`. These apply to every instance.
 3. **Tokens:** `@theme`, `--ui-*`, `ui.colors`, `ui.icons`, `icons`.
 4. **`UTheme`** around a subtree that needs other component defaults.
-5. **Per-instance `:ui` / `class`, for layout only:** width, placement, flex and grid, overflow. Never colour, type, radius, shadow or the component's own padding.
+5. **Per-instance `:ui` / `class`, for layout and motion only:** width, placement, flex and grid, overflow, and `animate-appear`. Never colour, type, radius, shadow or the component's own padding.
 6. **Own components.**
    - They compose Nuxt UI components and add domain meaning (`StatusBadge`, `EntityBadge`, `DataTable`, `LoadError`, `PageTabs`). They never re-implement a Nuxt UI component.
    - New visuals only where Nuxt UI has none: the graph canvas, the execution timeline, the coverage calendar and strips. They use the tokens and scales below.
@@ -139,6 +139,13 @@ Buttons, badges and empty states size their own icons.
 - a splitter's side pane (`useSlidingPane`) opens over the whole splitter as a detail view, with a visible way back; a pixel-sized rail starts folded, under its own saved layout;
 - the agent panel covers the page instead of making room.
 
+**Motion.** Light and quick: things fade in, nothing bounces.
+- One easing, `--ease-standard` (quick to start, settling gently), and three durations: 150ms for colour and hover (every `transition-*` class's default), 200ms for what fades in, 300ms for a panel that moves. All in main.css.
+- Only opacity, colour and a panel's slide change over time. No bounce, no springs, no staggered cascades, no counting numbers, no movement on a sort or a filter.
+- Appearing is gentle, leaving is instant: what appears fades in (`animate-appear`, opacity over 200ms), and nothing waits for an exit.
+- The theme fades a page's body and toolbar as it opens (the sidebar and the navbar stay still) and a table's rows as they appear (a list loading, a run arriving, a group opening); a row patched in place stays put. A block that replaces a skeleton carries `animate-appear` itself, and a table drawing skeleton rows passes `skeletonRowId` as its row id, so its loaded rows replace them.
+- With reduced motion every transition is instant (main.css). Fades stay: they are opacity alone, which the setting allows.
+
 **Elevation.** Cards are flat. Overlays keep the shadows Nuxt UI ships. The graph keeps its own hover lift. Nothing else casts a shadow.
 
 ## 5. Icons
@@ -213,7 +220,7 @@ Show the one fact a row, tile or line exists for; the rest waits for hover, a to
 | Empty: no data on a page | `UEmpty variant="outline"` with `actions` |
 | Empty: inside a card or panel | `UEmpty variant="naked" size="sm"` |
 | Empty: inside a wizard step | `UEmpty variant="subtle" size="sm"` with `actions` |
-| Loading, first load | `USkeleton` shaped like the content where the layout is known (`withSkeletons` for tables); otherwise one centred spinner, `appConfig.ui.icons.loading` at `size-5 animate-spin text-dimmed` |
+| Loading, first load | `USkeleton` shaped like the content where the layout is known (`withSkeletons` and `skeletonRowId` for tables), the content fading in as it replaces it; otherwise one centred spinner, `appConfig.ui.icons.loading` at `size-5 animate-spin text-dimmed` |
 | Loading, refetch | the component's `loading` prop |
 | Failed load | `LoadError` (error UAlert with Retry). Never only `console.error`. |
 | Failed action | `toast.add(errorToast(error, 'Couldn't …'))` |
