@@ -4,8 +4,8 @@ A package adds routes by naming an ``APIRouter`` in the ``routes`` section of
 its manifest, and a prebuilt UI by naming a `UIBundle` in its ``ui`` section:
 
 ```yaml
-routes: acme_interloper.routes:router
-ui: acme_interloper.ui:UI
+routes: interloper_acme.routes:router
+ui: interloper_acme.ui:UI
 ```
 
 The router answers under ``/api/organisations/{org_id}/ext/<name>``, where

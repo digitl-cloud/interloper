@@ -27,7 +27,7 @@ PLATFORM = REPOSITORY / "packages" / "platform"
 SOURCES = ("interloper-core", "interloper-db", "interloper-api", "interloper-scheduler", "interloper-app")
 DEPLOYED = ("interloper-core", "interloper-db", "interloper-api")
 PARTS = ("source", "connection", "settings", "command", "ui")
-LOADS = "from acme_interloper.ui import UI; assert (UI.directory / UI.entry).is_file(), UI.directory"
+LOADS = "from interloper_acme.ui import UI; assert (UI.directory / UI.entry).is_file(), UI.directory"
 
 
 @dataclass(frozen=True)
@@ -48,7 +48,7 @@ class ExtensionCheck:
         Returns:
             Its directory.
         """
-        return self.work / "acme-interloper"
+        return self.work / "interloper-acme"
 
     def run(self) -> None:
         """Create the extension, grow it with every part, build it and check it."""

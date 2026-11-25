@@ -18,8 +18,8 @@ An extension starts as an ordinary uv library, with `interloper-app` as its one 
 dependency: it carries the platform you run locally and the `interloper extension` commands.
 
 ```sh
-uv init --lib acme-interloper
-cd acme-interloper
+uv init --lib interloper-acme
+cd interloper-acme
 uv add --dev interloper-app
 uv run interloper extension init
 ```
@@ -28,7 +28,7 @@ uv run interloper extension init
 
 - `pyproject.toml` gains the `interloper.extensions` entry point naming the package, and
   `interloper-core` as a dependency;
-- `src/acme_interloper/extension.yaml` is the manifest: the extension's key (`acme`), its name and
+- `src/interloper_acme/extension.yaml` is the manifest: the extension's key (`acme`), its name and
   description, and later every part it declares;
 - `interloper.yaml` is the configuration every `interloper` command run in this directory reads,
   with a key that encrypts what the local instance stores. It holds that key, so `init` adds it
@@ -51,12 +51,12 @@ uv run interloper extension add ui
 
 | Part | Writes | Declares |
 |---|---|---|
-| `source` | `src/acme_interloper/weather/source.py`: a source and its assets | `components` |
-| `connection` | `src/acme_interloper/weather/connection.py`: the credentials a source reads | `components` |
-| `settings` | `src/acme_interloper/settings/acme.py`: a settings section `interloper.yaml` fills | `settings` |
-| `command` | `src/acme_interloper/commands/sync.py`: an `interloper sync` command | `cli` |
-| `routes` | `src/acme_interloper/routes.py`: API routes under `/api/organisations/{org_id}/ext/acme` | `routes` |
-| `ui` | `ui/`, a Vue page built with `@interloper/ui`, and `src/acme_interloper/ui.py` declaring its build | `ui` |
+| `source` | `src/interloper_acme/weather/source.py`: a source and its assets | `components` |
+| `connection` | `src/interloper_acme/weather/connection.py`: the credentials a source reads | `components` |
+| `settings` | `src/interloper_acme/settings/acme.py`: a settings section `interloper.yaml` fills | `settings` |
+| `command` | `src/interloper_acme/commands/sync.py`: an `interloper sync` command | `cli` |
+| `routes` | `src/interloper_acme/routes.py`: API routes under `/api/organisations/{org_id}/ext/acme` | `routes` |
+| `ui` | `ui/`, a Vue page built with `@interloper/ui`, and `src/interloper_acme/ui.py` declaring its build | `ui` |
 
 `add ui` adds the routes when the extension has none, since its page reads them. Edit the files
 as you like: the manifest names them, nothing else does.
@@ -91,7 +91,7 @@ uv run interloper extension build
 uv run interloper extension check
 ```
 
-`build` installs the UI's dependencies, type-checks and builds it into `src/acme_interloper/static/`,
+`build` installs the UI's dependencies, type-checks and builds it into `src/interloper_acme/static/`,
 then builds the sdist and the wheel into `dist/`, and checks that the wheel carries the UI.
 `check` imports every entry of every installed manifest and names what fails or what nothing
 reads. Publish the wheel the way you publish any package (`uv publish`); a deployment installs it
