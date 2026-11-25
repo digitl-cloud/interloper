@@ -33,7 +33,23 @@ from interloper_google_cloud.connection import GoogleCloudConnection
     tags=["Cloud"],
 )
 class BigQueryDestination(DatabaseDestination):
-    """BigQuery destination."""
+    """BigQuery destination.
+
+    Each asset is a table in a dataset of the destination's project: the
+    asset's dataset, else the default dataset, created in the destination's
+    location when missing. A table is created on first write from the asset's
+    schema, time-partitioned on its partition column, and carries the asset's
+    descriptions, kept in sync on later writes. A schema the asset declares
+    can add columns to its table; an inferred one never does.
+
+    Each write loads its rows in one Parquet load job. Replacing a partition
+    deletes its rows first, and BigQuery runs the two jobs apart, so a failed
+    load leaves the partition empty until the next write.
+
+    It signs in with the connection's service account key, or with the
+    environment's own credentials when the connection has none (workload
+    identity in a cluster).
+    """
 
     dialect: ClassVar[str | None] = "bigquery"
 
