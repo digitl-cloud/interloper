@@ -35,7 +35,7 @@ const open = ref(true)
                        class="ms-auto size-4 shrink-0 text-dimmed transition-transform duration-200 group-data-[state=open]:rotate-180" />
             </button>
             <div v-if="$slots.actions"
-                 class="flex shrink-0 items-center pe-3 sm:pe-5">
+                 class="flex shrink-0 items-center pe-3">
                 <slot name="actions" />
             </div>
         </div>
