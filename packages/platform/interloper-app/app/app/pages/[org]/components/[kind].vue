@@ -126,15 +126,15 @@ function lastRenewedColumn(): TableColumn<ComponentRecord> {
 // State columns (e.g. a connection's renewal timestamps) come from the
 // kind's state schema; every definition of a kind shares its anchor's state
 // model, so the first one stands in for them all. Connections fold the
-// renewal state into one badge: the error rides the badge's tooltip.
+// renewal state into one badge (the error rides the badge's tooltip), read
+// before the next renewal.
 const tableStateColumns = computed<TableColumn<ComponentRecord>[]>(() => {
     const stateColumns = stateSchemaColumns(definitions.value[0])
     if (kind.value !== 'connection') return stateColumns
     return [
         autoRenewColumn(),
-        ...stateColumns
-            .filter(column => column.id !== 'last_renewal_error')
-            .map(column => (column.id === 'last_renewed_at' ? lastRenewedColumn() : column)),
+        lastRenewedColumn(),
+        ...stateColumns.filter(column => column.id !== 'last_renewed_at' && column.id !== 'last_renewal_error'),
     ]
 })
 
