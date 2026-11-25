@@ -136,8 +136,8 @@
 
     .chat-prose :is(th, td) {
         padding: --spacing(2) --spacing(3);
-        font-size: var(--text-xs);
-        line-height: var(--text-xs--line-height);
+        font-size: var(--text-sm);
+        line-height: var(--text-sm--line-height);
     }
 
     .chat-prose div:has(> table) {
@@ -147,7 +147,7 @@
     .chat-prose :not(pre) > code {
         display: inline;
         padding: 0 --spacing(1);
-        font-size: 0.85em;
+        font-size: var(--text-xs);
         box-decoration-break: clone;
     }
 
