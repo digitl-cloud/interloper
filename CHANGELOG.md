@@ -2,6 +2,37 @@
 
 <!-- version list -->
 
+## v0.146.0 (2026-11-25)
+
+### Bug Fixes
+
+- **app**: Square a table row's highlight
+  ([`90389fb`](https://github.com/digitl-cloud/interloper/commit/90389fb9cbc4800fb0f99d986a29b8dc0a48dd34))
+
+### Continuous Integration
+
+- Build arm64 images on native runners, and release without rerunning the checks
+  ([`06e26f2`](https://github.com/digitl-cloud/interloper/commit/06e26f2f5e8e4a60c926a10b0bf879b635a7ed1c))
+
+### Documentation
+
+- Name the example extension interloper-acme
+  ([`acde364`](https://github.com/digitl-cloud/interloper/commit/acde3642275d3d9fa6c52a6da70e1043a516e0ce))
+
+### Features
+
+- Upstream relations follow the organisation
+  ([`be1139c`](https://github.com/digitl-cloud/interloper/commit/be1139c7384cb42d129c4420cce5431e325d3014))
+
+- **app**: Wider list column, the page recentres beside the agent, bigger titles
+  ([`4898999`](https://github.com/digitl-cloud/interloper/commit/4898999fc7182956d924e04e3ed805049e8eb835))
+
+### Performance Improvements
+
+- Read followed upstream edges where the rows are read
+  ([`deef01a`](https://github.com/digitl-cloud/interloper/commit/deef01ab4aff8bc3cdf284ccf8afe92441f5ecff))
+
+
 ## v0.145.0 (2026-11-24)
 
 ### Features
