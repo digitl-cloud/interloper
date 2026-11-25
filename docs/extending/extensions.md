@@ -18,22 +18,22 @@ point interloper reads, and ships the manifest inside that package so it lands i
 
 ```toml
 [project.entry-points."interloper.extensions"]
-acme = "acme_interloper"
+acme = "interloper_acme"
 ```
 
 ```yaml
-# acme_interloper/extension.yaml
+# interloper_acme/extension.yaml
 manifest_version: 1
 key: acme
 name: Acme
 description: "Acme sources, a Polars representation and a Ray runner."
-components: acme_interloper
+components: interloper_acme
 representations:
-  - acme_interloper.polars:POLARS_REPRESENTATION
+  - interloper_acme.polars:POLARS_REPRESENTATION
 oauth_providers:
-  - acme_interloper.oauth:ACME
+  - interloper_acme.oauth:ACME
 runners:
-  ray: acme_interloper.runner:RayRunner
+  ray: interloper_acme.runner:RayRunner
 ```
 
 Five keys say what the package is:
@@ -91,7 +91,7 @@ the section's: its block of `interloper.yaml` and the prefix of its environment 
 
 ```yaml
 settings:
-  acme_widgets: acme_interloper.settings:WidgetSettings
+  acme_widgets: interloper_acme.settings:WidgetSettings
 ```
 
 ```py
@@ -129,7 +129,7 @@ declares it):
 
 ```yaml
 cli:
-  backup: acme_interloper.cli:BackupCommand
+  backup: interloper_acme.cli:BackupCommand
 ```
 
 ```py
@@ -178,7 +178,7 @@ by the extension's key, and the API mounts it under the organisation the request
 (`interloper extension add routes` writes `routes.py` with one route and declares it):
 
 ```yaml
-routes: acme_interloper.routes:router
+routes: interloper_acme.routes:router
 ```
 
 ```py
@@ -222,11 +222,11 @@ page reading a route, one sidebar entry, routes added first when there are none)
 `interloper extension build` builds it into the wheel.
 
 ```yaml
-ui: acme_interloper.ui:UI
+ui: interloper_acme.ui:UI
 ```
 
 ```py
-# acme_interloper/ui.py
+# interloper_acme/ui.py
 from pathlib import Path
 
 from interloper_api import UIBundle
@@ -418,7 +418,7 @@ anything:
 
 ```sh
 $ interloper extension check
-package 'acme_interloper', section 'runner': no registry reads this section
+package 'interloper_acme', section 'runner': no registry reads this section
 Checked 48 entries in 8 sections: 1 problem(s).
 ```
 

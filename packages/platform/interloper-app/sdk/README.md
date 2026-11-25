@@ -17,7 +17,7 @@ An extension's UI needs four files beside its pages:
 // vite.config.ts: the bundle goes into the extension's Python package
 import { interloper } from '@interloper/ui/vite'
 
-export default interloper({ outDir: '../src/acme_interloper/static' })
+export default interloper({ outDir: '../src/interloper_acme/static' })
 ```
 
 ```json
