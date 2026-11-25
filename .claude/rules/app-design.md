@@ -123,8 +123,8 @@ No arbitrary radii.
 Buttons, badges and empty states size their own icons.
 
 **Widths.** A page names its column once, on its `UDashboardPanel`; its toolbar, body and navbar title line up on it (`page-gutter` and `page-title-offset` in main.css, applied by the theme), so no page centres its own content:
-- `page-wide` (80rem): lists; at a laptop's width they span the panel, so a table scrolls only when the window lacks room, and on a wide screen they stay capped and centred
-- `page-column` (64rem): the overview and the admin's overview
+- `page-wide` (80rem): lists and the overview; at a laptop's width they span the panel, so a table scrolls only when the window lacks room, and on a wide screen they stay capped and centred
+- `page-column` (64rem): the admin's overview
 - `page-narrow` (42rem): settings and forms
 - none, the panel's full width: canvases and detail pages (assets, a timeline, a run, a backfill)
 - auth pages: `max-w-sm`
