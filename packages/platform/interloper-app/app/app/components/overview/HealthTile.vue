@@ -30,7 +30,7 @@ defineProps<{
             <USkeleton class="h-4 w-28" />
         </div>
         <div v-else
-             class="flex items-baseline gap-2">
+             class="flex animate-appear items-baseline gap-2">
             <span class="text-3xl font-semibold tabular-nums"
                   :class="headlineClass || 'text-highlighted'">{{ headline }}</span>
             <span class="text-sm tabular-nums text-muted"><slot name="detail" /></span>
@@ -40,8 +40,10 @@ defineProps<{
                 <USkeleton class="h-8 w-full" />
                 <USkeleton class="h-4 w-2/3" />
             </template>
-            <slot v-else-if="!empty"
-                  name="footer" />
+            <div v-else-if="!empty"
+                 class="flex animate-appear flex-col gap-1.5">
+                <slot name="footer" />
+            </div>
         </div>
     </UCard>
 </template>

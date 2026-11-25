@@ -76,13 +76,15 @@ export default defineAppConfig({
     // A page is padded and spaced 16px at every width (the theme steps up to 24px from `sm`), and its
     // navbar and toolbar keep their edges in line with it. The navbar draws no rule: it and the page
     // are one surface.
-    // The body centres the page's column (`page-wide` / `page-column` / `page-narrow` on the panel,
-    // see main.css) and is the surface a sticky table header on it takes the tone of. The panel draws
-    // no edge after it: the agent column, the one thing that follows it, draws its own as it slides.
+    // The body and the toolbar fade in as a page opens; the sidebar, the navbar and the agent column
+    // stay still. The body centres the page's column (`page-wide` / `page-column` / `page-narrow` on
+    // the panel, see main.css) and is the surface a sticky table header on it takes the tone of. The
+    // panel draws no edge after it: the agent column, the one thing that follows it, draws its own as
+    // it slides.
     dashboardPanel: {
       slots: {
         root: 'lg:not-last:border-e-0',
-        body: 'sm:gap-4 sm:p-4 page-gutter sm:page-gutter [--surface:var(--ui-bg)]'
+        body: 'sm:gap-4 sm:p-4 page-gutter sm:page-gutter [--surface:var(--ui-bg)] animate-appear'
       }
     },
     dashboardNavbar: {
@@ -97,7 +99,7 @@ export default defineAppConfig({
     // keeps the theme's sideways scroll for tabs wider than a phone.
     dashboardToolbar: {
       slots: {
-        root: 'min-h-0 border-b-0 p-0 sm:p-0 pt-4 page-gutter sm:page-gutter'
+        root: 'min-h-0 border-b-0 p-0 sm:p-0 pt-4 page-gutter sm:page-gutter animate-appear'
       }
     },
     // The navbar's search field reads as a filled control, not an outlined button.
@@ -271,10 +273,12 @@ export default defineAppConfig({
       // first column carries the row's name. A row is a `group/row`, so what it holds can answer its
       // hover (the options menu). A sticky header takes the tone of the
       // surface it scrolls over (`--surface`: the page's, or a card's), so rows
-      // scrolling beneath don't show through.
+      // scrolling beneath don't show through. A row fades in as it appears: a list's rows as they
+      // load, a run as it arrives, a group's rows as it opens; a row patched in place stays put.
       slots: {
         root: '-mx-2',
         separator: 'bg-(--ui-border)',
+        tbody: '*:animate-appear',
         tr: 'group/row',
         th: 'py-3 first:ps-2 last:pe-2 text-muted font-normal',
         td: 'py-3 first:ps-2 last:pe-2 first:text-highlighted first:font-medium'

@@ -111,6 +111,7 @@ const columns = withSkeletons<(typeof table.value)[number]>([
                 size="sm" />
         <UTable v-else
                 :data="rows ? table : skeletonRows(Object.keys(KIND_META).length)"
+                :get-row-id="skeletonRowId"
                 :columns="columns"
                 :ui="{ tr: 'cursor-pointer' }"
                 @select="(_e: Event, row: any) => isSkeletonRow(row.original) || navigateTo(row.original.meta.to)" />

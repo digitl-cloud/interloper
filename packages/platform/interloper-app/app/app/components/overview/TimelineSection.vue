@@ -116,11 +116,11 @@ onUnmounted(() => timelineStore.$reset())
                 description="Runs show up here as they execute, and each job's next firing as a dashed bar."
                 variant="naked"
                 size="sm"
-                class="transition-opacity"
+                class="animate-appear transition-opacity"
                 :class="switching ? 'opacity-50' : ''"
                 :style="{ minHeight: `${height}px` }" />
         <div v-else
-             class="transition-opacity"
+             class="animate-appear transition-opacity"
              :class="switching ? 'opacity-50' : ''"
              :style="{ height: `${height}px` }">
             <ChartExecutionTimeline :rows="rows"

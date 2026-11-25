@@ -212,7 +212,7 @@ watch(coverage, (value) => {
                     :description="`No partitioned asset had a partition in the last ${coverageMonths} months. Coverage fills in once a job materialises one.`"
                     variant="naked"
                     size="sm"
-                    class="transition-opacity"
+                    class="animate-appear transition-opacity"
                     :class="switching ? 'opacity-50' : ''"
                     :style="{ minHeight: `${chartHeight}px` }" />
             <UTooltip v-else-if="coverage"
@@ -223,7 +223,7 @@ watch(coverage, (value) => {
                       :ui="{ content: 'h-auto pointer-events-none' }">
                 <VChart ref="chart"
                         :option="option"
-                        class="mx-auto transition-opacity"
+                        class="mx-auto animate-appear transition-opacity"
                         :class="switching ? 'opacity-50' : ''"
                         :style="{ height: `${chartHeight}px`, width: `${chartWidth}px` }"
                         autoresize
@@ -249,6 +249,7 @@ watch(coverage, (value) => {
             </div>
         </div>
         <OverviewCoverageSourceList v-if="coverage && selected && !coverageError"
+                                    class="animate-appear"
                                     :date="selected"
                                     :coverage="coverage"
                                     :type-filter="typeFilter"

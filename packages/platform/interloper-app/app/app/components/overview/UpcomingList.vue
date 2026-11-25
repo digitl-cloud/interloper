@@ -66,6 +66,7 @@ const columns = withSkeletons<Row>([
                    @retry="overviewStore.fetchOverview()" />
         <UTable v-else
                 :data="items ? rows : skeletonRows(LIMIT)"
+                :get-row-id="skeletonRowId"
                 :columns="columns"
                 :ui="{ tr: 'cursor-pointer' }"
                 @select="(_e: Event, row: any) => isSkeletonRow(row.original) || navigateTo({ path: organisationStore.path(kindPath('job')), query: { q: row.original.job_name } })">
