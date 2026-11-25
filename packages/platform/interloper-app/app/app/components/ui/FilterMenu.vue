@@ -1,18 +1,17 @@
 <script setup lang="ts" generic="T extends string">
 /**
- * A filter, or a choice of how a list shows, kept behind a button so a toolbar
- * holds only what is used most. Inline (a wide `FilterBar`), the button names
- * the current choice and opens a menu of the options; in the phone's filter
- * sheet the options are a labelled list, as every other filter's are there.
- * The `leading` slot draws what goes before an option (a status dot) in both.
+ * A choice of how a list shows, kept behind a button so the toolbar's inline
+ * controls stay its filters. Inline (a wide `FilterBar`), the button names the
+ * current choice and opens a menu of the options; in the phone's filter sheet
+ * the options are a labelled list, as every filter's are there.
  */
 const model = defineModel<T>({ required: true })
 
 const props = defineProps<{
     /** What the options choose: the menu's heading, and the sheet's. */
     label: string
-    /** The options; a `badge` is a count shown beside one. */
-    items: Array<{ label: string, value: T, icon?: string, badge?: number }>
+    /** The options. */
+    items: Array<{ label: string, value: T, icon?: string }>
     /** The button's text for the current choice. */
     trigger: string
     /** The button's icon. */
@@ -25,7 +24,6 @@ const stacked = computed(() => bar?.value ?? false)
 
 const menu = computed(() => [[
     { type: 'label' as const, label: props.label },
-    // Each option keeps what the caller gave it, so the `leading` slot sees the same item in both.
     ...props.items.map(item => ({
         ...item,
         type: 'checkbox' as const,
@@ -39,13 +37,7 @@ const menu = computed(() => [[
     <FilterBarField v-if="stacked"
                     :label="label">
         <UTabs v-model="model"
-               :items="items">
-            <template v-if="$slots.leading"
-                      #leading="{ item }">
-                <slot name="leading"
-                      :item="item" />
-            </template>
-        </UTabs>
+               :items="items" />
     </FilterBarField>
     <UDropdownMenu v-else
                    :items="menu">
@@ -54,14 +46,5 @@ const menu = computed(() => [[
                  :trailing-icon="appConfig.ui.icons.chevronDown"
                  color="neutral"
                  variant="soft" />
-        <template #item-label="{ item }">
-            {{ item.label }}<span v-if="'badge' in item && item.badge !== undefined"
-                                  class="ms-1.5 text-dimmed tabular-nums">{{ item.badge }}</span>
-        </template>
-        <template v-if="$slots.leading"
-                  #item-leading="{ item }">
-            <slot name="leading"
-                  :item="item" />
-        </template>
     </UDropdownMenu>
 </template>
