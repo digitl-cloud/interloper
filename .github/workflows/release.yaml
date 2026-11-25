@@ -2,9 +2,9 @@ name: Release
 
 # Cuts a version with semantic-release (version bump, release commit, tag,
 # changelog, GitHub release). It runs no checks of its own: it releases only a
-# commit that main's Checks workflow passed. It publishes nothing: the GitHub
-# release it creates triggers the Publish workflow, which builds the tag and
-# publishes it to PyPI, npm and GHCR.
+# commit that main's Checks workflow passed, waiting for Checks when it is still
+# running. It publishes nothing: the GitHub release it creates triggers the
+# Publish workflow, which builds the tag and publishes it to PyPI, npm and GHCR.
 
 on:
   workflow_dispatch:
@@ -41,22 +41,34 @@ jobs:
 
     steps:
       - name: Require Checks to have passed
+        timeout-minutes: 15
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           runs="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow checks.yaml --commit "$GITHUB_SHA" \
-            --json status,conclusion,url)"
-          if jq -e 'any(.[]; .conclusion == "success")' <<<"$runs" >/dev/null; then
-            echo "Checks passed for ${GITHUB_SHA}."
-            exit 0
-          fi
+            --json databaseId,status,conclusion,url)"
           if [ "$(jq length <<<"$runs")" -eq 0 ]; then
             echo "::error::Checks has not run for ${GITHUB_SHA}. It skips a commit that touches only the paths it" \
               "ignores, and a [skip ci] one. Run it on main (gh workflow run checks.yaml --ref main), then release."
-          else
-            echo "::error::Checks has not passed for ${GITHUB_SHA}: $(jq -r '.[0] | "\(if .conclusion == "" then .status else .conclusion end), \(.url)"' <<<"$runs")"
+            exit 1
           fi
-          exit 1
+          # A release usually follows the merge whose Checks is still running:
+          # a run that passed settles it, else the run still going is waited for.
+          run="$(jq -c 'first(.[] | select(.conclusion == "success"))
+            // first(.[] | select(.status != "completed")) // .[0]' <<<"$runs")"
+          id="$(jq -r .databaseId <<<"$run")"
+          if [ "$(jq -r .status <<<"$run")" != "completed" ]; then
+            echo "Waiting for Checks on ${GITHUB_SHA}: $(jq -r .url <<<"$run")"
+          fi
+          until [ "$(jq -r .status <<<"$run")" = "completed" ]; do
+            sleep 15
+            run="$(gh run view "$id" --repo "$GITHUB_REPOSITORY" --json status,conclusion,url)"
+          done
+          if [ "$(jq -r .conclusion <<<"$run")" != "success" ]; then
+            echo "::error::Checks has not passed for ${GITHUB_SHA}: $(jq -r '"\(.conclusion), \(.url)"' <<<"$run")"
+            exit 1
+          fi
+          echo "Checks passed for ${GITHUB_SHA}: $(jq -r .url <<<"$run")"
 
       - name: Get GitHub App token
         uses: actions/create-github-app-token@v3
