@@ -47,12 +47,12 @@ class _RowSchema(Schema):
 
 
 @il.asset
-def plain_asset() -> list:  # noqa: D103
+def plain_asset() -> list:
     return []
 
 
 @il.asset(partitioning=il.TimePartitionConfig(column="day"))
-def partitioned_asset() -> list:  # noqa: D103
+def partitioned_asset() -> list:
     return []
 
 

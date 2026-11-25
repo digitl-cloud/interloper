@@ -37,17 +37,9 @@ interloper-sql = { workspace = true }
 # RUFF
 # ###############
 [tool.ruff]
-line-length = 120
+extend = "../../../pyproject.toml"
 
-[tool.ruff.lint]
-preview = true
-extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202", "DOC", "D"]
-
-[tool.ruff.lint.pydocstyle]
-convention = "google"
-
-[tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401", "F403"]
+[tool.ruff.lint.extend-per-file-ignores]
 "**/schemas/**" = ["E501", "D100", "D101"]
 "src/interloper_assets/*/*/source.py" = ["DOC201", "DOC501"]
 "src/interloper_assets/*/assets.py" = ["DOC201"]
@@ -56,4 +48,3 @@ convention = "google"
 "src/interloper_assets/*/__init__.py" = ["D104"]
 "src/interloper_assets/*/*/__init__.py" = ["D104"]
 "src/interloper_assets/*/*/schemas/__init__.py" = ["D104"]
-"tests/**" = ["ANN", "F811", "D101", "D102", "D103", "D104", "RUF069", "PLW0108"]

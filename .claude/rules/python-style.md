@@ -148,7 +148,7 @@ Mechanics, all verified against the linter:
 - a **toolkit or agent tool** docstring becomes the tool description sent to the model (`@mcp.tool(description=fn.__doc__)`), and the injected `ctx` parameter is stripped from the tool schema — documenting it would tell the model about an argument it must never pass;
 - anything else assigned to `__doc__` for display.
 
-These get a summary and the prose a *reader* needs, and no mechanical sections. Each package's `per-file-ignores` turns the completeness rules off for them; this paragraph is the reason, so don't restate it there. Never add a `Returns:` to product copy to satisfy a linter. If you are unsure which kind you are looking at, check whether anything reads `__doc__`.
+These get a summary and the prose a *reader* needs, and no mechanical sections. Each package's `extend-per-file-ignores` turns the completeness rules off for them; this paragraph is the reason, so don't restate it there. Never add a `Returns:` to product copy to satisfy a linter. If you are unsure which kind you are looking at, check whether anything reads `__doc__`.
 
 **The second exemption is a generated or templated scaffold**, where the file's shape is fixed and a docstring could only name it: an alembic revision's `upgrade`/`downgrade` pair (the migration's module docstring holds its intent), a schema module declaring one class named after its file with every field already carrying a `description`, and the per-vendor connector layout repeated 45 times in `interloper-assets`. The *missing*-docstring rules are off for those; what is genuinely worth saying about a vendor — auth quirks, pagination, rate limits — belongs on the class or function it constrains, where the rules still apply.
 

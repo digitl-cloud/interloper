@@ -12,7 +12,7 @@ from interloper.partitioning import TimePartition
 
 
 @il.asset(partitioning=il.TimePartitionConfig(column="date"))
-def orders(context: il.ExecutionContext) -> list:  # noqa: D103
+def orders(context: il.ExecutionContext) -> list:
     return []
 
 

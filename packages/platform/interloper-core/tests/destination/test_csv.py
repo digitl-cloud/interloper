@@ -12,12 +12,12 @@ from interloper.partitioning import TimePartition, TimePartitionWindow
 
 
 @il.asset(partitioning=il.TimePartitionConfig(column="date"))
-def partitioned_asset(context: il.ExecutionContext) -> list:  # noqa: D103
+def partitioned_asset(context: il.ExecutionContext) -> list:
     return []
 
 
 @il.asset
-def plain_asset() -> list:  # noqa: D103
+def plain_asset() -> list:
     return []
 
 

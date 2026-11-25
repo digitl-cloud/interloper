@@ -87,12 +87,12 @@ class OtherOpenDatabase(OpenDatabase):
 
 
 @il.asset(partitioning=il.TimePartitionConfig(column="date"))
-def partitioned_asset(context: il.ExecutionContext) -> list:  # noqa: D103
+def partitioned_asset(context: il.ExecutionContext) -> list:
     return []
 
 
 @il.asset
-def plain_asset() -> list:  # noqa: D103
+def plain_asset() -> list:
     return []
 
 
@@ -105,7 +105,7 @@ class DiscriminatedSource(il.Source):
         """Asset carrying the instance discriminator in its table name."""
 
 
-def make_io_context(asset: il.Asset, window=None, schema=None) -> IOContext:  # noqa: D103
+def make_io_context(asset: il.Asset, window=None, schema=None) -> IOContext:
     return IOContext(asset=asset, window=PartitionWindow.of(window), schema=schema)
 
 

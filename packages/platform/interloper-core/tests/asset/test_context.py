@@ -19,27 +19,27 @@ from interloper.partitioning import (
 
 
 @il.asset(partitioning=TimePartitionConfig(column="date"))
-def daily(context: il.ExecutionContext) -> list:  # noqa: D103
+def daily(context: il.ExecutionContext) -> list:
     return []
 
 
 @il.asset(partitioning=TimePartitionConfig(column="date", allow_window=True))
-def windowed(context: il.ExecutionContext) -> list:  # noqa: D103
+def windowed(context: il.ExecutionContext) -> list:
     return []
 
 
 @il.asset(partitioning=TimePartitionConfig(column="date", granularity=TimeGranularity.MONTH))
-def monthly(context: il.ExecutionContext) -> list:  # noqa: D103
+def monthly(context: il.ExecutionContext) -> list:
     return []
 
 
 @il.asset(partitioning=ListPartitionConfig(column="region", values=("eu", "us")))
-def regional(context: il.ExecutionContext) -> list:  # noqa: D103
+def regional(context: il.ExecutionContext) -> list:
     return []
 
 
 @il.asset
-def whole() -> list:  # noqa: D103
+def whole() -> list:
     return []
 
 
