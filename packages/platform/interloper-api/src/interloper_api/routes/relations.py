@@ -11,7 +11,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Query
-from interloper_db import Page, RelationQuery
+from interloper_db import Edge, Page, RelationQuery
 from interloper_db.models import ComponentRelation
 from pydantic import BaseModel
 
@@ -34,11 +34,11 @@ class RelationResponse(BaseModel):
     dst_kind: str
 
     @classmethod
-    def from_relation(cls, relation: ComponentRelation) -> RelationResponse:
-        """Describe a relation row.
+    def from_relation(cls, relation: Edge | ComponentRelation) -> RelationResponse:
+        """Describe a relation: an edge a listing read, or a row a write stored.
 
         Args:
-            relation: The relation row.
+            relation: The edge or the stored row.
 
         Returns:
             The response model.

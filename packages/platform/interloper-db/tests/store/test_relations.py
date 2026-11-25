@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
+from contextlib import contextmanager
 from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
 from interloper.errors import ConfigError
-from sqlalchemy import Engine
+from sqlalchemy import Engine, event
 from sqlmodel import Session, select
 
 from interloper_db import NotFoundError
@@ -68,6 +70,15 @@ class Matcher(il.Asset):
     """Asset fanning in the ``campaigns`` asset of every source."""
 
     campaigns: list[il.Asset] = il.Relation("asset", "*.campaigns", many=True)
+
+    def data(self, context: il.ExecutionContext) -> list[dict]:
+        return []
+
+
+class MixedReach(il.Asset):
+    """Parentless asset whose one relation names a parentless asset and another source's asset."""
+
+    up: list[il.Asset] = il.Relation("asset", ["guard_upstream", "instance_source.rows"], many=True)
 
     def data(self, context: il.ExecutionContext) -> list[dict]:
         return []
@@ -255,6 +266,7 @@ def store(component_db: Engine) -> Store:
             GuardRequired,
             GuardOptional,
             Matcher,
+            MixedReach,
             WireUpSource,
             WireOtherSource,
             WireDownSource,
@@ -628,7 +640,22 @@ class TestIntraSourceWiring:
 
 
 def _edges(store: Store, org_id: UUID = _ORG) -> set[tuple[UUID, str, UUID]]:
-    return {(edge.src_id, edge.name, edge.dst_id) for edge in store.relations.automatic(org_id)}
+    listed = store.relations.list(org_id, RelationQuery(src_kind="asset", dst_kind="asset", limit=None)).items
+    return {(edge.src_id, edge.name, edge.dst_id) for edge in listed}
+
+
+@contextmanager
+def _statements(engine: Engine) -> Generator[list[str]]:
+    sent: list[str] = []
+
+    def record(_connection, _cursor, statement, *_) -> None:
+        sent.append(statement)
+
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        yield sent
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
 
 
 class TestAutomatic:
@@ -650,7 +677,6 @@ class TestAutomatic:
         qualified = _child(store.components.create(_ORG, kind="source", key="consumer_source"), "qualified")
         store.relations.add(qualified.id, name="rows", dst_id=_child(first, "rows").id)
 
-        assert not any(src == qualified.id and name == "rows" for src, name, _ in _edges(store))
         listed = store.relations.list(_ORG, RelationQuery(name="rows", src_kind="asset", limit=None)).items
         assert {edge.dst_id for edge in listed if edge.src_id == qualified.id} == {_child(first, "rows").id}
 
@@ -692,24 +718,40 @@ class TestAutomatic:
             assert _relations(session, _child(source, "totals").id) == []
         assert _edges(store) == {(_child(source, "totals").id, "rows", _child(source, "rows").id)}
 
-    def test_automatic_matches_each_relation_against_its_own_keys_only(
-        self, store: Store, monkeypatch: pytest.MonkeyPatch
-    ):
+    def test_a_relation_reaching_a_parentless_asset_follows_it_as_well(self, store: Store):
+        upstream = store.components.create(_ORG, kind="asset", key="guard_upstream")
+        instance = store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "a"})
+        reach = store.components.create(_ORG, kind="asset", key="mixed_reach")
+
+        assert {dst for src, name, dst in _edges(store) if src == reach.id and name == "up"} == {
+            upstream.id,
+            _child(instance, "rows").id,
+        }
+
+    def test_a_page_is_one_windowed_statement_and_its_count(self, store: Store, component_db: Engine):
         store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "a"})
-        store.components.create(_ORG, kind="source", key="wire_up_source")
-        store.components.create(_ORG, kind="source", key="first_campaign_source")
         store.components.create(_ORG, kind="source", key="consumer_source")
-        pools: list[set[str]] = []
-        original = il.Relation.matches
 
-        def recorded(self: il.Relation, owner: il.ComponentIdentity, candidates, *, siblings):
-            pools.append({identity.key for identity in candidates.values()})
-            return original(self, owner, candidates, siblings=siblings)
+        with _statements(component_db) as sent:
+            page = store.relations.list(_ORG, RelationQuery(src_kind="asset", dst_kind="asset", limit=1, offset=1))
 
-        monkeypatch.setattr(il.Relation, "matches", recorded)
-        store.relations.automatic(_ORG)
+        assert page.total == 3
+        assert len(sent) == 2
 
-        assert pools and all(pool <= {"rows"} for pool in pools)
+    def test_a_listing_filters_matches_by_name_and_destination(self, store: Store):
+        first = store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "a"})
+        second = store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "b"})
+        consumer = store.components.create(_ORG, kind="source", key="consumer_source")
+
+        query = RelationQuery(name="rows", dst_id=[_child(second, "rows").id], limit=None)
+        listed = store.relations.list(_ORG, query).items
+
+        assert {(edge.src_id, edge.dst_id) for edge in listed} == {
+            (_child(consumer, "qualified").id, _child(second, "rows").id),
+            (_child(consumer, "wild").id, _child(second, "rows").id),
+            (_child(second, "totals").id, _child(second, "rows").id),
+        }
+        assert _child(first, "rows").id not in {edge.dst_id for edge in listed}
 
     def test_check_bound_accepts_an_unbound_upstream_relation(self, store: Store):
         store.components.create(_ORG, kind="asset", key="matcher")

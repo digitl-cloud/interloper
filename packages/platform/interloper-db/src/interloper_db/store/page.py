@@ -14,7 +14,7 @@ from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, Field
 from sqlmodel import Session, func, select
-from sqlmodel.sql.expression import SelectOfScalar
+from sqlmodel.sql.expression import Select, SelectOfScalar
 
 T = TypeVar("T")
 U = TypeVar("U")
@@ -45,7 +45,7 @@ class Page(BaseModel, Generic[T]):
     total: int
 
     @classmethod
-    def read(cls, session: Session, statement: SelectOfScalar[Any], query: PageQuery) -> Page[Any]:
+    def read(cls, session: Session, statement: Select[Any] | SelectOfScalar[Any], query: PageQuery) -> Page[Any]:
         """Run a listing statement over the window *query* asks for.
 
         The total is counted over the same statement without its ordering and
@@ -55,13 +55,19 @@ class Page(BaseModel, Generic[T]):
 
         Args:
             session: Open session the statement runs in.
-            statement: The filtered, ordered selection of the listing.
+            statement: The filtered, ordered selection of the listing: entities
+                come back as entities, columns as rows.
             query: The window to read.
 
         Returns:
             The page of rows.
         """
-        items = list(session.exec(statement.offset(query.offset).limit(query.limit)).all())
+        window = statement.offset(query.offset).limit(query.limit)
+        if any(description["entity"] is not None for description in statement.column_descriptions):
+            items = list(session.exec(window).all())
+        else:
+            # Columns alone are read off the connection: the ORM adds nothing to them but a cost per row.
+            items = list(session.connection().execute(window).all())
         if (query.limit is None or len(items) < query.limit) and (items or query.offset == 0):
             return cls(items=items, total=query.offset + len(items))
         counted = select(func.count()).select_from(statement.order_by(None).subquery())

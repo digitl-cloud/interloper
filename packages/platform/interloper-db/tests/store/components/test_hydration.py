@@ -7,13 +7,15 @@ and assert on the reconstructed framework instances.
 
 from __future__ import annotations
 
+from collections.abc import Generator
+from contextlib import contextmanager
 from typing import Any
 from uuid import UUID, uuid4
 
 import interloper as il
 import pydantic
 import pytest
-from sqlalchemy import Engine
+from sqlalchemy import Engine, event
 from sqlmodel import Session, select
 
 from interloper_db import ComponentDriftError, HydrationError
@@ -53,6 +55,11 @@ class DemoSource(il.Source):
 
 @il.asset(partitioning=_DAILY)
 def demo_asset() -> list[dict]:
+    return []
+
+
+@il.asset(partitioning=_DAILY)
+def follower_asset(demo_asset: il.Upstream) -> list[dict]:
     return []
 
 
@@ -173,7 +180,7 @@ class FakeLinker(il.Component):
 
 il.KINDS.register(FakeLinker.kind, FakeLinker.anchor())
 
-_CATALOG = il.Catalog.from_assets([DemoSource, demo_asset, Shop, Finance, Account, Report, Warehouse])
+_CATALOG = il.Catalog.from_assets([DemoSource, demo_asset, follower_asset, Shop, Finance, Account, Report, Warehouse])
 
 
 @pytest.fixture
@@ -195,6 +202,20 @@ def shop_connection(store: Store) -> Component:
         The created connection component.
     """
     return store.components.create(_ORG, kind="connection", key="shop_connection", config={}, encrypted=False)
+
+
+@contextmanager
+def _statements(engine: Engine) -> Generator[list[str]]:
+    sent: list[str] = []
+
+    def record(_connection, _cursor, statement, *_) -> None:
+        sent.append(statement)
+
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        yield sent
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
 
 
 def _child(source: Component, key: str) -> Component:
@@ -404,16 +425,19 @@ class TestAutomaticUpstreams:
         with pytest.raises(HydrationError, match="'stats' matches 2 assets"):
             store.components.load(report.id)
 
-    def test_load_resolves_nothing_for_a_component_holding_no_asset(
-        self, store: Store, shop_connection: Component, monkeypatch: pytest.MonkeyPatch
-    ):
-        calls: list[UUID] = []
-        original = store.relations.automatic
-        monkeypatch.setattr(store.relations, "automatic", lambda org_id: calls.append(org_id) or original(org_id))
+    def test_following_siblings_sends_the_statements_an_idle_source_sends(self, store: Store, component_db: Engine):
+        following = store.components.create(_ORG, kind="source", key="demo_source", config={"dataset": "first"})
+        idle = store.components.create(
+            _ORG, kind="source", key="demo_source", config={"dataset": "second", "enabled": False}
+        )
 
-        store.components.load(shop_connection.id)
+        with _statements(component_db) as idle_sent:
+            store.components.load(idle.id)
+        with _statements(component_db) as following_sent:
+            hydrated = store.components.load(following.id)
 
-        assert calls == []
+        assert _asset(hydrated, "b").bound("a") is _asset(hydrated, "a")
+        assert following_sent == idle_sent
 
     def test_load_leaves_a_disabled_assets_upstreams_alone(self, store: Store):
         for account in ("a", "b"):
@@ -423,6 +447,15 @@ class TestAutomaticUpstreams:
         hydrated = store.components.load(report.id)
 
         assert _asset(hydrated, "summary").bound("stats") is None
+
+    def test_a_parentless_asset_follows_the_parentless_asset_it_names(self, store: Store):
+        upstream = store.components.create(_ORG, kind="asset", key="demo_asset")
+        follower = store.components.create(_ORG, kind="asset", key="follower_asset")
+
+        hydrated = store.components.load(follower.id)
+
+        bound = hydrated.bound("demo_asset")
+        assert isinstance(bound, il.Asset) and bound.id == str(upstream.id)
 
     def test_siblings_bind_without_rows(self, store: Store):
         demo = store.components.create(_ORG, kind="source", key="demo_source")
@@ -475,10 +508,10 @@ class TestCrossSourceUpstream:
         original_build = Hydrator._build
         shop_hydrations: list[UUID] = []
 
-        def spy(self: Hydrator, db_component: Component, cache: Any, chain: Any, automatic: Any) -> il.Component:
+        def spy(self: Hydrator, db_component: Component, cache: Any, chain: Any) -> il.Component:
             if db_component.key == "shop":
                 shop_hydrations.append(db_component.id)
-            return original_build(self, db_component, cache, chain, automatic)
+            return original_build(self, db_component, cache, chain)
 
         monkeypatch.setattr(Hydrator, "_build", spy)
 

@@ -11,12 +11,13 @@ been hydrated within the same call.
 One cache backs a whole call (see :meth:`Hydrator._load`), so a component
 reached several times (a destination two sources share, a job's own target
 reached again through a cross-source upstream) hydrates once and every
-consumer binds the identical instance. An asset's upstream relation holding
-no row is bound to what it follows in the organisation
-(:meth:`~interloper_db.store.relations.RelationStore.automatic`), resolved
-once per call and never written. Hydration fails closed on catalog
-drift. Whether a key resolves is asked of the catalog directly: hydration
-needs a yes or no, while the descriptive status a response shows
+consumer binds the identical instance. An enabled asset's upstream
+relation holding no row is bound to what it follows in the organisation,
+read with the asset's own rows
+(:meth:`~interloper_db.store.relations.RelationStore.targets`) and never
+written. Hydration fails closed on catalog drift. Whether a key resolves
+is asked of the catalog directly: hydration needs a yes or no, while the
+descriptive status a response shows
 (disabled, missing, unreadable) is the row store's
 :meth:`~interloper_db.store.components.base.ComponentStore.read`.
 """
@@ -37,46 +38,11 @@ from sqlalchemy import Engine
 from sqlmodel import col, select
 
 from interloper_db.errors import ComponentDriftError, HydrationError, NotFoundError
-from interloper_db.models import Component, ComponentRelation
+from interloper_db.models import Component
 from interloper_db.session import session_scope
 
 if TYPE_CHECKING:
     from interloper_db.store.relations import RelationStore
-
-
-class Automatic:
-    """What an organisation's unbound upstream relations follow, resolved once and only when an asset asks.
-
-    One lives for one :meth:`Hydrator.load` call: loading a connection or a
-    destination never pays for resolving the organisation's edges.
-    """
-
-    def __init__(self, relations: RelationStore, org_id: UUID) -> None:
-        """Hold what resolving needs, resolving nothing yet.
-
-        Args:
-            relations: The relation store resolving the edges.
-            org_id: The organisation the load belongs to.
-        """
-        self._relations = relations
-        self._org_id = org_id
-        self._edges: dict[UUID, dict[str, list[UUID]]] | None = None
-
-    def of(self, asset_id: UUID) -> dict[str, list[UUID]]:
-        """What each of one asset's unbound upstream relations follows.
-
-        Args:
-            asset_id: The asset.
-
-        Returns:
-            Relation name to the ids of the assets it follows; empty when it follows none.
-        """
-        if self._edges is None:
-            self._edges = {}
-            for edge in self._relations.automatic(self._org_id):
-                self._edges.setdefault(edge.src_id, {}).setdefault(edge.name, []).append(edge.dst_id)
-        return self._edges.get(asset_id, {})
-
 
 Cache = dict[UUID, il.Component]
 Chain = tuple[tuple[UUID, str], ...]
@@ -101,8 +67,8 @@ class Hydrator:
             catalog: Catalog the rows' keys resolve against.
             decrypt: Optional ``(bytes) -> bytes`` callable for decrypting
                 payloads marked ``encrypted=True``.
-            relations: The relation store, which says what an unbound upstream
-                relation follows.
+            relations: The relation store, which reads what a row's relations
+                point at, followed upstreams included.
         """
         self._engine = engine
         self._catalog = catalog
@@ -120,23 +86,15 @@ class Hydrator:
 
         Returns:
             The reconstructed framework component.
-
-        Raises:
-            NotFoundError: If the component is not found.
         """
         with tracer().start_as_current_span(
             "interloper.store.load", attributes={attributes.TARGET_ID: str(component_id)}
         ):
-            with session_scope(self._engine) as session:
-                db_component = session.get(Component, component_id)
-                if not db_component:
-                    raise NotFoundError(f"Component {component_id} not found")
-                org_id = db_component.org_id
-            return self._load(component_id, {}, (), Automatic(self._relations, org_id))
+            return self._load(component_id, {}, ())
 
     # -- Internals -------------------------------------------------------------
 
-    def _load(self, component_id: UUID, cache: Cache, chain: Chain, automatic: Automatic) -> il.Component:
+    def _load(self, component_id: UUID, cache: Cache, chain: Chain) -> il.Component:
         """Hydrate a component row (the traced body of :meth:`load`).
 
         *chain* is the trail of ids currently being hydrated, paired with the
@@ -150,7 +108,6 @@ class Hydrator:
                 by id, consulted before doing any work.
             chain: Ids currently being hydrated in this call, in resolution
                 order.
-            automatic: What the organisation's unbound upstream relations follow.
 
         Returns:
             The reconstructed framework component.
@@ -179,10 +136,10 @@ class Hydrator:
 
         chain = (*chain, (component_id, db_component.key))
         if owned_asset:
-            return self._load_owned_asset(db_component, cache, chain, automatic)
-        return self._build(db_component, cache, chain, automatic)
+            return self._load_owned_asset(db_component, cache, chain)
+        return self._build(db_component, cache, chain)
 
-    def _load_owned_asset(self, db_asset: Component, cache: Cache, chain: Chain, automatic: Automatic) -> il.Component:
+    def _load_owned_asset(self, db_asset: Component, cache: Cache, chain: Chain) -> il.Component:
         """Hydrate a source-owned asset through its parent source.
 
         The parent source is the unit of construction: hydrating it builds
@@ -195,7 +152,6 @@ class Hydrator:
             db_asset: The asset row, owned by a source.
             cache: Components already hydrated within the enclosing call.
             chain: Ids currently being hydrated in the enclosing call.
-            automatic: What the organisation's unbound upstream relations follow.
 
         Returns:
             The bound asset instance.
@@ -204,7 +160,7 @@ class Hydrator:
             ComponentDriftError: If the source no longer declares the key.
         """
         assert db_asset.parent_id is not None
-        source = self._load(db_asset.parent_id, cache, chain, automatic)
+        source = self._load(db_asset.parent_id, cache, chain)
         asset = cache.get(db_asset.id)
         if asset is None:
             raise ComponentDriftError(
@@ -213,7 +169,7 @@ class Hydrator:
             )
         return asset
 
-    def _build(self, db_component: Component, cache: Cache, chain: Chain, automatic: Automatic) -> il.Component:
+    def _build(self, db_component: Component, cache: Cache, chain: Chain) -> il.Component:
         """Construct a parentless row's component, bind what exists only once it does, and check it.
 
         Args:
@@ -221,7 +177,6 @@ class Hydrator:
             cache: Components already hydrated within the enclosing call; the
                 component and the children it owns join it here.
             chain: Ids currently being hydrated in the enclosing call.
-            automatic: What the organisation's unbound upstream relations follow.
 
         Returns:
             The component, its relations bound and checked.
@@ -233,16 +188,14 @@ class Hydrator:
                 class refuses it or the bound relations.
         """
         cls = il.Component.resolve_key(db_component.qualified_key, self._catalog)
-        init, owed = self._init(db_component, cache, chain, automatic)
+        init, owed = self._init(db_component, cache, chain)
         try:
             component = cls(**init)
             cache[db_component.id] = component
             for child in component.owned:
                 cache[UUID(child.id)] = child
             for owner_id, name, target_ids in owed:
-                targets = [self._load(target_id, cache, chain, automatic) for target_id in target_ids]
-                cache[owner_id].bind(name, *targets)
-            self._bind_automatic(component, cache, chain, automatic)
+                cache[owner_id].bind(name, *(self._load(target_id, cache, chain) for target_id in target_ids))
             component.validate_relations()
         except (ComponentDriftError, HydrationError, NotFoundError):
             raise
@@ -255,43 +208,13 @@ class Hydrator:
             ) from e
         return component
 
-    def _bind_automatic(self, component: il.Component, cache: Cache, chain: Chain, automatic: Automatic) -> None:
-        """Bind each upstream relation a freshly built component's enabled assets left unbound to what it follows.
-
-        Args:
-            component: The component just built: an asset, or the owner of some.
-            cache: Components already hydrated within the enclosing call.
-            chain: Ids currently being hydrated in the enclosing call.
-            automatic: What the organisation's unbound upstream relations follow.
-
-        Raises:
-            HydrationError: If a single-valued relation follows several assets;
-                it has to be bound explicitly.
-        """
-        owned = [component] if isinstance(component, il.Asset) else component.owned
-        assets = [asset for asset in owned if isinstance(asset, il.Asset)]
-        for asset in assets:
-            if not asset.enabled:
-                continue
-            for name, target_ids in automatic.of(UUID(asset.id)).items():
-                if asset.bound(name):
-                    continue
-                if not type(asset).relations[name].many and len(target_ids) > 1:
-                    listed = ", ".join(str(target_id) for target_id in target_ids)
-                    raise HydrationError(
-                        f"Asset '{asset.qualified_key}' relation '{name}' matches {len(target_ids)} assets "
-                        f"({listed}); bind '{name}' explicitly."
-                    )
-                asset.bind(name, *(self._load(target_id, cache, chain, automatic) for target_id in target_ids))
-
-    def _init(
-        self, db_component: Component, cache: Cache, chain: Chain, automatic: Automatic
-    ) -> tuple[dict[str, Any], Owed]:
+    def _init(self, db_component: Component, cache: Cache, chain: Chain) -> tuple[dict[str, Any], Owed]:
         """The constructor arguments of a row, and the bindings owed once the component exists.
 
         The row's config, then each relation name the row holds edges under,
-        a list when the declared relation is ``many`` and a single value
-        otherwise: a parentless target is hydrated and handed over, an owned
+        or that an enabled asset's unbound upstream relation follows, a list
+        when the declared relation is ``many`` and a single value otherwise:
+        a parentless target is hydrated and handed over, an owned
         one (an asset) is owed, since its source is built as a whole. A
         source's children embed as the ``assets`` override map, their own
         config and relations read the same way; a child the parent's
@@ -303,7 +226,6 @@ class Hydrator:
             db_component: The component row.
             cache: Components already hydrated within the enclosing call.
             chain: Ids currently being hydrated in the enclosing call.
-            automatic: What the organisation's unbound upstream relations follow.
 
         Returns:
             The keyword arguments to construct with, and the bindings owed as
@@ -311,25 +233,36 @@ class Hydrator:
 
         Raises:
             HydrationError: If the row holds edges under a relation name its
-                class does not declare, or holds more than one row under a
-                relation its class declares single-valued.
+                class does not declare, holds more than one row under a
+                relation its class declares single-valued, or such a relation
+                holding none follows several assets, which only a binding can
+                choose between.
         """
         init: dict[str, Any] = {"id": str(db_component.id), **db_component.read_config(self._decrypt)}
         vocabulary = self._catalog.vocabulary(db_component.kind, db_component.qualified_key)
         owed: Owed = []
-        for name, targets in self._targets(db_component.id).items():
+        parent = db_component.parent if db_component.parent_id is not None else None
+        follow = db_component.kind == "asset" and db_component.enabled and (parent is None or parent.enabled)
+        targets_by_name, followed = self._relations.targets(db_component, follow=follow)
+        for name, targets in targets_by_name.items():
             relation = vocabulary.get(name)
             if relation is None:
                 raise HydrationError(
                     f"Component {db_component.id} ({db_component.kind}) has '{name}' relations "
                     "its class does not declare"
                 )
+            if not relation.many and len(targets) > 1 and name in followed:
+                listed = ", ".join(str(target.id) for target in targets)
+                raise HydrationError(
+                    f"Asset '{db_component.qualified_key}' relation '{name}' matches {len(targets)} assets "
+                    f"({listed}); bind '{name}' explicitly."
+                )
             if not relation.many and len(targets) > 1:
                 raise HydrationError(
                     f"Component {db_component.id} ({db_component.kind}) holds {len(targets)} rows under "
                     f"single-valued relation '{name}'"
                 )
-            built = [self._load(target.id, cache, chain, automatic) for target in targets if target.parent_id is None]
+            built = [self._load(target.id, cache, chain) for target in targets if target.parent_id is None]
             owned = [target.id for target in targets if target.parent_id is not None]
             if built:
                 init[name] = built if relation.many else built[0]
@@ -343,33 +276,12 @@ class Hydrator:
         with session_scope(self._engine) as session:
             for child in session.exec(children_statement).all():
                 self._check_declared(db_component, child)
-                child_init, child_owed = self._init(child, cache, chain, automatic)
+                child_init, child_owed = self._init(child, cache, chain)
                 assets[child.key] = child_init
                 owed.extend(child_owed)
         if assets:
             init["assets"] = assets
         return init, owed
-
-    def _targets(self, src_id: UUID) -> dict[str, list[Component]]:
-        """The rows a component's outgoing relations point at, by relation name, ordered stably.
-
-        Args:
-            src_id: The source component's id.
-
-        Returns:
-            A ``{name: target rows}`` mapping ordered by ``(name, dst_id)``.
-        """
-        statement = (
-            select(ComponentRelation.name, Component)
-            .join(Component, col(Component.id) == col(ComponentRelation.dst_id))
-            .where(ComponentRelation.src_id == src_id)
-            .order_by(col(ComponentRelation.name), col(ComponentRelation.dst_id))
-        )
-        grouped: dict[str, list[Component]] = {}
-        with session_scope(self._engine) as session:
-            for name, target in session.exec(statement).all():
-                grouped.setdefault(name, []).append(target)
-        return grouped
 
     def _check_job_targets(self, db_job: Component) -> None:
         """Fail closed when any job target's catalog key no longer resolves.
@@ -377,7 +289,8 @@ class Hydrator:
         Args:
             db_job: The job row being hydrated.
         """
-        for target in self._targets(db_job.id).get("targets", []):
+        targets, _ = self._relations.targets(db_job, follow=False)
+        for target in targets.get("targets", []):
             self._check_resolves(target, subject=f"Job '{db_job.name}' ({db_job.id})")
 
     def _check_resolves(self, db_component: Component, *, subject: str | None = None) -> None:
