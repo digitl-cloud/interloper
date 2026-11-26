@@ -9,7 +9,9 @@
  */
 
 export { defineExtension, useExtension } from '~/composables/extensions'
-export type { Extension, ExtensionHost, ExtensionNavDestination, ExtensionNavPage, ExtensionRoute } from '~/composables/extensions'
+export type { AssetUIContext, Extension, ExtensionAssetUI, ExtensionHost, ExtensionNavDestination, ExtensionNavPage, ExtensionRoute } from '~/composables/extensions'
+export { useAssetRows } from '~/composables/assetRows'
+export type { AssetRows } from '~/types/rows'
 
 export { useApi, useOrgApi } from '~/composables/api'
 export { useConfirm } from '~/composables/confirm'
@@ -19,12 +21,15 @@ export { useToast } from '@nuxt/ui/composables/useToast'
 export { useCatalogStore } from '~/stores/catalog'
 export { useComponentsStore } from '~/stores/components'
 export { useOrganisationStore } from '~/stores/organisation'
+export { useRunsStore } from '~/stores/runs'
 export { useUserStore } from '~/stores/user'
 
 export { errorToast } from '~/utils/apiErrors'
 export { componentIcon } from '~/utils/icons'
 
 export { default as AppNavbar } from '~/components/ui/AppNavbar.vue'
+export { default as AssetRowsTable } from '~/components/assets/RowsTable.vue'
+export { default as AssetTableEditor } from '~/components/assets/TableEditor.vue'
 export { default as CardHeader } from '~/components/ui/CardHeader.vue'
 export { default as DataTable } from '~/components/ui/DataTable.vue'
 export { default as LoadError } from '~/components/ui/LoadError.vue'

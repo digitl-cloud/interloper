@@ -44,6 +44,14 @@ export function emptyCell() {
     return h('span', { class: 'text-dimmed' }, '—')
 }
 
+/** A cell of an asset's rows: the dash for null, numbers in tabular figures, a list or an object as JSON. */
+export function rowCell(value: unknown) {
+    if (value === null || value === undefined) return emptyCell()
+    if (typeof value === 'object') return h('span', { class: 'font-mono' }, JSON.stringify(value))
+    if (typeof value === 'number') return h('span', { class: 'tabular-nums' }, String(value))
+    return String(value)
+}
+
 /** A UUID as its short form, the full id in a tooltip. */
 export function idCell(id: string) {
     return h(UTooltip, { text: id }, () => h('span', { class: 'tabular-nums slashed-zero' }, shortId(id)))

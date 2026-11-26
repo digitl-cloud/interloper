@@ -262,7 +262,7 @@ the bundle (`external` in any bundler):
 |--------|------------|
 | `vue`, `vue-router`, `pinia`, `@vueuse/core` | the packages, as the app runs them |
 | `@iconify/vue` | the icon store `UIcon` renders from: `addCollection` registers an extension's own icons |
-| `@interloper/host` | the app itself: `defineExtension`, `useExtension`, `useApi`, `useOrgApi`, `useRealtimeSubscription`, `useToast`, `useConfirm`, the organisation, user, catalog and components stores, `errorToast`, `componentIcon`, the `AppNavbar`, `CardHeader`, `DataTable`, `LoadError` and `StatusBadge` components and a set of Nuxt UI components (`UButton`, `UCard`, `UDashboardPanel`, `UTable`, `UModal`, `UForm`, ...) that render with the app's theme |
+| `@interloper/host` | the app itself: `defineExtension`, `useExtension`, `useAssetRows`, `useApi`, `useOrgApi`, `useRealtimeSubscription`, `useToast`, `useConfirm`, the organisation, user, catalog, components and runs stores, `errorToast`, `componentIcon`, the `AppNavbar`, `AssetRowsTable`, `AssetTableEditor`, `CardHeader`, `DataTable`, `LoadError` and `StatusBadge` components and a set of Nuxt UI components (`UButton`, `UCard`, `UDashboardPanel`, `UTable`, `UModal`, `UForm`, ...) that render with the app's theme |
 
 The entry module's default export declares the extension. Its `setup` receives the extension's
 host, which adds its pages and its sidebar entries:
@@ -300,6 +300,103 @@ router.push(path(`buckets/${buckets[0].id}`))   // /<organisation>/ext/acme/buck
 a page's path as `addRoute` does. A sidebar entry, its `views` a submenu, follows the app's own
 and is found by the command palette under its label and keywords. An extension that fails to
 load is reported in a toast and skipped; the app and the other extensions carry on.
+
+### Asset UIs
+
+An extension can give an asset a UI of its own. `addAssetUI` names the asset definition by its
+qualified key, the label and icon the app shows for it, and the component it renders:
+
+```js
+import { defineAsyncComponent } from 'vue'
+import { defineExtension } from '@interloper/host'
+
+export default defineExtension({
+    setup(host) {
+        host.addAssetUI({
+            asset: 'campaign_matcher.campaign_matches',
+            label: 'Bucket builder',
+            icon: 'i-lucide-boxes',
+            component: defineAsyncComponent(() => import('./BucketBuilder.vue')),
+        })
+    },
+})
+```
+
+Every asset of a source opens from the Assets page: from a button in its side pane, labelled with
+its UI's label, "Edit" for a [decision table](../guide/views.md#decision-tables) and "Rows" for
+any other asset, and, in a graph the user may edit, from an icon on its card when it has a UI. It
+opens in one modal per source, titled with the source's name: a tab for every asset of the source
+that has a UI, in the source's order, the asset it opened on selected, plus that asset's rows when
+it has no UI. An asset's UI is the one an extension contributed, else the grid editor when it is a
+decision table. A second UI for the same asset replaces the first, with a warning in the console.
+
+The component receives one prop, `context`, an `AssetUIContext`:
+
+| Field | What it holds |
+|-------|---------------|
+| `asset` | the asset instance the tab shows |
+| `source` | the source that owns it |
+| `assets` | the source's assets by bare key: `context.assets.buckets` |
+| `canEdit` | whether the user may write the source's decision tables and run it: an editor or an admin |
+
+An asset UI owns no storage and no routes: it is a client of the platform's rows API, and keeps to
+one rule. **An asset UI reads any asset of its source (and that source's upstreams), writes only its
+source's decision tables, and runs only its source.** `useExtension()` belongs to an extension's
+pages and throws anywhere else; an asset UI has its context instead, and `useAssetRows()`:
+
+```js
+import { useAssetRows, useRunsStore } from '@interloper/host'
+
+const { read, write, run } = useAssetRows()
+const { buckets, campaign_matches } = props.context.assets
+
+const matches = await read(campaign_matches.id, { search: 'black friday', limit: 10_000 })
+const table = await read(buckets.id, { limit: 10_000 })
+await write(buckets.id, [...table.rows, { bucket_id: 'b7', name: 'Black Friday', active: true }], table.version)
+const runId = await run(props.context.source.id)
+useRunsStore().findById(runId)?.status   // the run, live
+```
+
+| Call | Request | Does |
+|------|---------|------|
+| `read(assetId, { search, limit, offset })` | `GET /api/organisations/{org_id}/assets/{asset_id}/rows?search=&limit=&offset=` | A page of the rows, for a viewer. |
+| `write(assetId, rows, version)` | `PUT` on the same path, `{"rows": [...], "version": "..."}` | Rewrites a decision table whole, for an editor. |
+| `run(componentId)` | `POST /api/organisations/{org_id}/runs` | Queues a run of a source or an asset, through the runs store, and returns its id. |
+
+A read goes through the asset's default destination and answers an `AssetRows`: `columns` (the
+schema's, in its order, when it declares one, else the data's), `rows` (JSON-safe: dates and
+instants as ISO text, a missing value as `null`), `total`, `truncated` and `version`. `limit` runs
+from 1 to 10,000, 100 by default. `search` keeps the rows with a text cell that contains it, case
+ignored. No read goes past 10,000 rows: a page without a search reads up to its own end, and
+`truncated` says more rows follow it; a page with a search, and any read of a decision table, reads
+the first 10,000 rows and searches them, so `total` counts the matches among them and `truncated`
+says the table holds more. Either way a truncated table reads as "more than
+`total` rows". A table never written answers no rows. A destination that fails answers 502 with
+its message.
+
+Anything narrower than a search is the UI's own: it reads the rows, up to the cap, and narrows
+them in the browser.
+
+A decision table's read carries its `version`, a hash of every row whatever their order, and its
+write names the version the rows were read at: a table that changed since answers 409, and is not
+written. A write replaces the table in every destination of the asset, an empty list emptying it;
+it refuses more than 10,000 rows and a row that fails the schema (422, naming the row and the
+field), and answers the new table's first page and version.
+
+The app's own UIs are exported for an asset UI to embed, each taking a `context` like its own (`{
+...context, asset: context.assets.buckets }` for another asset of the source):
+
+- `AssetRowsTable`, an asset's rows: 100 a page, a search for words in its text columns, and the
+  "more than N rows" note when the read stops short.
+- `AssetTableEditor`, a decision table's grid: a column per field of its schema (text, number,
+  switch, date, date and time, and a select for an enum; a list or an object shows as JSON and
+  keeps its values), required fields marked, rows added, edited and deleted, then "Save and run"
+  writes the table with its version and runs its source: at once, or, when an asset of the
+  source is partitioned, through the source's run dialog, which asks for the partition as the
+  source's own Run does. A table changed meanwhile is
+  not overwritten: the editor says so and offers to reload it. A viewer sees the rows read-only,
+  and so does everyone when the table holds more than the 10,000 rows a read reaches, since
+  saving it would drop the rest.
 
 ### Building it with the SDK
 

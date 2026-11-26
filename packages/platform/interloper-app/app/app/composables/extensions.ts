@@ -1,4 +1,6 @@
+import type { Component } from 'vue'
 import type { RouteComponent, RouteMeta, Router } from 'vue-router'
+import type { ComponentRecord } from '~/types/component'
 
 /** The organisation's route, which extension pages are added beneath so its middleware runs before them. */
 export const ORGANISATION_ROUTE = 'organisation'
@@ -36,11 +38,35 @@ export interface ExtensionNavDestination extends ExtensionNavPage {
     views?: ExtensionNavPage[]
 }
 
+/** What an asset UI's component receives as its one prop, `context`. */
+export interface AssetUIContext {
+    /** The asset instance the UI shows. */
+    asset: ComponentRecord
+    /** The source that owns it. */
+    source: ComponentRecord
+    /** The source's assets, by bare key. */
+    assets: Record<string, ComponentRecord>
+    /** Whether the user may write the source's editable assets and run it: an editor or an admin. */
+    canEdit: boolean
+}
+
+/** A UI an extension contributes to one asset; the app opens it from the asset's pane and its graph node. */
+export interface ExtensionAssetUI {
+    /** The asset definition's qualified key: `campaign_matcher.campaign_matches`. */
+    asset: string
+    /** The button's and the tab's label. */
+    label: string
+    icon?: string
+    /** Rendered with one prop, `context: AssetUIContext`; `defineAsyncComponent` loads it on first open. */
+    component: Component
+}
+
 /** What an extension's `setup` receives: its key and the ways it plugs into the app. */
 export interface ExtensionHost {
     readonly key: string
     addRoute: (route: ExtensionRoute) => void
     addNavDestination: (destination: ExtensionNavDestination) => void
+    addAssetUI: (ui: ExtensionAssetUI) => void
 }
 
 /** An extension's UI: the default export of its entry module. */
@@ -59,6 +85,7 @@ function extensionPath(key: string, path: string): string {
 }
 
 const destinations = shallowRef<{ key: string, destination: ExtensionNavDestination }[]>([])
+const assetUIs = shallowRef<Record<string, ExtensionAssetUI>>({})
 
 /** The host an extension's `setup` gets: its pages go under the organisation's route, its entries into the sidebar. */
 export function createExtensionHost(key: string, router: Router): ExtensionHost {
@@ -75,7 +102,16 @@ export function createExtensionHost(key: string, router: Router): ExtensionHost 
         addNavDestination(destination) {
             destinations.value = [...destinations.value, { key, destination }]
         },
+        addAssetUI(ui) {
+            if (assetUIs.value[ui.asset]) console.warn(`Extension '${key}' replaces the UI of asset '${ui.asset}'`)
+            assetUIs.value = { ...assetUIs.value, [ui.asset]: ui }
+        },
     }
+}
+
+/** The UI an extension contributed to an asset definition, by its qualified key. */
+export function extensionAssetUI(assetKey: string): ExtensionAssetUI | undefined {
+    return assetUIs.value[assetKey]
 }
 
 /**

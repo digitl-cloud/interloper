@@ -8,7 +8,9 @@ import { requiredUpstreams } from '~/types/catalog'
  * An asset card on the graph: name, status dot, description, tags and the
  * latest status label, with corner badges for materializing, drift, warnings
  * and destinations. Its target handle shows while it has an upstream, and
- * rings in warning while a required upstream relation matches no asset.
+ * rings in warning while a required upstream relation matches no asset. An
+ * asset with a UI (an extension's, or an editable asset's editor) carries a
+ * button that opens it, unless the graph is read-only.
  */
 const props = defineProps<{
     asset: ComponentRecord
@@ -53,6 +55,10 @@ const LOUD_TEXT: Partial<Record<StatusColor, string>> = { error: 'text-error', w
 const statusTextClass = computed(() => LOUD_TEXT[nodeStateColor(state.value)] ?? 'text-dimmed')
 const warnings = computed(() => getWarnings(props.asset.id, props.asset.key))
 const destinationBadge = computed(() => getBadgeForAssetId(props.asset.id))
+
+const assetUI = useAssetUI()
+const source = computed(() => props.asset.parent_id ? componentsStore.byId(props.asset.parent_id) : undefined)
+const ui = computed(() => source.value && !graphReadonly.value ? assetUI.uiOf(source.value, props.asset) : undefined)
 
 // Every required upstream relation follows at least one asset.
 const isRunnable = computed(() => {
@@ -131,6 +137,16 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                     <span class="min-w-0 truncate text-sm font-semibold text-highlighted">{{ label }}</span>
                     <StatusDot :color="nodeStateColor(state)"
                                :pulse="nodeStateExecuting(state)" />
+                    <UTooltip v-if="source && ui"
+                              :text="ui.action">
+                        <UButton :icon="ui.icon"
+                                 :aria-label="ui.action"
+                                 color="neutral"
+                                 variant="ghost"
+                                 size="xs"
+                                 class="ms-auto -me-1"
+                                 @click.stop="assetUI.open(source, asset)" />
+                    </UTooltip>
                 </div>
                 <div class="flex min-h-0 flex-1 flex-col justify-between p-3">
                     <p class="line-clamp-2 h-8 text-xs text-muted"

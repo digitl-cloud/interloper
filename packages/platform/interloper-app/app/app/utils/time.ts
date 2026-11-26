@@ -1,3 +1,6 @@
+import type { CalendarDate } from '@internationalized/date'
+import { parseDate } from '@internationalized/date'
+
 /** The user's preferred display timezone (IANA name); undefined falls back to the browser's. */
 let displayTimeZone: string | undefined
 
@@ -106,6 +109,20 @@ export function timeSince(date: Date): string {
         return Math.floor(interval) + " minutes"
     }
     return Math.floor(seconds) + " seconds"
+}
+
+/**
+ * An ISO `YYYY-MM-DD` value as a calendar date, for a date input; an ISO date
+ * and time gives its date part. Undefined when unset or unparsable.
+ */
+export function calendarDate(value: unknown): CalendarDate | undefined {
+    if (!value || typeof value !== 'string') return undefined
+    try {
+        return parseDate(value.slice(0, 10))
+    }
+    catch {
+        return undefined
+    }
 }
 
 /** Date-only label, e.g. "4 Feb 2026". */
