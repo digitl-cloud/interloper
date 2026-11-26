@@ -691,9 +691,9 @@ class Population:
                 parameters,
             )
             self._connection.execute(
-                "INSERT INTO component_relations (src_id, name, dst_id, org_id, src_kind, dst_kind) "
-                "SELECT s.new_id, r.name, d.new_id, %(org)s, r.src_kind, r.dst_kind FROM component_relations r "
-                "JOIN clone_map s ON s.old_id = r.src_id JOIN clone_map d ON d.old_id = r.dst_id",
+                "INSERT INTO component_relations (from_id, relation, to_id, org_id, from_kind, to_kind) "
+                "SELECT s.new_id, r.relation, d.new_id, %(org)s, r.from_kind, r.to_kind FROM component_relations r "
+                "JOIN clone_map s ON s.old_id = r.from_id JOIN clone_map d ON d.old_id = r.to_id",
                 parameters,
             )
 
@@ -708,8 +708,8 @@ class Population:
         """
         rows = self._connection.execute(
             "SELECT j.id, j.name, a.id, a.key, a.parent_id FROM components j "
-            "JOIN component_relations r ON r.src_id = j.id AND r.name = 'targets' "
-            "JOIN components a ON a.parent_id = r.dst_id "
+            "JOIN component_relations r ON r.from_id = j.id AND r.relation = 'targets' "
+            "JOIN components a ON a.parent_id = r.to_id "
             "WHERE j.org_id = %s AND j.kind = 'job' ORDER BY j.name, a.parent_id, a.key",
             (org_id,),
         ).fetchall()
