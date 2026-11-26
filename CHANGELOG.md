@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v0.148.0 (2026-11-26)
+
+### Features
+
+- An asset's upstream relations read only its upstream sources
+  ([`d331726`](https://github.com/digitl-cloud/interloper/commit/d33172601136a9a00e804a5bf1615b04fa24f1ad))
+
+- **app**: Choose the sources a source and an asset read
+  ([`0e7242d`](https://github.com/digitl-cloud/interloper/commit/0e7242df52e7e9a97cac1f17de189f2f6503e595))
+
+- **assets**: A star schema takes its platform's discriminator, so several share a dataset
+  ([`67245c4`](https://github.com/digitl-cloud/interloper/commit/67245c4a7915bbcd49d430b4afdecaf91c4a29bd))
+
+### Refactoring
+
+- Name relation rows from, relation and to
+  ([`a127d0f`](https://github.com/digitl-cloud/interloper/commit/a127d0f54b54be5a6ddd09553f131d7be81972f7))
+
+### Breaking Changes
+
+- The relation API speaks the same names. GET /relations returns from_id, relation, to_id, from_kind
+  and to_kind and filters on relation, from_kind, to_kind and to_id; a component's relations carry
+  to_id, to_kind, to_key and to_name; POST /components/{id}/relations takes {relation, to_id};
+  DELETE is /components/{id}/relations/{relation}/{to_id}; bind_relation and unbind_relation take
+  relation and to_id; lineage edges carry relation instead of param_name.
+
+
 ## v0.147.0 (2026-11-25)
 
 ### Bug Fixes
