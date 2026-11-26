@@ -2540,10 +2540,32 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#interloper.Relation.other_sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;other_sources
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#interloper.Relation.targets_from" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
         <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;targets_from
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper.Relation.upstream_source_relation" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;upstream_source_relation
       </span>
     </span>
   </a>
@@ -6609,6 +6631,102 @@ source instance.</p>
 <div class="doc doc-object doc-function">
 
 
+<h3 id="interloper.Relation.other_sources" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">other_sources</span>
+
+
+<a href="#interloper.Relation.other_sources" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">other_sources</span><span class="p">(</span><span class="n">own_source_key</span><span class="p">:</span> <span class="n"><span title="str">str</span></span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="frozenset">frozenset</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">]</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The sources outside the owner's own that this relation's keys name.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>own_source_key</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Key of the source declaring the relation, which a
+bare key is scoped to. <code>None</code> when it is not known yet (an
+asset class before its source collects it) or there is none.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="frozenset">frozenset</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The source keys its qualified keys name other than</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="frozenset">frozenset</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>own_source_key</code>, <code>ANY_SOURCE</code> for a wildcard key; empty for a</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="frozenset">frozenset</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>relation whose keys are all local, or that declares none.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="interloper.Relation.targets_from" class="doc doc-heading">
 <code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">targets_from</span>
 
@@ -6695,6 +6813,125 @@ relation.</p>
               <div class="doc-md-description">
                 <p>If a single component is handed to a <code>many</code> relation,
 which takes a list.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.Relation.upstream_source_relation" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">upstream_source_relation</span>
+
+
+<a href="#interloper.Relation.upstream_source_relation" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">upstream_source_relation</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">relations</span><span class="p">:</span> <span class="n"><span title="collections.abc.Iterable">Iterable</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Relation&lt;/span&gt; (&lt;code&gt;interloper.component.relation.Relation&lt;/code&gt;)" href="./#interloper.Relation">Relation</a></span><span class="p">],</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">own_source_key</span><span class="p">:</span> <span class="n"><span title="str">str</span></span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Relation&lt;/span&gt; (&lt;code&gt;interloper.component.relation.Relation&lt;/code&gt;)" href="./#interloper.Relation">Relation</a></span> <span class="o">|</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The <code>UPSTREAM</code> relation a component carries for relations reading other sources' assets.</p>
+<p>It binds the upstream sources those relations read: an asset holding
+rows of it reads only those sources' assets, else its source's
+upstream sources, else every asset its relations match. The framework
+gives it, so no author declares it, and it accepts the sources the
+relations name, or any source when one of them is a wildcard.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>relations</code>
+            </td>
+            <td>
+                  <code><span title="collections.abc.Iterable">Iterable</span>[<a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Relation&lt;/span&gt; (&lt;code&gt;interloper.component.relation.Relation&lt;/code&gt;)" href="./#interloper.Relation">Relation</a>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The relations of an asset, or of every asset of a source.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>own_source_key</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Key of the source owning them, which bare keys are
+scoped to; <code>None</code> when not known yet or there is none.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Relation&lt;/span&gt; (&lt;code&gt;interloper.component.relation.Relation&lt;/code&gt;)" href="./#interloper.Relation">Relation</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The relation, named <code>UPSTREAM</code>, of kind <code>source</code>, many,</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Relation&lt;/span&gt; (&lt;code&gt;interloper.component.relation.Relation&lt;/code&gt;)" href="./#interloper.Relation">Relation</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>optional and blocking the deletion of a bound source; <code>None</code></p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Relation&lt;/span&gt; (&lt;code&gt;interloper.component.relation.Relation&lt;/code&gt;)" href="./#interloper.Relation">Relation</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>when no relation accepting assets names another source.</p>
               </div>
             </td>
           </tr>
@@ -6990,7 +7227,7 @@ deprecated whatever its source.</p>
 
 
 <a href="#interloper.component.base.KINDS" class="headerlink" title="Permanent link">&para;</a></h2>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">KINDS</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">registry</span><span class="o">.</span><span class="n">base</span><span class="o">.</span><span class="n">Registry</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7b48cd2ede80</span><span class="o">&gt;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">KINDS</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">registry</span><span class="o">.</span><span class="n">base</span><span class="o">.</span><span class="n">Registry</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7b07df3456a0</span><span class="o">&gt;</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents first">

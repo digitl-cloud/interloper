@@ -2717,8 +2717,20 @@ the pool is the organisation rather than the DAG: a stored binding narrows a rel
 what it names, and an upstream relation with none reads every matching asset of the organisation,
 accounts added later included, whether the run materializes them or only reads them. Nothing is
 written for it; removing a relation's last binding returns it to following them all.</p>
+<p>To narrow a whole source without binding every relation, bind its upstream sources. Every source
+and asset whose relations read another source's assets carries a relation named <code>upstream</code>,
+which the framework adds (no class declares it; the name is reserved). An asset reads what its
+relation binds, else its own upstream sources, else its source's, else every asset it matches.
+With upstream sources, each relation reads only their assets it accepts, and nothing when none of
+its sources is among them; the asset's siblings are never narrowed. An upstream source cannot be
+deleted while it is bound.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">rollup</span> <span class="o">=</span> <span class="n">Rollup</span><span class="p">()</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">rollup</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="s2">"upstream"</span><span class="p">,</span> <span class="n">meta</span><span class="p">,</span> <span class="n">tiktok</span><span class="p">)</span>  <span class="c1"># every asset of the rollup reads these two</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">rollup</span><span class="o">.</span><span class="n">totals</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="s2">"upstream"</span><span class="p">,</span> <span class="n">meta</span><span class="p">)</span>   <span class="c1"># this asset reads meta only</span>
+</span></code></pre></div>
 <p>In a spec, a bound upstream is a <code>{ref: id}</code> under the relation's name, since an asset always
-travels inside its own source's document. See <a href="../specs/">Specs</a>.</p>
+travels inside its own source's document, and upstream sources are <code>upstream: [{ref: id}, ...]</code>
+under the source or the asset. See <a href="../specs/">Specs</a>.</p>
 <h2 id="reading-upstream-data">Reading upstream data<a class="headerlink" href="#reading-upstream-data" title="Permanent link">&para;</a></h2>
 <p>Each leg is read from the upstream's <code>default_destination_key</code> destination, or its first, scoped
 to the window the upstream consumes, joined into one table when it covers several partitions.
@@ -2818,9 +2830,9 @@ included.</p>
 <p>A bound upstream the run does not materialize joins the DAG anyway, as a disabled copy
 under the same id: it is a live instance with its own destinations, so it can be read without
 being run. That is the whole mechanism behind running one asset with its parents:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">mini</span> <span class="o">=</span> <span class="n">dag</span><span class="o">.</span><span class="n">mini_dag</span><span class="p">(</span><span class="n">fin</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="p">[(</span><span class="n">op</span><span class="o">.</span><span class="n">qualified_key</span><span class="p">,</span> <span class="n">op</span><span class="o">.</span><span class="n">enabled</span><span class="p">)</span> <span class="k">for</span> <span class="n">op</span> <span class="ow">in</span> <span class="n">mini</span><span class="o">.</span><span class="n">operations</span><span class="p">]</span>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="c1"># [("finance.revenue", True), ("shop.orders", False)]</span>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">mini</span> <span class="o">=</span> <span class="n">dag</span><span class="o">.</span><span class="n">mini_dag</span><span class="p">(</span><span class="n">fin</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="p">[(</span><span class="n">op</span><span class="o">.</span><span class="n">qualified_key</span><span class="p">,</span> <span class="n">op</span><span class="o">.</span><span class="n">enabled</span><span class="p">)</span> <span class="k">for</span> <span class="n">op</span> <span class="ow">in</span> <span class="n">mini</span><span class="o">.</span><span class="n">operations</span><span class="p">]</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="c1"># [("finance.revenue", True), ("shop.orders", False)]</span>
 </span></code></pre></div>
 <p>Only the target executes; the parents are read, not rewritten. Partition checks still apply
 along those edges. A source offers the same idea over its own assets through <code>select</code>.</p>

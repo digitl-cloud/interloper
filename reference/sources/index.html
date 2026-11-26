@@ -2191,6 +2191,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#interloper.Source.to_spec" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;to_spec
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#interloper.Source.validate_relations" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2902,7 +2913,7 @@ dumps.</p>
 
 <a href="#interloper.Source.internal_fields" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">internal_fields</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="p">{</span><span class="s2">"normalizer"</span><span class="p">,</span> <span class="s2">"enabled"</span><span class="p">,</span> <span class="s2">"assets"</span><span class="p">}</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="p">{</span><span class="s2">"assets"</span><span class="p">,</span> <span class="s2">"enabled"</span><span class="p">,</span> <span class="s2">"normalizer"</span><span class="p">}</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span>
 </span></code></pre></div>
 
@@ -3675,6 +3686,88 @@ validated when the source resolves its assets, not coerced.</p>
             <td>
               <div class="doc-md-description">
                 <p>The physical table name for the asset.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.Source.to_spec" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">to_spec</span>
+
+
+<a href="#interloper.Source.to_spec" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">to_spec</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n"><span title="interloper.serializable.base.SerializationContext">SerializationContext</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Spec&lt;/span&gt; (&lt;code&gt;interloper.serializable.base.Spec&lt;/code&gt;)" href="../catalog/#interloper.Spec">Spec</a></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Serialize this source, or only name it in a document that does not carry it.</p>
+<p>A closed document (a graph's) reaches a source it does not carry only
+as another component's upstream source, which reads nothing of it but
+its id: it is written with its settings alone, no relations and no
+assets, so a run never receives the credentials of a source it does
+not execute.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>context</code>
+            </td>
+            <td>
+                  <code><span title="interloper.serializable.base.SerializationContext">SerializationContext</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The state shared with the other roots of one document.
+<code>None</code> starts a context for this source alone.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Spec&lt;/span&gt; (&lt;code&gt;interloper.serializable.base.Spec&lt;/code&gt;)" href="../catalog/#interloper.Spec">Spec</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A Spec capturing this source's state, identity and bindings.</p>
               </div>
             </td>
           </tr>
