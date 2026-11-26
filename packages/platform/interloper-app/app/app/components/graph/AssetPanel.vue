@@ -10,8 +10,9 @@ import { UPSTREAM, carriesUpstream, upstreamCandidates } from '~/utils/upstream'
 /**
  * The open asset's side panel: its identity and warnings, then folding
  * sections for its latest materializations, destinations, partitions,
- * upstreams and schema. The `actions` slot (the page's way to
- * close the panel) sits at the end of the identity header.
+ * upstreams and schema. The identity header ends with the button that opens
+ * the asset's UI (its rows, when it has none), then the `actions` slot (the
+ * page's way to close the panel).
  */
 const props = defineProps<{
     asset: ComponentRecord
@@ -35,6 +36,8 @@ const warnings = computed(() =>
 )
 
 const sourceIcon = computed(() => componentIcon(props.source.key, appConfig.icons.source))
+const assetUI = useAssetUI()
+const assetTab = computed(() => assetUI.tabOf(props.source, props.asset))
 const canEdit = useCanEdit()
 const toast = useToast()
 
@@ -283,9 +286,16 @@ async function resetUpstream() {
                     </span>
                 </span>
             </template>
-            <template v-if="$slots.actions"
-                      #actions>
-                <slot name="actions" />
+            <template #actions>
+                <div class="flex items-center gap-1">
+                    <UButton :icon="assetTab.icon"
+                             :label="assetTab.action"
+                             color="neutral"
+                             variant="outline"
+                             size="sm"
+                             @click="assetUI.open(source, asset)" />
+                    <slot name="actions" />
+                </div>
             </template>
 
             <p v-if="assetDefn?.description"

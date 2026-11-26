@@ -472,6 +472,8 @@ export default defineAppConfig({
     unreadable: 'i-lucide-lock',
     window: 'i-lucide-calendar-range',
     partition: 'i-lucide-layers',
+    rows: 'i-lucide-rows-3',
+    extension: 'i-lucide-puzzle',
     expandAll: 'i-lucide-unfold-vertical',
     collapseAll: 'i-lucide-fold-vertical',
     switcher: 'i-lucide-chevrons-up-down',

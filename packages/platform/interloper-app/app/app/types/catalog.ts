@@ -1,3 +1,5 @@
+import type { OAuthFieldMeta } from '~/types/oauth'
+
 /** One relation a component kind may declare toward other components, named by its record key. */
 export interface RelationDefinition {
     /** Allowed dst component kind(s). */
@@ -52,6 +54,8 @@ export interface AssetDefinition extends ComponentDefinition {
     source_key: string
     partitioning: Record<string, unknown> | null
     asset_schema: JsonSchema | null
+    /** An editable reference (`il.reference(editable=True)`): the app may rewrite its rows whole. */
+    editable: boolean
 }
 
 export interface SourceDefinition extends ComponentDefinition {
@@ -170,21 +174,125 @@ export function qualifiedKey(sourceKey: string, assetKey: string): string {
 
 // ─── JSON Schema ─────────────────────────────────────────────────────
 
-/** Minimal JSON Schema representation for asset output schemas. */
+/** A JSON Schema as Pydantic's `model_json_schema()` writes it: a component's config, an asset's rows. */
 export interface JsonSchema {
     type?: string
     title?: string
     description?: string
     properties?: Record<string, JsonSchemaProperty>
     required?: string[]
+    $defs?: Record<string, JsonSchemaProperty>
+    /** Sign-in through an OAuth provider fills the connection's credential fields. */
+    'x-oauth'?: OAuthFieldMeta
     [key: string]: unknown
 }
 
+/** A field whose options the server resolves: `/catalog/{key}/resolve` calls `<relation>.<method>`. */
+export interface FetchFieldMeta {
+    provider: string
+    label_key: string
+    value_key: string
+}
+
+/** One property of a JSON Schema, with the `x-*` hints the app's forms read. */
 export interface JsonSchemaProperty {
     type?: string | string[]
+    format?: string
     title?: string
     description?: string
-    format?: string
-    anyOf?: Array<{ type?: string; format?: string }>
+    default?: unknown
+    enum?: unknown[]
+    $ref?: string
+    allOf?: JsonSchemaProperty[]
+    anyOf?: JsonSchemaProperty[]
+    items?: JsonSchemaProperty
+    properties?: Record<string, JsonSchemaProperty>
+    required?: string[]
+    /** Set by `resolveSchemaProperty` on an `anyOf` with a `null` branch (Pydantic's `Optional`). */
+    nullable?: boolean
+    minItems?: number
+    minimum?: number
+    maximum?: number
+    minLength?: number
+    maxLength?: number
+    'x-widget'?: string
+    'x-options'?: { label: string, value: string }[]
+    'x-options-from'?: string
+    'x-fetch'?: FetchFieldMeta
+    'x-discriminator'?: boolean
+    'x-info'?: string
+    'x-section'?: string
     [key: string]: unknown
+}
+
+/**
+ * A property with its `$ref`, `allOf` and `anyOf` inlined against the schema's
+ * `$defs`, so an enum (a ref into `$defs`) or an optional field (an `anyOf`
+ * with a `null` branch) reads like a plain property. Sibling keys (default,
+ * description, x-*) win over the referenced definition's; `anyOf` resolves to
+ * its first non-null branch and sets `nullable`.
+ */
+export function resolveSchemaProperty(property: JsonSchemaProperty, defs: Record<string, JsonSchemaProperty> = {}): JsonSchemaProperty {
+    const deref = (part: JsonSchemaProperty): JsonSchemaProperty => {
+        if (!part.$ref) return part
+        const { $ref, ...siblings } = part
+        // Drop the definition's own title/description: they describe the
+        // type (e.g. an enum's class name and docstring), not the field.
+        const { title: _title, description: _description, ...target } = defs[$ref.split('/').pop() ?? ''] ?? {}
+        return { ...target, ...siblings }
+    }
+    let resolved = deref(property)
+    if (resolved.allOf) {
+        const { allOf, ...siblings } = resolved
+        resolved = { ...allOf.map(deref).reduce((merged, part) => ({ ...merged, ...part }), {}), ...siblings }
+    }
+    if (resolved.anyOf) {
+        const { anyOf, ...siblings } = resolved
+        const branch = anyOf.find(candidate => candidate.type !== 'null') ?? anyOf[0] ?? {}
+        resolved = { ...deref(branch), ...siblings, nullable: anyOf.some(candidate => candidate.type === 'null') }
+    }
+    if (resolved.items) {
+        resolved = { ...resolved, items: resolveSchemaProperty(resolved.items, defs) }
+    }
+    return resolved
+}
+
+/**
+ * The widget a resolved property edits with: its `x-widget` hint, else one
+ * inferred from its type: `select` for an enum or options, `object` for a
+ * nested model, `date` and `datetime` for the string formats, `switch`,
+ * `number`, `array`, and `text` for everything else.
+ */
+export function schemaWidget(property: JsonSchemaProperty): string {
+    if (property['x-widget']) return property['x-widget']
+    if (property['x-options'] || property['x-options-from'] || property.enum) return 'select'
+    if (property.type === 'object' && property.properties) return 'object'
+    if (property.format === 'date') return 'date'
+    if (property.format === 'date-time') return 'datetime'
+    switch (property.type) {
+        case 'boolean': return 'switch'
+        case 'integer':
+        case 'number': return 'number'
+        case 'array': return 'array'
+        default: return 'text'
+    }
+}
+
+/** A column of an asset's rows as its schema declares it, and the widget a cell edits it with. */
+export interface SchemaColumn {
+    key: string
+    /** The column's property, resolved. */
+    property: JsonSchemaProperty
+    widget: string
+    /** A row must hold a value: the schema requires the column and does not accept null. */
+    required: boolean
+}
+
+/** The columns an asset's schema declares, in its order; none without a schema. */
+export function schemaColumns(schema: JsonSchema | null | undefined): SchemaColumn[] {
+    const required = new Set(schema?.required ?? [])
+    return Object.entries(schema?.properties ?? {}).map(([key, declared]) => {
+        const property = resolveSchemaProperty(declared, schema?.$defs)
+        return { key, property, widget: schemaWidget(property), required: required.has(key) && !property.nullable }
+    })
 }

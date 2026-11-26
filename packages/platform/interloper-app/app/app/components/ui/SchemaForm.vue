@@ -14,6 +14,7 @@
  *   - timezone (searchable IANA timezone select, defaulting to the user's profile timezone)
  *   - object (default for a nested model: its own fields, behind a switch when optional)
  *   - date (default for a `date`-formatted string: a date picker, cleared to null)
+ *   - datetime (default for a `date-time`-formatted string: a text input holding the ISO instant)
  *
  * Supports `x-oauth` at the schema root for OAuth sign-in:
  *   - UTabs toggle between "Sign in" and "Manual" modes
@@ -31,52 +32,10 @@
  * fields when there is no sign-in.
  */
 
-import type { CalendarDate } from '@internationalized/date'
 import type { FormError, TabsItem } from '@nuxt/ui'
-import { parseDate } from '@internationalized/date'
 import cronstrue from 'cronstrue'
-
-interface FetchMeta {
-    /** `<relation>.<method>` resolved via `/catalog/{key}/resolve`. */
-    provider: string
-    label_key: string
-    value_key: string
-}
-
-interface JsonSchemaProperty {
-    type?: string
-    format?: string
-    title?: string
-    description?: string
-    default?: unknown
-    enum?: unknown[]
-    '$ref'?: string
-    'allOf'?: JsonSchemaProperty[]
-    'anyOf'?: JsonSchemaProperty[]
-    'x-widget'?: string
-    'x-options'?: { label: string, value: string }[]
-    'x-options-from'?: string
-    'x-fetch'?: FetchMeta
-    'x-discriminator'?: boolean
-    'x-info'?: string
-    'x-section'?: string
-    items?: JsonSchemaProperty
-    properties?: Record<string, JsonSchemaProperty>
-    required?: string[]
-    nullable?: boolean
-    minItems?: number
-    minimum?: number
-    maximum?: number
-    minLength?: number
-    maxLength?: number
-}
-
-interface JsonSchema {
-    properties?: Record<string, JsonSchemaProperty>
-    required?: string[]
-    '$defs'?: Record<string, JsonSchemaProperty>
-    'x-oauth'?: OAuthFieldMeta
-}
+import type { FetchFieldMeta, JsonSchema, JsonSchemaProperty } from '~/types/catalog'
+import { resolveSchemaProperty, schemaWidget } from '~/types/catalog'
 
 const props = defineProps<{
     schema: JsonSchema
@@ -270,12 +229,12 @@ function updateFetchState(fieldKey: string, patch: Partial<{ options: { label: s
 }
 
 /** The relation a fetch field depends on: the `<relation>` part of its provider. */
-function fetchRelationName(meta: FetchMeta): string {
+function fetchRelationName(meta: FetchFieldMeta): string {
     return meta.provider.split('.')[0] ?? ''
 }
 
 /** Fetch options for a single x-fetch field. */
-async function fetchOptions(fieldKey: string, meta: FetchMeta) {
+async function fetchOptions(fieldKey: string, meta: FetchFieldMeta) {
     ensureFetchState(fieldKey)
 
     // Backend instantiates the resource in the provider's relation and calls
@@ -314,7 +273,7 @@ async function fetchOptions(fieldKey: string, meta: FetchMeta) {
 /**
  * Check if the dependency (the provider's relation) for a fetch field is satisfied.
  */
-function fetchDepsReady(meta: FetchMeta): boolean {
+function fetchDepsReady(meta: FetchFieldMeta): boolean {
     const relation = fetchRelationName(meta)
     if (mergedResourceContext.value[relation]) return true
     if (data.value[relation] !== undefined && data.value[relation] !== '') return true
@@ -325,7 +284,7 @@ function fetchDepsReady(meta: FetchMeta): boolean {
  * Build a fingerprint for a fetch field's dependency.
  * Used to detect when the relation's value actually changes and a re-fetch is needed.
  */
-function depsFingerprint(meta: FetchMeta): string {
+function depsFingerprint(meta: FetchFieldMeta): string {
     const relation = fetchRelationName(meta)
     const resourceData = mergedResourceContext.value[relation]
     if (resourceData) return `${relation}:resource`
@@ -357,45 +316,10 @@ watch(
     { deep: true, immediate: true },
 )
 
-// ── Property resolution ($ref / allOf / anyOf) ───────────────────
-
-/**
- * Inline `$ref` / `allOf` / `anyOf` composition against the schema's `$defs`,
- * so enum-typed Pydantic fields (which render as refs into `$defs`) behave
- * like plain properties. Sibling keys (default, description, x-*) win over
- * the referenced definition's; `anyOf` resolves to its first non-null branch
- * (Pydantic's encoding of `Optional[...]` fields).
- */
-function resolveProperty(prop: JsonSchemaProperty): JsonSchemaProperty {
-    const defs = props.schema?.$defs ?? {}
-    const deref = (p: JsonSchemaProperty): JsonSchemaProperty => {
-        if (!p.$ref) return p
-        const { $ref, ...siblings } = p
-        // Drop the definition's own title/description: they describe the
-        // type (e.g. an enum's class name and docstring), not the field.
-        const { title: _title, description: _description, ...target } = defs[$ref.split('/').pop() ?? ''] ?? {}
-        return { ...target, ...siblings }
-    }
-    let resolved = deref(prop)
-    if (resolved.allOf) {
-        const { allOf, ...siblings } = resolved
-        resolved = { ...allOf.map(deref).reduce((acc, part) => ({ ...acc, ...part }), {}), ...siblings }
-    }
-    if (resolved.anyOf) {
-        const { anyOf, ...siblings } = resolved
-        const branch = anyOf.find(b => b.type !== 'null') ?? anyOf[0] ?? {}
-        resolved = { ...deref(branch), ...siblings, nullable: anyOf.some(b => b.type === 'null') }
-    }
-    if (resolved.items) {
-        resolved = { ...resolved, items: resolveProperty(resolved.items) }
-    }
-    return resolved
-}
-
 /** Schema properties with refs and compositions inlined. */
 const resolvedProperties = computed<Record<string, JsonSchemaProperty>>(() => {
     return Object.fromEntries(
-        Object.entries(props.schema?.properties ?? {}).map(([key, prop]) => [key, resolveProperty(prop)]),
+        Object.entries(props.schema?.properties ?? {}).map(([key, prop]) => [key, resolveSchemaProperty(prop, props.schema?.$defs)]),
     )
 })
 
@@ -429,17 +353,6 @@ function cronHelp(value: unknown): string | undefined {
 /** The one look of an input holding code (cron, JSON): the code family. */
 const CODE_INPUT_UI = { base: 'font-mono' }
 
-/** A date field's ISO `YYYY-MM-DD` value as a calendar date, or undefined when unset or unparsable. */
-function dateValue(value: unknown): CalendarDate | undefined {
-    if (!value || typeof value !== 'string') return undefined
-    try {
-        return parseDate(value)
-    }
-    catch {
-        return undefined
-    }
-}
-
 /**
  * The sibling timezone field's current value, labelling the cron widget's
  * rendering with the zone the schedule is read in (never the viewer's).
@@ -464,21 +377,6 @@ const nestedSchemas = computed<Record<string, JsonSchema>>(() => Object.fromEntr
         .filter(([, prop]) => prop.type === 'object' && prop.properties)
         .map(([key, prop]) => [key, { properties: prop.properties, required: prop.required, $defs: props.schema?.$defs }]),
 ))
-
-/** Resolve which widget to render for a given field. */
-function resolveWidget(prop: JsonSchemaProperty): string {
-    if (prop['x-widget']) return prop['x-widget']
-    if (prop['x-options'] || prop['x-options-from'] || prop.enum) return 'select'
-    if (prop.type === 'object' && prop.properties) return 'object'
-    if (prop.format === 'date') return 'date'
-    switch (prop.type) {
-        case 'boolean': return 'switch'
-        case 'integer':
-        case 'number': return 'number'
-        case 'array': return 'array'
-        default: return 'text'
-    }
-}
 
 /** Resolve options for a field, including x-options-from context lookups. */
 function resolveOptions(prop: JsonSchemaProperty): unknown[] | undefined {
@@ -514,7 +412,7 @@ const fields = computed(() => {
             label: prop.title ?? key,
             description: prop.description,
             info: prop['x-info'],
-            widget: resolveWidget(prop),
+            widget: schemaWidget(prop),
             required: required.has(key),
             default: prop.default,
             options: resolveOptions(prop),
@@ -872,7 +770,7 @@ defineExpose({ setErrors })
 
                         <!-- Date: an empty picker clears the value -->
                         <UInputDate v-else-if="field.widget === 'date'"
-                                    :model-value="dateValue(data[field.key])"
+                                    :model-value="calendarDate(data[field.key])"
                                     class="w-full"
                                     @update:model-value="(v: unknown) => data[field.key] = v ? String(v) : null">
                             <template #trailing>
@@ -884,7 +782,7 @@ defineExpose({ setErrors })
                                              aria-label="Select a date"
                                              class="px-0" />
                                     <template #content>
-                                        <UCalendar :model-value="dateValue(data[field.key])"
+                                        <UCalendar :model-value="calendarDate(data[field.key])"
                                                    class="p-2"
                                                    @update:model-value="(v: unknown) => data[field.key] = v ? String(v) : null" />
                                     </template>
