@@ -102,6 +102,13 @@ class TheTradeDeskStarSchema(il.Source):
     one with no table yet is skipped with a warning.
     """
 
+    partner_id: str | None = il.InputField(
+        default=None,
+        discriminator=True,
+        description="The The Trade Desk partner this star schema covers, when several share the dataset: "
+        "its views are written as <view>__<partner_id>",
+    )
+
     @ibis_view(
         schema=schemas.FactCampaignPerformance,
         tags=["Fact"],

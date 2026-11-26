@@ -59,6 +59,13 @@ class BingAdsStarSchema(il.Source):
     one with no table yet is skipped with a warning.
     """
 
+    account_id: str | None = il.InputField(
+        default=None,
+        discriminator=True,
+        description="The Bing Ads account this star schema covers, when several share the dataset: "
+        "its views are written as <view>__<account_id>",
+    )
+
     @ibis_view(
         schema=schemas.FactCampaignPerformance,
         tags=["Fact"],
