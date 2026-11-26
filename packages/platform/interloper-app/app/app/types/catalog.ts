@@ -110,6 +110,12 @@ export function requiredUpstreams(defn: ComponentDefinition): Record<string, str
     )
 }
 
+/** The config field marked `x-discriminator`, which tells a definition's instances apart; null when none is. */
+export function discriminatorField(defn: ComponentDefinition | undefined): string | null {
+    const properties = (defn?.config_schema?.properties ?? {}) as Record<string, Record<string, unknown>>
+    return Object.entries(properties).find(([, property]) => property['x-discriminator'])?.[0] ?? null
+}
+
 /** Compatible destination keys from the `destinations` relation. Empty = all compatible. */
 export function allowedDestinationKeys(defn: ComponentDefinition): string[] {
     const destinations = defn.relations?.destinations

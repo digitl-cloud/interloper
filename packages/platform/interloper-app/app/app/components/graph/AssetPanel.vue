@@ -5,6 +5,7 @@ import type { ComponentRecord } from '~/types/component'
 import { relationIds, relationRefs } from '~/types/component'
 import type { Page } from '~/composables/api'
 import type { Execution } from '~/types/execution'
+import { UPSTREAM, carriesUpstream, upstreamCandidates } from '~/utils/upstream'
 
 /**
  * The open asset's side panel: its identity and warnings, then folding
@@ -34,6 +35,8 @@ const warnings = computed(() =>
 )
 
 const sourceIcon = computed(() => componentIcon(props.source.key, appConfig.icons.source))
+const canEdit = useCanEdit()
+const toast = useToast()
 
 onMounted(() => componentsStore.fetchAll(['destination']))
 
@@ -203,6 +206,7 @@ const upstreamGroups = computed(() => {
                     id: asset.id,
                     name: defn?.name ?? asset.key,
                     sourceName: owner ? (owner.name ?? owner.key) : '',
+                    discriminator: owner?.discriminator ?? '',
                     icon: componentIcon(owner?.key ?? asset.key, appConfig.icons.source),
                 }
             })
@@ -211,6 +215,47 @@ const upstreamGroups = computed(() => {
 })
 
 const upstreamCount = computed(() => upstreamGroups.value.reduce((count, group) => count + group.assets.length, 0))
+
+// ── Upstream sources: the asset's own, else its source's, else the organisation ──
+
+const choosesUpstream = computed(() => carriesUpstream(props.assetDefn))
+const upstreamSources = computed(() => choosesUpstream.value && props.assetDefn
+    ? upstreamCandidates(props.assetDefn, props.source.key, componentsStore.byKind('source'), catalogStore.catalog, props.source.id)
+    : [])
+const upstreamSourceIds = computed(() => new Set(upstreamSources.value.flatMap(group => group.sources.map(source => source.id))))
+const ownUpstream = computed(() => componentsStore.upstreamSources(props.asset.id))
+const sourceUpstream = computed(() => componentsStore.upstreamSources(props.source.id))
+const follows = computed(() => ownUpstream.value.length ? 'own' : sourceUpstream.value.length ? 'source' : 'organisation')
+const sourceName = computed(() => props.source.name ?? props.source.key)
+
+/** What the asset reads, counted among the sources that fill its relations. */
+const followsLine = computed(() => {
+    const total = upstreamSourceIds.value.size
+    const read = (ids: string[]) => ids.filter(id => upstreamSourceIds.value.has(id)).length
+    if (follows.value === 'own') return `Own selection · ${read(ownUpstream.value)} of ${total} sources`
+    if (follows.value === 'source') return `As its source · ${read(sourceUpstream.value)} of ${total} sources`
+    return `All ${total} sources of the organisation`
+})
+
+const followsNote = computed(() => {
+    if (follows.value === 'source') return `Chosen on ${sourceName.value}`
+    if (follows.value !== 'own') return ''
+    return sourceUpstream.value.length
+        ? `Replaces the ${sourceUpstream.value.length} sources of ${sourceName.value}`
+        : `Replaces all sources of ${sourceName.value}`
+})
+
+const editingUpstream = ref(false)
+
+async function resetUpstream() {
+    try {
+        await componentsStore.update(props.asset.id, { relations: { [UPSTREAM]: [] } })
+        componentsStore.refreshRelations()
+    }
+    catch (e) {
+        toast.add(errorToast(e, "Couldn't reset the asset's upstream sources"))
+    }
+}
 </script>
 
 <template>
@@ -365,7 +410,30 @@ const upstreamCount = computed(() => upstreamGroups.value.reduce((count, group) 
             <GraphPanelSection v-if="upstreamGroups.length"
                                title="Upstreams"
                                :count="upstreamCount">
+                <template v-if="choosesUpstream && canEdit"
+                          #actions>
+                    <div class="flex items-center gap-1">
+                        <UButton v-if="follows === 'own'"
+                                 size="sm"
+                                 color="neutral"
+                                 variant="ghost"
+                                 label="Reset"
+                                 @click="resetUpstream()" />
+                        <UButton size="sm"
+                                 color="neutral"
+                                 variant="ghost"
+                                 :icon="appConfig.icons.edit"
+                                 label="Edit"
+                                 @click="editingUpstream = true" />
+                    </div>
+                </template>
                 <div class="flex flex-col gap-3">
+                    <div v-if="choosesUpstream"
+                         class="flex flex-col gap-1">
+                        <span class="text-sm">{{ followsLine }}</span>
+                        <span v-if="followsNote"
+                              class="text-xs text-dimmed">{{ followsNote }}</span>
+                    </div>
                     <div v-for="group in upstreamGroups"
                          :key="group.name">
                         <div class="caption mb-1 flex items-center gap-2 text-muted">
@@ -385,12 +453,25 @@ const upstreamCount = computed(() => upstreamGroups.value.reduce((count, group) 
                                     <div v-if="upstream.sourceName"
                                          class="truncate text-xs text-muted">{{ upstream.sourceName }}</div>
                                 </div>
+                                <UBadge v-if="upstream.discriminator"
+                                        color="neutral"
+                                        size="sm"
+                                        class="slashed-zero">
+                                    {{ upstream.discriminator }}
+                                </UBadge>
                             </li>
                         </ul>
                         <p v-else
                            class="py-2 text-xs text-dimmed">No matching asset</p>
                     </div>
                 </div>
+
+                <GraphUpstreamModal v-if="choosesUpstream"
+                                    v-model:open="editingUpstream"
+                                    :asset="asset"
+                                    :asset-name="assetDefn?.name ?? asset.key"
+                                    :source="source"
+                                    :groups="upstreamSources" />
             </GraphPanelSection>
 
             <GraphPanelSection v-if="schemaFields.length"
