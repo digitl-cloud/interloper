@@ -548,7 +548,7 @@ watch(
     () => {
         const key = discriminatorKey.value
         const value = key ? data.value[key] : undefined
-        if (!key || value === undefined || value === '') {
+        if (!key || value === undefined || value === null || value === '') {
             discriminatorLabel.value = null
             return
         }

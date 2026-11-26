@@ -1,4 +1,6 @@
 import type { ComponentRecord, ComponentInput, DeleteImpact, Relation } from '~/types/component'
+import { relationIds } from '~/types/component'
+import { UPSTREAM } from '~/utils/upstream'
 import type { Page } from '~/composables/api'
 
 /** The key an unfiltered listing is held under, beside the kinds. */
@@ -277,6 +279,12 @@ export const useComponentsStore = defineStore('components', () => {
         return index.value.get(id)
     }
 
+    /** A component's upstream sources, from the rows its record carries; empty when it follows the organisation. */
+    function upstreamSources(id: string): string[] {
+        const record = byId(id)
+        return record ? relationIds(record, UPSTREAM) : []
+    }
+
     /**
      * The server's delete preview for `ids`: the same rule its guard enforces,
      * evaluated before anything is deleted. `blocking` referrers make the
@@ -363,10 +371,12 @@ export const useComponentsStore = defineStore('components', () => {
 
     /**
      * Refetch the held relations, once per burst of messages. An asset's
-     * upstream edges follow the organisation, so a component added or removed,
-     * or an upstream binding written, changes edges no relation message carries.
+     * upstream edges follow the organisation, or the sources it or its source
+     * binds as upstream sources, so a component added or removed, an upstream
+     * binding written, or upstream sources changed, changes edges no relation
+     * message carries.
      */
-    function _refreshRelations() {
+    function refreshRelations() {
         if (relationsListing === undefined) return
         clearTimeout(relationsRefresh)
         relationsRefresh = setTimeout(() => {
@@ -380,13 +390,13 @@ export const useComponentsStore = defineStore('components', () => {
         scope: () => orgStore.organisation?.id,
         onInsert: (record: Record<string, any>) => {
             _refetchChanged(record)
-            _refreshRelations()
+            refreshRelations()
         },
         onUpdate: _refetchChanged,
         onDelete: (record: Record<string, any>) => {
             _remove(record.id)
             relations.value = relations.value.filter(r => r.from_id !== record.id && r.to_id !== record.id)
-            _refreshRelations()
+            refreshRelations()
         },
         // Relations included: the one reload covers both subscriptions.
         onReconnect: reload,
@@ -401,7 +411,7 @@ export const useComponentsStore = defineStore('components', () => {
             const incoming = record as Relation
             if (!relations.value.some(r => key(r) === key(incoming))) relations.value.push(incoming)
             _embed(incoming)
-            if (incoming.from_kind === 'asset') _refreshRelations()
+            if (incoming.from_kind === 'asset' || incoming.relation === UPSTREAM) refreshRelations()
         },
         onUpdate: () => {},
         onDelete: (record: Record<string, any>) => {
@@ -409,7 +419,7 @@ export const useComponentsStore = defineStore('components', () => {
                 r => !(r.from_id === record.from_id && r.relation === record.relation && r.to_id === record.to_id),
             )
             _unembed(record as Relation)
-            if (record.from_kind === 'asset') _refreshRelations()
+            if (record.from_kind === 'asset' || record.relation === UPSTREAM) refreshRelations()
         },
     })
 
@@ -428,10 +438,12 @@ export const useComponentsStore = defineStore('components', () => {
         update,
         remove,
         fetchRelations,
+        refreshRelations,
         reload,
         fetchPartitionRowCounts,
         byKind,
         byId,
+        upstreamSources,
         deleteImpact,
         search,
         _upsert,

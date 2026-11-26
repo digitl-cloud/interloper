@@ -83,6 +83,11 @@ const props = withDefaults(defineProps<{
     extraInput?: () => { children?: string[], relations?: Record<string, RelationInput[]> }
     /** Post-save work needing the saved record (e.g. selecting what was just created). */
     afterSave?: (saved: ComponentRecord) => Promise<void>
+    /**
+     * Config values the page suggests (create mode): each fills its field while the field is empty or still
+     * holds the previous suggestion, so a value typed over it stays.
+     */
+    suggestedConfig?: Record<string, unknown>
 }>(), {
     definitionKey: undefined,
     definitions: undefined,
@@ -96,6 +101,7 @@ const props = withDefaults(defineProps<{
     optionsContext: undefined,
     extraInput: undefined,
     afterSave: undefined,
+    suggestedConfig: () => ({}),
 })
 
 const emit = defineEmits<{
@@ -303,9 +309,24 @@ watch(selectedKey, (newKey, oldKey) => {
 const discriminatorLabel = ref<string | null>(null)
 
 watch(discriminatorLabel, (label, old) => {
-    if (!label) return
-    const previous = old ?? `My ${definition.value?.name ?? props.noun}`
-    if (!name.value || name.value === previous) name.value = label
+    const fallback = `My ${definition.value?.name ?? props.noun}`
+    if (!name.value || name.value === (old ?? fallback)) name.value = label ?? fallback
+})
+
+// ── Suggested config (create mode: follows the page until edited) ─
+
+watch(() => props.suggestedConfig, (next, previous) => {
+    if (isEditing.value) return
+    const data = { ...configData.value }
+    let changed = false
+    for (const key of new Set([...Object.keys(next), ...Object.keys(previous ?? {})])) {
+        const current = data[key]
+        const untouched = current === undefined || current === null || current === '' || current === previous?.[key]
+        if (!untouched || current === next[key]) continue
+        data[key] = next[key]
+        changed = true
+    }
+    if (changed) configData.value = data
 })
 
 // ── Stepper ─────────────────────────────────────────────────────
