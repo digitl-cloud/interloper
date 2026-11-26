@@ -16,7 +16,14 @@ from pydantic._internal._model_construction import ModelMetaclass
 from interloper.asset.context import ExecutionContext
 from interloper.asset.output import Output
 from interloper.asset.upstream import Upstream
-from interloper.component import Component, ComponentDefinition, ComponentIdentity, Relation, unwrap_optional
+from interloper.component import (
+    UPSTREAM,
+    Component,
+    ComponentDefinition,
+    ComponentIdentity,
+    Relation,
+    unwrap_optional,
+)
 from interloper.destination import Destination, IOContext
 from interloper.errors import (
     AssetError,
@@ -204,8 +211,21 @@ class Asset(Operation, metaclass=AssetMeta):
         `_infer_relation` as the class is created. The parameters the call
         fills are recorded, in order, in ``_parameters``, so a run never reads
         the signature again.
+
+        An asset whose relations read another source's assets then carries
+        the `UPSTREAM` relation (see `Relation.upstream_source_relation`); its own source
+        is not known yet, so `Source` recomputes it once it collects the class.
         """
         super()._collect()
+        cls._infer_relations()
+        cls._carry_upstream(Relation.upstream_source_relation(cls.relations.values(), None))
+
+    @classmethod
+    def _infer_relations(cls) -> None:
+        """Infer a relation for each ``data()`` parameter nothing declares (see `_collect`).
+
+        A parameter named after the reserved `UPSTREAM` relation is refused.
+        """
         if "data" not in cls.__dict__:
             return
         try:
@@ -219,6 +239,8 @@ class Asset(Operation, metaclass=AssetMeta):
             if name == "self" or parameter.kind in _VARIADIC_KINDS:
                 continue
             parameters.append(name)
+            if name == UPSTREAM:
+                cls._refuse_upstream()
             if name in _RESERVED_PARAMETERS or name in cls.relations:
                 continue
             hint = hints.get(name, parameter.annotation)
@@ -341,6 +363,28 @@ class Asset(Operation, metaclass=AssetMeta):
         ever parents an asset, so the cast is safe.
         """
         return cast("Source | None", self.parent)
+
+    def upstream_sources(self) -> list[Source] | None:
+        """The sources this asset's relations reading other sources are narrowed to.
+
+        Its own `UPSTREAM` sources when it binds any, else all of its
+        source's: unlike a relation read through the owner, a source's
+        upstream sources are not filtered per asset, so one none of whose
+        assets this asset reads leaves its relations reading nothing.
+
+        Returns:
+            The upstream sources, or ``None`` when the asset reads no other
+            source, or when neither it nor its source binds any: its relations
+            then match the whole pool.
+        """
+        if UPSTREAM not in type(self).relations:
+            return None
+        for holder in (self, self.source):
+            if holder is not None and UPSTREAM in type(holder).relations:
+                bound = holder.bound(UPSTREAM)
+                if bound:
+                    return cast("list[Source]", bound)
+        return None
 
     @property
     def table(self) -> str:

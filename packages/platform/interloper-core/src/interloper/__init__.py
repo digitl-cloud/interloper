@@ -4,6 +4,7 @@ from interloper.asset import Asset, AssetDefinition, ExecutionContext, Reference
 from interloper.catalog import Catalog
 from interloper.component import (
     KINDS,
+    UPSTREAM,
     Component,
     ComponentDefinition,
     ComponentIdentity,
@@ -91,6 +92,7 @@ __all__ = [
     "DAG",
     "HOOK_EVENT_TYPES",
     "KINDS",
+    "UPSTREAM",
     "Asset",
     "AssetDefinition",
     "AsyncRESTClient",

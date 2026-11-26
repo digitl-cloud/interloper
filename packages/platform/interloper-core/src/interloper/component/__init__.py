@@ -7,10 +7,11 @@ from interloper.component.base import (
 )
 from interloper.component.decorator import Decorator
 from interloper.component.maturity import Maturity
-from interloper.component.relation import ComponentIdentity, Relation, unwrap_optional
+from interloper.component.relation import UPSTREAM, ComponentIdentity, Relation, unwrap_optional
 
 __all__ = [
     "KINDS",
+    "UPSTREAM",
     "Component",
     "ComponentDefinition",
     "ComponentIdentity",

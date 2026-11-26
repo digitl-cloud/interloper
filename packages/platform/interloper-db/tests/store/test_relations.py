@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from contextlib import contextmanager
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import interloper as il
@@ -252,6 +253,54 @@ class ConsumerSource(il.Source):
             return []
 
 
+class UpstreamShop(il.Source):
+    """Source whose ``orders`` the rollup reads by qualified key."""
+
+    class Orders(il.Asset):
+        """Orders."""
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+
+class UpstreamRollup(il.Source):
+    """Source whose ``totals`` reads every source's ``campaigns``, the shop's ``orders`` and its sibling."""
+
+    class Base(il.Asset):
+        """The sibling ``totals`` reads."""
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+    class Totals(il.Asset):
+        """Totals over campaigns, orders and the sibling."""
+
+        campaigns: list[il.Asset] = il.Relation("asset", "*.campaigns", many=True, optional=True)
+        orders: il.Asset | None = il.Relation("asset", "upstream_shop.orders", optional=True)
+        base: il.Asset | None = il.Relation("asset", "base", optional=True)
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+
+class WildSiblingSource(il.Source):
+    """Source whose ``totals`` fans in every source's ``campaigns``, its own sibling's included."""
+
+    class Campaigns(il.Asset):
+        """The sibling the wildcard also matches."""
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+    class Totals(il.Asset):
+        """Totals over every ``campaigns`` asset."""
+
+        campaigns: list[il.Asset] = il.Relation("asset", "*.campaigns", many=True, optional=True)
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+
 @pytest.fixture
 def store(component_db: Engine) -> Store:
     """A store whose catalog carries every class the relation tests declare.
@@ -278,6 +327,9 @@ def store(component_db: Engine) -> Store:
             SelfCampaignSource,
             InstanceSource,
             ConsumerSource,
+            UpstreamShop,
+            UpstreamRollup,
+            WildSiblingSource,
         ]
     )
     return Store(catalog=catalog)
@@ -755,3 +807,122 @@ class TestAutomatic:
 
     def test_check_bound_accepts_an_unbound_upstream_relation(self, store: Store):
         store.components.create(_ORG, kind="asset", key="matcher")
+
+
+@pytest.fixture
+def rollup_org(store: Store) -> SimpleNamespace:
+    """An organisation where a rollup could read two providers' campaigns and a shop's orders.
+
+    Returns:
+        The rows: the rollup source and its ``totals`` and ``base``, both
+        providers and their ``campaigns``, the shop and its ``orders``.
+    """
+    provider_a = store.components.create(_ORG, kind="source", key="first_campaign_source")
+    provider_b = store.components.create(_ORG, kind="source", key="second_campaign_source")
+    shop = store.components.create(_ORG, kind="source", key="upstream_shop")
+    rollup = store.components.create(_ORG, kind="source", key="upstream_rollup")
+    return SimpleNamespace(
+        org_id=_ORG,
+        rollup=rollup,
+        totals=_child(rollup, "totals"),
+        base=_child(rollup, "base"),
+        shop=shop,
+        orders=_child(shop, "orders"),
+        provider_a=provider_a,
+        provider_b=provider_b,
+        a_campaigns=_child(provider_a, "campaigns"),
+        b_campaigns=_child(provider_b, "campaigns"),
+    )
+
+
+def _followed(store: Store, org: SimpleNamespace, from_id: UUID, name: str) -> set[UUID]:
+    edges = store.relations.list(org.org_id, RelationQuery(relation=name)).items
+    return {edge.to_id for edge in edges if edge.from_id == from_id}
+
+
+class TestUpstreamSources:
+    """A source's or an asset's upstream sources narrow what its relations follow to their assets."""
+
+    def test_a_sources_upstream_sources_narrow_the_listing(self, store: Store, rollup_org: SimpleNamespace):
+        store.relations.add(rollup_org.rollup.id, relation=il.UPSTREAM, to_id=rollup_org.provider_a.id)
+
+        assert _followed(store, rollup_org, rollup_org.totals.id, "campaigns") == {rollup_org.a_campaigns.id}
+
+    def test_an_assets_own_upstream_sources_replace_its_sources(self, store: Store, rollup_org: SimpleNamespace):
+        store.relations.add(rollup_org.rollup.id, relation=il.UPSTREAM, to_id=rollup_org.provider_a.id)
+        store.relations.add(rollup_org.totals.id, relation=il.UPSTREAM, to_id=rollup_org.provider_b.id)
+
+        assert _followed(store, rollup_org, rollup_org.totals.id, "campaigns") == {rollup_org.b_campaigns.id}
+
+    def test_upstream_sources_naming_none_of_a_relations_sources_read_nothing(
+        self, store: Store, rollup_org: SimpleNamespace
+    ):
+        store.relations.add(rollup_org.rollup.id, relation=il.UPSTREAM, to_id=rollup_org.provider_a.id)
+
+        assert _followed(store, rollup_org, rollup_org.totals.id, "orders") == set()
+
+    def test_upstream_sources_leave_sibling_edges_alone(self, store: Store, rollup_org: SimpleNamespace):
+        store.relations.add(rollup_org.rollup.id, relation=il.UPSTREAM, to_id=rollup_org.provider_a.id)
+
+        assert _followed(store, rollup_org, rollup_org.totals.id, "base") == {rollup_org.base.id}
+
+    def test_without_upstream_sources_every_match_is_followed(self, store: Store, rollup_org: SimpleNamespace):
+        assert _followed(store, rollup_org, rollup_org.totals.id, "campaigns") == {
+            rollup_org.a_campaigns.id,
+            rollup_org.b_campaigns.id,
+        }
+        assert _followed(store, rollup_org, rollup_org.totals.id, "orders") == {rollup_org.orders.id}
+
+    def test_upstream_sources_are_listed_as_rows(self, store: Store, rollup_org: SimpleNamespace):
+        store.relations.add(rollup_org.rollup.id, relation=il.UPSTREAM, to_id=rollup_org.provider_a.id)
+
+        rows = store.relations.list(_ORG, RelationQuery(relation=il.UPSTREAM)).items
+        assert [(edge.from_id, edge.to_id, edge.to_kind) for edge in rows] == [
+            (rollup_org.rollup.id, rollup_org.provider_a.id, "source")
+        ]
+
+    def test_a_parentless_assets_own_upstream_sources_narrow_other_sources_and_keep_parentless_siblings(
+        self, store: Store
+    ):
+        upstream = store.components.create(_ORG, kind="asset", key="guard_upstream")
+        first = store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "a"})
+        store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "b"})
+        reach = store.components.create(_ORG, kind="asset", key="mixed_reach")
+        store.relations.add(reach.id, relation=il.UPSTREAM, to_id=first.id)
+
+        assert {dst for src, name, dst in _edges(store) if src == reach.id and name == "up"} == {
+            upstream.id,
+            _child(first, "rows").id,
+        }
+
+    def test_a_parentless_owner_without_upstream_sources_keeps_its_edges_when_another_component_binds_some(
+        self, store: Store, rollup_org: SimpleNamespace
+    ):
+        matcher = store.components.create(_ORG, kind="asset", key="matcher")
+        store.relations.add(rollup_org.rollup.id, relation=il.UPSTREAM, to_id=rollup_org.provider_a.id)
+
+        assert _followed(store, rollup_org, matcher.id, "campaigns") == {
+            rollup_org.a_campaigns.id,
+            rollup_org.b_campaigns.id,
+        }
+
+    def test_a_wildcard_reaching_a_sibling_keeps_it_under_upstream_sources(self, store: Store):
+        first = store.components.create(_ORG, kind="source", key="first_campaign_source")
+        store.components.create(_ORG, kind="source", key="second_campaign_source")
+        wild = store.components.create(_ORG, kind="source", key="wild_sibling_source")
+        store.relations.add(wild.id, relation=il.UPSTREAM, to_id=first.id)
+
+        assert _followed(store, SimpleNamespace(org_id=_ORG), _child(wild, "totals").id, "campaigns") == {
+            _child(first, "campaigns").id,
+            _child(wild, "campaigns").id,
+        }
+
+    def test_a_page_with_upstream_sources_is_still_one_windowed_statement_and_its_count(
+        self, store: Store, rollup_org: SimpleNamespace, component_db: Engine
+    ):
+        store.relations.add(rollup_org.rollup.id, relation=il.UPSTREAM, to_id=rollup_org.provider_a.id)
+
+        with _statements(component_db) as sent:
+            store.relations.list(_ORG, RelationQuery(from_kind="asset", to_kind="asset", limit=1, offset=1))
+
+        assert len(sent) == 2

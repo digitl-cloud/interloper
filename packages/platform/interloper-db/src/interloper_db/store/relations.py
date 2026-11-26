@@ -14,10 +14,11 @@ alone cannot tell apart. A single-valued relation holds one row and repoints
 on rewrite; a ``many`` relation accumulates. A non-optional relation cannot be
 emptied, only repointed, except an asset's upstream relation: a row is a
 curation, and an upstream relation holding none follows every asset of the
-organisation it matches, never written. What it follows is decided per pair
-of identities off the catalog (:class:`UpstreamRules`) and expanded to rows
-in SQL, inside the statement that reads the rows: a listing page stays one
-windowed statement and its count, a load one statement per row.
+organisation it matches, never written, or only the assets of its asset's
+upstream sources (its ``upstream`` rows), else its source's. What it follows is
+decided per pair of identities off the catalog (:class:`UpstreamRules`) and
+expanded to rows in SQL, inside the statement that reads the rows: a page of
+relations stays one windowed statement and its count, a load one statement per row.
 Every write takes the ``from`` row's lock, so the guards cannot be read around
 concurrently. Rows are stamped with the
 denormalized ``org_id``/``from_kind``/``to_kind`` triple the composite
@@ -36,7 +37,22 @@ import interloper as il
 from interloper.catalog import Catalog
 from interloper.errors import ConfigError
 from pydantic import Field
-from sqlalchemy import Engine, Select, String, and_, column, exists, false, func, literal, text, true, union_all
+from sqlalchemy import (
+    Engine,
+    Select,
+    String,
+    and_,
+    case,
+    column,
+    exists,
+    false,
+    func,
+    literal,
+    or_,
+    text,
+    true,
+    union_all,
+)
 from sqlalchemy import select as sa_select
 from sqlmodel import Session, col, select
 
@@ -192,6 +208,12 @@ class FollowedEdges:
     so each rule is one indexed lookup. A sibling rule follows the assets
     sharing the owner's parent; parentless assets are siblings of one
     another, as in a DAG.
+
+    A rule reaching another source's assets follows only the assets of the
+    upstream sources the owner binds under `UPSTREAM`, else those its parent
+    binds (the *holder*), as `Asset.upstream_sources` reads them in core; its
+    siblings are never narrowed. A parentless asset is only ever followed by a
+    parentless owner, its sibling, so upstream sources never narrow it.
     """
 
     def __init__(self, org_id: UUID, *, dst_ids: Sequence[UUID] | None = None) -> None:
@@ -229,16 +251,18 @@ class FollowedEdges:
 
         An owned asset's sibling rules need none: its source binds them as it
         is built (`SourceDefinition.sibling_bindings`), from the instances it
-        already holds.
+        already holds. The rules reaching another source's assets are read as
+        one union, which its upstream sources narrow once.
 
         Args:
             src: The asset row the rules belong to.
             rules: Its rules.
 
         Returns:
-            One selection per rule left; a rule its asset curates selects nothing.
+            The selections; a rule its asset curates selects nothing.
         """
         selections: list[Select[Any]] = []
+        across: list[Select[Any]] = []
         for rule in rules:
             if rule.sibling and src.parent_id is not None:
                 continue
@@ -255,18 +279,75 @@ class FollowedEdges:
                 )
             )
             if rule.sibling or rule.upstream.source_key is None:
-                statement = statement.where(
-                    dst.c.org_id == self._org_id, dst.c.kind == "asset", dst.c.parent_id.is_(None)
+                selections.append(
+                    statement.where(dst.c.org_id == self._org_id, dst.c.kind == "asset", dst.c.parent_id.is_(None))
                 )
-            else:
-                parent = table_of(Component).alias()
-                statement = statement.join(parent, parent.c.id == dst.c.parent_id).where(
-                    parent.c.org_id == self._org_id, parent.c.key == rule.upstream.source_key
-                )
-            selections.append(statement)
+                continue
+            parent = table_of(Component).alias()
+            across.append(
+                statement.add_columns(dst.c.parent_id.label("parent_id"))
+                .join(parent, parent.c.id == dst.c.parent_id)
+                .where(parent.c.org_id == self._org_id, parent.c.key == rule.upstream.source_key)
+            )
+        if across:
+            followed = union_all(*across).subquery("across") if len(across) > 1 else across[0].subquery("across")
+            selections.append(
+                sa_select(followed.c.relation, followed.c.to_id).where(self._may_follow(src, followed.c.parent_id))
+            )
         return selections
 
     # -- Internals -------------------------------------------------------------
+
+    @classmethod
+    def _may_follow(cls, src: Component, followed_parent: Any) -> Any:
+        """Whether one asset's upstream sources let it follow an asset of *followed_parent*, as a condition.
+
+        Args:
+            src: The asset row whose upstream sources decide.
+            followed_parent: The followed asset's parent id column.
+
+        Returns:
+            True when the source is the asset's own parent, or an upstream
+            source of its holder (the asset when it holds `UPSTREAM` rows, else
+            its parent), or when neither holds any.
+        """
+        if src.parent_id is None:
+            return or_(~cls._holds(src.id), cls._binds(src.id, followed_parent))
+        return or_(
+            and_(~cls._holds(src.id), ~cls._holds(src.parent_id)),
+            followed_parent == src.parent_id,
+            cls._binds(src.id, followed_parent),
+            and_(~cls._holds(src.id), cls._binds(src.parent_id, followed_parent)),
+        )
+
+    @staticmethod
+    def _holds(holder: Any) -> Any:
+        """Whether *holder* holds `UPSTREAM` rows, as a condition.
+
+        Args:
+            holder: The component id, or a column of them.
+
+        Returns:
+            The condition.
+        """
+        return exists().where(col(ComponentRelation.from_id) == holder, col(ComponentRelation.relation) == il.UPSTREAM)
+
+    @staticmethod
+    def _binds(holder: Any, followed_parent: Any) -> Any:
+        """Whether *holder* binds *followed_parent* as an upstream source, as a condition.
+
+        Args:
+            holder: The component id, or a column of them.
+            followed_parent: The followed asset's parent id column.
+
+        Returns:
+            The condition, probed on the relation table's primary key.
+        """
+        return exists().where(
+            col(ComponentRelation.from_id) == holder,
+            col(ComponentRelation.relation) == il.UPSTREAM,
+            col(ComponentRelation.to_id) == followed_parent,
+        )
 
     def _across(self, rules: Sequence[UpstreamRule]) -> Select[Any]:
         """Edges reaching every asset a source of the upstream identity's key owns.
@@ -276,6 +357,10 @@ class FollowedEdges:
         is shared by many platforms, so the candidates are narrowed by their
         source's key as well.
 
+        With upstream sources, an owner keeps its siblings and the assets of
+        its holder's upstream sources, probed on the relation table's primary
+        key; without any, the probe is never reached.
+
         Args:
             rules: Rules that are not sibling rules, whose upstream an asset of
                 a source fills.
@@ -283,11 +368,16 @@ class FollowedEdges:
         Returns:
             The selection.
         """
-        owners = self._anywhere("across", rules)
+        owners = self._anywhere("across", rules, holders=True)
         dst = table_of(Component).alias()
         dst_parent = table_of(Component).alias()
         candidates = (
-            sa_select(dst.c.id.label("id"), dst_parent.c.key.label("source"), dst.c.key.label("key"))
+            sa_select(
+                dst.c.id.label("id"),
+                dst.c.parent_id.label("parent_id"),
+                dst_parent.c.key.label("source"),
+                dst.c.key.label("key"),
+            )
             .select_from(dst)
             .join(dst_parent, dst_parent.c.id == dst.c.parent_id)
             .where(
@@ -299,12 +389,14 @@ class FollowedEdges:
             .cte("across_candidates")
             .prefix_with("MATERIALIZED")
         )
+        bound = self._binds(owners.c.holder, candidates.c.parent_id)
         return self._edges(owners, candidates.c.id).join(
             candidates,
             and_(
                 candidates.c.source == owners.c.upstream_source,
                 candidates.c.key == owners.c.upstream_key,
                 candidates.c.id != owners.c.from_id,
+                or_(~owners.c.narrowed, candidates.c.parent_id == owners.c.parent_id, bound),
             ),
         )
 
@@ -331,12 +423,17 @@ class FollowedEdges:
             ),
         )
 
-    def _anywhere(self, name: str, rules: Sequence[UpstreamRule]) -> Any:
+    def _anywhere(self, name: str, rules: Sequence[UpstreamRule], *, holders: bool = False) -> Any:
         """The owners of rules reaching outside their own source instance, resolved once.
 
         Args:
             name: The rules table's name, unique within the statement.
             rules: The rules, none of them sibling rules.
+            holders: Whether each owner also carries the ``holder`` of its
+                upstream sources (itself when it holds `UPSTREAM` rows, else
+                its parent) and whether that holder holds any (``narrowed``,
+                false rather than NULL for a parentless owner, whose join
+                would otherwise drop every edge).
 
         Returns:
             The owners, as a materialized common table expression.
@@ -344,9 +441,19 @@ class FollowedEdges:
         table = self._table(name, rules, sources=True)
         src = table_of(Component).alias()
         src_parent = table_of(Component).alias()
+        owners = self._owners(src, table, rules)
+        if holders:
+            holding = sa_select(col(ComponentRelation.from_id)).where(
+                col(ComponentRelation.org_id) == self._org_id, col(ComponentRelation.relation) == il.UPSTREAM
+            )
+            owners = owners.add_columns(
+                case((src.c.id.in_(holding), src.c.id), else_=src.c.parent_id).label("holder"),
+                or_(src.c.id.in_(holding), and_(src.c.parent_id.is_not(None), src.c.parent_id.in_(holding))).label(
+                    "narrowed"
+                ),
+            )
         return (
-            self._owners(src, table, rules)
-            .outerjoin(src_parent, src_parent.c.id == src.c.parent_id)
+            owners.outerjoin(src_parent, src_parent.c.id == src.c.parent_id)
             .where(func.coalesce(src_parent.c.key, "") == table.c.owner_source)
             .cte(f"{name}_owners")
             .prefix_with("MATERIALIZED")
@@ -876,10 +983,11 @@ class RelationStore:
 
         Two rules the identity match cannot see are checked here. A component
         never fills its own relation, whatever the declared keys match. And a
-        bare declared key names a component of the owner's *own* source
+        bare declared key names an asset of the owner's *own* source
         instance, while identities carry only the catalog key of the owning
         source: two instances of one source have the same identity, so the
-        instance is compared by parent row.
+        instance is compared by parent row. Any other kind is keyed globally
+        (see `Relation.accepts`), so a bare key there scopes nothing.
 
         Args:
             src: Source component the relation originates from.
@@ -909,7 +1017,7 @@ class RelationStore:
                 f"'{src.key}'.{name} does not accept {dst.kind} '{dst.key}' "
                 f"(declared: kind {relation.kinds}, key {relation.keys or 'any'})"
             )
-        if relation.local and src.parent_id is not None and dst.parent_id != src.parent_id:
+        if relation.local and dst.kind == "asset" and src.parent_id is not None and dst.parent_id != src.parent_id:
             raise ConfigError(f"'{src.key}'.{name} names a sibling; '{dst.key}' belongs to another source instance")
         return dst
 

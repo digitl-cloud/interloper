@@ -92,7 +92,7 @@ class TestParameterizedForm:
             icon="carbon:data-table",
             relations={
                 "destinations": [DecoratorDestination],
-                "upstream": il.Relation("asset", "other"),
+                "feed": il.Relation("asset", "other"),
                 "maybe": il.Relation("asset", "another", optional=True),
             },
         )
@@ -108,8 +108,8 @@ class TestParameterizedForm:
         assert declared.name == "Custom Asset"
         assert declared.icon == "carbon:data-table"
         assert declared.relations["config"].key == DecoratorConfig.key
-        upstream, maybe = declared.relations["upstream"], declared.relations["maybe"]
-        assert (upstream.kind, upstream.key, upstream.name, upstream.optional) == ("asset", "other", "upstream", False)
+        feed, maybe = declared.relations["feed"], declared.relations["maybe"]
+        assert (feed.kind, feed.key, feed.name, feed.optional) == ("asset", "other", "feed", False)
         assert (maybe.kind, maybe.key, maybe.name, maybe.optional) == ("asset", "another", "maybe", True)
 
     def test_field_declarations_become_real_field_defaults(self):

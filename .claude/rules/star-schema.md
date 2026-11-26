@@ -93,6 +93,7 @@ Dimensions are type 1: the latest row wins. `as_of_date` says which day it refle
 - Every upstream relation is `many=True, optional=True`: the star schema is a view over whatever its relations follow. A fact with no readable upstream raises `ConfigError("no readable upstream: ...")` from `union()`; a dimension whose entity tier has no readable upstream falls through to the lower tiers.
 - Relation names are the raw asset's key (`campaigns_stats`, `profiles`, `ads`). A relation over several keys lists them (`["amazon_ads.products_campaigns_stats", ...]`).
 - Upstreams follow the organisation: a relation with no binding reads every asset of the organisation it matches, so an account added later joins the views on their next run, and one with no table yet is skipped with a warning naming it. A binding (API, MCP, spec file) curates the relation to exactly what it names. Say so in the source docstring.
+- A star's own `upstream` list (the app's Upstream step) narrows it to chosen accounts: its relations then read only the listed sources' assets, and a consumer reading several instances of one platform's star lists the ones it reads.
 
 ## 8. Tests
 

@@ -171,10 +171,12 @@ class DAG:
         """Bind the declared upstream keys nothing has bound yet.
 
         For every materializing asset and every unbound upstream relation, the
-        candidates are the DAG's other assets the relation `Relation.matches`.
-        A ``many`` relation binds every candidate and a single-valued one the
-        only candidate there is; no candidate leaves the relation unbound for
-        `_check_relations` to judge.
+        candidates are the DAG's other assets the relation `Relation.matches`:
+        its siblings, and of the others only those of its upstream sources
+        (`Asset.upstream_sources`) when it has any. A ``many`` relation binds
+        every candidate and a single-valued one the only candidate there is;
+        no candidate leaves the relation unbound for `_check_relations` to
+        judge.
 
         Binding goes through
         `bind`, so an explicit
@@ -187,24 +189,38 @@ class DAG:
         """
         assets = {operation.id: operation for operation in self.operations if isinstance(operation, Asset)}
         identities = {handle: asset.identity for handle, asset in assets.items()}
+        parents = {handle: asset.parent.id if asset.parent is not None else None for handle, asset in assets.items()}
         for asset in assets.values():
             if not asset.enabled:
                 continue
-            for name, relation in asset.upstream_relations().items():
-                if asset.bound(name) or not relation.keys:
-                    continue
-                others = {handle: identity for handle, identity in identities.items() if handle != asset.id}
-                siblings = {handle for handle in others if assets[handle].parent is asset.parent}
+            unbound = {
+                name: relation
+                for name, relation in asset.upstream_relations().items()
+                if relation.keys and not asset.bound(name)
+            }
+            if not unbound:
+                continue
+            others = {handle: identity for handle, identity in identities.items() if handle != asset.id}
+            siblings = {handle for handle in others if assets[handle].parent is asset.parent}
+            upstream = asset.upstream_sources()
+            if upstream is not None:
+                readable = {source.id for source in upstream}
+                others = {
+                    handle: identity
+                    for handle, identity in others.items()
+                    if handle in siblings or parents[handle] in readable
+                }
+            for name, relation in unbound.items():
                 matched = relation.matches(identities[asset.id], others, siblings=siblings)
                 candidates = [assets[handle] for handle in matched]
                 if not candidates:
                     continue
                 if not relation.many and len(candidates) > 1:
-                    listed = ", ".join(f"{candidate.qualified_key}#{candidate.id[:8]}" for candidate in candidates)
+                    named = ", ".join(f"{candidate.qualified_key}#{candidate.id[:8]}" for candidate in candidates)
                     raise DAGError(
                         f"'{asset.qualified_key}' relation '{name}' depends on "
                         f"'{', '.join(relation.keys)}' and the DAG holds {len(candidates)} matching assets "
-                        f"({listed}); bind '{name}' explicitly."
+                        f"({named}); bind '{name}' explicitly."
                     )
                 asset.bind(name, *candidates)
 
@@ -458,12 +474,15 @@ class DAG:
         its assets (flagged read-only in a mini-DAG, or only some of them in a
         partial run) rather than its originals, and a binding pointing at an
         owned component outside this graph is left out rather than written
-        as a reference nothing answers.
+        as a reference nothing answers. The owners are known before anything
+        is written, so a component's upstream sources refer to those that are
+        items and only name the others (see `Source.to_spec`).
 
         Returns:
             A DAGSpec that can reconstruct an equivalent DAG.
         """
-        context = SerializationContext(cast("list[Component]", self.operations))
+        owners = {operation.parent.id: operation.parent for operation in self.operations if operation.parent}
+        context = SerializationContext([*cast("list[Component]", self.operations), *owners.values()])
         items: list[Spec] = []
         written_owners: set[str] = set()
         for operation in self.operations:

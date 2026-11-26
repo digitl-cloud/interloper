@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from interloper.component.inherited import InheritedSetting
 from interloper.component.maturity import Maturity
-from interloper.component.relation import ComponentIdentity, Relation, unwrap_optional
+from interloper.component.relation import UPSTREAM, ComponentIdentity, Relation, unwrap_optional
 from interloper.errors import ConfigError
 from interloper.registry import Registry
 from interloper.serializable.base import IgnoredDescriptor, Serializable, SerializationContext, Spec
@@ -978,7 +978,8 @@ class Component(Serializable):
 
         Raises:
             TypeError: If an empty ``Relation()`` has no annotation naming a
-                component class to take its target from.
+                component class to take its target from, or if the class
+                declares the reserved `UPSTREAM` relation.
         """
         inherited: dict[str, Relation] = {}
         for base in reversed(cls.__mro__[1:]):
@@ -1012,6 +1013,8 @@ class Component(Serializable):
         declared = cls.__dict__.get("relations")
         if isinstance(declared, dict):
             own.update(declared)
+        if UPSTREAM in own:
+            cls._refuse_upstream()
 
         cls.relations = {**inherited, **own}
         for name, relation in cls.relations.items():
@@ -1019,6 +1022,34 @@ class Component(Serializable):
             cls.relations[name] = stamped
             setattr(cls, name, stamped)
             annotations.pop(name, None)
+
+    @classmethod
+    def _refuse_upstream(cls) -> None:
+        """Refuse a class declaring the `UPSTREAM` relation, which the framework alone gives.
+
+        Raises:
+            TypeError: Always.
+        """
+        raise TypeError(
+            f"{cls.__name__} declares '{UPSTREAM}', which is a reserved relation name: the framework gives it to "
+            f"every component whose assets read another source's assets"
+        )
+
+    @classmethod
+    def _carry_upstream(cls, upstream: Relation | None) -> None:
+        """Give the class the `UPSTREAM` relation its relations call for, or take an inherited one away.
+
+        Args:
+            upstream: The relation, as `Relation.upstream_source_relation` builds it;
+                ``None`` when nothing the class reads lies in another source.
+        """
+        relations = {name: relation for name, relation in cls.relations.items() if name != UPSTREAM}
+        if upstream is not None:
+            relations[UPSTREAM] = upstream
+            setattr(cls, UPSTREAM, upstream)
+        elif UPSTREAM in cls.__dict__:
+            delattr(cls, UPSTREAM)
+        cls.relations = relations
 
     @classmethod
     def discriminator_field(cls) -> str | None:

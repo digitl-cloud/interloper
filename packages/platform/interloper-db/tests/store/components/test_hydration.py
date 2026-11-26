@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from contextlib import contextmanager
+from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -172,6 +173,80 @@ class Report(il.Source):
             return []
 
 
+class CampaignsA(il.Source):
+    """First provider of a ``campaigns`` asset."""
+
+    class Campaigns(il.Asset):
+        """Campaigns."""
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:  # pragma: no cover
+            """Never materialized by these tests.
+
+            Args:
+                context: The execution context of the materialization.
+
+            Returns:
+                No rows.
+            """
+            return []
+
+
+class CampaignsB(il.Source):
+    """Second provider of a ``campaigns`` asset."""
+
+    class Campaigns(il.Asset):
+        """Campaigns."""
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:  # pragma: no cover
+            """Never materialized by these tests.
+
+            Args:
+                context: The execution context of the materialization.
+
+            Returns:
+                No rows.
+            """
+            return []
+
+
+class Rollup(il.Source):
+    """Source whose ``totals`` reads every source's ``campaigns`` and the shop's ``orders``."""
+
+    class Totals(il.Asset):
+        """Totals over campaigns and orders."""
+
+        campaigns: list[il.Asset] = il.Relation("asset", "*.campaigns", many=True, optional=True)
+        orders: il.Asset | None = il.Relation("asset", "shop.orders", optional=True)
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:  # pragma: no cover
+            """Never materialized by these tests.
+
+            Args:
+                context: The execution context of the materialization.
+
+            Returns:
+                No rows.
+            """
+            return []
+
+
+class Tally(il.Asset):
+    """Parentless asset reading every source's ``campaigns``."""
+
+    campaigns: list[il.Asset] = il.Relation("asset", "*.campaigns", many=True, optional=True)
+
+    def data(self, context: il.ExecutionContext) -> list[dict]:  # pragma: no cover
+        """Never materialized by these tests.
+
+        Args:
+            context: The execution context of the materialization.
+
+        Returns:
+            No rows.
+        """
+        return []
+
+
 class FakeLinker(il.Component):
     """Test-only kind whose vocabulary the hydrator has never seen."""
 
@@ -180,7 +255,22 @@ class FakeLinker(il.Component):
 
 il.KINDS.register(FakeLinker.kind, FakeLinker.anchor())
 
-_CATALOG = il.Catalog.from_assets([DemoSource, demo_asset, follower_asset, Shop, Finance, Account, Report, Warehouse])
+_CATALOG = il.Catalog.from_assets(
+    [
+        DemoSource,
+        demo_asset,
+        follower_asset,
+        Shop,
+        Finance,
+        Account,
+        Report,
+        Warehouse,
+        CampaignsA,
+        CampaignsB,
+        Rollup,
+        Tally,
+    ]
+)
 
 
 @pytest.fixture
@@ -463,6 +553,110 @@ class TestAutomaticUpstreams:
         hydrated = store.components.load(demo.id)
 
         assert _asset(hydrated, "b").bound("a") is _asset(hydrated, "a")
+
+
+@pytest.fixture
+def rollup_org(store: Store, shop_connection: Component) -> SimpleNamespace:
+    """An organisation where the rollup could read both providers' campaigns and the shop's orders.
+
+    Returns:
+        The rows: the rollup and its ``totals``, both providers and their
+        ``campaigns``, the shop.
+    """
+    provider_a = store.components.create(_ORG, kind="source", key="campaigns_a")
+    provider_b = store.components.create(_ORG, kind="source", key="campaigns_b")
+    shop = store.components.create(_ORG, kind="source", key="shop", relations={"connection": [shop_connection.id]})
+    rollup = store.components.create(_ORG, kind="source", key="rollup")
+    return SimpleNamespace(
+        rollup=rollup,
+        totals=_child(rollup, "totals"),
+        shop=shop,
+        provider_a=provider_a,
+        provider_b=provider_b,
+        a_campaigns=_child(provider_a, "campaigns"),
+    )
+
+
+class TestUpstreamSources:
+    """Upstream sources narrow what hydration binds, and travel with the component, so a run's DAG narrows alike."""
+
+    def test_a_relation_follows_only_its_upstream_sources(self, store: Store, rollup_org: SimpleNamespace):
+        store.relations.add(rollup_org.rollup.id, relation=il.UPSTREAM, to_id=rollup_org.provider_a.id)
+
+        totals = _asset(store.components.load(rollup_org.rollup.id), "totals")
+
+        campaigns = totals.bound("campaigns")
+        assert isinstance(campaigns, list)
+        assert [asset.id for asset in campaigns] == [str(rollup_org.a_campaigns.id)]
+        assert totals.bound("orders") is None
+
+    def test_the_upstream_sources_are_bound(self, store: Store, rollup_org: SimpleNamespace):
+        store.relations.add(rollup_org.rollup.id, relation=il.UPSTREAM, to_id=rollup_org.provider_a.id)
+
+        rollup = store.components.load(rollup_org.rollup.id)
+
+        assert [source.id for source in _asset(rollup, "totals").upstream_sources() or []] == [
+            str(rollup_org.provider_a.id)
+        ]
+        campaigns, upstream = _asset(rollup, "totals").bound("campaigns"), rollup.bound(il.UPSTREAM)
+        assert isinstance(campaigns, list) and isinstance(upstream, list)
+        assert campaigns[0].parent is upstream[0]
+
+    def test_a_parentless_assets_own_upstream_sources_narrow_what_it_follows(
+        self, store: Store, rollup_org: SimpleNamespace
+    ):
+        tally = store.components.create(_ORG, kind="asset", key="tally")
+        store.relations.add(tally.id, relation=il.UPSTREAM, to_id=rollup_org.provider_a.id)
+
+        campaigns = store.components.load(tally.id).bound("campaigns")
+
+        assert isinstance(campaigns, list)
+        assert [asset.id for asset in campaigns] == [str(rollup_org.a_campaigns.id)]
+
+    def test_a_runs_dag_never_widens_a_relation_its_upstream_sources_left_empty(
+        self, store: Store, rollup_org: SimpleNamespace
+    ):
+        store.relations.add(rollup_org.rollup.id, relation=il.UPSTREAM, to_id=rollup_org.provider_a.id)
+        rollup = store.components.load(rollup_org.rollup.id)
+        shop = store.components.load(rollup_org.shop.id)
+        assert isinstance(rollup, il.Source) and isinstance(shop, il.Source)
+
+        dag = il.DAG(*rollup.operations(), *shop.operations())
+        restored = il.DAG.from_spec(dag.to_spec())
+
+        for graph in (dag, restored):
+            totals = next(operation for operation in graph.operations if operation.key == "totals")
+            assert totals.bound("orders") is None
+
+    def test_upstream_sources_add_no_statement_to_a_load(
+        self, store: Store, rollup_org: SimpleNamespace, component_db: Engine
+    ):
+        with _statements(component_db) as following:
+            store.components.load(rollup_org.rollup.id)
+        for provider in (rollup_org.provider_a, rollup_org.provider_b, rollup_org.shop):
+            store.relations.add(rollup_org.rollup.id, relation=il.UPSTREAM, to_id=provider.id)
+        with _statements(component_db) as narrowed:
+            store.components.load(rollup_org.rollup.id)
+
+        assert len(narrowed) <= len(following)
+
+    def test_an_upstream_source_hydrates_once(
+        self, store: Store, rollup_org: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+    ):
+        store.relations.add(rollup_org.rollup.id, relation=il.UPSTREAM, to_id=rollup_org.provider_a.id)
+        original_build = Hydrator._build
+        built: list[UUID] = []
+
+        def spy(self: Hydrator, db_component: Component, cache: Any, chain: Any) -> il.Component:
+            built.append(db_component.id)
+            return original_build(self, db_component, cache, chain)
+
+        monkeypatch.setattr(Hydrator, "_build", spy)
+
+        store.components.load(rollup_org.rollup.id)
+
+        assert built.count(rollup_org.provider_a.id) == 1
+        assert rollup_org.provider_b.id not in built
 
 
 class TestCrossSourceUpstream:

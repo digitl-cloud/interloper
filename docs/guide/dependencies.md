@@ -184,8 +184,23 @@ what it names, and an upstream relation with none reads every matching asset of 
 accounts added later included, whether the run materializes them or only reads them. Nothing is
 written for it; removing a relation's last binding returns it to following them all.
 
+To narrow a whole source without binding every relation, bind its upstream sources. Every source
+and asset whose relations read another source's assets carries a relation named `upstream`,
+which the framework adds (no class declares it; the name is reserved). An asset reads what its
+relation binds, else its own upstream sources, else its source's, else every asset it matches.
+With upstream sources, each relation reads only their assets it accepts, and nothing when none of
+its sources is among them; the asset's siblings are never narrowed. An upstream source cannot be
+deleted while it is bound.
+
+```python
+rollup = Rollup()
+rollup.bind("upstream", meta, tiktok)  # every asset of the rollup reads these two
+rollup.totals.bind("upstream", meta)   # this asset reads meta only
+```
+
 In a spec, a bound upstream is a `{ref: id}` under the relation's name, since an asset always
-travels inside its own source's document. See [Specs](specs.md).
+travels inside its own source's document, and upstream sources are `upstream: [{ref: id}, ...]`
+under the source or the asset. See [Specs](specs.md).
 
 ## Reading upstream data
 
