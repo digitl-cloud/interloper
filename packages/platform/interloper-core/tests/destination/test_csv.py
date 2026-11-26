@@ -88,3 +88,18 @@ class TestWindowWrites:
         context = IOContext(asset=partitioned_asset(), window=window)
         dest.write(context, rows)
         assert dest.partition_row_counts(context) == {"2024-01-01": 1, "2024-01-02": 2}
+
+    def test_a_partitioned_asset_previews_its_newest_partitions(self, tmp_path):
+        dest = CSVDestination(id="csv", base_path=str(tmp_path))
+        window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2))
+        rows = [
+            {"date": "2024-01-01", "v": "a"},
+            {"date": "2024-01-02", "v": "b"},
+            {"date": "2024-01-02", "v": "c"},
+        ]
+        dest.write(IOContext(asset=partitioned_asset(), window=window), rows)
+        assert dest.head(IOContext(asset=partitioned_asset()), 3) == [
+            {"date": "2024-01-02", "v": "b"},
+            {"date": "2024-01-02", "v": "c"},
+            {"date": "2024-01-01", "v": "a"},
+        ]

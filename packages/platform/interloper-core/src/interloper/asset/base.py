@@ -66,7 +66,8 @@ class AssetDefinition(ComponentDefinition):
     Cross-entity references travel as keys: ``relations`` names the kinds and
     keys that may fill each declared link. Same-entity data is inlined:
     ``asset_schema`` is the asset's own output schema and ``partitioning`` its
-    own partition config.
+    own partition config. ``editable`` says the asset is an editable
+    `Reference`, whose rows the app may rewrite whole.
 
     Asset keys come in three forms:
 
@@ -84,6 +85,7 @@ class AssetDefinition(ComponentDefinition):
     config_schema: dict[str, Any] = Field(default_factory=dict)
     asset_schema: dict[str, Any] | None = Field(default=None)
     partitioning: dict[str, Any] | None = Field(default=None)
+    editable: bool = Field(default=False)
 
     @property
     def qualified_key(self) -> str:

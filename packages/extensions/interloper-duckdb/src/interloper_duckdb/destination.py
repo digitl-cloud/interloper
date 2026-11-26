@@ -133,6 +133,39 @@ class DuckDBDestination(DatabaseDestination):
         ).fetchall()
         return dict(rows)
 
+    def _select(
+        self, table: str, dataset: str | None, where: PartitionFilter | None, limit: int | None = None
+    ) -> pd.DataFrame:
+        """Select the rows a filter selects, or every row, at most *limit* of them, as a DataFrame.
+
+        Args:
+            table: Target table name.
+            dataset: The schema, or ``None`` for the destination's default.
+            where: The rows to select; ``None`` for the whole table.
+            limit: The most rows to select; ``None`` for every one.
+
+        Returns:
+            The selected rows.
+
+        Raises:
+            DataNotFoundError: If the table does not exist yet.
+        """
+        with self._cursor() as cursor:
+            types = self._columns(cursor, table, dataset)
+            if not types:
+                raise DataNotFoundError(
+                    f"Table '{self._schema(dataset)}.{table}' does not exist. Has the asset been materialized?"
+                )
+            query = f"SELECT * FROM {self.qualified_name(table, dataset)}"
+            parameters: list[Any] = []
+            if where is not None:
+                predicate, parameters = self._predicate(where, types)
+                query += f" WHERE {predicate}"
+            if limit is not None:
+                query += " LIMIT ?"
+                parameters = [*parameters, limit]
+            return cursor.execute(query, parameters).df()
+
     def _create_table(
         self, cursor: duckdb.DuckDBPyConnection, table: str, dataset: str | None, specs: list[FieldSpec]
     ) -> None:
@@ -268,21 +301,21 @@ class DuckDBDestination(DatabaseDestination):
 
         Returns:
             The selected rows.
-
-        Raises:
-            DataNotFoundError: If the table does not exist yet.
         """
-        with self._cursor() as cursor:
-            types = self._columns(cursor, table, dataset)
-            if not types:
-                raise DataNotFoundError(
-                    f"Table '{self._schema(dataset)}.{table}' does not exist. Has the asset been materialized?"
-                )
-            ref = self.qualified_name(table, dataset)
-            if where is None:
-                return cursor.execute(f"SELECT * FROM {ref}").df()
-            predicate, parameters = self._predicate(where, types)
-            return cursor.execute(f"SELECT * FROM {ref} WHERE {predicate}", parameters).df()
+        return self._select(table, dataset, where)
+
+    def head(self, context: IOContext, limit: int) -> pd.DataFrame:
+        """Select at most *limit* rows of what the context covers, from a table or a view, the limit in the query.
+
+        Args:
+            context: IO context carrying the target asset, the window and the effective schema.
+            limit: The most rows to return.
+
+        Returns:
+            The rows, as a DataFrame.
+        """
+        table, dataset = self._target(context)
+        return self._select(table, dataset, self._where(context), limit)
 
     def has_table(self, table: str, dataset: str | None) -> bool:
         """Whether the table exists, read from the information schema.

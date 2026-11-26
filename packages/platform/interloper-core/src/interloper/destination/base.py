@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from interloper.component import Component
 from interloper.destination.context import IOContext
-from interloper.errors import ConfigError, RepresentationError
+from interloper.errors import ConfigError, DataNotFoundError, RepresentationError
 from interloper.partitioning.base import Partition
 from interloper.representation import TableData
 from interloper.utils.data import is_empty
@@ -25,7 +25,8 @@ class Destination(Component):
     partition, and `partition_row_counts` for the coverage view.
     `write` and `read` own the rest, splitting a window write into
     one call per partition and joining a window read into one table, so a
-    destination is partition-correct by construction. A
+    destination is partition-correct by construction, and `head` reads the
+    first rows through `read` unless the backend can stop early. A
     backend that does not store per partition (a database that clears each
     partition and inserts a window in one batch) overrides `write` or
     `read` instead. Two more hooks, `reference` and `create_view`, serve
@@ -114,6 +115,42 @@ class Destination(Component):
         except RepresentationError:
             return parts
         return table.concat(parts[1:])
+
+    def head(self, context: IOContext, limit: int) -> Any:
+        """Read at most *limit* rows of the data the context covers.
+
+        A window, or an unpartitioned asset, is read through `read` and its
+        first rows kept. A partitioned asset read without a window has no
+        whole to read here, since this destination stores it per partition:
+        the partitions `partition_row_counts` lists are read newest first,
+        through `read_partition`, until *limit* rows are gathered. A backend
+        that can stop early (a ``LIMIT``, a paged listing) overrides this.
+
+        Args:
+            context: IO context carrying the target asset, the window and the effective schema.
+            limit: The most rows to return.
+
+        Returns:
+            The first *limit* rows, in the representation `read` returns them in.
+
+        Raises:
+            DataNotFoundError: If no partition of a partitioned asset was
+                written; `read` raises it for the rest.
+        """
+        partitioning = context.asset.partitioning
+        if context.window is not None or partitioning is None:
+            table = TableData.from_data(self.read(context))
+            return table.representation.from_rows(table.rows[:limit])
+        tables: list[TableData] = []
+        rows: list[dict[str, Any]] = []
+        for key in sorted(self.partition_row_counts(context), reverse=True):
+            if len(rows) >= limit:
+                break
+            tables.append(TableData.from_data(self.read_partition(context, partitioning.partition(key))))
+            rows.extend(tables[-1].rows)
+        if not tables:
+            raise DataNotFoundError(f"No partition of asset '{context.asset.key}' has been written")
+        return tables[0].representation.from_rows(rows[:limit])
 
     @abstractmethod
     def partition_row_counts(self, context: IOContext) -> dict[str, int]:

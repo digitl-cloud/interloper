@@ -2,7 +2,8 @@
 
 Two kinds of asset besides the one that writes rows. A **view** materializes its definition: its
 destination creates a warehouse view from what `data()` returns. A **reference** materializes
-nothing: it points at a table that already exists and reads it. Both are assets in every other
+nothing: it points at a table that already exists, or at a decision table whose rows people edit
+in the app, and reads it. Both are assets in every other
 respect, with lineage, relations, a schema and a place in the catalog.
 
 | | Asset | View | Reference |
@@ -80,8 +81,42 @@ class GoogleAnalytics4Export(il.Source):
 A reference names its table as written, wildcard and all; the dataset is the asset's, the source's
 by default. Either may name a field of the source in braces (`dataset="analytics_{property_id}"`),
 filled per instance, which is how the GA4 export points `events` at the property's own dataset.
-Nothing is created or written. Downstream assets read it like any asset, and views build on it like
-any table.
+Without a `table`, a reference refers to its own table, named as any asset's is. Nothing is created
+or written by a run. Downstream assets read it like any asset, and views build on it like any table.
+
+### Decision tables
+
+`editable=True` makes a reference a **decision table**: rows people decide (a bucket, an
+assignment), which the app edits in a grid and rewrites whole, in every destination of the asset.
+Everything computed from those decisions is an ordinary asset reading the table as an upstream.
+
+```py
+class Bucket(il.Schema):
+    bucket_id: str
+    name: str
+    active: bool
+
+
+@il.source
+class CampaignMatcher(il.Source):
+    @il.reference(editable=True, schema=Bucket)
+    def buckets(self) -> None:
+        """The buckets campaigns are sorted into."""
+
+    @il.asset
+    def campaign_matches(self, buckets: il.Upstream | None = None) -> list[dict]:
+        ...
+```
+
+A decision table declares a `schema`, which every write is checked against, and no `partitioning`,
+since it is only ever written whole; either is refused when the class is defined. A run does
+nothing for it, and a table nobody has written yet reads as no data, as any missing upstream does:
+an optional relation receives `None`. The catalog marks it with `editable` on its definition.
+
+The API reads any asset's rows through its default destination, paged, capped and searched
+(`GET /api/organisations/{org_id}/assets/{asset_id}/rows`), and rewrites a
+decision table with the editor role (`PUT` on the same path), refusing rows that fail the schema
+and a write over rows that changed since they were read.
 
 A source whose tables exist in one warehouse only says so with a narrowed `destinations` relation,
 checked when a destination is bound: the GA4 export declares

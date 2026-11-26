@@ -16,6 +16,7 @@ from interloper.schema import Schema
 from pydantic import BaseModel, Field
 
 from interloper_google_cloud.bigquery.destination import (
+    PREVIEW_BYTES_BILLED,
     BigQueryDestination,
     _merge_field_descriptions,
     _partition_param,
@@ -706,6 +707,164 @@ class TestPartitionParam:
         mock_client.get_table.side_effect = NotFound("nope")
         with pytest.raises(DataNotFoundError, match="Has the asset been materialized"):
             dest.select("tbl", "ds", None)
+
+
+@il.source
+class _Export(il.Source):
+    @il.reference(table="events_*")
+    def events(self) -> None:
+        """Sharded export tables."""
+
+
+class TestHead:
+    """``head`` lists a table's rows and queries anything else with a limit."""
+
+    def test_a_table_is_listed_without_a_query(self):
+        import pandas as pd
+
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.get_table.return_value.table_type = "TABLE"
+        frame = pd.DataFrame([{"id": 1}])
+        mock_client.list_rows.return_value.to_dataframe.return_value = frame
+
+        assert dest.head(_ctx(_plain_asset(), None), 5) is frame
+        mock_client.list_rows.assert_called_once_with(mock_client.get_table.return_value, max_results=5)
+        assert not mock_client.query.called
+
+    def test_a_view_is_queried_with_a_limit_and_a_billing_cap(self):
+        import pandas as pd
+
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.get_table.return_value.table_type = "VIEW"
+        frame = pd.DataFrame([{"id": 1}])
+        mock_client.query.return_value.result.return_value.to_dataframe.return_value = frame
+
+        assert dest.head(_ctx(_plain_asset(), None), 5) is frame
+        assert mock_client.query.call_args.args[0] == "SELECT * FROM `test-proj.ds.plain_asset` LIMIT 5"
+        assert mock_client.query.call_args.kwargs["job_config"].maximum_bytes_billed == PREVIEW_BYTES_BILLED
+        assert not mock_client.list_rows.called
+
+    def test_a_window_is_queried_with_its_filter_a_limit_and_a_billing_cap(self):
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.get_table.return_value.table_type = "TABLE"
+        mock_client.get_table.return_value.schema = [bigquery.SchemaField("day", "DATE")]
+        partition = il.TimePartition(datetime.date(2024, 1, 1))
+
+        dest.head(IOContext(asset=_partitioned_asset(), window=partition.window), 3)
+
+        query = mock_client.query.call_args.args[0]
+        assert "WHERE" in query
+        assert query.endswith("LIMIT 3")
+        job_config = mock_client.query.call_args.kwargs["job_config"]
+        assert job_config.maximum_bytes_billed == PREVIEW_BYTES_BILLED
+        assert [parameter.name for parameter in job_config.query_parameters] == ["partition_start", "partition_end"]
+        assert not mock_client.list_rows.called
+
+    def test_a_wildcard_lists_its_newest_table(self):
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.list_tables.return_value = [
+            SimpleNamespace(table_id=name) for name in ("events_20261101", "events_20261103", "other", "events_2026")
+        ]
+        mock_client.get_table.return_value.table_type = "TABLE"
+
+        dest.head(_ctx(_Export(dataset="ds").events, None), 5)
+
+        assert mock_client.get_table.call_args.args[0] == "test-proj.ds.events_20261103"
+        mock_client.list_rows.assert_called_once_with(mock_client.get_table.return_value, max_results=5)
+        assert not mock_client.query.called
+
+    def test_a_wildcard_covering_no_table_is_data_not_found(self):
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.list_tables.return_value = [SimpleNamespace(table_id="other")]
+
+        with pytest.raises(DataNotFoundError, match=r"No table matches 'test-proj.ds.events_\*'"):
+            dest.head(_ctx(_Export(dataset="ds").events, None), 5)
+
+    def test_a_missing_table_is_data_not_found(self):
+        from google.cloud.exceptions import NotFound
+
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.get_table.side_effect = NotFound("nope")
+        with pytest.raises(DataNotFoundError, match="Has the asset been materialized"):
+            dest.head(_ctx(_plain_asset(), None), 5)
+
+
+class TestWholeTableWrite:
+    """The whole table is replaced by one ``WRITE_TRUNCATE`` load job; a window is deleted then appended."""
+
+    def test_rows_replace_the_table_in_one_load_job(self):
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.get_table.return_value.time_partitioning = None
+
+        dest.write(_ctx(_declared_asset(), _RowSchema), [{"id": 1, "cost": 1.0, "day": None}])
+
+        assert not mock_client.query.called
+        job_config = mock_client.load_table_from_dataframe.call_args.kwargs["job_config"]
+        assert job_config.write_disposition == bigquery.WriteDisposition.WRITE_TRUNCATE
+        assert job_config.schema_update_options is None
+        assert [field.name for field in job_config.schema] == ["id", "cost", "day"]
+
+    def test_a_missing_table_is_created_from_the_schema_before_the_load(self):
+        from google.cloud.exceptions import NotFound
+
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.get_table.side_effect = [NotFound("nope"), mock_client.get_table.return_value]
+
+        dest.write(_ctx(_declared_asset(), _RowSchema), [{"id": 1, "cost": 1.0, "day": None}])
+
+        created = mock_client.create_table.call_args.args[0]
+        assert [field.name for field in created.schema] == ["id", "cost", "day"]
+        job_config = mock_client.load_table_from_dataframe.call_args.kwargs["job_config"]
+        assert job_config.write_disposition == bigquery.WriteDisposition.WRITE_TRUNCATE
+
+    def test_a_partitioned_table_keeps_its_partitioning(self):
+        dest, mock_client = _make_destination(dataset="ds")
+        partitioning = bigquery.TimePartitioning(type_=bigquery.TimePartitioningType.DAY, field="day")
+        mock_client.get_table.return_value.time_partitioning = partitioning
+
+        dest.write(_ctx(_partitioned_asset(), _RowSchema), [{"id": 1, "cost": 1.0, "day": datetime.date(2024, 1, 1)}])
+
+        job_config = mock_client.load_table_from_dataframe.call_args.kwargs["job_config"]
+        assert job_config.write_disposition == bigquery.WriteDisposition.WRITE_TRUNCATE
+        assert job_config.time_partitioning == partitioning
+
+    def test_descriptions_are_synced_after_the_load(self):
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.get_table.return_value.time_partitioning = None
+        mock_client.get_table.return_value.schema = [bigquery.SchemaField("id", "INTEGER")]
+
+        dest.write(_ctx(_declared_asset(), _RowSchema), [{"id": 1, "cost": 1.0, "day": None}])
+
+        assert mock_client.get_table.call_count == 2
+        assert mock_client.update_table.called
+
+    def test_no_rows_truncate_the_table_without_a_load_job(self):
+        dest, mock_client = _make_destination(dataset="ds")
+
+        dest.write(_ctx(_declared_asset(), _RowSchema), [])
+
+        assert mock_client.query.call_args.args[0] == "TRUNCATE TABLE `test-proj.ds.declared_asset`"
+        assert not mock_client.load_table_from_dataframe.called
+
+    def test_no_rows_without_a_schema_write_nothing(self):
+        dest, mock_client = _make_destination(dataset="ds")
+
+        dest.write(_ctx(_plain_asset(), None), [])
+
+        assert not mock_client.query.called
+        assert not mock_client.load_table_from_dataframe.called
+
+    def test_a_window_deletes_its_partitions_then_appends(self):
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.get_table.return_value.schema = [bigquery.SchemaField("day", "DATE")]
+        partition = il.TimePartition(datetime.date(2024, 1, 1))
+        context = IOContext(asset=_partitioned_asset(), window=partition.window, schema=_RowSchema)
+
+        dest.write(context, [{"id": 1, "cost": 1.0, "day": datetime.date(2024, 1, 1)}])
+
+        assert mock_client.query.call_args.args[0].startswith("DELETE FROM")
+        job_config = mock_client.load_table_from_dataframe.call_args.kwargs["job_config"]
+        assert job_config.write_disposition == bigquery.WriteDisposition.WRITE_APPEND
 
 
 class TestDefinition:

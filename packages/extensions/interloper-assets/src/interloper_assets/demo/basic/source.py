@@ -14,6 +14,14 @@ class DemoSchema(il.Schema):
     hello: str
 
 
+class Annotation(il.Schema):
+    """A note kept on a day of the demo data."""
+
+    date: dt.date
+    note: str
+    author: str | None = None
+
+
 partitioning = il.TimePartitionConfig(column="date", allow_window=False)
 
 
@@ -22,7 +30,7 @@ partitioning = il.TimePartitionConfig(column="date", allow_window=False)
     icon="carbon:data-structured",
 )
 class DemoSource(il.Source):
-    """Demo source. Defines a small DAG (a -> b,c,d -> e) with time partitioning."""
+    """Demo source. Defines a small DAG (a -> b,c,d -> e) with time partitioning, and an editable reference."""
 
     hello: str = il.InputField(default="world", description="Greeting text")
     random_failure_probability: float = il.InputField(default=0.0, description="Probability of random failure (0-1)")
@@ -63,3 +71,7 @@ class DemoSource(il.Source):
     def e(self, context: il.ExecutionContext, b: il.Upstream, c: il.Upstream, d: il.Upstream) -> pd.DataFrame:
         """Depends on B, C, and D. Sink asset of the example DAG."""
         return self._do(context, "E")
+
+    @il.reference(editable=True, schema=Annotation)
+    def annotations(self) -> None:
+        """Notes kept on days of the demo data, edited in the app and read by nothing."""

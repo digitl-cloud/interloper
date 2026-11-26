@@ -72,8 +72,8 @@ class ViewDecorator(Decorator[View]):
 view = ViewDecorator(View)
 
 
-def reference(*, table: str, **overrides: Any) -> Decorator[Reference]:
-    """Create a Reference subclass from a decorated function: an asset over a table that already exists.
+def reference(*, table: str | None = None, editable: bool = False, **overrides: Any) -> Decorator[Reference]:
+    """Create a Reference subclass from a decorated function: an asset over a table no run computes.
 
     Like ``il.asset``, but the function has nothing to compute: its name is
     the asset key and its docstring the description, and its body stays
@@ -90,12 +90,27 @@ def reference(*, table: str, **overrides: Any) -> Decorator[Reference]:
             \"\"\"The property's raw export, read and never written.\"\"\"
     ```
 
+    Without a ``table``, the reference refers to its own table, named as any
+    asset's is. ``editable=True`` lets the app rewrite its rows whole
+    through the asset's destinations; downstream assets read them like any
+    upstream. An editable reference declares a ``schema`` and no
+    ``partitioning``:
+
+    ```py
+    @il.reference(editable=True, schema=Buckets)
+    def buckets(self) -> None:
+        \"\"\"The buckets campaigns are sorted into.\"\"\"
+    ```
+
     Args:
-        table: The physical table name, used as written, wildcard and all.
+        table: The physical table name, used as written, wildcard and all;
+            ``None`` names it as any asset's table.
+        editable: Whether the app may rewrite the table whole; defaults
+            to ``False``.
         **overrides: Definition metadata and behaviour as for `asset`
             (``schema``, ``tags``, ``dataset``, ``partitioning``, ...).
 
     Returns:
         A decorator turning the function into a Reference subclass.
     """
-    return Decorator(Reference, table_name=table, **overrides)
+    return Decorator(Reference, table_name=table, editable=editable, **overrides)

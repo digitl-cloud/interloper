@@ -13,7 +13,7 @@ import pytest
 
 import interloper as il
 from interloper.destination import IOContext
-from interloper.errors import ConfigError
+from interloper.errors import ConfigError, DataNotFoundError
 from interloper.partitioning import Partition, PartitionWindow, TimePartition, TimePartitionWindow
 
 
@@ -246,6 +246,94 @@ class TestReadDispatch:
         result = Opaque().read(IOContext(asset=partitioned_asset(), window=window))
 
         assert result == [Box("2026-09-07"), Box("2026-09-08")]
+
+
+class PartitionReadingMemory(il.MemoryDestination):
+    """Memory destination recording the partitions it reads, in order."""
+
+    partitions_read: ClassVar[list[str | None]] = []
+
+    def model_post_init(self, context: Any) -> None:
+        super().model_post_init(context)
+        object.__setattr__(self, "partitions_read", [])  # noqa: PLC2801 - bypasses pydantic's __setattr__
+
+    def read_partition(self, context: IOContext, partition: Partition | None) -> Any:
+        self.partitions_read.append(partition.key if partition else None)
+        return super().read_partition(context, partition)
+
+
+class TestHead:
+    """``head`` reads the first rows through ``read`` unless a backend stops early."""
+
+    def test_keeps_the_first_rows(self):
+        il.MemoryDestination.clear()
+        destination = il.MemoryDestination()
+        context = io_context(plain_asset())
+        destination.write(context, [{"v": 1}, {"v": 2}, {"v": 3}])
+
+        assert destination.head(context, 2) == [{"v": 1}, {"v": 2}]
+        assert destination.head(context, 10) == [{"v": 1}, {"v": 2}, {"v": 3}]
+
+    def test_keeps_the_destinations_own_representation(self, columnar):
+        il.MemoryDestination.clear()
+        destination = il.MemoryDestination()
+        context = io_context(plain_asset())
+        destination.write(context, columnar({"v": [1, 2, 3]}))
+
+        assert destination.head(context, 2) == columnar({"v": [1, 2]})
+
+    def test_reads_the_window_the_context_covers(self):
+        il.MemoryDestination.clear()
+        destination = il.MemoryDestination()
+        asset = partitioned_asset()
+        for day in (7, 8):
+            partition = TimePartition(datetime.date(2026, 9, day))
+            destination.write(IOContext(asset=asset, window=partition.window), [{"date": f"2026-09-0{day}"}] * 2)
+        window = TimePartitionWindow(datetime.date(2026, 9, 7), datetime.date(2026, 9, 8))
+
+        assert destination.head(IOContext(asset=asset, window=window), 3) == [
+            {"date": "2026-09-07"},
+            {"date": "2026-09-07"},
+            {"date": "2026-09-08"},
+        ]
+
+    def test_data_never_written_is_not_found(self):
+        il.MemoryDestination.clear()
+        with pytest.raises(DataNotFoundError):
+            il.MemoryDestination().head(io_context(plain_asset()), 5)
+
+    def test_a_partitioned_asset_reads_its_partitions_newest_first_up_to_the_limit(self):
+        il.MemoryDestination.clear()
+        destination = PartitionReadingMemory()
+        asset = partitioned_asset()
+        for day in (7, 9, 8):
+            partition = TimePartition(datetime.date(2026, 9, day))
+            rows = [{"date": f"2026-09-0{day}", "n": n} for n in range(2)]
+            destination.write(IOContext(asset=asset, window=partition.window), rows)
+
+        head = destination.head(IOContext(asset=asset), 3)
+
+        assert head == [
+            {"date": "2026-09-09", "n": 0},
+            {"date": "2026-09-09", "n": 1},
+            {"date": "2026-09-08", "n": 0},
+        ]
+        assert destination.partitions_read == ["2026-09-09", "2026-09-08"]
+
+    def test_a_partitioned_asset_keeps_the_destinations_own_representation(self, columnar):
+        il.MemoryDestination.clear()
+        destination = il.MemoryDestination()
+        asset = partitioned_asset()
+        for day in (7, 8):
+            partition = TimePartition(datetime.date(2026, 9, day))
+            destination.write(IOContext(asset=asset, window=partition.window), columnar({"v": [day]}))
+
+        assert destination.head(IOContext(asset=asset), 5) == columnar({"v": [8, 7]})
+
+    def test_a_partitioned_asset_with_no_partition_written_is_not_found(self):
+        il.MemoryDestination.clear()
+        with pytest.raises(DataNotFoundError, match="No partition of asset 'partitioned_asset' has been written"):
+            il.MemoryDestination().head(IOContext(asset=partitioned_asset()), 5)
 
 
 class TestHookContract:

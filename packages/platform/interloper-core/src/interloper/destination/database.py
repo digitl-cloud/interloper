@@ -357,8 +357,7 @@ class DatabaseDestination(Destination):
             The rows, in the backend's native representation.
         """
         table, dataset = self._target(context)
-        where = None if context.window is None else context.window.filter(self._partition_column(context))
-        return self.select(table, dataset, where)
+        return self.select(table, dataset, self._where(context))
 
     def read_partition(self, context: IOContext, partition: Partition | None) -> Any:
         """Load one partition: `read` over the partition's own window.
@@ -371,6 +370,23 @@ class DatabaseDestination(Destination):
             The partition's rows, in the backend's native representation.
         """
         return self.read(replace(context, window=partition.window if partition is not None else None))
+
+    def head(self, context: IOContext, limit: int) -> Any:
+        """Refuse to preview rows: reading a whole table to keep a few of them could exhaust memory.
+
+        A database holds a table whole, so there is no partition to stop at.
+        A backend previews rows by overriding this with a query that stops
+        after *limit* rows (a ``LIMIT``, a paged listing), over the rows
+        `_where` selects.
+
+        Args:
+            context: IO context carrying the target asset, the window and the effective schema.
+            limit: The most rows to return.
+
+        Raises:
+            ConfigError: Always; this backend cannot preview rows.
+        """
+        raise ConfigError(f"Destination '{self.key}' cannot preview rows")
 
     def partition_row_counts(self, context: IOContext) -> dict[str, int]:
         """Return row counts grouped by the asset's partition column.
@@ -414,6 +430,17 @@ class DatabaseDestination(Destination):
         if context.asset.partitioning is None:
             raise ConfigError(f"Asset '{context.asset.key}' is not partitioned")
         return context.asset.partitioning.column
+
+    def _where(self, context: IOContext) -> PartitionFilter | None:
+        """The rows the context's window covers, as one filter.
+
+        Args:
+            context: IO context whose asset supplies the partition column.
+
+        Returns:
+            The window's filter, or ``None`` for the whole table.
+        """
+        return None if context.window is None else context.window.filter(self._partition_column(context))
 
     def _filter(self, context: IOContext, partition: Partition | None) -> PartitionFilter | None:
         """The rows one partition covers, as the partition renders them.

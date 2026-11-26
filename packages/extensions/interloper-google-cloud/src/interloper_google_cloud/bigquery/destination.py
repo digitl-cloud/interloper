@@ -21,9 +21,12 @@ from interloper.errors import ConfigError, DataNotFoundError
 from interloper.partitioning import PartitionConfig, PartitionFilter, TimeGranularity, TimePartitionConfig
 from interloper.representation import TableData
 from interloper.resource import FetchField, InputField, SelectField
+from interloper.utils.data import is_empty
 
 from interloper_google_cloud.bigquery.types import TIME_PARTITIONABLE, column_type, parameter_type, to_fields
 from interloper_google_cloud.connection import GoogleCloudConnection
+
+PREVIEW_BYTES_BILLED = 10 * 1024**3
 
 
 @destination(
@@ -159,14 +162,29 @@ class BigQueryDestination(DatabaseDestination):
         """
         if not table.endswith("*"):
             return self._get_table(table, dataset) is not None
+        return bool(self._shards(table, dataset))
+
+    def _shards(self, table: str, dataset: str | None) -> list[str]:
+        """The tables a wildcard table covers.
+
+        Args:
+            table: A table name ending in ``*``, covering every table of the
+                dataset starting with what precedes it.
+            dataset: The BigQuery dataset, or ``None`` for the destination's default.
+
+        Returns:
+            The covered tables' names, none when the dataset does not exist.
+        """
         prefix = table.removesuffix("*")
         project, resolved, _ = self.table_parts(table, dataset)
         try:
-            return any(
-                listed.table_id.startswith(prefix) for listed in self.client.list_tables(f"{project}.{resolved}")
-            )
+            return [
+                listed.table_id
+                for listed in self.client.list_tables(f"{project}.{resolved}")
+                if listed.table_id.startswith(prefix)
+            ]
         except NotFound:
-            return False
+            return []
 
     def _create_table(
         self,
@@ -302,8 +320,42 @@ class BigQueryDestination(DatabaseDestination):
 
     # -- DatabaseDestination hooks ---------------------------------------------
 
+    def write(self, context: IOContext, data: Any) -> None:
+        """Write data: a window as `DatabaseDestination.write` does, the whole table in one replacing load job.
+
+        A window's partitions are deleted, then the data appended. The whole
+        table (no window: an unpartitioned asset, or an editable one saved
+        from the app) is replaced by one ``WRITE_TRUNCATE`` load job, which
+        BigQuery applies whole or not at all: a failed load leaves the
+        previous rows in place, where a delete followed by a load would leave
+        the table empty. No rows truncate the table, which is created first
+        when missing.
+
+        Args:
+            context: IO context carrying the target asset, the window and the effective schema.
+            data: The data to write, in its native representation.
+        """
+        if context.window is not None:
+            super().write(context, data)
+            return
+        if is_empty(data) and context.schema is None:
+            return
+        table, dataset = self._target(context)
+        self._load_rows(table, dataset, data, context, replace=True)
+
     def insert(self, table: str, dataset: str | None, data: Any, context: IOContext) -> None:
-        """Insert data into BigQuery through one Parquet load job, whatever its representation.
+        """Append data to a table through one Parquet load job, whatever its representation (see `_load_rows`).
+
+        Args:
+            table: Target table name.
+            dataset: The BigQuery dataset, or ``None`` for the destination's default.
+            data: The data in its native representation.
+            context: IO context carrying the asset and effective schema.
+        """
+        self._load_rows(table, dataset, data, context, replace=False)
+
+    def _load_rows(self, table: str, dataset: str | None, data: Any, context: IOContext, *, replace: bool) -> None:
+        """Load data into a table through one Parquet load job, appending it or replacing every row.
 
         The data is converted to a DataFrame (``TableData.from_data(data).to("dataframe")``)
         and loaded with ``load_table_from_dataframe``. The effective schema
@@ -315,13 +367,18 @@ class BigQueryDestination(DatabaseDestination):
         New tables are created with the asset's partitioning (time
         partitioning on the partition column at the asset's granularity) and
         carry field and table descriptions; on existing tables, descriptions
-        are kept in sync. No rows create the table and start no load job.
+        are kept in sync, again after a replacing load. A replacing load
+        restates the table's partitioning, which BigQuery requires of a load
+        that replaces a partitioned table. No rows start no load job: they
+        create the table, and, when replacing, truncate it.
 
         Args:
             table: Target table name.
             dataset: The BigQuery dataset, or ``None`` for the destination's default.
             data: The data in its native representation.
             context: IO context carrying the asset and effective schema.
+            replace: Whether the load replaces every row (``WRITE_TRUNCATE``)
+                rather than appending to them.
         """
         frame = TableData.from_data(data).to("dataframe")
         bq_schema = to_fields(context.schema.field_specs()) if context.schema is not None else None
@@ -329,26 +386,34 @@ class BigQueryDestination(DatabaseDestination):
         partitioning = context.asset.partitioning
 
         bq_table = self._get_table(table, dataset)
-        time_partitioning = None
         if bq_table is not None:
             self._sync_table_metadata(bq_table, bq_schema, description)
+            time_partitioning = bq_table.time_partitioning if replace else None
         elif bq_schema is not None:
             self._ensure_dataset(dataset)
-            tp = _time_partitioning(partitioning, bq_schema)
-            self._create_table(table, dataset, bq_schema, time_partitioning=tp, description=description)
+            created = _time_partitioning(partitioning, bq_schema)
+            self._create_table(table, dataset, bq_schema, time_partitioning=created, description=description)
+            time_partitioning = created if replace else None
         else:
             self._ensure_dataset(dataset)
             time_partitioning = _time_partitioning(partitioning, None)
 
         if frame.empty:
+            if replace:
+                self.delete(table, dataset, None)
             return
         self._load(
             self._table_ref(table, dataset),
             frame,
             bq_schema,
             time_partitioning=time_partitioning,
-            allow_field_addition=context.asset.schema is not None,
+            allow_field_addition=not replace and context.asset.schema is not None,
+            replace=replace,
         )
+        if replace:
+            replaced = self._get_table(table, dataset)
+            if replaced is not None:
+                self._sync_table_metadata(replaced, bq_schema, description)
 
     def _load(
         self,
@@ -358,6 +423,7 @@ class BigQueryDestination(DatabaseDestination):
         time_partitioning: bigquery.TimePartitioning | None = None,
         *,
         allow_field_addition: bool = False,
+        replace: bool = False,
     ) -> None:
         """Load a DataFrame via a Parquet load job.
 
@@ -375,12 +441,17 @@ class BigQueryDestination(DatabaseDestination):
             df: The DataFrame to load.
             bq_schema: BigQuery field definitions, or ``None`` to autodetect.
             time_partitioning: Partitioning spec for the table the load job is
-                about to create; ``None`` when the table already exists.
+                about to create, or replaces; ``None`` when it appends to an
+                existing table.
             allow_field_addition: Whether the asset declares the schema the
                 load carries, so new declared columns may be added to the
-                table; defaults to ``False``.
+                table; defaults to ``False``. A replacing load takes the job's
+                schema whole and takes no schema update option.
+            replace: Whether the load replaces every row of the table
+                (``WRITE_TRUNCATE``) rather than appending; defaults to ``False``.
         """
-        job_config = bigquery.LoadJobConfig(write_disposition=bigquery.WriteDisposition.WRITE_APPEND)
+        disposition = bigquery.WriteDisposition.WRITE_TRUNCATE if replace else bigquery.WriteDisposition.WRITE_APPEND
+        job_config = bigquery.LoadJobConfig(write_disposition=disposition)
         if time_partitioning is not None:
             job_config.time_partitioning = time_partitioning
         if allow_field_addition and bq_schema is not None:
@@ -454,6 +525,48 @@ class BigQueryDestination(DatabaseDestination):
         job_config = bigquery.QueryJobConfig(query_parameters=parameters)
         query = self.client.query(f"SELECT * FROM `{ref}` WHERE {predicate}", job_config=job_config)
         return query.result().to_dataframe()
+
+    def head(self, context: IOContext, limit: int) -> pd.DataFrame:
+        """Read at most *limit* rows of the asset's table, listing them rather than querying when it can.
+
+        A table's rows are listed through the API, which scans nothing and
+        costs nothing; a wildcard reference (``events_*``) lists the newest of
+        the tables it covers, the last by name. A view, or a window, is
+        queried with a ``LIMIT``, and the query may bill at most
+        `PREVIEW_BYTES_BILLED`: BigQuery refuses one that would scan more,
+        rather than billing a huge scan for a preview.
+
+        Args:
+            context: IO context carrying the target asset, the window and the effective schema.
+            limit: The most rows to return.
+
+        Returns:
+            The rows, as a DataFrame.
+
+        Raises:
+            DataNotFoundError: If the table does not exist yet, or a wildcard
+                covers no table.
+        """
+        table, dataset = self._target(context)
+        if table.endswith("*"):
+            shards = self._shards(table, dataset)
+            if not shards:
+                raise DataNotFoundError(f"No table matches '{self._table_ref(table, dataset)}'")
+            table = max(shards)
+        bq_table = self._get_table(table, dataset)
+        ref = self._table_ref(table, dataset)
+        if bq_table is None:
+            raise DataNotFoundError(f"Table '{ref}' does not exist. Has the asset been materialized?")
+        where = self._where(context)
+        if where is None and bq_table.table_type == "TABLE":
+            return self.client.list_rows(bq_table, max_results=limit).to_dataframe()
+        query = f"SELECT * FROM `{ref}`"
+        job_config = bigquery.QueryJobConfig(maximum_bytes_billed=PREVIEW_BYTES_BILLED)
+        if where is not None:
+            predicate, parameters = _predicate(bq_table, where)
+            job_config.query_parameters = parameters
+            query += f" WHERE {predicate}"
+        return self.client.query(f"{query} LIMIT {int(limit)}", job_config=job_config).result().to_dataframe()
 
     # -- Introspection ---------------------------------------------------------
 

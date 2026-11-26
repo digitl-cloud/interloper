@@ -364,6 +364,43 @@ class TestRead:
         destination.delete("absent", None, None)
 
 
+class TestHead:
+    def test_selects_at_most_the_limit(self, destination):
+        destination.write(_ctx(plain(), schema=DayRow), _days(1, 5))
+        frame = destination.head(_ctx(plain()), 2)
+        assert isinstance(frame, pd.DataFrame)
+        assert list(frame.columns) == ["day", "value"]
+        assert len(frame) == 2
+
+    def test_a_limit_beyond_the_table_returns_every_row(self, destination):
+        destination.write(_ctx(plain(), schema=DayRow), _days(1, 3))
+        assert sorted(destination.head(_ctx(plain()), 10)["value"].tolist()) == [1, 2, 3]
+
+    def test_reads_a_view(self, destination):
+        @il.asset(dataset="reporting")
+        def totals() -> list:
+            return []
+
+        destination.connection.client.execute("CREATE SCHEMA shop; CREATE TABLE shop.orders AS SELECT 1 AS total")
+        destination.replace_view("totals", "reporting", 'SELECT total FROM "shop"."orders"')
+        assert destination.head(_ctx(totals()), 5).to_dict("records") == [{"total": 1}]
+
+    def test_reads_only_the_window(self, destination):
+        destination.write(_ctx(daily()), _days(1, 4))
+        window = TimePartitionWindow(datetime.date(2024, 1, 2), datetime.date(2024, 1, 3))
+        assert destination.head(_ctx(daily(), window), 1)["value"].tolist() == [2]
+
+    def test_missing_table_raises(self, destination):
+        with pytest.raises(DataNotFoundError, match=r"Table 'main.plain' does not exist"):
+            destination.head(_ctx(plain()), 5)
+
+    def test_an_empty_table_is_no_rows(self, destination):
+        destination.write(_ctx(plain(), schema=DayRow), [])
+        frame = destination.head(_ctx(plain()), 5)
+        assert frame.empty
+        assert list(frame.columns) == ["day", "value"]
+
+
 class TestCount:
     def test_counts_rows_per_partition_value(self, destination):
         destination.write(_ctx(daily()), [*_days(1, 2), {"day": datetime.date(2024, 1, 2), "value": 3}])
