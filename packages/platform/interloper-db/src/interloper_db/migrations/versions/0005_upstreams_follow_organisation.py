@@ -18,6 +18,7 @@ Revises: 0004
 
 from __future__ import annotations
 
+import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -28,7 +29,10 @@ depends_on: str | None = None
 
 
 def upgrade() -> None:
-    op.execute("DELETE FROM component_relations WHERE src_kind = 'asset' AND dst_kind = 'asset'")
+    # A table created at a later head no longer has these columns, and holds no row to delete.
+    columns = {column["name"] for column in sa.inspect(op.get_bind()).get_columns("component_relations")}
+    if "src_kind" in columns:
+        op.execute("DELETE FROM component_relations WHERE src_kind = 'asset' AND dst_kind = 'asset'")
 
 
 def downgrade() -> None:

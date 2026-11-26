@@ -254,12 +254,12 @@ def _row(
     )
 
 
-def _relation(name: str, dst_id: UUID, dst_kind: str, *, dst_key: str = "k", dst_name: str | None = None) -> Any:
+def _relation(relation: str, to_id: UUID, to_kind: str, *, to_key: str = "k", to_name: str | None = None) -> Any:
     return SimpleNamespace(
-        name=name,
-        dst_id=dst_id,
-        dst_kind=dst_kind,
-        dst=SimpleNamespace(id=dst_id, key=dst_key, name=dst_name),
+        relation=relation,
+        to_id=to_id,
+        to_kind=to_kind,
+        to=SimpleNamespace(id=to_id, key=to_key, name=to_name),
     )
 
 
@@ -338,16 +338,18 @@ class CrudStore:
             raise self.load_error
         return self.loaded
 
-    def _add_relation(self, src_id: UUID, *, name: str, dst_id: UUID) -> Any:
+    def _add_relation(self, from_id: UUID, *, relation: str, to_id: UUID) -> Any:
         if self.error:
             raise self.error
-        self.added_relations.append({"src_id": src_id, "name": name, "dst_id": dst_id})
-        return SimpleNamespace(src_id=src_id, name=name, dst_id=dst_id, src_kind="source", dst_kind="connection")
+        self.added_relations.append({"from_id": from_id, "relation": relation, "to_id": to_id})
+        return SimpleNamespace(
+            from_id=from_id, relation=relation, to_id=to_id, from_kind="source", to_kind="connection"
+        )
 
-    def _remove_relation(self, src_id: UUID, *, name: str, dst_id: UUID) -> None:
+    def _remove_relation(self, from_id: UUID, *, relation: str, to_id: UUID) -> None:
         if self.error:
             raise self.error
-        self.removed_relations.append({"src_id": src_id, "name": name, "dst_id": dst_id})
+        self.removed_relations.append({"from_id": from_id, "relation": relation, "to_id": to_id})
 
 
 @pytest.fixture
@@ -433,7 +435,7 @@ class TestListComponents:
             _row(
                 kind="source",
                 key="fb",
-                relations=[_relation("connection", connection_id, "connection", dst_key="facebook_ads", dst_name="FB")],
+                relations=[_relation("connection", connection_id, "connection", to_key="facebook_ads", to_name="FB")],
             )
         ]
 
@@ -442,10 +444,10 @@ class TestListComponents:
         assert row["relations"] == {
             "connection": [
                 {
-                    "dst_id": str(connection_id),
-                    "dst_kind": "connection",
-                    "dst_key": "facebook_ads",
-                    "dst_name": "FB",
+                    "to_id": str(connection_id),
+                    "to_kind": "connection",
+                    "to_key": "facebook_ads",
+                    "to_name": "FB",
                 }
             ]
         }
@@ -495,7 +497,7 @@ class TestCreateComponent:
         body = {
             "kind": "source",
             "key": "fb",
-            "relations": {"connection": [{"dst_id": str(destination_id)}]},
+            "relations": {"connection": [{"to_id": str(destination_id)}]},
         }
 
         crud_client.post("/components", json=body)
@@ -627,24 +629,26 @@ class TestAddRelation:
 
     def test_adds_the_relation(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         source_id, destination_id = uuid4(), uuid4()
-        body = {"name": "connection", "dst_id": str(destination_id)}
+        body = {"relation": "connection", "to_id": str(destination_id)}
 
         response = crud_client.post(f"/components/{source_id}/relations", json=body)
 
         assert response.status_code == 201
-        assert response.json()["dst_kind"] == "connection"
-        assert crud_store.added_relations == [{"src_id": source_id, "name": "connection", "dst_id": destination_id}]
+        assert response.json()["to_kind"] == "connection"
+        assert crud_store.added_relations == [{"from_id": source_id, "relation": "connection", "to_id": destination_id}]
 
-    def test_add_relation_by_name(self, crud_client: TestClient, crud_store: CrudStore) -> None:
+    def test_add_relation_by_relation(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         source_id, destination_id = uuid4(), uuid4()
 
         response = crud_client.post(
-            f"/components/{source_id}/relations", json={"name": "destinations", "dst_id": str(destination_id)}
+            f"/components/{source_id}/relations", json={"relation": "destinations", "to_id": str(destination_id)}
         )
 
         assert response.status_code == 201
-        assert response.json()["name"] == "destinations"
-        assert crud_store.added_relations == [{"src_id": source_id, "name": "destinations", "dst_id": destination_id}]
+        assert response.json()["relation"] == "destinations"
+        assert crud_store.added_relations == [
+            {"from_id": source_id, "relation": "destinations", "to_id": destination_id}
+        ]
 
     def test_a_target_in_another_org_is_a_404(
         self, crud_client: TestClient, crud_store: CrudStore, monkeypatch: pytest.MonkeyPatch
@@ -661,7 +665,7 @@ class TestAddRelation:
 
         response = crud_client.post(
             f"/components/{source_id}/relations",
-            json={"name": "connection", "dst_id": str(destination_id)},
+            json={"relation": "connection", "to_id": str(destination_id)},
         )
 
         assert response.status_code == 404
@@ -678,14 +682,14 @@ class TestAddRelation:
 
         response = crud_client.post(
             f"/components/{uuid4()}/relations",
-            json={"name": "connection", "dst_id": str(uuid4())},
+            json={"relation": "connection", "to_id": str(uuid4())},
         )
 
         assert response.status_code == expected
 
 
 class TestRemoveRelation:
-    """``DELETE /components/{id}/relations/{name}/{dst_id}``."""
+    """``DELETE /components/{id}/relations/{relation}/{to_id}``."""
 
     def test_removes_the_relation(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         source_id, destination_id = uuid4(), uuid4()
@@ -693,17 +697,21 @@ class TestRemoveRelation:
         response = crud_client.delete(f"/components/{source_id}/relations/connection/{destination_id}")
 
         assert response.status_code == 204
-        assert crud_store.removed_relations == [{"src_id": source_id, "name": "connection", "dst_id": destination_id}]
+        assert crud_store.removed_relations == [
+            {"from_id": source_id, "relation": "connection", "to_id": destination_id}
+        ]
 
-    def test_remove_relation_route_uses_name(self, crud_client: TestClient, crud_store: CrudStore) -> None:
+    def test_remove_relation_route_uses_the_relation(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         source_id, destination_id = uuid4(), uuid4()
 
         response = crud_client.delete(f"/components/{source_id}/relations/destinations/{destination_id}")
 
         assert response.status_code == 204
-        assert crud_store.removed_relations == [{"src_id": source_id, "name": "destinations", "dst_id": destination_id}]
+        assert crud_store.removed_relations == [
+            {"from_id": source_id, "relation": "destinations", "to_id": destination_id}
+        ]
 
-    def test_a_required_name_is_refused(self, crud_client: TestClient, crud_store: CrudStore) -> None:
+    def test_a_required_relation_is_refused(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         # Required dependency names are repointed, never emptied.
         crud_store.error = ConfigError("'connection' is required")
 
@@ -824,7 +832,7 @@ class TestPartitionRowCounts:
 class TestRelationGrouping:
     """``_relations_of`` and ``_bindings`` — the two shape converters."""
 
-    def test_outgoing_relations_group_by_name(self) -> None:
+    def test_outgoing_rows_group_by_relation(self) -> None:
         first, second = uuid4(), uuid4()
         row = _row(
             relations=[
@@ -837,30 +845,30 @@ class TestRelationGrouping:
         grouped = components_module._relations_of(row)
 
         assert set(grouped) == {"connection", "destinations"}
-        assert [ref.dst_id for ref in grouped["connection"]] == [first, second]
+        assert [ref.to_id for ref in grouped["connection"]] == [first, second]
 
     def test_no_relations_is_an_empty_map(self) -> None:
         assert components_module._relations_of(_row()) == {}
 
     def test_bindings_flatten_entries_to_ids(self) -> None:
         destination_id = uuid4()
-        entries = {"connection": [components_module.RelationEntry(dst_id=destination_id)]}
+        entries = {"connection": [components_module.RelationEntry(to_id=destination_id)]}
 
         assert components_module._bindings(entries) == {"connection": [destination_id]}
 
     def test_bindings_of_none_stay_none(self) -> None:
-        # None means "leave every relation name untouched".
+        # None means "leave every relation untouched".
         assert components_module._bindings(None) is None
 
 
 class TestComponentResponseRelations:
-    """``ComponentResponse.relations``, keyed by name, dst_kind carried along."""
+    """``ComponentResponse.relations``, keyed by relation, to_kind carried along."""
 
-    def test_component_response_relations_keyed_by_name(self) -> None:
+    def test_component_response_relations_keyed_by_relation(self) -> None:
         connection_id, destination_id = uuid4(), uuid4()
         row = _row(
             relations=[
-                _relation("connection", connection_id, "connection", dst_key="facebook_ads", dst_name="FB"),
+                _relation("connection", connection_id, "connection", to_key="facebook_ads", to_name="FB"),
                 _relation("destinations", destination_id, "destination"),
             ]
         )
@@ -880,6 +888,6 @@ class TestComponentResponseRelations:
         assert set(response.relations) == {"connection", "destinations"}
         assert response.relations["connection"] == [
             components_module.RelationRef(
-                dst_id=connection_id, dst_kind="connection", dst_key="facebook_ads", dst_name="FB"
+                to_id=connection_id, to_kind="connection", to_key="facebook_ads", to_name="FB"
             )
         ]

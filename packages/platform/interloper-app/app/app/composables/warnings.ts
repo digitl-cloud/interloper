@@ -27,8 +27,8 @@ export function useAssetWarnings() {
     const followedByAssetId = computed(() => {
         const map = new Map<string, Set<string>>()
         for (const dep of componentsStore.upstreams) {
-            if (!map.has(dep.src_id)) map.set(dep.src_id, new Set())
-            map.get(dep.src_id)!.add(dep.name)
+            if (!map.has(dep.from_id)) map.set(dep.from_id, new Set())
+            map.get(dep.from_id)!.add(dep.relation)
         }
         return map
     })

@@ -316,8 +316,8 @@ class HookController(Controller):
             The matching hook rows.
         """
         watched_ids = [target.id] + ([target.parent_id] if target.parent_id else [])
-        query = RelationQuery(name="watches", src_kind="hook", dst_id=watched_ids, limit=None)
-        hook_ids = dict.fromkeys(relation.src_id for relation in self._store.relations.list(org_id, query).items)
+        query = RelationQuery(relation="watches", from_kind="hook", to_id=watched_ids, limit=None)
+        hook_ids = dict.fromkeys(relation.from_id for relation in self._store.relations.list(org_id, query).items)
         return [self._store.components.get(hook_id, org_id=org_id) for hook_id in hook_ids]
 
     def _fire(

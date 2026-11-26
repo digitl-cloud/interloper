@@ -21,17 +21,17 @@ org_router = APIRouter(prefix="/relations", tags=["relations"])
 
 
 class RelationResponse(BaseModel):
-    """One named, directed edge between two components.
+    """One relation row: a component, under one of its relations, points at another.
 
-    ``src_kind`` rides along so the graph and upstream views can filter
+    ``from_kind`` rides along so the graph and upstream views can filter
     asset-to-asset rows without a second lookup.
     """
 
-    src_id: UUID
-    name: str
-    dst_id: UUID
-    src_kind: str
-    dst_kind: str
+    from_id: UUID
+    relation: str
+    to_id: UUID
+    from_kind: str
+    to_kind: str
 
     @classmethod
     def from_relation(cls, relation: Edge | ComponentRelation) -> RelationResponse:
@@ -44,11 +44,11 @@ class RelationResponse(BaseModel):
             The response model.
         """
         return cls(
-            src_id=relation.src_id,
-            name=relation.name,
-            dst_id=relation.dst_id,
-            src_kind=relation.src_kind,
-            dst_kind=relation.dst_kind,
+            from_id=relation.from_id,
+            relation=relation.relation,
+            to_id=relation.to_id,
+            from_kind=relation.from_kind,
+            to_kind=relation.to_kind,
         )
 
 
@@ -58,12 +58,12 @@ def list_relations(
     store: StoreDep,
     query: Annotated[RelationQuery, Query()],
 ) -> Page[RelationResponse]:
-    """List the organisation's relations, optionally filtered by name and endpoint kinds.
+    """List the organisation's relation rows, optionally filtered by relation and endpoint kinds.
 
     Args:
         scope: The organisation the path names, the caller at least a viewer there.
         store: The Store instance.
-        query: The name, source and destination kinds, and the window to read.
+        query: The relation, the from and to kinds, and the window to read.
 
     Returns:
         The page of relations.

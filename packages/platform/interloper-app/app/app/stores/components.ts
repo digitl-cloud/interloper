@@ -37,7 +37,7 @@ export const useComponentsStore = defineStore('components', () => {
      * Getters
      **********************/
     /** All asset-to-asset relations (an asset's declared upstreams). */
-    const upstreams = computed(() => relations.value.filter(r => r.src_kind === 'asset' && r.dst_kind === 'asset'))
+    const upstreams = computed(() => relations.value.filter(r => r.from_kind === 'asset' && r.to_kind === 'asset'))
     const loading = computed(() => pending.value > 0)
 
     /**********************
@@ -61,7 +61,7 @@ export const useComponentsStore = defineStore('components', () => {
         for (const record of all.value) {
             for (const refs of Object.values(record.relations ?? {})) {
                 for (const ref of refs) {
-                    if (ref.dst_id === component.id) ref.dst_name = component.name
+                    if (ref.to_id === component.id) ref.to_name = component.name
                 }
             }
         }
@@ -74,19 +74,19 @@ export const useComponentsStore = defineStore('components', () => {
      * source, whose detail names it.
      */
     function _embed(relation: Relation) {
-        const src = byId(relation.src_id)
+        const src = byId(relation.from_id)
         if (!src) return
-        const refs = (src.relations ??= {})[relation.name] ??= []
-        if (refs.some(ref => ref.dst_id === relation.dst_id)) return
-        const dst = byId(relation.dst_id)
-        if (dst) refs.push({ dst_id: dst.id, dst_kind: dst.kind, dst_key: dst.key, dst_name: dst.name })
+        const refs = (src.relations ??= {})[relation.relation] ??= []
+        if (refs.some(ref => ref.to_id === relation.to_id)) return
+        const dst = byId(relation.to_id)
+        if (dst) refs.push({ to_id: dst.id, to_kind: dst.kind, to_key: dst.key, to_name: dst.name })
         else _refetchChanged(src)
     }
 
     function _unembed(relation: Relation) {
-        const src = byId(relation.src_id)
-        const refs = src?.relations?.[relation.name]
-        if (src && refs) src.relations[relation.name] = refs.filter(ref => ref.dst_id !== relation.dst_id)
+        const src = byId(relation.from_id)
+        const refs = src?.relations?.[relation.relation]
+        if (src && refs) src.relations[relation.relation] = refs.filter(ref => ref.to_id !== relation.to_id)
     }
 
     /**
@@ -385,7 +385,7 @@ export const useComponentsStore = defineStore('components', () => {
         onUpdate: _refetchChanged,
         onDelete: (record: Record<string, any>) => {
             _remove(record.id)
-            relations.value = relations.value.filter(r => r.src_id !== record.id && r.dst_id !== record.id)
+            relations.value = relations.value.filter(r => r.from_id !== record.id && r.to_id !== record.id)
             _refreshRelations()
         },
         // Relations included: the one reload covers both subscriptions.
@@ -397,19 +397,19 @@ export const useComponentsStore = defineStore('components', () => {
         table: 'component_relations',
         scope: () => orgStore.organisation?.id,
         onInsert: (record: Record<string, any>) => {
-            const key = (r: Relation) => `${r.src_id}|${r.name}|${r.dst_id}`
+            const key = (r: Relation) => `${r.from_id}|${r.relation}|${r.to_id}`
             const incoming = record as Relation
             if (!relations.value.some(r => key(r) === key(incoming))) relations.value.push(incoming)
             _embed(incoming)
-            if (incoming.src_kind === 'asset') _refreshRelations()
+            if (incoming.from_kind === 'asset') _refreshRelations()
         },
         onUpdate: () => {},
         onDelete: (record: Record<string, any>) => {
             relations.value = relations.value.filter(
-                r => !(r.src_id === record.src_id && r.name === record.name && r.dst_id === record.dst_id),
+                r => !(r.from_id === record.from_id && r.relation === record.relation && r.to_id === record.to_id),
             )
             _unembed(record as Relation)
-            if (record.src_kind === 'asset') _refreshRelations()
+            if (record.from_kind === 'asset') _refreshRelations()
         },
     })
 

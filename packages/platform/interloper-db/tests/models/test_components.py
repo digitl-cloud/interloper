@@ -221,7 +221,7 @@ class TestStart:
 
 
 class TestComponentRelation:
-    """A relation row is keyed by ``(src_id, name, dst_id)``, no ``type``/``slot``."""
+    """A relation row is keyed by ``(from_id, name, to_id)``, no ``type``/``slot``."""
 
     def test_relation_row_is_keyed_by_name(self, component_db: Engine) -> None:
         with Session(component_db) as session:
@@ -231,18 +231,18 @@ class TestComponentRelation:
             session.flush()
             session.add(
                 ComponentRelation(
-                    src_id=src.id,
-                    name="destinations",
-                    dst_id=dst.id,
+                    from_id=src.id,
+                    relation="destinations",
+                    to_id=dst.id,
                     org_id=_ORG,
-                    src_kind="source",
-                    dst_kind="destination",
+                    from_kind="source",
+                    to_kind="destination",
                 )
             )
             session.commit()
 
             row = session.exec(select(ComponentRelation)).one()
 
-            assert row.name == "destinations"
+            assert row.relation == "destinations"
             assert not hasattr(row, "slot")
             assert not hasattr(row, "type")

@@ -22,7 +22,7 @@ function assemble(
 ): GraphModel {
     const present = new Set(assets.map(e => e.asset.id))
     const dependencies = deps
-        .filter(d => present.has(d.src_id) && present.has(d.dst_id))
+        .filter(d => present.has(d.from_id) && present.has(d.to_id))
         .map(toGraphDependency)
     return { sources, assets, dependencies }
 }

@@ -190,11 +190,11 @@ function historyTooltip(execution: Execution): string {
  */
 const upstreamGroups = computed(() => {
     const relations = props.assetDefn ? upstreamRelations(props.assetDefn) : {}
-    const edges = componentsStore.upstreams.filter(edge => edge.src_id === props.asset.id)
+    const edges = componentsStore.upstreams.filter(edge => edge.from_id === props.asset.id)
     return Object.keys(relations).map((name) => {
         const assets = edges
-            .filter(edge => edge.name === name)
-            .map(edge => componentsStore.byId(edge.dst_id))
+            .filter(edge => edge.relation === name)
+            .map(edge => componentsStore.byId(edge.to_id))
             .filter((asset): asset is ComponentRecord => !!asset)
             .map((asset) => {
                 const owner = asset.parent_id ? componentsStore.byId(asset.parent_id) : undefined

@@ -17,14 +17,14 @@ export type ComponentStatus = 'ok' | 'disabled' | 'missing' | 'unreadable'
 /**
  * A relation entry embedded on a component (`component.relations[name]`).
  *
- * `dst_key` and `dst_name` ride along so a surface can label what a component
+ * `to_key` and `to_name` ride along so a surface can label what a component
  * is bound to without holding that component's own record.
  */
 export interface RelationRef {
-    dst_id: string
-    dst_kind: string
-    dst_key: string
-    dst_name: string | null
+    to_id: string
+    to_kind: string
+    to_key: string
+    to_name: string | null
 }
 
 /** `GET /components/delete-impact`: who refuses a deletion, who merely loses a binding. */
@@ -35,11 +35,11 @@ export interface DeleteImpact {
 
 /** A standalone relation row from `GET /relations`. */
 export interface Relation {
-    src_id: string
-    name: string
-    dst_id: string
-    src_kind: string
-    dst_kind: string
+    from_id: string
+    relation: string
+    to_id: string
+    from_kind: string
+    to_kind: string
 }
 
 /** Mirrors the API's ComponentResponse — one shape for every kind. */
@@ -76,7 +76,7 @@ export interface ComponentRecord {
 
 /** Relation entry in create/update payloads. */
 export interface RelationInput {
-    dst_id: string
+    to_id: string
 }
 
 /** Create/update payload. Each relations name listed is fully replaced. */
@@ -105,13 +105,13 @@ export function relationRefs(c: ComponentRecord, name: string): RelationRef[] {
 
 /** Destination ids under a given relation name. */
 export function relationIds(c: ComponentRecord, name: string): string[] {
-    return relationRefs(c, name).map(r => r.dst_id)
+    return relationRefs(c, name).map(r => r.to_id)
 }
 
 /**
- * Resource relations as a {name: dst_id} map (the old `resources` field).
+ * Resource relations as a {name: to_id} map (the old `resources` field).
  *
- * Read off the bindings' own `dst_kind`, not the definition's vocabulary, so
+ * Read off the bindings' own `to_kind`, not the definition's vocabulary, so
  * a component whose key has drifted out of the catalog still reports what it
  * is bound to.
  */
@@ -119,7 +119,7 @@ export function resourceMap(c: ComponentRecord): Record<string, string> {
     const map: Record<string, string> = {}
     for (const [name, refs] of Object.entries(c.relations ?? {})) {
         const [ref] = refs
-        if (ref && RESOURCE_KINDS.some(kind => kind === ref.dst_kind)) map[name] = ref.dst_id
+        if (ref && RESOURCE_KINDS.some(kind => kind === ref.to_kind)) map[name] = ref.to_id
     }
     return map
 }
@@ -164,8 +164,8 @@ export function jobLastRunAt(c: ComponentRecord): string | null {
 /** A job's target ids of a given kind ('source' | 'asset'). */
 export function jobTargetIds(c: ComponentRecord, kind: string): string[] {
     return relationRefs(c, 'targets')
-        .filter(r => r.dst_kind === kind)
-        .map(r => r.dst_id)
+        .filter(r => r.to_kind === kind)
+        .map(r => r.to_id)
 }
 
 // ─── Hook accessors (config fields) ──────────────────────────────────

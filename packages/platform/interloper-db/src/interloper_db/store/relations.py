@@ -1,6 +1,7 @@
-"""Relation policy: validated reads and writes for the named edge table.
+"""Relation policy: validated reads and writes for the relation table.
 
-An edge is a name, and the class declaring that name is the contract. The
+A row says that one component, under a relation its class declares, points
+at another, and that declaration is the contract. The
 vocabulary resolves by the row's qualified key, since a source-owned asset's
 declaration lives on the source that owns it, with the kind's anchor as the
 drift fallback. Every write asks the declared
@@ -9,17 +10,17 @@ candidate, so the database enforces exactly what the framework enforces in
 memory: the declared kinds, and the identity the declared keys expect
 (bare, qualified or wildcard). No component fills its own relation, and a
 bare key stays inside the owner's own source instance, which identities
-alone cannot tell apart. Single-valued names hold one edge and repoint on
-rewrite; ``many`` names accumulate. A non-optional name cannot be
+alone cannot tell apart. A single-valued relation holds one row and repoints
+on rewrite; a ``many`` relation accumulates. A non-optional relation cannot be
 emptied, only repointed, except an asset's upstream relation: a row is a
 curation, and an upstream relation holding none follows every asset of the
 organisation it matches, never written. What it follows is decided per pair
 of identities off the catalog (:class:`UpstreamRules`) and expanded to rows
 in SQL, inside the statement that reads the rows: a listing page stays one
 windowed statement and its count, a load one statement per row.
-Every write takes the source row's lock, so the guards cannot be read around
+Every write takes the ``from`` row's lock, so the guards cannot be read around
 concurrently. Rows are stamped with the
-denormalized ``org_id``/``src_kind``/``dst_kind`` triple the composite
+denormalized ``org_id``/``from_kind``/``to_kind`` triple the composite
 foreign keys verify.
 """
 
@@ -58,17 +59,17 @@ class RelationQuery(PageQuery):
 
     Attributes:
         limit: How many relations to read; ``None`` reads them all.
-        name: Keep relations filed under this name; ``None`` keeps every name.
-        src_kind: Keep relations whose source is of this kind.
-        dst_kind: Keep relations whose destination is of this kind.
-        dst_id: Keep relations pointing at any of these components.
+        relation: Keep the rows of this relation; ``None`` keeps every relation.
+        from_kind: Keep relations whose source is of this kind.
+        to_kind: Keep relations whose destination is of this kind.
+        to_id: Keep relations pointing at any of these components.
     """
 
     limit: int | None = Field(default=None, ge=1, le=MAX_PAGE_SIZE)
-    name: str | None = None
-    src_kind: str | None = None
-    dst_kind: str | None = None
-    dst_id: builtins.list[UUID] | None = None
+    relation: str | None = None
+    from_kind: str | None = None
+    to_kind: str | None = None
+    to_id: builtins.list[UUID] | None = None
 
 
 class Edge(NamedTuple):
@@ -78,16 +79,16 @@ class Edge(NamedTuple):
     either, so it reads columns and hands each back as this tuple.
     """
 
-    src_id: UUID
-    name: str
-    dst_id: UUID
+    from_id: UUID
+    relation: str
+    to_id: UUID
     org_id: UUID
-    src_kind: str
-    dst_kind: str
+    from_kind: str
+    to_kind: str
 
 
 class UpstreamRule(NamedTuple):
-    """One identity-level match: an asset of ``owner`` follows, under ``name``, the assets of ``upstream``.
+    """One identity-level match: an asset of ``owner`` follows, through ``relation``, the assets of ``upstream``.
 
     ``sibling`` keeps the owner's own source instance only: the relation is
     `local`, or the owner's source wires it to a sibling
@@ -95,7 +96,7 @@ class UpstreamRule(NamedTuple):
     """
 
     owner: il.ComponentIdentity
-    name: str
+    relation: str
     upstream: il.ComponentIdentity
     sibling: bool
 
@@ -164,23 +165,25 @@ class UpstreamRules:
         """
         return self._by_owner.get(owner, [])
 
-    def named(self, name: str | None) -> list[UpstreamRule]:
-        """Every declaration's rules, or only those filed under one relation name.
+    def of_relation(self, relation: str | None) -> list[UpstreamRule]:
+        """Every declaration's rules, or only those of one relation.
 
         Args:
-            name: The relation name to keep; ``None`` keeps every rule.
+            relation: The relation to keep; ``None`` keeps every rule.
 
         Returns:
             The rules.
         """
-        return [rule for rules in self._by_owner.values() for rule in rules if name is None or rule.name == name]
+        return [
+            rule for rules in self._by_owner.values() for rule in rules if relation is None or rule.relation == relation
+        ]
 
 
 class FollowedEdges:
     """The edges unbound upstream relations follow in one organisation, as selections over its rows.
 
     One lives for one statement. Across the organisation (:meth:`of`), each
-    selection reads ``(src_id, name, dst_id, org_id)`` in two steps: the
+    selection reads ``(from_id, relation, to_id, org_id)`` in two steps: the
     owners, the assets of a rule's owner identity holding no row under its
     name, and from each owner every other asset of the organisation of the
     rule's upstream identity. Owners are few next to what they follow (a star
@@ -222,7 +225,7 @@ class FollowedEdges:
         ]
 
     def of_one(self, src: Component, rules: Sequence[UpstreamRule]) -> list[Select[Any]]:
-        """The selections a load of one asset needs, each reading ``(name, dst_id)``.
+        """The selections a load of one asset needs, each reading ``(relation, to_id)``.
 
         An owned asset's sibling rules need none: its source binds them as it
         is built (`SourceDefinition.sibling_bindings`), from the instances it
@@ -241,12 +244,14 @@ class FollowedEdges:
                 continue
             dst = table_of(Component).alias()
             statement = (
-                sa_select(literal(rule.name).label("name"), dst.c.id.label("dst_id"))
+                sa_select(literal(rule.relation).label("relation"), dst.c.id.label("to_id"))
                 .select_from(dst)
                 .where(
                     dst.c.key == rule.upstream.key,
                     dst.c.id != src.id,
-                    ~exists().where(col(ComponentRelation.src_id) == src.id, col(ComponentRelation.name) == rule.name),
+                    ~exists().where(
+                        col(ComponentRelation.from_id) == src.id, col(ComponentRelation.relation) == rule.relation
+                    ),
                 )
             )
             if rule.sibling or rule.upstream.source_key is None:
@@ -299,7 +304,7 @@ class FollowedEdges:
             and_(
                 candidates.c.source == owners.c.upstream_source,
                 candidates.c.key == owners.c.upstream_key,
-                candidates.c.id != owners.c.src_id,
+                candidates.c.id != owners.c.from_id,
             ),
         )
 
@@ -322,7 +327,7 @@ class FollowedEdges:
                 dst.c.kind == "asset",
                 dst.c.parent_id.is_(None),
                 dst.c.key == owners.c.upstream_key,
-                dst.c.id != owners.c.src_id,
+                dst.c.id != owners.c.from_id,
             ),
         )
 
@@ -372,7 +377,7 @@ class FollowedEdges:
             and_(
                 dst.c.parent_id == owners.c.parent_id,
                 dst.c.key == owners.c.upstream_key,
-                dst.c.id != owners.c.src_id,
+                dst.c.id != owners.c.from_id,
             ),
         )
 
@@ -401,7 +406,7 @@ class FollowedEdges:
                 dst.c.kind == "asset",
                 dst.c.parent_id.is_(None),
                 dst.c.key == owners.c.upstream_key,
-                dst.c.id != owners.c.src_id,
+                dst.c.id != owners.c.from_id,
             ),
         )
 
@@ -416,15 +421,15 @@ class FollowedEdges:
             rules: The rules the table holds, whose owner keys narrow the read.
 
         Returns:
-            The selection of ``(src_id, org_id, parent_id, name, upstream_key)``
+            The selection of ``(from_id, org_id, parent_id, relation, upstream_key)``
             and, when the table carries them, ``upstream_source``.
         """
         statement = (
             sa_select(
-                src.c.id.label("src_id"),
+                src.c.id.label("from_id"),
                 src.c.org_id.label("org_id"),
                 src.c.parent_id.label("parent_id"),
-                *(carried for carried in table.c if carried.key in ("name", "upstream_source", "upstream_key")),
+                *(carried for carried in table.c if carried.key in ("relation", "upstream_source", "upstream_key")),
             )
             .select_from(src)
             .join(table, table.c.owner_key == src.c.key)
@@ -432,7 +437,9 @@ class FollowedEdges:
                 src.c.org_id == self._org_id,
                 src.c.kind == "asset",
                 src.c.key.in_(sorted({rule.owner.key for rule in rules})),
-                ~exists().where(col(ComponentRelation.src_id) == src.c.id, col(ComponentRelation.name) == table.c.name),
+                ~exists().where(
+                    col(ComponentRelation.from_id) == src.c.id, col(ComponentRelation.relation) == table.c.relation
+                ),
             )
         )
         return statement
@@ -447,9 +454,9 @@ class FollowedEdges:
         Returns:
             The selection, before its caller's joins.
         """
-        statement = sa_select(owners.c.src_id, owners.c.name, followed.label("dst_id"), owners.c.org_id).select_from(
-            owners
-        )
+        statement = sa_select(
+            owners.c.from_id, owners.c.relation, followed.label("to_id"), owners.c.org_id
+        ).select_from(owners)
         if self._dst_ids:
             statement = statement.where(followed.in_(self._dst_ids))
         return statement
@@ -473,20 +480,20 @@ class FollowedEdges:
             The table, as a common table expression.
         """
         if sources:
-            labels = ("owner_source", "owner_key", "name", "upstream_source", "upstream_key")
+            labels = ("owner_source", "owner_key", "relation", "upstream_source", "upstream_key")
             rows = [
                 (
                     rule.owner.source_key or "",
                     rule.owner.key,
-                    rule.name,
+                    rule.relation,
                     rule.upstream.source_key or "",
                     rule.upstream.key,
                 )
                 for rule in rules
             ]
         else:
-            labels = ("owner_key", "name", "upstream_key")
-            rows = [(rule.owner.key, rule.name, rule.upstream.key) for rule in rules]
+            labels = ("owner_key", "relation", "upstream_key")
+            rows = [(rule.owner.key, rule.relation, rule.upstream.key) for rule in rules]
         quoted = ", ".join("(" + ", ".join("'" + value.replace("'", "''") + "'" for value in row) + ")" for row in rows)
         selected = ", ".join(f"rule.column{index} AS {label}" for index, label in enumerate(labels, start=1))
         body = text(f"SELECT {selected} FROM (VALUES {quoted}) AS rule")
@@ -528,30 +535,30 @@ class RelationStore:
             The page of edges, in a stable order.
         """
         filters: builtins.list[Any] = [ComponentRelation.org_id == org_id]
-        if query.name:
-            filters.append(ComponentRelation.name == query.name)
-        if query.src_kind:
-            filters.append(ComponentRelation.src_kind == query.src_kind)
-        if query.dst_kind:
-            filters.append(ComponentRelation.dst_kind == query.dst_kind)
-        if query.dst_id:
-            filters.append(col(ComponentRelation.dst_id).in_(query.dst_id))
+        if query.relation:
+            filters.append(ComponentRelation.relation == query.relation)
+        if query.from_kind:
+            filters.append(ComponentRelation.from_kind == query.from_kind)
+        if query.to_kind:
+            filters.append(ComponentRelation.to_kind == query.to_kind)
+        if query.to_id:
+            filters.append(col(ComponentRelation.to_id).in_(query.to_id))
         stored = sa_select(
-            col(ComponentRelation.src_id),
-            col(ComponentRelation.name),
-            col(ComponentRelation.dst_id),
+            col(ComponentRelation.from_id),
+            col(ComponentRelation.relation),
+            col(ComponentRelation.to_id),
             col(ComponentRelation.org_id),
-            col(ComponentRelation.src_kind),
-            col(ComponentRelation.dst_kind),
+            col(ComponentRelation.from_kind),
+            col(ComponentRelation.to_kind),
         ).where(*filters)
-        follows = query.src_kind in {None, "asset"} and query.dst_kind in {None, "asset"}
-        rules = self._upstreams.named(query.name) if follows else []
+        follows = query.from_kind in {None, "asset"} and query.to_kind in {None, "asset"}
+        rules = self._upstreams.of_relation(query.relation) if follows else []
         followed = [
-            branch.add_columns(literal("asset").label("src_kind"), literal("asset").label("dst_kind"))
-            for branch in FollowedEdges(org_id, dst_ids=query.dst_id).of(rules)
+            branch.add_columns(literal("asset").label("from_kind"), literal("asset").label("to_kind"))
+            for branch in FollowedEdges(org_id, dst_ids=query.to_id).of(rules)
         ]
         edges = union_all(stored, *followed).subquery("edges") if followed else stored.subquery("edges")
-        statement = select(*edges.c).order_by(edges.c.src_id, edges.c.name, edges.c.dst_id)
+        statement = select(*edges.c).order_by(edges.c.from_id, edges.c.relation, edges.c.to_id)
         with session_scope(self._engine) as session:
             return Page.read(session, statement, query).map(Edge._make)
 
@@ -569,7 +576,7 @@ class RelationStore:
                 hydration passes it for an enabled asset only.
 
         Returns:
-            The target rows by relation name, ordered by ``(name, dst_id)``,
+            The target rows by relation name, ordered by ``(name, to_id)``,
             and the names among them filled by following rather than by rows.
         """
         lookups: builtins.list[Select[Any]] = []
@@ -579,24 +586,24 @@ class RelationStore:
             lookups = FollowedEdges(src.org_id).of_one(src, rules)
         if lookups:
             stored = sa_select(
-                col(ComponentRelation.name).label("name"),
-                col(ComponentRelation.dst_id).label("dst_id"),
+                col(ComponentRelation.relation).label("relation"),
+                col(ComponentRelation.to_id).label("to_id"),
                 false().label("followed"),
-            ).where(col(ComponentRelation.src_id) == src.id)
+            ).where(col(ComponentRelation.from_id) == src.id)
             branches: builtins.list[Select[Any]] = [stored]
             branches.extend(lookup.add_columns(true().label("followed")) for lookup in lookups)
             edges = union_all(*branches).subquery("edges")
             statement = (
-                select(edges.c.name, edges.c.followed, Component)
-                .join(Component, col(Component.id) == edges.c.dst_id)
-                .order_by(edges.c.name, edges.c.dst_id)
+                select(edges.c.relation, edges.c.followed, Component)
+                .join(Component, col(Component.id) == edges.c.to_id)
+                .order_by(edges.c.relation, edges.c.to_id)
             )
         else:
             statement = (
-                select(ComponentRelation.name, false(), Component)
-                .join(Component, col(Component.id) == col(ComponentRelation.dst_id))
-                .where(ComponentRelation.src_id == src.id)
-                .order_by(col(ComponentRelation.name), col(ComponentRelation.dst_id))
+                select(ComponentRelation.relation, false(), Component)
+                .join(Component, col(Component.id) == col(ComponentRelation.to_id))
+                .where(ComponentRelation.from_id == src.id)
+                .order_by(col(ComponentRelation.relation), col(ComponentRelation.to_id))
             )
         grouped: dict[str, builtins.list[Component]] = {}
         followed: set[str] = set()
@@ -607,21 +614,21 @@ class RelationStore:
                     followed.add(name)
         return grouped, followed
 
-    def add(self, component_id: UUID, *, name: str, dst_id: UUID) -> ComponentRelation:
-        """Bind one component to another under a declared relation name.
+    def add(self, component_id: UUID, *, relation: str, to_id: UUID) -> ComponentRelation:
+        """Bind one component to another under a relation its class declares.
 
-        A ``many`` name accumulates; a single-valued one repoints, so
-        rebinding it needs no :meth:`delete` first. Re-adding an edge that is
-        already there returns it untouched. An undeclared name, a missing or
-        cross-org endpoint and a destination the declared relation refuses all
+        A ``many`` relation accumulates; a single-valued one repoints, so
+        rebinding it needs no :meth:`delete` first. Re-adding a row that is
+        already there returns it untouched. An undeclared relation, a missing or
+        cross-org endpoint and a target the declared relation refuses all
         propagate from the checks this delegates to (:meth:`_lock`,
         :meth:`_relation`, :meth:`_resolve`).
 
         Args:
-            component_id: Source component the relation originates from.
-            name: Relation name, which the source's class must declare.
-            dst_id: Destination component the relation points at. Must belong
-                to the same organisation as the source.
+            component_id: The component the row goes from.
+            relation: The relation, which the component's class must declare.
+            to_id: The component the row points at. Must belong to the same
+                organisation.
 
         Returns:
             The relation row (created, repointed, or already present).
@@ -629,60 +636,60 @@ class RelationStore:
         with session_scope(self._engine) as session:
             self._refuse_served()
             src = self._lock(component_id)
-            relation = self._relation(src, name)
-            dst = self._resolve(src, relation, name, dst_id)
-            existing = self._rows(src.id, name)
-            if match := next((row for row in existing if row.dst_id == dst.id), None):
+            declared = self._relation(src, relation)
+            dst = self._resolve(src, declared, relation, to_id)
+            existing = self._rows(src.id, relation)
+            if match := next((row for row in existing if row.to_id == dst.id), None):
                 return match
-            if not relation.many:
+            if not declared.many:
                 for row in existing:
                     session.delete(row)
                 session.flush()
-            row = self._insert(src, dst, name)
+            row = self._insert(src, dst, relation)
             commit(session)
             return row
 
-    def delete(self, component_id: UUID, *, name: str, dst_id: UUID) -> None:
-        """Detach one component from another under a declared relation name.
+    def delete(self, component_id: UUID, *, relation: str, to_id: UUID) -> None:
+        """Detach one component from another under one of its relations.
 
-        Takes the source row's lock before reading the edges, so the
+        Takes the ``from`` row's lock before reading the rows, so the
         non-optional guard below cannot be read around by a concurrent write.
-        A missing source propagates as a ``NotFoundError`` from
+        A missing component propagates as a ``NotFoundError`` from
         :meth:`_lock`.
 
-        Unlike every other write path this takes no undeclared-name guard,
-        deliberately: a name the class no longer declares is exactly the row
+        Unlike every other write path this takes no undeclared-relation guard,
+        deliberately: a relation the class no longer declares is exactly the row
         someone needs to clear, and refusing it would leave the component
         unloadable with no way out.
 
         Args:
-            component_id: Source component the relation originates from.
-            name: Relation name the edge is filed under.
-            dst_id: Destination the removed edge points at. An edge that isn't
+            component_id: The component the row goes from.
+            relation: The relation the row belongs to.
+            to_id: The component the removed row points at. A row that isn't
                 there is a no-op.
 
         Raises:
-            ConfigError: If the edge is the last one of a non-optional
+            ConfigError: If the row is the last one of a non-optional
                 relation, which may be repointed but not emptied.
         """
         with session_scope(self._engine) as session:
             self._refuse_served()
             src = self._lock(component_id)
-            rows = self._rows(src.id, name)
-            row = next((candidate for candidate in rows if candidate.dst_id == dst_id), None)
+            rows = self._rows(src.id, relation)
+            row = next((candidate for candidate in rows if candidate.to_id == to_id), None)
             if row is None:
                 return
-            relation = self._vocabulary(src).get(name)
-            if len(rows) == 1 and relation is not None and not relation.optional and not self._follows(src, relation):
+            declared = self._vocabulary(src).get(relation)
+            if len(rows) == 1 and declared is not None and not declared.optional and not self._follows(src, declared):
                 raise ConfigError(
-                    f"'{src.key}'.{name} is non-optional and cannot be emptied; "
+                    f"'{src.key}'.{relation} is non-optional and cannot be emptied; "
                     f"repoint it or remove the dependent component instead"
                 )
             session.delete(row)
             commit(session)
 
-    def clear(self, src: Component, names: Sequence[str]) -> None:
-        """Remove every edge filed under these names, required or not, whatever the collection's mode.
+    def clear(self, src: Component, relations: Sequence[str]) -> None:
+        """Remove every row of these relations, required or not, whatever the collection's mode.
 
         Part of the caller's transaction. It bypasses the read-only refusal
         and the guard on a required relation, so it serves only the writer of
@@ -690,12 +697,12 @@ class RelationStore:
         the file says.
 
         Args:
-            src: Source component whose edges are removed.
-            names: The relation names to empty.
+            src: The component whose rows are removed.
+            relations: The relations to empty.
         """
         with session_scope(self._engine) as session:
-            for name in names:
-                for row in self._rows(src.id, name):
+            for relation in relations:
+                for row in self._rows(src.id, relation):
                     session.delete(row)
             session.flush()
 
@@ -748,15 +755,15 @@ class RelationStore:
                 )
             kept = set(dst_ids)
             for row in existing:
-                if row.dst_id not in kept:
+                if row.to_id not in kept:
                     session.delete(row)
             session.flush()
-            held = {row.dst_id for row in existing if row.dst_id in kept}
-            for dst_id in dst_ids:
-                if dst_id in held:
+            held = {row.to_id for row in existing if row.to_id in kept}
+            for to_id in dst_ids:
+                if to_id in held:
                     continue
-                held.add(dst_id)
-                self._insert(src, self._resolve(src, relation, name, dst_id), name)
+                held.add(to_id)
+                self._insert(src, self._resolve(src, relation, name, to_id), name)
 
     def check_bound(self, src: Component) -> None:
         """Refuse a row that leaves a relation its class declares non-optional unbound.
@@ -793,7 +800,7 @@ class RelationStore:
         Returns:
             True if the edge may be detached, False if it blocks the deletion.
         """
-        relation = self._vocabulary(referrer).get(relation_row.name)
+        relation = self._vocabulary(referrer).get(relation_row.relation)
         if relation is None:
             return False
         return relation.on_delete == "detach"
@@ -864,7 +871,7 @@ class RelationStore:
             )
         return vocabulary[name]
 
-    def _resolve(self, src: Component, relation: il.Relation, name: str, dst_id: UUID) -> Component:
+    def _resolve(self, src: Component, relation: il.Relation, name: str, to_id: UUID) -> Component:
         """Load a relation destination and check the declared relation accepts it.
 
         Two rules the identity match cannot see are checked here. A component
@@ -878,7 +885,7 @@ class RelationStore:
             src: Source component the relation originates from.
             relation: Declared relation the destination must satisfy.
             name: Relation name, used for error messages.
-            dst_id: Destination component to resolve.
+            to_id: Destination component to resolve.
 
         Returns:
             The destination row, accepted by the relation.
@@ -892,9 +899,9 @@ class RelationStore:
                 instance's component.
         """
         with session_scope(self._engine) as session:
-            dst = session.get(Component, dst_id)
+            dst = session.get(Component, to_id)
         if dst is None or dst.org_id != src.org_id:
-            raise NotFoundError(f"Component {dst_id} not found (relation '{name}')")
+            raise NotFoundError(f"Component {to_id} not found (relation '{name}')")
         if dst.id == src.id:
             raise ConfigError(f"'{src.key}'.{name} cannot point at the component itself")
         if not relation.accepts(dst.kind, dst.identity, owner=src.identity):
@@ -928,17 +935,19 @@ class RelationStore:
                 raise NotFoundError(f"Component {component_id} not found")
             return src
 
-    def _rows(self, src_id: UUID, name: str) -> builtins.list[ComponentRelation]:
+    def _rows(self, from_id: UUID, name: str) -> builtins.list[ComponentRelation]:
         """The edges a component currently holds under one relation name.
 
         Args:
-            src_id: Source component the edges originate from.
+            from_id: Source component the edges originate from.
             name: Relation name the edges are filed under.
 
         Returns:
             The matching edge rows, in no guaranteed order.
         """
-        statement = select(ComponentRelation).where(ComponentRelation.src_id == src_id, ComponentRelation.name == name)
+        statement = select(ComponentRelation).where(
+            ComponentRelation.from_id == from_id, ComponentRelation.relation == name
+        )
         with session_scope(self._engine) as session:
             return list(session.exec(statement).all())
 
@@ -954,12 +963,12 @@ class RelationStore:
             The pending edge (added to the session, not flushed).
         """
         row = ComponentRelation(
-            src_id=src.id,
-            name=name,
-            dst_id=dst.id,
+            from_id=src.id,
+            relation=name,
+            to_id=dst.id,
             org_id=src.org_id,
-            src_kind=src.kind,
-            dst_kind=dst.kind,
+            from_kind=src.kind,
+            to_kind=dst.kind,
         )
         with session_scope(self._engine) as session:
             session.add(row)

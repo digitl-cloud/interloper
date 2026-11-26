@@ -32,8 +32,8 @@ def _viewer_scope(org_id: UUID) -> OrgScope:
     return OrgScope(credential=caller, organisation=cast(Organisation, SimpleNamespace(id=org_id)), role="viewer")
 
 
-def _relation(name: str, src_kind: str, dst_kind: str) -> SimpleNamespace:
-    return SimpleNamespace(src_id=uuid4(), name=name, dst_id=uuid4(), src_kind=src_kind, dst_kind=dst_kind)
+def _relation(relation: str, from_kind: str, to_kind: str) -> SimpleNamespace:
+    return SimpleNamespace(from_id=uuid4(), relation=relation, to_id=uuid4(), from_kind=from_kind, to_kind=to_kind)
 
 
 class RelationStore:
@@ -50,9 +50,9 @@ class RelationStore:
         rows = [
             row
             for row in self.rows
-            if (query.name is None or row.name == query.name)
-            and (query.src_kind is None or row.src_kind == query.src_kind)
-            and (query.dst_kind is None or row.dst_kind == query.dst_kind)
+            if (query.relation is None or row.relation == query.relation)
+            and (query.from_kind is None or row.from_kind == query.from_kind)
+            and (query.to_kind is None or row.to_kind == query.to_kind)
         ]
         return Page.window(rows, query)
 
@@ -86,7 +86,7 @@ def client(store: RelationStore) -> TestClient:
 
 
 class TestListRelations:
-    """``GET /relations``, optionally narrowed by name and kinds."""
+    """``GET /relations``, optionally narrowed by relation and kinds."""
 
     def test_lists_every_relation(self, client: TestClient, store: RelationStore) -> None:
         relation = _relation("connection", "source", "connection")
@@ -98,11 +98,11 @@ class TestListRelations:
         assert response.json() == {
             "items": [
                 {
-                    "src_id": str(relation.src_id),
-                    "name": "connection",
-                    "dst_id": str(relation.dst_id),
-                    "src_kind": "source",
-                    "dst_kind": "connection",
+                    "from_id": str(relation.from_id),
+                    "relation": "connection",
+                    "to_id": str(relation.to_id),
+                    "from_kind": "source",
+                    "to_kind": "connection",
                 }
             ],
             "total": 1,
@@ -111,17 +111,17 @@ class TestListRelations:
         assert org_id == _ORG_ID
         assert query == RelationQuery()
 
-    def test_the_name_filter_narrows_the_result(self, client: TestClient, store: RelationStore) -> None:
+    def test_the_relation_filter_narrows_the_result(self, client: TestClient, store: RelationStore) -> None:
         store.rows = [
             _relation("connection", "source", "connection"),
             _relation("destinations", "source", "destination"),
         ]
 
-        response = client.get("/relations?name=destinations")
+        response = client.get("/relations?relation=destinations")
 
-        assert [row["name"] for row in response.json()["items"]] == ["destinations"]
+        assert [row["relation"] for row in response.json()["items"]] == ["destinations"]
         ((_, query),) = store.listed
-        assert query.name == "destinations"
+        assert query.relation == "destinations"
 
     def test_the_kind_filters_narrow_the_result(self, client: TestClient, store: RelationStore) -> None:
         store.rows = [
@@ -129,13 +129,13 @@ class TestListRelations:
             _relation("connection", "source", "connection"),
         ]
 
-        response = client.get("/relations", params={"src_kind": "asset", "dst_kind": "asset"})
+        response = client.get("/relations", params={"from_kind": "asset", "to_kind": "asset"})
 
         rows = response.json()["items"]
-        assert all(row["dst_kind"] == "asset" for row in rows)
-        assert [row["name"] for row in rows] == ["upstreams"]
+        assert all(row["to_kind"] == "asset" for row in rows)
+        assert [row["relation"] for row in rows] == ["upstreams"]
         ((_, query),) = store.listed
-        assert (query.src_kind, query.dst_kind) == ("asset", "asset")
+        assert (query.from_kind, query.to_kind) == ("asset", "asset")
 
     def test_the_page_window_is_forwarded(self, client: TestClient, store: RelationStore) -> None:
         store.rows = [_relation(f"r{i}", "asset", "asset") for i in range(3)]
@@ -144,7 +144,7 @@ class TestListRelations:
 
         ((_, query),) = store.listed
         assert (query.limit, query.offset) == (1, 2)
-        assert [row["name"] for row in body["items"]] == ["r2"]
+        assert [row["relation"] for row in body["items"]] == ["r2"]
         assert body["total"] == 3
 
     def test_no_limit_reads_the_whole_set_in_one_page(self, client: TestClient, store: RelationStore) -> None:

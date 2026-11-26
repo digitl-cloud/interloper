@@ -137,7 +137,7 @@ class TestDeleteOrganisation:
         session.add(asset)
         session.add(
             ComponentRelation(
-                src_id=asset.id, dst_id=source.id, org_id=org_id, src_kind="asset", dst_kind="source", name="owner"
+                from_id=asset.id, to_id=source.id, org_id=org_id, from_kind="asset", to_kind="source", relation="owner"
             )
         )
         backfill = Backfill(org_id=org_id, start_key="2026-01-01", end_key="2026-01-02")

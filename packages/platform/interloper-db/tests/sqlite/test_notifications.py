@@ -196,7 +196,7 @@ class TestNotifications:
         _add(
             database,
             ComponentRelation(
-                src_id=source, name="upstream", dst_id=other, org_id=_ORG, src_kind="source", dst_kind="source"
+                from_id=source, relation="upstream", to_id=other, org_id=_ORG, from_kind="source", to_kind="source"
             ),
         )
         with Session(database) as session:
@@ -206,7 +206,7 @@ class TestNotifications:
         change = notified[-1]
 
         assert (change["table"], change["op"]) == ("component_relations", "DELETE")
-        assert UUID(hex=change["record"]["src_id"]) == source
+        assert UUID(hex=change["record"]["from_id"]) == source
 
     def test_a_rolled_back_change_is_not_notified(self, database: Engine, notified: list[dict[str, Any]]) -> None:
         with Session(database) as session:

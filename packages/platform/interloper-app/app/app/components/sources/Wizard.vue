@@ -66,7 +66,7 @@ const extraSteps = [
 function extraInput() {
     return {
         children: selectedAssetKeys.value,
-        relations: { destinations: selectedDestinationIds.value.map(id => ({ dst_id: id })) },
+        relations: { destinations: selectedDestinationIds.value.map(id => ({ to_id: id })) },
     }
 }
 

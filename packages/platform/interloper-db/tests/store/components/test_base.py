@@ -29,9 +29,9 @@ _ORG = uuid4()
 _DAILY = il.TimePartitionConfig(column="date", allow_window=False)
 
 
-def _stored(component_db: Engine, src_id: UUID) -> list[ComponentRelation]:
+def _stored(component_db: Engine, from_id: UUID) -> list[ComponentRelation]:
     with Session(component_db) as session:
-        return list(session.exec(select(ComponentRelation).where(ComponentRelation.src_id == src_id)).all())
+        return list(session.exec(select(ComponentRelation).where(ComponentRelation.from_id == from_id)).all())
 
 
 class DemoSource(il.Source):
@@ -321,7 +321,7 @@ class TestCrud:
             relations={"connection": [connection.id], "destinations": [destination.id]},
         )
 
-        assert {relation.name for relation in source.out_relations} == {"connection", "destinations"}
+        assert {relation.relation for relation in source.out_relations} == {"connection", "destinations"}
 
     def test_delete_refuses_source_owned_assets(self, store: Store, component_db: Engine):
         job = store.components.create(_ORG, kind="job", key="cron_job")  # any parentable stand-in row
@@ -348,7 +348,7 @@ class TestCrud:
     def test_delete_cascades_outbound_relations(self, store: Store):
         job = store.components.create(_ORG, kind="job", key="cron_job", name="J")
         asset = store.components.create(_ORG, kind="asset", key="guard_upstream")
-        store.relations.add(job.id, name="targets", dst_id=asset.id)
+        store.relations.add(job.id, relation="targets", to_id=asset.id)
 
         store.components.delete(job.id)
         assert store.relations.list(_ORG, RelationQuery(limit=None)).items == []
@@ -429,7 +429,7 @@ class TestCrud:
     def test_a_relation_target_listed_on_the_page_reads_whole(self, store: Store):
         source = store.components.create(_ORG, kind="source", key="wire_up_source")
         totals = _child(source, "totals")
-        store.relations.add(totals.id, name="rows", dst_id=_child(source, "rows").id)
+        store.relations.add(totals.id, relation="rows", to_id=_child(source, "rows").id)
         store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [totals.id]})
 
         roots = store.components.list(_ORG, ComponentQuery(limit=None)).items
@@ -440,7 +440,7 @@ class TestCrud:
             totals.config,
             "wire_up_source.totals",
         )
-        assert [(relation.name, relation.dst.key) for relation in listed.out_relations if relation.dst] == [
+        assert [(relation.relation, relation.to.key) for relation in listed.out_relations if relation.to] == [
             ("rows", "rows")
         ]
 
@@ -484,9 +484,9 @@ class TestCrud:
 
         row = store.components.get(source.id)
 
-        relation = next(r for r in row.out_relations if r.name == "connection")
-        assert relation.dst is not None
-        assert (relation.dst.id, relation.dst.key, relation.dst.name) == (
+        relation = next(r for r in row.out_relations if r.relation == "connection")
+        assert relation.to is not None
+        assert (relation.to.id, relation.to.key, relation.to.name) == (
             connection.id,
             "wire_connection",
             connection.name,
@@ -631,7 +631,7 @@ class TestServedCollection:
         bound = _stored(component_db, reader_id)
         store.components.apply(_ORG, self._wired(consumer_reads_rows=False))
 
-        assert (reader_id, rows_id) in {(edge.src_id, edge.dst_id) for edge in bound}
+        assert (reader_id, rows_id) in {(edge.from_id, edge.to_id) for edge in bound}
         assert _stored(component_db, reader_id) == []
 
     def test_an_asset_dropped_with_what_requires_it_applies_at_once(self, store: Store):
@@ -669,9 +669,9 @@ class TestServedCollection:
         with pytest.raises(ReadOnlyError, match=refusal):
             served.components.delete(reader.id)
         with pytest.raises(ReadOnlyError, match=refusal):
-            served.relations.add(reader.id, name="up", dst_id=upstream.id)
+            served.relations.add(reader.id, relation="up", to_id=upstream.id)
         with pytest.raises(ReadOnlyError, match=refusal):
-            served.relations.delete(reader.id, name="up", dst_id=upstream.id)
+            served.relations.delete(reader.id, relation="up", to_id=upstream.id)
 
     def test_a_served_collection_takes_the_platform_s_own_writes(self, served: Store):
         served.components.apply(_ORG, [self._job("0 6 * * *")])
@@ -724,7 +724,7 @@ class TestDeleteInUseGuard:
 
         # A required relation is repointed rather than emptied, which is what
         # releases the connection the source used to consume.
-        store.relations.add(source.id, name="connection", dst_id=other.id)
+        store.relations.add(source.id, relation="connection", to_id=other.id)
 
         store.components.delete(connection.id)
         with pytest.raises(NotFoundError):
@@ -765,7 +765,7 @@ class TestDeleteInUseGuard:
         down = store.components.create(
             _ORG, kind="source", key="wire_down_source", name="Down", relations={"connection": [connection.id]}
         )
-        store.relations.add(_child(down, "consumer").id, name="rows", dst_id=_child(up, "rows").id)
+        store.relations.add(_child(down, "consumer").id, relation="rows", to_id=_child(up, "rows").id)
 
         with pytest.raises(InUseError) as excinfo:
             store.components.delete(up.id)
@@ -774,7 +774,7 @@ class TestDeleteInUseGuard:
     def test_intra_subtree_relations_do_not_block(self, store: Store):
         source = store.components.create(_ORG, kind="source", key="wire_up_source")
         # the source's own sibling edge
-        assert store.relations.list(_ORG, RelationQuery(name="rows", limit=None)).items != []
+        assert store.relations.list(_ORG, RelationQuery(relation="rows", limit=None)).items != []
 
         store.components.delete(source.id)
         with pytest.raises(NotFoundError):
@@ -801,7 +801,7 @@ class TestUpstreamDeleteSemantics:
         store.components.delete(upstream.id)
 
         assert store.components.get(detaching.id).id == detaching.id
-        assert store.relations.list(_ORG, RelationQuery(name="up", limit=None)).items == []
+        assert store.relations.list(_ORG, RelationQuery(relation="up", limit=None)).items == []
 
     def test_an_optional_relation_keeping_the_default_policy_blocks(self, store: Store):
         upstream = store.components.create(_ORG, kind="asset", key="guard_upstream", name="Up")
@@ -839,7 +839,7 @@ class TestDeleteImpact:
         mixed = store.components.create(
             _ORG, kind="source", key="wire_down_mixed_source", name="Mixed", relations={"connection": [connection.id]}
         )
-        store.relations.add(_child(mixed, "reader").id, name="rows", dst_id=_child(up, "rows").id)
+        store.relations.add(_child(mixed, "reader").id, relation="rows", to_id=_child(up, "rows").id)
 
         # One referrer, two outcomes: it blocks on its connection and detaches
         # on its asset's upstream. Blocking is the only honest answer.
@@ -853,7 +853,7 @@ class TestDeleteImpact:
         down = store.components.create(
             _ORG, kind="source", key="wire_down_source", name="Down", relations={"connection": [connection.id]}
         )
-        store.relations.add(_child(down, "consumer").id, name="rows", dst_id=_child(up, "rows").id)
+        store.relations.add(_child(down, "consumer").id, relation="rows", to_id=_child(up, "rows").id)
 
         impact = store.components.delete_impact([up.id])
 
@@ -886,22 +886,22 @@ class TestIntraSourceWiring:
     def test_create_source_binds_sibling_relations(self, store: Store):
         source = store.components.create(_ORG, kind="source", key="wire_up_source")
 
-        rows = store.relations.list(_ORG, RelationQuery(src_kind="asset", dst_kind="asset", limit=None)).items
-        assert {(row.name, row.dst_id) for row in rows} == {("rows", _child(source, "rows").id)}
+        rows = store.relations.list(_ORG, RelationQuery(from_kind="asset", to_kind="asset", limit=None)).items
+        assert {(row.relation, row.to_id) for row in rows} == {("rows", _child(source, "rows").id)}
 
     def test_full_dag_wired_on_create(self, demo_store: Store):
         demo_store.components.create(_ORG, kind="source", key="demo_source")
-        edges = demo_store.relations.list(_ORG, RelationQuery(src_kind="asset", dst_kind="asset", limit=None)).items
+        edges = demo_store.relations.list(_ORG, RelationQuery(from_kind="asset", to_kind="asset", limit=None)).items
         assert len(edges) == 6  # b,c,d -> a and e -> b,c,d
 
     def test_children_enabled_later_get_inbound_edges(self, demo_store: Store):
         source = demo_store.components.create(_ORG, kind="source", key="demo_source", children=["b", "e"])
         edges = demo_store.relations.list(_ORG, RelationQuery(limit=None)).items
-        assert [row.name for row in edges] == ["b"]  # only e -> b
+        assert [row.relation for row in edges] == ["b"]  # only e -> b
 
         updated = demo_store.components.update(source.id, children=["a", "b", "e"])
         edges = demo_store.relations.list(_ORG, RelationQuery(limit=None)).items
-        by_name = {row.name: (row.src_id, row.dst_id) for row in edges}
+        by_name = {row.relation: (row.from_id, row.to_id) for row in edges}
         assert set(by_name) == {"a", "b"}
         assert by_name["a"] == (_child(updated, "b").id, _child(updated, "a").id)
 
@@ -925,21 +925,21 @@ class TestChildRemovalGuard:
         down = store.components.create(
             _ORG, kind="source", key="wire_down_source", name="Down", relations={"connection": [connection.id]}
         )
-        store.relations.add(_child(down, "consumer").id, name="rows", dst_id=_child(up, "rows").id)
+        store.relations.add(_child(down, "consumer").id, relation="rows", to_id=_child(up, "rows").id)
 
         with pytest.raises(InUseError) as excinfo:
             store.components.update(up.id, children=[])
         assert [r["id"] for r in excinfo.value.referrers] == [str(down.id)]
-        assert store.relations.list(_ORG, RelationQuery(name="rows", limit=None)).items != []
+        assert store.relations.list(_ORG, RelationQuery(relation="rows", limit=None)).items != []
 
     def test_removing_child_with_detaching_external_upstream_detaches(self, store: Store):
         up = store.components.create(_ORG, kind="source", key="wire_up_source")
         down = store.components.create(_ORG, kind="source", key="wire_down_optional_source")
-        store.relations.add(_child(down, "reader").id, name="rows", dst_id=_child(up, "rows").id)
+        store.relations.add(_child(down, "reader").id, relation="rows", to_id=_child(up, "rows").id)
 
         updated = store.components.update(up.id, children=[])
         assert updated.children == []
-        assert store.relations.list(_ORG, RelationQuery(name="rows", limit=None)).items == []
+        assert store.relations.list(_ORG, RelationQuery(relation="rows", limit=None)).items == []
 
     def test_intra_source_reshape_not_blocked(self, component_db: Engine):
         store = Store(catalog=il.Catalog.from_assets([DemoSource]))

@@ -43,13 +43,13 @@ const columns: TableColumn<ComponentRecord>[] = [
     {
         id: 'connection',
         header: 'Connection',
-        accessorFn: (row: ComponentRecord) => connectionOf(row)?.dst_name ?? connectionOf(row)?.dst_key ?? '',
+        accessorFn: (row: ComponentRecord) => connectionOf(row)?.to_name ?? connectionOf(row)?.to_key ?? '',
         cell: ({ row }) => {
             const resource = connectionOf(row.original)
             if (!resource) return h('span', { class: 'text-muted' }, '—')
             return h(EntityBadge, {
-                icon: componentIcon(resource.dst_key, appConfig.icons.connection),
-                label: resource.dst_name ?? resource.dst_key,
+                icon: componentIcon(resource.to_key, appConfig.icons.connection),
+                label: resource.to_name ?? resource.to_key,
             })
         },
     },

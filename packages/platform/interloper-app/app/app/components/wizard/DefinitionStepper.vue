@@ -398,13 +398,13 @@ async function submit() {
             ...Object.fromEntries(
                 activeRelationSteps.value.map(step => [
                     step.name,
-                    (relationSelections.value[step.name] ?? []).map(id => ({ dst_id: id })),
+                    (relationSelections.value[step.name] ?? []).map(id => ({ to_id: id })),
                 ]),
             ),
             ...Object.fromEntries(
                 Object.entries(resourceSelections.value)
                     .filter(([, id]) => !!id)
-                    .map(([name, id]) => [name, [{ dst_id: id }]]),
+                    .map(([name, id]) => [name, [{ to_id: id }]]),
             ),
             ...contributed.relations,
         }

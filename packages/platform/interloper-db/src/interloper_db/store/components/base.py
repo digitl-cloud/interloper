@@ -60,11 +60,11 @@ SENSITIVE_KINDS = tuple(kind for kind, anchor in il.KINDS.items() if anchor.sens
 COMPONENT_LOAD_OPTIONS = [
     selectinload(Component.parent),  # ty: ignore[invalid-argument-type]
     selectinload(Component.out_relations)  # ty: ignore[invalid-argument-type]
-    .selectinload(ComponentRelation.dst)  # ty: ignore[invalid-argument-type]
+    .selectinload(ComponentRelation.to)  # ty: ignore[invalid-argument-type]
     .load_only(Component.key, Component.name),  # ty: ignore[invalid-argument-type]
     selectinload(Component.children)  # ty: ignore[invalid-argument-type]
     .selectinload(Component.out_relations)  # ty: ignore[invalid-argument-type]
-    .selectinload(ComponentRelation.dst)  # ty: ignore[invalid-argument-type]
+    .selectinload(ComponentRelation.to)  # ty: ignore[invalid-argument-type]
     .load_only(Component.key, Component.name),  # ty: ignore[invalid-argument-type]
     selectinload(Component.children).immediateload(Component.parent),  # ty: ignore[invalid-argument-type]
 ]
@@ -276,7 +276,7 @@ class ComponentStore:
                 ``False`` opts into plaintext storage.
             children: Source kinds only — which child asset keys to enable
                 (``None`` enables all the catalog class declares).
-            relations: ``{name: [dst_id, …]}``, replaced per name.
+            relations: ``{name: [to_id, …]}``, replaced per name.
 
         Returns:
             The created component row, eager-loaded.
@@ -393,7 +393,7 @@ class ComponentStore:
                 ``False`` opts into plaintext storage.
             children: Source kinds only — the exact set of child asset keys to
                 keep enabled.
-            relations: ``{name: [dst_id, …]}``, replaced per name.
+            relations: ``{name: [to_id, …]}``, replaced per name.
 
         Returns:
             The updated component row, eager-loaded.
@@ -531,13 +531,13 @@ class ComponentStore:
             The blocking and detaching referrers, each sorted by display name.
         """
         statement = select(ComponentRelation).where(
-            col(ComponentRelation.dst_id).in_(target_ids), col(ComponentRelation.src_id).not_in(subtree_ids)
+            col(ComponentRelation.to_id).in_(target_ids), col(ComponentRelation.from_id).not_in(subtree_ids)
         )
         blocking: dict[UUID, Component] = {}
         detaching: dict[UUID, Component] = {}
         with session_scope(self._engine) as session:
             for relation in session.exec(statement).all():
-                src = session.get(Component, relation.src_id)
+                src = session.get(Component, relation.from_id)
                 if src is None:
                     continue
                 detaches = self._relations.detaches(src, relation)
@@ -656,7 +656,7 @@ class ComponentStore:
         row = session.get(Component, row_id)
         if row is None:
             return
-        bound = set(session.exec(select(ComponentRelation.name).where(ComponentRelation.src_id == row_id)))
+        bound = set(session.exec(select(ComponentRelation.relation).where(ComponentRelation.from_id == row_id)))
         if unbound := sorted(bound - set(declaration.relations)):
             self._relations.clear(row, unbound)
 
@@ -1127,7 +1127,7 @@ class ComponentStore:
         if not job_ids:
             return {}
         relations_statement = select(ComponentRelation).where(
-            col(ComponentRelation.src_id).in_(job_ids), ComponentRelation.name == "targets"
+            col(ComponentRelation.from_id).in_(job_ids), ComponentRelation.relation == "targets"
         )
         with session_scope(self._engine) as session:
             relations = session.exec(relations_statement).all()
@@ -1135,13 +1135,13 @@ class ComponentStore:
                 row.id: row
                 for row in session.exec(
                     select(Component)
-                    .where(col(Component.id).in_({relation.dst_id for relation in relations}))
+                    .where(col(Component.id).in_({relation.to_id for relation in relations}))
                     .options(selectinload(Component.parent))  # ty: ignore[invalid-argument-type]
                 ).all()
             }
         granularities: dict[UUID, set[TimeGranularity]] = {job_id: set() for job_id in job_ids}
         for relation in relations:
-            if (target := targets.get(relation.dst_id)) is None:
+            if (target := targets.get(relation.to_id)) is None:
                 continue
             definition = self._catalog.get(target.qualified_key)
             if isinstance(definition, il.SourceDefinition):
@@ -1151,7 +1151,7 @@ class ComponentStore:
             else:
                 partitionings = []
             configs = [il.PartitionConfig.from_definition(partitioning) for partitioning in partitionings]
-            granularities[relation.src_id].update(
+            granularities[relation.from_id].update(
                 config.granularity
                 for config in configs
                 if config.windowed and isinstance(config, il.TimePartitionConfig)
@@ -1195,7 +1195,7 @@ class ComponentStore:
         Returns:
             The asset rows, oldest first, their parents loaded.
         """
-        targets = [relation.dst_id for relation in job.out_relations if relation.name == "targets"]
+        targets = [relation.to_id for relation in job.out_relations if relation.relation == "targets"]
         statement = (
             select(Component)
             .where(
