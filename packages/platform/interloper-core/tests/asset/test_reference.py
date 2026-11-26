@@ -100,6 +100,74 @@ class TestReference:
         memory.write(context, [{"event_date": "20260101", "event_name": "page_view"}])
         assert memory.read(context) == [{"event_date": "20260101", "event_name": "page_view"}]
 
+    def test_the_decorator_needs_no_table(self):
+        @il.source
+        class Plain(il.Source):
+            property_id: str = il.InputField(default="", discriminator=True)
+
+            @il.reference(schema=Events)
+            def events(self) -> None: ...
+
+        assert Plain(property_id="123").events.table == "events__123"
+
+
+class Bucket(il.Schema):
+    bucket_id: str
+    name: str
+
+
+@il.source
+class Matcher(il.Source):
+    @il.reference(editable=True, schema=Bucket)
+    def buckets(self) -> None:
+        """The buckets people sort campaigns into."""
+
+    @il.asset
+    def matches(self, buckets: il.Upstream | None = None) -> list:
+        return buckets.data if buckets is not None else []
+
+
+class TestEditable:
+    def test_editable_is_a_class_attribute(self):
+        assert issubclass(Matcher.buckets, il.Reference)
+        assert Matcher.buckets.editable is True
+        assert Export.events.editable is False
+
+    def test_the_definition_says_which_assets_are_editable(self):
+        editable = {asset.key: asset.editable for asset in Matcher.definition().assets}
+        assert editable == {"buckets": True, "matches": False}
+
+    def test_an_editable_reference_without_a_schema_is_refused(self):
+        with pytest.raises(TypeError, match="Editable reference 'notes' declares no schema"):
+
+            @il.reference(editable=True)
+            def notes() -> None: ...
+
+    def test_a_partitioned_editable_reference_is_refused(self):
+        with pytest.raises(TypeError, match="Editable reference 'notes' declares a partitioning"):
+
+            @il.reference(editable=True, schema=Bucket, partitioning=il.TimePartitionConfig(column="date"))
+            def notes() -> None: ...
+
+    def test_a_subclass_is_checked_too(self):
+        with pytest.raises(TypeError, match="declares no schema"):
+
+            class Notes(il.Reference):
+                editable = True
+
+    def test_a_run_writes_nothing_and_downstream_reads_the_rows(self):
+        memory = il.MemoryDestination()
+        source = Matcher(destinations=[memory])
+        memory.write_partition(il.IOContext(asset=source.buckets), None, [{"bucket_id": "b1", "name": "Sale"}])
+        il.DAG(source).materialize()
+        assert memory.read(il.IOContext(asset=source.matches)) == [{"bucket_id": "b1", "name": "Sale"}]
+
+    def test_a_table_never_written_reads_as_no_data(self):
+        memory = il.MemoryDestination()
+        source = Matcher(destinations=[memory])
+        il.DAG(source).materialize()
+        assert memory._storage == {}
+
 
 @pytest.fixture(autouse=True)
 def _clear_memory() -> None:

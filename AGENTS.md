@@ -10,7 +10,7 @@ packages/
     interloper-core/           the framework: assets, sources, DAG, runners, IO, partitioning, the `run` command
     interloper-db/             database persistence layer, platform errors, `interloper db`
     interloper-scheduler/      cron + queue worker + reaper + launchers; `interloper scheduler`
-    interloper-api/            FastAPI HTTP backend, `interloper api`; reads catalog metadata only, never executes assets
+    interloper-api/            FastAPI HTTP backend, `interloper api`; reads catalog metadata and, through an asset's destinations, its rows; never executes assets
     interloper-app/            Nuxt SPA (app/) + Python package serving it; `interloper app` (all roles in one process); sdk/ is @interloper/ui, what extension UIs build with
     interloper-toolkit/        tool functions shared by the agent and the MCP server
     interloper-agent/          the assistant (pydantic-ai)

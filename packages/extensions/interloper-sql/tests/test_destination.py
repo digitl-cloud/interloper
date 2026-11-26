@@ -344,3 +344,27 @@ class TestHasTable:
         assert destination.has_table("plain_asset", None) is False
         destination.write(_ctx(plain_asset()), [{"a": 1}])
         assert destination.has_table("plain_asset", None) is True
+
+
+class TestHead:
+    def test_selects_at_most_the_limit(self, destination):
+        destination.write(_ctx(plain_asset(), schema=_DayRow), [{"day": _day(n), "value": n} for n in range(1, 6)])
+        statements = _statements(destination, "SELECT")
+
+        rows = destination.head(_ctx(plain_asset()), 2)
+
+        assert len(rows) == 2
+        assert set(rows[0]) == {"day", "value"}
+        assert any("LIMIT" in statement for statement, _ in statements)
+
+    def test_reads_only_the_window(self, destination):
+        destination.write(_ctx(daily_asset()), [{"day": _day(n), "value": n} for n in range(1, 5)])
+        window = TimePartitionWindow(_day(2), _day(3))
+
+        rows = destination.head(_ctx(daily_asset(), window), 5)
+
+        assert sorted(row["value"] for row in rows) == [2, 3]
+
+    def test_missing_table_raises(self, destination):
+        with pytest.raises(DataNotFoundError, match="Table 'plain_asset' does not exist"):
+            destination.head(_ctx(plain_asset()), 5)

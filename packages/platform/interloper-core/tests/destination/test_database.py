@@ -312,6 +312,25 @@ class TestNativeReads:
         assert result == {"native": ("plain_asset", None)}
 
 
+class TestHead:
+    """A database holds a table whole: previewing it is a backend's own query, refused by default."""
+
+    @pytest.mark.parametrize("window", [None, TimePartition(datetime.date(2024, 1, 1))])
+    def test_a_backend_without_a_limited_query_refuses(self, window):
+        database = RecordingDatabase(id="db")
+
+        with pytest.raises(ConfigError, match="Destination 'recording_database' cannot preview rows"):
+            database.head(make_io_context(partitioned_asset(), window), 5)
+        assert database.calls == []
+
+    def test_the_window_is_one_filter_and_the_whole_table_none(self):
+        database = RecordingDatabase(id="db")
+        day = TimePartition(datetime.date(2024, 1, 1))
+
+        assert database._where(make_io_context(partitioned_asset())) is None
+        assert database._where(make_io_context(partitioned_asset(), day)) == day.filter("date")
+
+
 class DateSchema(il.Schema):
     """Schema with a date field, mirroring API rows that carry ISO strings."""
 

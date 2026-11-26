@@ -31,6 +31,7 @@ from interloper_api.requests import RequestLog
 from interloper_api.routes import (
     admin,
     apps,
+    assets,
     auth,
     backfills,
     collection,
@@ -76,6 +77,7 @@ _ORG_ROUTERS: tuple[APIRouter, ...] = (
     catalog_routes.org_router,
     collection.org_router,
     components.org_router,
+    assets.org_router,
     relations.org_router,
     runs.org_router,
     executions.org_router,

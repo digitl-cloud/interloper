@@ -2,7 +2,7 @@
 """Populate the scale-test database with organisations shaped like production ones.
 
 Every organisation one invocation adds gets the same population: demo sources
-with their five assets, cron jobs over a share of them, connections, members
+with their assets, cron jobs over a share of them, connections, members
 with sessions, and a history of backfills, runs, executions and events. The
 invocation's first organisation's components go through the store, as the app
 creates them; the others clone those rows, and a later invocation adds
@@ -10,6 +10,8 @@ organisations of another shape after them. History is copied in with ``COPY``
 while the tables' user triggers are off: the folds and the realtime
 notifications are the live phase's to exercise, not the load's, so executions
 and partitions are written as the folds would have left them.
+
+A source's editable references get no history: a run does nothing for them.
 
 A real organisation's history has holes: some assets miss days now and then,
 and the coverage calendar reads such an asset partition by partition where it
@@ -72,7 +74,7 @@ class Shape:
     """What each generated organisation holds.
 
     Attributes:
-        sources: Demo sources, each owning five assets.
+        sources: Demo sources, each owning five assets a run computes and an editable reference.
         jobs: Cron jobs, sharing the targeted sources between them.
         job_share: Share of the sources some job targets.
         days: Days of run history, ending yesterday.
@@ -131,7 +133,7 @@ class Asset:
 
     Attributes:
         id: The asset's component id.
-        key: Its key within its source (``a`` to ``e``).
+        key: Its key within its source (``a`` to ``e``; never an editable reference, which no run computes).
         parent_id: Its source's component id.
     """
 
@@ -571,7 +573,11 @@ class Population:
         self._shape = shape
         settings = PostgresSettings.get()
         init_engine(settings.dsn)
-        self._store = Store.from_settings(il.Catalog.from_settings())
+        catalog = il.Catalog.from_settings()
+        self._store = Store.from_settings(catalog)
+        source = catalog.get(SOURCE_KEY)
+        assets = source.assets if isinstance(source, il.SourceDefinition) else []
+        self._editable = {asset.key for asset in assets if asset.editable}
         self._connection = psycopg.connect(
             settings.dsn.replace("postgresql+psycopg://", "postgresql://"), autocommit=True
         )
@@ -692,7 +698,7 @@ class Population:
             )
 
     def _jobs(self, org_id: uuid.UUID) -> list[Job]:
-        """Read an organisation's jobs and the assets their runs execute.
+        """Read an organisation's jobs and the assets their runs compute, editable references left out.
 
         Args:
             org_id: The organisation.
@@ -709,7 +715,8 @@ class Population:
         ).fetchall()
         assets: dict[tuple[uuid.UUID, str], list[Asset]] = {}
         for job_id, job_name, asset_id, asset_key, parent_id in rows:
-            assets.setdefault((job_id, job_name), []).append(Asset(asset_id, asset_key, parent_id))
+            if asset_key not in self._editable:
+                assets.setdefault((job_id, job_name), []).append(Asset(asset_id, asset_key, parent_id))
         return [Job(job_id, job_name, tuple(owned)) for (job_id, job_name), owned in assets.items()]
 
     def _copy_history(self, history: History) -> None:

@@ -143,6 +143,35 @@ class SQLDestination(DatabaseDestination):
         """
         return f"{dataset}.{table}" if dataset else table
 
+    def _select(
+        self, table: str, dataset: str | None, where: PartitionFilter | None, limit: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Select the rows a filter selects, or every row, at most *limit* of them, as records.
+
+        Args:
+            table: Target table name.
+            dataset: The asset's schema, or ``None`` for ``default_dataset``.
+            where: The rows to select; ``None`` for the whole table.
+            limit: The most rows to select; ``None`` for every one.
+
+        Returns:
+            The selected rows.
+
+        Raises:
+            DataNotFoundError: If the table does not exist yet.
+        """
+        dataset = self._resolve_dataset(dataset)
+        with self._begin() as conn:
+            sql_table = self._table(table, dataset, conn)
+            if sql_table is None:
+                raise DataNotFoundError(self._not_found(table, dataset))
+            statement = select(sql_table)
+            if where is not None:
+                statement = statement.where(_predicate(sql_table, where))
+            if limit is not None:
+                statement = statement.limit(limit)
+            return [dict(row._mapping) for row in conn.execute(statement)]
+
     def _not_found(self, table: str, dataset: str | None) -> str:
         """Word the error a read raises on a table that does not exist.
 
@@ -225,19 +254,21 @@ class SQLDestination(DatabaseDestination):
 
         Returns:
             The selected rows.
-
-        Raises:
-            DataNotFoundError: If the table does not exist yet.
         """
-        dataset = self._resolve_dataset(dataset)
-        with self._begin() as conn:
-            sql_table = self._table(table, dataset, conn)
-            if sql_table is None:
-                raise DataNotFoundError(self._not_found(table, dataset))
-            statement = select(sql_table)
-            if where is not None:
-                statement = statement.where(_predicate(sql_table, where))
-            return [dict(row._mapping) for row in conn.execute(statement)]
+        return self._select(table, dataset, where)
+
+    def head(self, context: IOContext, limit: int) -> list[dict[str, Any]]:
+        """Select at most *limit* rows of what the context covers, the limit in the query.
+
+        Args:
+            context: IO context carrying the target asset, the window and the effective schema.
+            limit: The most rows to return.
+
+        Returns:
+            The rows, as records.
+        """
+        table, dataset = self._target(context)
+        return self._select(table, dataset, self._where(context), limit)
 
     def has_table(self, table: str, dataset: str | None) -> bool:
         """Whether the table exists, asked of the database's own catalog.

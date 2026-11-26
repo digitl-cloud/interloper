@@ -1,11 +1,19 @@
 # What `make dev-up` declares in the repository's dev organisation: `interloper dev -f collection.yaml`
 # applies it on every start, read-only in the app. Edit it and save: the platform restarts with the change.
-# The demo source writes a dataset of its own, so it never collides with a demo source made in the app.
+# The demo source writes a dataset of its own, so it never collides with a demo source made in the app,
+# as CSV files outside the repository, so the app can preview its rows and edit its annotations.
 
+key: csv_destination
+id: demo-files
+init:
+  base_path: /tmp/interloper-dev
+---
 key: demo_source
 id: demo
 init:
   dataset: dev_demo
+  destinations:
+    - ref: demo-files
 ---
 key: cron_job
 id: demo-daily
