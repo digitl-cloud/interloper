@@ -258,3 +258,14 @@ def test_star_schema_views_use_the_shared_vocabulary():
         )
     assert checked >= 30, f"expected the five contracted views of at least six star schemas, found {checked}"
     assert not misses, "star schema views off the shared vocabulary:\n" + "\n".join(misses)
+
+
+def test_every_star_schema_is_discriminated_like_the_platform_it_reads():
+    sources = {source.key: source for source in _catalog_sources()}
+    stars = [source for source in sources.values() if source.__name__.endswith("StarSchema")]
+    assert len(stars) == 7
+    for star in stars:
+        (platform,) = star.relations[il.UPSTREAM].keys
+        field = sources[platform].discriminator_field()
+        assert field is not None and star.discriminator_field() == field, star.__name__
+        assert star.model_fields[field].default is None, star.__name__

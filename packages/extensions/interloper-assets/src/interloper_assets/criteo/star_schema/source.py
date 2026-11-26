@@ -83,6 +83,13 @@ class CriteoStarSchema(il.Source):
     one with no table yet is skipped with a warning.
     """
 
+    advertiser_id: str | None = il.InputField(
+        default=None,
+        discriminator=True,
+        description="The Criteo advertiser account this star schema covers, when several share the dataset: "
+        "its views are written as <view>__<advertiser_id>",
+    )
+
     @ibis_view(
         schema=schemas.FactCampaignPerformance,
         tags=["Fact"],

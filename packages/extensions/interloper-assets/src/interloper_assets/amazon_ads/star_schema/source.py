@@ -104,6 +104,13 @@ class AmazonAdsStarSchema(il.Source):
     one with no table yet is skipped with a warning.
     """
 
+    profile_id: str | None = il.InputField(
+        default=None,
+        discriminator=True,
+        description="The Amazon Ads profile this star schema covers, when several share the dataset: "
+        "its views are written as <view>__<profile_id>",
+    )
+
     @ibis_view(
         schema=schemas.FactCampaignPerformance,
         tags=["Fact"],

@@ -15,7 +15,9 @@ A platform's star schema source (`<platform>/star_schema/`, key `<platform>_star
 - **`dim_ads`** — where the platform has ads. One row per ad.
 - **`fact_<grain>_performance`** — optional, at most one, at the platform's native finer grain (`fact_ad_performance` on Facebook with its placement breakdown, `fact_ad_group_performance` on The Trade Desk). It serves platform-internal analysis only.
 
-Cross-platform sources (`campaign/`) bind `*.fact_campaign_performance`, `*.dim_campaigns` and `*.dim_accounts`, never the finer fact, and read columns by the names below. They stamp the platform themselves, from the upstream's source key; a platform's views carry no `platform` column. A column one platform does not publish is absent from its view, so the cross-platform source that needs it states in its own code what stands in for it on that platform (`NULL`, or another measure), per upstream. A consumer that guesses a column name (`_first(row, "campaign_name", "name", ...)`) is a contract violation, not a convenience.
+Every star source is discriminated like the platform it reads, by an optional field of the same name (`account_id` on Facebook, Bing and Snapchat, `advertiser_id` on TikTok and Criteo, `profile_id` on Amazon, `partner_id` on The Trade Desk): unset, its views carry the names above; set, they are `<view>__<value>`, like the raw tables, so several instances of one platform's star (each narrowed to its own accounts, rule 7) share the dataset. `tests/test_catalog_conventions.py` checks the field matches the platform's.
+
+Cross-platform sources (`campaign/`) bind `*.fact_campaign_performance`, `*.dim_campaigns` and `*.dim_accounts`, never the finer fact, and read columns by the names below. They stamp the platform themselves, from the upstream's source key; a platform's views carry no `platform` column. A column one platform does not publish is absent from its view, so the cross-platform source that needs it states in its own code what stands in for it on that platform (`NULL`, or another measure), per upstream. A consumer that guesses a column name (`_first(row, "campaign_name", "name", ...)`) is a contract violation, not a convenience. A consumer reading several instances of one platform's star binds the ones it reads as its upstream sources (rule 7): it otherwise reads them all, and instances over overlapping accounts count those twice.
 
 ## 2. Each platform publishes what it fills, under one vocabulary
 
@@ -93,7 +95,7 @@ Dimensions are type 1: the latest row wins. `as_of_date` says which day it refle
 - Every upstream relation is `many=True, optional=True`: the star schema is a view over whatever its relations follow. A fact with no readable upstream raises `ConfigError("no readable upstream: ...")` from `union()`; a dimension whose entity tier has no readable upstream falls through to the lower tiers.
 - Relation names are the raw asset's key (`campaigns_stats`, `profiles`, `ads`). A relation over several keys lists them (`["amazon_ads.products_campaigns_stats", ...]`).
 - Upstreams follow the organisation: a relation with no binding reads every asset of the organisation it matches, so an account added later joins the views on their next run, and one with no table yet is skipped with a warning naming it. A binding (API, MCP, spec file) curates the relation to exactly what it names. Say so in the source docstring.
-- A star's own `upstream` list (the app's Upstream step) narrows it to chosen accounts: its relations then read only the listed sources' assets, and a consumer reading several instances of one platform's star lists the ones it reads.
+- A star's own upstream sources (its `upstream` relation, the app's Upstream step) narrow it to chosen accounts: its relations then read only those sources' assets.
 
 ## 8. Tests
 

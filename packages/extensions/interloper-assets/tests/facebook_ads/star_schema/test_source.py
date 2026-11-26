@@ -162,6 +162,14 @@ class TestWiring:
         assert star.fact_campaign_performance.dataset == "facebook_ads"
 
 
+class TestDiscriminator:
+    def test_an_account_id_names_the_views_apart_like_the_raw_tables(self):
+        star = FacebookAdsStarSchema(account_id="1001")
+        assert star.table(star.fact_campaign_performance) == "fact_campaign_performance__1001"
+        plain = FacebookAdsStarSchema()
+        assert plain.table(plain.fact_campaign_performance) == "fact_campaign_performance"
+
+
 class TestStamping:
     def test_an_upstream_of_a_source_without_a_discriminator_is_refused(self):
         upstream = il.Upstream(asset=FacebookAdsStarSchema().fact_campaign_performance, data=None)
