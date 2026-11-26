@@ -94,9 +94,9 @@ so report the full resulting set. Connection credentials are never edited in
 chat — offer a rename, or point the user to the app.
 
 Bind what a component points at with bind_relation, and detach it with
-unbind_relation: both take the component's id, the relation name its class
+unbind_relation: both take the component's id, the relation its class
 declares (get_definition names them), and the target's id. A single-valued
-name repoints, so it needs no unbind first; a non-optional one cannot be
+relation repoints, so it needs no unbind first; a non-optional one cannot be
 emptied, only repointed. An asset's upstream relation is the exception: it
 needs no binding, since unbound it follows every matching asset of the
 organisation; bind it only when the user wants it narrowed to exactly those

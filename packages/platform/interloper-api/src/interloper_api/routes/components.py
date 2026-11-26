@@ -49,26 +49,26 @@ org_router = APIRouter(prefix="/components", tags=["components"])
 class RelationEntry(BaseModel):
     """One relation binding in a create/update request."""
 
-    dst_id: UUID
+    to_id: UUID
 
 
 class RelationCreateRequest(RelationEntry):
     """Request body for adding one relation."""
 
-    name: str
+    relation: str
 
 
 class RelationRef(BaseModel):
     """One relation binding in a component response, with enough of its target to name it.
 
-    ``dst_key`` and ``dst_name`` ride along so a surface can label what a
+    ``to_key`` and ``to_name`` ride along so a surface can label what a
     component is bound to without holding that component's own row.
     """
 
-    dst_id: UUID
-    dst_kind: str
-    dst_key: str
-    dst_name: str | None = None
+    to_id: UUID
+    to_kind: str
+    to_key: str
+    to_name: str | None = None
 
 
 class UsedByRef(BaseModel):
@@ -236,22 +236,22 @@ class PartitionRowCountsResponse(BaseModel):
 
 
 def _relations_of(row: Component) -> dict[str, list[RelationRef]]:
-    """Group a component's outgoing relations by name.
+    """Group a component's outgoing rows by relation.
 
     Args:
         row: The component row, with its ``out_relations`` eager-loaded.
 
     Returns:
-        A ``{name: [bindings]}`` map of the row's outgoing relations.
+        A ``{relation: [bindings]}`` map of the row's outgoing rows.
     """
     grouped: dict[str, list[RelationRef]] = {}
     for relation in row.out_relations:
-        grouped.setdefault(relation.name, []).append(
+        grouped.setdefault(relation.relation, []).append(
             RelationRef(
-                dst_id=relation.dst_id,
-                dst_kind=relation.dst_kind,
-                dst_key=relation.dst.key if relation.dst else "",
-                dst_name=relation.dst.name if relation.dst else None,
+                to_id=relation.to_id,
+                to_kind=relation.to_kind,
+                to_key=relation.to.key if relation.to else "",
+                to_name=relation.to.name if relation.to else None,
             )
         )
     return grouped
@@ -265,11 +265,11 @@ def _bindings(relations: dict[str, list[RelationEntry]] | None) -> dict[str, lis
             every relation name untouched.
 
     Returns:
-        A ``{name: [dst_id, ...]}`` map, or None when *relations* is None.
+        A ``{name: [to_id, ...]}`` map, or None when *relations* is None.
     """
     if relations is None:
         return None
-    return {name: [entry.dst_id for entry in entries] for name, entries in relations.items()}
+    return {name: [entry.to_id for entry in entries] for name, entries in relations.items()}
 
 
 # -- Component endpoints -------------------------------------------------------
@@ -440,7 +440,7 @@ def add_relation(
 
     Args:
         component_id: The source component's UUID.
-        body: The relation to add: its name and target ``dst_id``.
+        body: The row to add: its relation and target ``to_id``.
         scope: The organisation the path names and the caller's role there.
         store: The Store instance.
 
@@ -448,32 +448,32 @@ def add_relation(
         The created relation row; a target of another organisation reads as missing.
     """
     load_authorized(store.components.get, component_id, scope, label="Component", minimum="editor")
-    load_authorized(store.components.get, body.dst_id, scope, label="Component", minimum="editor")
-    relation = store.relations.add(component_id, name=body.name, dst_id=body.dst_id)
+    load_authorized(store.components.get, body.to_id, scope, label="Component", minimum="editor")
+    relation = store.relations.add(component_id, relation=body.relation, to_id=body.to_id)
     return RelationResponse.from_relation(relation)
 
 
-@org_router.delete("/{component_id}/relations/{name}/{dst_id}", status_code=204)
+@org_router.delete("/{component_id}/relations/{relation}/{to_id}", status_code=204)
 def remove_relation(
     component_id: UUID,
-    name: str,
-    dst_id: UUID,
+    relation: str,
+    to_id: UUID,
     scope: OrgDep,
     store: StoreDep,
 ) -> None:
-    """Remove a component's relation of one name toward one destination.
+    """Remove one row of a component's relation, toward one target.
 
-    Refused (400) for required dependency names - repoint them instead.
+    Refused (400) for a required relation's last row: repoint it instead.
 
     Args:
-        component_id: The source component's UUID.
-        name: The relation name to remove.
-        dst_id: The target component's UUID.
+        component_id: The component's UUID.
+        relation: The relation the row belongs to.
+        to_id: The target component's UUID.
         scope: The organisation the path names and the caller's role there.
         store: The Store instance.
     """
     load_authorized(store.components.get, component_id, scope, label="Component", minimum="editor")
-    store.relations.delete(component_id, name=name, dst_id=dst_id)
+    store.relations.delete(component_id, relation=relation, to_id=to_id)
 
 
 # -- Partition endpoint --------------------------------------------------------

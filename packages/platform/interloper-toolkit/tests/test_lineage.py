@@ -27,8 +27,8 @@ def _seed_chain(org_id: UUID) -> dict[str, Any]:
     b = Component(org_id=org_id, kind="asset", key="b", parent_id=source.id)
     c = Component(org_id=org_id, kind="asset", key="c", parent_id=source.id)
     deps = [
-        ComponentRelation(src_id=b.id, dst_id=a.id, name="a", org_id=org_id, src_kind="asset", dst_kind="asset"),
-        ComponentRelation(src_id=c.id, dst_id=b.id, name="b", org_id=org_id, src_kind="asset", dst_kind="asset"),
+        ComponentRelation(from_id=b.id, to_id=a.id, relation="a", org_id=org_id, from_kind="asset", to_kind="asset"),
+        ComponentRelation(from_id=c.id, to_id=b.id, relation="b", org_id=org_id, from_kind="asset", to_kind="asset"),
     ]
     ids = {"source": source.id, "a": a.id, "b": b.id, "c": c.id}
     with Session(engine_module.get_engine()) as session:
@@ -80,12 +80,27 @@ class TestLineage:
         finance = create_source(ctx.org_id, "finance_source")
         orders = next(child for child in shop.children if child.key == "orders")
         revenue = next(child for child in finance.children if child.key == "revenue")
-        store.relations.add(revenue.id, name="orders", dst_id=orders.id)
+        store.relations.add(revenue.id, relation="orders", to_id=orders.id)
 
         result = lineage.get_upstream(ctx, str(revenue.id))
 
         assert result.status == "success"
-        assert [(edge.param_name, edge.asset_id) for edge in result.upstream] == [("orders", str(orders.id))]
+        assert [(edge.relation, edge.asset_id) for edge in result.upstream] == [("orders", str(orders.id))]
+
+    def test_get_downstream_reports_the_relation_it_is_read_through(
+        self, ctx: ToolkitContext, store: Store, create_source: Callable[[UUID, str], Component]
+    ):
+        shop = create_source(ctx.org_id, "shop_source")
+        finance = create_source(ctx.org_id, "finance_source")
+        orders = next(child for child in shop.children if child.key == "orders")
+        revenue = next(child for child in finance.children if child.key == "revenue")
+        store.relations.add(revenue.id, relation="orders", to_id=orders.id)
+
+        result = lineage.get_downstream(ctx, str(orders.id))
+
+        assert result.status == "success"
+        edge = next(edge for edge in result.downstream if edge.asset_id == str(revenue.id))
+        assert (edge.relation, edge.asset_key, edge.source_id) == ("orders", "revenue", str(finance.id))
 
     def test_get_upstream_follows_automatic_edges(
         self, ctx: ToolkitContext, create_source: Callable[[UUID, str], Component]
@@ -98,7 +113,7 @@ class TestLineage:
         result = lineage.get_upstream(ctx, str(revenue.id))
 
         assert result.status == "success"
-        assert [(edge.param_name, edge.asset_id) for edge in result.upstream] == [("orders", str(orders.id))]
+        assert [(edge.relation, edge.asset_id) for edge in result.upstream] == [("orders", str(orders.id))]
 
     def test_cross_source_dependencies_counts_automatic_edges(
         self, ctx: ToolkitContext, create_source: Callable[[UUID, str], Component]
@@ -119,8 +134,8 @@ class TestLineage:
         orders = next(child for child in shop.children if child.key == "orders")
         revenue = next(child for child in finance.children if child.key == "revenue")
         bq = store.components.create(ctx.org_id, kind="destination", key="bq")
-        store.relations.add(revenue.id, name="orders", dst_id=orders.id)
-        store.relations.add(finance.id, name="destinations", dst_id=bq.id)
+        store.relations.add(revenue.id, relation="orders", to_id=orders.id)
+        store.relations.add(finance.id, relation="destinations", to_id=bq.id)
 
         result = lineage.get_full_lineage(ctx, str(revenue.id), direction="upstream")
 

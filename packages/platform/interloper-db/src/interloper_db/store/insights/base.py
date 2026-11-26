@@ -585,9 +585,9 @@ class InsightStore:
             The targets' ids: sources and assets, as the jobs name them.
         """
         statement = (
-            select(Component, ComponentRelation.dst_id)
-            .join(ComponentRelation, col(ComponentRelation.src_id) == col(Component.id))
-            .where(Component.org_id == org_id, Component.kind == "job", ComponentRelation.name == "targets")
+            select(Component, ComponentRelation.to_id)
+            .join(ComponentRelation, col(ComponentRelation.from_id) == col(Component.id))
+            .where(Component.org_id == org_id, Component.kind == "job", ComponentRelation.relation == "targets")
         )
         with session_scope(self._engine) as session:
             return {target for job, target in session.exec(statement).all() if job.enabled}

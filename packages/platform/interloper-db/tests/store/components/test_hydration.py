@@ -298,12 +298,12 @@ class TestRelationTargets:
         with Session(component_db) as session:
             session.add(
                 ComponentRelation(
-                    src_id=shop.id,
-                    name="mystery",
-                    dst_id=warehouse.id,
+                    from_id=shop.id,
+                    relation="mystery",
+                    to_id=warehouse.id,
                     org_id=_ORG,
-                    src_kind="source",
-                    dst_kind="destination",
+                    from_kind="source",
+                    to_kind="destination",
                 )
             )
             session.commit()
@@ -321,12 +321,12 @@ class TestRelationTargets:
         with Session(component_db) as session:
             session.add(
                 ComponentRelation(
-                    src_id=shop.id,
-                    name="connection",
-                    dst_id=rogue.id,
+                    from_id=shop.id,
+                    relation="connection",
+                    to_id=rogue.id,
                     org_id=_ORG,
-                    src_kind="source",
-                    dst_kind="connection",
+                    from_kind="source",
+                    to_kind="connection",
                 )
             )
             session.commit()
@@ -343,12 +343,12 @@ class TestSourceRoundTrip:
         assert db_source.kind == "source"
         assert sorted(child.key for child in db_source.children) == ["a", "b", "c", "d", "e"]
 
-        deps = store.relations.list(_ORG, RelationQuery(src_kind="asset", dst_kind="asset", limit=None)).items
+        deps = store.relations.list(_ORG, RelationQuery(from_kind="asset", to_kind="asset", limit=None)).items
         by_child: dict[str, set[tuple[str, str]]] = {}
         children_by_id = {child.id: child.key for child in db_source.children}
         for relation in deps:
-            by_child.setdefault(children_by_id[relation.src_id], set()).add(
-                (relation.name, children_by_id[relation.dst_id])
+            by_child.setdefault(children_by_id[relation.from_id], set()).add(
+                (relation.relation, children_by_id[relation.to_id])
             )
         assert by_child == {
             "b": {("a", "a")},
@@ -390,8 +390,8 @@ class TestSourceRoundTrip:
         refreshed = store.components.get(db_source.id, kind="source")
         assert sorted(child.key for child in refreshed.children) == ["a", "b"]
         # e (and its dependency relations) are gone; b keeps its dep on a.
-        remaining = store.relations.list(_ORG, RelationQuery(src_kind="asset", dst_kind="asset", limit=None)).items
-        assert [relation.name for relation in remaining] == ["a"]
+        remaining = store.relations.list(_ORG, RelationQuery(from_kind="asset", to_kind="asset", limit=None)).items
+        assert [relation.relation for relation in remaining] == ["a"]
 
 
 class TestAutomaticUpstreams:
@@ -408,7 +408,7 @@ class TestAutomaticUpstreams:
         orders = _asset(hydrated, "revenue").bound("orders")
         assert isinstance(orders, il.Asset) and orders.id == str(_child(shop, "orders").id)
         with Session(component_db) as session:
-            assert session.exec(select(ComponentRelation).where(ComponentRelation.src_kind == "asset")).all() == []
+            assert session.exec(select(ComponentRelation).where(ComponentRelation.from_kind == "asset")).all() == []
 
     def test_load_leaves_an_unmatched_required_relation_unbound(self, store: Store):
         finance = store.components.create(_ORG, kind="source", key="finance")
@@ -472,7 +472,7 @@ class TestCrossSourceUpstream:
         shop = store.components.create(_ORG, kind="source", key="shop", relations={"connection": [shop_connection.id]})
         finance = store.components.create(_ORG, kind="source", key="finance")
         shop_orders = _child(shop, "orders")
-        store.relations.add(_child(finance, "revenue").id, name="orders", dst_id=shop_orders.id)
+        store.relations.add(_child(finance, "revenue").id, relation="orders", to_id=shop_orders.id)
 
         hydrated = store.components.load(finance.id)
 
@@ -487,7 +487,7 @@ class TestCrossSourceUpstream:
         finance = store.components.create(_ORG, kind="source", key="finance")
         shop_orders = _child(shop, "orders")
         revenue_row = _child(finance, "revenue")
-        store.relations.add(revenue_row.id, name="orders", dst_id=shop_orders.id)
+        store.relations.add(revenue_row.id, relation="orders", to_id=shop_orders.id)
 
         revenue = store.components.load(revenue_row.id)
 
@@ -502,8 +502,8 @@ class TestCrossSourceUpstream:
         shop = store.components.create(_ORG, kind="source", key="shop", relations={"connection": [shop_connection.id]})
         finance = store.components.create(_ORG, kind="source", key="finance")
         shop_orders = _child(shop, "orders")
-        store.relations.add(_child(finance, "revenue").id, name="orders", dst_id=shop_orders.id)
-        store.relations.add(_child(finance, "cogs").id, name="orders", dst_id=shop_orders.id)
+        store.relations.add(_child(finance, "revenue").id, relation="orders", to_id=shop_orders.id)
+        store.relations.add(_child(finance, "cogs").id, relation="orders", to_id=shop_orders.id)
 
         original_build = Hydrator._build
         shop_hydrations: list[UUID] = []
@@ -532,8 +532,8 @@ class TestCrossSourceUpstream:
         finance = store.components.create(_ORG, kind="source", key="finance")
         shop_orders = _child(shop, "orders")
         revenue = _child(finance, "revenue")
-        store.relations.add(revenue.id, name="orders", dst_id=shop_orders.id)
-        store.relations.add(shop_orders.id, name="back", dst_id=revenue.id)
+        store.relations.add(revenue.id, relation="orders", to_id=shop_orders.id)
+        store.relations.add(shop_orders.id, relation="back", to_id=revenue.id)
 
         hydrated = store.components.load(shop.id)
 
@@ -551,12 +551,12 @@ class TestCrossSourceUpstream:
             for src, dst in ((first, second), (second, first)):
                 session.add(
                     ComponentRelation(
-                        src_id=src.id,
-                        name="links",
-                        dst_id=dst.id,
+                        from_id=src.id,
+                        relation="links",
+                        to_id=dst.id,
                         org_id=_ORG,
-                        src_kind="fake_linker",
-                        dst_kind="fake_linker",
+                        from_kind="fake_linker",
+                        to_kind="fake_linker",
                     )
                 )
             session.commit()
@@ -569,7 +569,7 @@ class TestCrossSourceUpstream:
     ):
         shop = store.components.create(_ORG, kind="source", key="shop", relations={"connection": [shop_connection.id]})
         finance = store.components.create(_ORG, kind="source", key="finance")
-        store.relations.add(_child(finance, "revenue").id, name="orders", dst_id=_child(shop, "orders").id)
+        store.relations.add(_child(finance, "revenue").id, relation="orders", to_id=_child(shop, "orders").id)
 
         reader = Store(catalog=il.Catalog.from_assets([DemoSource, demo_asset, Finance, Warehouse]))
 
@@ -605,7 +605,7 @@ class TestJobRoundTrip:
         assert db_job.name == "Demo Daily"
         assert db_job.config == {"cron": "0 6 * * *", "tags": ["daily"], "enabled": True}
         assert db_job.state is None
-        assert [relation.dst_id for relation in db_job.out_relations] == [db_source.id]
+        assert [relation.to_id for relation in db_job.out_relations] == [db_source.id]
 
         jobs = store.components.list(_ORG, ComponentQuery(kind=["job"], roots_only=False, limit=None)).items
         assert [job.id for job in jobs] == [db_job.id]

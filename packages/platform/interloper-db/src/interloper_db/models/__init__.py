@@ -12,7 +12,7 @@ Key design decisions:
   intent, the Spec init payload), ``state`` (machine-owned runtime
   state, written only by operators via targeted updates, always safe to
   discard), and ``data`` (Fernet-encrypted secrets).
-- Relations carry ``org_id``/``src_kind``/``dst_kind`` denormalized but drift-proof:
+- Relations carry ``org_id``/``from_kind``/``to_kind`` denormalized but drift-proof:
   composite foreign keys onto ``UNIQUE (id, org_id, kind)`` force them to match
   the referenced rows, giving DB-level kind- and tenant-safety.
 - Auth tables (profiles, organisations, tokens, OAuth clients and grants) live alongside data

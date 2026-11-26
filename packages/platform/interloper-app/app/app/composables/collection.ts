@@ -105,9 +105,9 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
 
         const map = new Map<string, Array<{ name: string; icon: string }>>()
         for (const dep of options.upstreams.value) {
-            if (!map.has(dep.src_id)) map.set(dep.src_id, [])
-            const upstreamQk = qkById.get(dep.dst_id)
-            let name = upstreamQk ?? dep.dst_id
+            if (!map.has(dep.from_id)) map.set(dep.from_id, [])
+            const upstreamQk = qkById.get(dep.to_id)
+            let name = upstreamQk ?? dep.to_id
             let icon = icons.asset
             if (upstreamQk) {
                 const defn = getAssetDefinition(upstreamQk)
@@ -116,7 +116,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
                     icon = componentIcon(defn.key)
                 }
             }
-            map.get(dep.src_id)!.push({ name, icon })
+            map.get(dep.from_id)!.push({ name, icon })
         }
         return map
     })

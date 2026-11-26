@@ -114,14 +114,14 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
     {
         id: 'targets',
         header: 'Targets',
-        accessorFn: (row: ComponentRecord) => targetsOf(row).map(t => t.dst_name ?? t.dst_key).join(', '),
+        accessorFn: (row: ComponentRecord) => targetsOf(row).map(t => t.to_name ?? t.to_key).join(', '),
         cell: ({ row }) => {
             const targets = targetsOf(row.original)
             if (targets.length === 0) return h('span', { class: 'text-muted' }, '—')
             const first = targets[0]!
             return h(EntityBadge, {
-                icon: componentIcon(first.dst_key),
-                label: first.dst_name ?? first.dst_key,
+                icon: componentIcon(first.to_key),
+                label: first.to_name ?? first.to_key,
                 extra: targets.length - 1,
             })
         },

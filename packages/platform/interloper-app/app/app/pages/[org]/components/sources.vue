@@ -78,7 +78,7 @@ function rowActions(source: ComponentRecord): DropdownMenuItem[][] {
 
 /** The destinations a source is bound to, in relation order, as its bindings name them. */
 function destinationsOf(source: ComponentRecord): DestinationLike[] {
-    return relationRefs(source, 'destinations').map(ref => ({ key: ref.dst_key, name: ref.dst_name }))
+    return relationRefs(source, 'destinations').map(ref => ({ key: ref.to_key, name: ref.to_name }))
 }
 
 const columns: TableColumn<ComponentRecord>[] = [

@@ -47,13 +47,13 @@ export type StatusFilter = typeof STATUS_FILTERS[number]
 
 /**
  * A directed asset→asset dependency, normalised away from the store shape.
- * `name` is the relation name the binding is filed under, which is what the
- * API addresses it by.
+ * `relation` is the relation the downstream asset reads the upstream through,
+ * which is what the API addresses it by.
  */
 export interface GraphDependency {
     upstreamAssetId: string
     downstreamAssetId: string
-    name: string
+    relation: string
 }
 
 export interface GraphSourceEntry {
@@ -82,7 +82,7 @@ export interface GraphModel {
     dependencies: GraphDependency[]
 }
 
-/** Convert a `dependency` relation (src = downstream, dst = upstream) into the normalised graph shape. */
+/** Convert an asset→asset relation row (from = downstream, to = upstream) into the normalised graph shape. */
 export function toGraphDependency(rel: Relation): GraphDependency {
-    return { upstreamAssetId: rel.dst_id, downstreamAssetId: rel.src_id, name: rel.name }
+    return { upstreamAssetId: rel.to_id, downstreamAssetId: rel.from_id, relation: rel.relation }
 }

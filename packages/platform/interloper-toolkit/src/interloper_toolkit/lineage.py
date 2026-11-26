@@ -21,7 +21,7 @@ from interloper_toolkit.models import (
     UpstreamResult,
 )
 
-_ASSET_EDGES = RelationQuery(src_kind="asset", dst_kind="asset", limit=None)
+_ASSET_EDGES = RelationQuery(from_kind="asset", to_kind="asset", limit=None)
 _ASSETS = ComponentQuery(kind=["asset"], roots_only=False, limit=None)
 
 
@@ -40,12 +40,12 @@ def get_upstream(ctx: ToolkitContext, asset_id: str) -> UpstreamResult | ToolErr
 
         upstream = []
         for dep in deps:
-            if dep.src_id == target:
-                asset = ctx.store.components.get(dep.dst_id, org_id=ctx.org_id, kind="asset")
+            if dep.from_id == target:
+                asset = ctx.store.components.get(dep.to_id, org_id=ctx.org_id, kind="asset")
                 upstream.append(
                     RelationEdge(
-                        asset_id=str(dep.dst_id),
-                        param_name=dep.name,
+                        asset_id=str(dep.to_id),
+                        relation=dep.relation,
                         asset_key=asset.key,
                         source_id=str(asset.parent_id),
                     )
@@ -70,12 +70,12 @@ def get_downstream(ctx: ToolkitContext, asset_id: str) -> DownstreamResult | Too
 
         downstream = []
         for dep in deps:
-            if dep.dst_id == target:
-                asset = ctx.store.components.get(dep.src_id, org_id=ctx.org_id, kind="asset")
+            if dep.to_id == target:
+                asset = ctx.store.components.get(dep.from_id, org_id=ctx.org_id, kind="asset")
                 downstream.append(
                     RelationEdge(
-                        asset_id=str(dep.src_id),
-                        param_name=dep.name,
+                        asset_id=str(dep.from_id),
+                        relation=dep.relation,
                         asset_key=asset.key,
                         source_id=str(asset.parent_id),
                     )
@@ -183,16 +183,16 @@ def cross_source_dependencies(ctx: ToolkitContext) -> CrossSourceDependencies | 
 
         cross_deps = []
         for dep in deps:
-            src_down = asset_source.get(dep.src_id)
-            src_up = asset_source.get(dep.dst_id)
+            src_down = asset_source.get(dep.from_id)
+            src_up = asset_source.get(dep.to_id)
             if src_down and src_up and src_down != src_up:
                 cross_deps.append(
                     CrossSourceEdge(
-                        downstream_asset_id=str(dep.src_id),
-                        downstream=asset_info.get(dep.src_id, AssetRef()),
-                        upstream_asset_id=str(dep.dst_id),
-                        upstream=asset_info.get(dep.dst_id, AssetRef()),
-                        param_name=dep.name,
+                        downstream_asset_id=str(dep.from_id),
+                        downstream=asset_info.get(dep.from_id, AssetRef()),
+                        upstream_asset_id=str(dep.to_id),
+                        upstream=asset_info.get(dep.to_id, AssetRef()),
+                        relation=dep.relation,
                     )
                 )
 
@@ -241,8 +241,8 @@ def _build_adjacency(
     adj: dict[UUID, list[UUID]] = defaultdict(list)
     for dep in deps:
         if direction == "upstream":
-            adj[dep.src_id].append(dep.dst_id)
+            adj[dep.from_id].append(dep.to_id)
         else:
-            adj[dep.dst_id].append(dep.src_id)
+            adj[dep.to_id].append(dep.from_id)
 
     return adj, asset_info

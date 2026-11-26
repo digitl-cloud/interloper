@@ -56,7 +56,7 @@ class TestBindRelation:
         result = collection.bind_relation(ctx, str(source.id), "destinations", str(bq.id))
 
         assert result.status == "success"
-        assert (result.name, result.dst_kind) == ("destinations", "destination")
+        assert (result.relation, result.to_kind) == ("destinations", "destination")
 
     def test_bind_relation_wrong_kind_is_tool_error(
         self, ctx: ToolkitContext, store: Store, create_source: Callable[[UUID, str], Component]
@@ -79,12 +79,12 @@ class TestBindRelation:
     ):
         source = create_source(ctx.org_id, "shop_source")
         bq = store.components.create(ctx.org_id, kind="destination", key="bq")
-        store.relations.add(source.id, name="destinations", dst_id=bq.id)
+        store.relations.add(source.id, relation="destinations", to_id=bq.id)
 
         result = collection.unbind_relation(ctx, str(source.id), "destinations", str(bq.id))
 
         assert result.status == "success"
-        assert store.relations.list(ctx.org_id, RelationQuery(name="destinations")).items == []
+        assert store.relations.list(ctx.org_id, RelationQuery(relation="destinations")).items == []
 
     def test_bind_relation_from_another_orgs_component_is_not_found(
         self, ctx: ToolkitContext, store: Store, create_source: Callable[[UUID, str], Component]
@@ -96,7 +96,7 @@ class TestBindRelation:
         result = collection.bind_relation(ctx, str(source.id), "destinations", str(bq.id))
 
         assert result.status == "error"
-        assert store.relations.list(other_org, RelationQuery(name="destinations")).items == []
+        assert store.relations.list(other_org, RelationQuery(relation="destinations")).items == []
 
     def test_unbind_relation_from_another_orgs_component_is_not_found(
         self, ctx: ToolkitContext, store: Store, create_source: Callable[[UUID, str], Component]
@@ -104,12 +104,12 @@ class TestBindRelation:
         other_org = uuid4()
         source = create_source(other_org, "shop_source")
         bq = store.components.create(other_org, kind="destination", key="bq")
-        store.relations.add(source.id, name="destinations", dst_id=bq.id)
+        store.relations.add(source.id, relation="destinations", to_id=bq.id)
 
         result = collection.unbind_relation(ctx, str(source.id), "destinations", str(bq.id))
 
         assert result.status == "error"
-        assert len(store.relations.list(other_org, RelationQuery(name="destinations")).items) == 1
+        assert len(store.relations.list(other_org, RelationQuery(relation="destinations")).items) == 1
 
 
 class TestListComponents:

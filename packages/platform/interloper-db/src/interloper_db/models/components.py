@@ -81,13 +81,13 @@ class Component(SQLModel, table=True):
     )
     out_relations: list["ComponentRelation"] = Relationship(
         sa_relationship_kwargs={
-            "primaryjoin": "Component.id == foreign(ComponentRelation.src_id)",
+            "primaryjoin": "Component.id == foreign(ComponentRelation.from_id)",
             "viewonly": True,
         },
     )
     in_relations: list["ComponentRelation"] = Relationship(
         sa_relationship_kwargs={
-            "primaryjoin": "Component.id == foreign(ComponentRelation.dst_id)",
+            "primaryjoin": "Component.id == foreign(ComponentRelation.to_id)",
             "viewonly": True,
         },
     )
@@ -313,44 +313,44 @@ class Component(SQLModel, table=True):
 
 
 class ComponentRelation(SQLModel, table=True):
-    """A named, directed relation between two components.
+    """One binding: a component, under one of the relations its class declares, points at another.
 
-    ``name`` is the relation name as declared on the owning class: the field
-    a ``Relation`` is bound to. Whether a given name is single-valued or
-    many-valued is a class rule the store enforces, not a schema constraint,
-    so no uniqueness is declared here. ``dst`` reads the target row the edge
-    points at, so a consumer can name what a component is bound to without a
-    second lookup.
+    ``relation`` is the attribute the relation is declared under on the
+    ``from`` component's class (``connection``, ``destinations``,
+    ``campaigns_stats``). Whether a relation is single-valued or many-valued
+    is a class rule the store enforces, not a schema constraint, so no
+    uniqueness is declared here. ``to`` reads the row the binding points at, so
+    a consumer can name what a component is bound to without a second lookup.
     """
 
     __tablename__: ClassVar[str] = "component_relations"
     __table_args__: ClassVar[tuple[Any, ...]] = (
         ForeignKeyConstraint(
-            ["src_id", "org_id", "src_kind"],
+            ["from_id", "org_id", "from_kind"],
             ["components.id", "components.org_id", "components.kind"],
             ondelete="CASCADE",
-            name="fk_component_relations_src",
+            name="fk_component_relations_from",
         ),
         ForeignKeyConstraint(
-            ["dst_id", "org_id", "dst_kind"],
+            ["to_id", "org_id", "to_kind"],
             ["components.id", "components.org_id", "components.kind"],
             ondelete="CASCADE",
-            name="fk_component_relations_dst",
+            name="fk_component_relations_to",
         ),
-        Index("ix_component_relations_org_id_name", "org_id", "name"),
-        Index("ix_component_relations_dst_id_name", "dst_id", "name"),
+        Index("ix_component_relations_org_id_relation", "org_id", "relation"),
+        Index("ix_component_relations_to_id_relation", "to_id", "relation"),
     )
 
-    src_id: UUID = SQLField(primary_key=True)
-    name: str = SQLField(primary_key=True)
-    dst_id: UUID = SQLField(primary_key=True)
+    from_id: UUID = SQLField(primary_key=True)
+    relation: str = SQLField(primary_key=True)
+    to_id: UUID = SQLField(primary_key=True)
     org_id: UUID
-    src_kind: str
-    dst_kind: str
+    from_kind: str
+    to_kind: str
 
-    dst: Optional["Component"] = Relationship(
+    to: Optional["Component"] = Relationship(
         sa_relationship_kwargs={
-            "primaryjoin": "foreign(ComponentRelation.dst_id) == Component.id",
+            "primaryjoin": "foreign(ComponentRelation.to_id) == Component.id",
             "viewonly": True,
         },
     )

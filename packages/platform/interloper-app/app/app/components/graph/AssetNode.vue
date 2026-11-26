@@ -57,8 +57,8 @@ const destinationBadge = computed(() => getBadgeForAssetId(props.asset.id))
 // Every required upstream relation follows at least one asset.
 const isRunnable = computed(() => {
     const required = props.assetDefn ? Object.keys(requiredUpstreams(props.assetDefn)) : []
-    const upstreams = componentsStore.upstreams.filter(d => d.src_id === props.asset.id)
-    return required.every(name => upstreams.some(d => d.name === name))
+    const upstreams = componentsStore.upstreams.filter(d => d.from_id === props.asset.id)
+    return required.every(relation => upstreams.some(d => d.relation === relation))
 })
 
 const showTargetHandle = computed(() => hasUpstream.value || !isRunnable.value)

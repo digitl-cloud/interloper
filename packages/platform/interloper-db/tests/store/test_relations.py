@@ -19,10 +19,10 @@ from interloper_db.store import RelationQuery, Store
 _ORG = uuid4()
 
 
-def _relations(session: Session, src_id: UUID, name: str | None = None) -> list[ComponentRelation]:
-    statement = select(ComponentRelation).where(ComponentRelation.src_id == src_id)
+def _relations(session: Session, from_id: UUID, name: str | None = None) -> list[ComponentRelation]:
+    statement = select(ComponentRelation).where(ComponentRelation.from_id == from_id)
     if name:
-        statement = statement.where(ComponentRelation.name == name)
+        statement = statement.where(ComponentRelation.relation == name)
     return list(session.exec(statement).all())
 
 
@@ -302,10 +302,10 @@ class TestAdd:
             _ORG, kind="source", key="wire_down_source", relations={"connection": [connection.id]}
         )
 
-        store.relations.add(source.id, name="connection", dst_id=other.id)
+        store.relations.add(source.id, relation="connection", to_id=other.id)
 
         with Session(component_db) as session:
-            assert [r.dst_id for r in _relations(session, source.id, "connection")] == [other.id]
+            assert [r.to_id for r in _relations(session, source.id, "connection")] == [other.id]
 
     def test_many_valued_relation_accumulates(self, store: Store, component_db: Engine):
         first = store.components.create(_ORG, kind="source", key="first_campaign_source")
@@ -314,7 +314,7 @@ class TestAdd:
             _ORG, kind="asset", key="matcher", relations={"campaigns": [_child(first, "campaigns").id]}
         )
 
-        store.relations.add(matcher.id, name="campaigns", dst_id=_child(second, "campaigns").id)
+        store.relations.add(matcher.id, relation="campaigns", to_id=_child(second, "campaigns").id)
 
         with Session(component_db) as session:
             assert len(_relations(session, matcher.id, "campaigns")) == 2
@@ -327,7 +327,7 @@ class TestAdd:
         standalone = store.components.create(_ORG, kind="asset", key="campaigns")
 
         with pytest.raises(ConfigError, match="does not accept"):
-            store.relations.add(matcher.id, name="campaigns", dst_id=standalone.id)
+            store.relations.add(matcher.id, relation="campaigns", to_id=standalone.id)
 
     def test_rejects_a_kind_the_relation_does_not_declare(self, store: Store, connection: Component):
         source = store.components.create(
@@ -336,7 +336,7 @@ class TestAdd:
         destination = store.components.create(_ORG, kind="destination", key="dest")
 
         with pytest.raises(ConfigError, match="does not accept"):
-            store.relations.add(source.id, name="connection", dst_id=destination.id)
+            store.relations.add(source.id, relation="connection", to_id=destination.id)
 
     def test_rejects_an_undeclared_name(self, store: Store, connection: Component):
         source = store.components.create(
@@ -344,7 +344,7 @@ class TestAdd:
         )
 
         with pytest.raises(ConfigError, match="declares no relation 'nope'"):
-            store.relations.add(source.id, name="nope", dst_id=connection.id)
+            store.relations.add(source.id, relation="nope", to_id=connection.id)
 
     def test_rejects_an_undeclared_key(self, store: Store):
         declared = store.components.create(_ORG, kind="asset", key="guard_upstream")
@@ -352,7 +352,7 @@ class TestAdd:
         undeclared = store.components.create(_ORG, kind="asset", key="guard_other")
 
         with pytest.raises(ConfigError, match="does not accept"):
-            store.relations.add(required.id, name="up", dst_id=undeclared.id)
+            store.relations.add(required.id, relation="up", to_id=undeclared.id)
 
     def test_checks_a_declared_key_against_the_parent_source(self, store: Store, connection: Component):
         wire_up = store.components.create(_ORG, kind="source", key="wire_up_source")
@@ -363,36 +363,36 @@ class TestAdd:
         consumer = _child(down, "consumer")
 
         with pytest.raises(ConfigError, match="does not accept"):
-            store.relations.add(consumer.id, name="rows", dst_id=_child(other, "rows").id)
+            store.relations.add(consumer.id, relation="rows", to_id=_child(other, "rows").id)
 
-        relation = store.relations.add(consumer.id, name="rows", dst_id=_child(wire_up, "rows").id)
-        assert relation.dst_id == _child(wire_up, "rows").id
+        relation = store.relations.add(consumer.id, relation="rows", to_id=_child(wire_up, "rows").id)
+        assert relation.to_id == _child(wire_up, "rows").id
 
     def test_identical_add_returns_the_existing_row(self, store: Store, connection: Component):
         source = store.components.create(
             _ORG, kind="source", key="wire_down_source", relations={"connection": [connection.id]}
         )
 
-        first = store.relations.add(source.id, name="connection", dst_id=connection.id)
-        second = store.relations.add(source.id, name="connection", dst_id=connection.id)
+        first = store.relations.add(source.id, relation="connection", to_id=connection.id)
+        second = store.relations.add(source.id, relation="connection", to_id=connection.id)
 
-        assert (second.src_id, second.name, second.dst_id) == (first.src_id, first.name, first.dst_id)
-        assert len(store.relations.list(_ORG, RelationQuery(name="connection", limit=None)).items) == 1
+        assert (second.from_id, second.relation, second.to_id) == (first.from_id, first.relation, first.to_id)
+        assert len(store.relations.list(_ORG, RelationQuery(relation="connection", limit=None)).items) == 1
 
     def test_stamps_the_denormalized_org_and_kinds(self, store: Store, connection: Component):
         source = store.components.create(
             _ORG, kind="source", key="wire_down_source", relations={"connection": [connection.id]}
         )
 
-        relation = store.relations.add(source.id, name="connection", dst_id=connection.id)
+        relation = store.relations.add(source.id, relation="connection", to_id=connection.id)
 
-        assert (relation.org_id, relation.src_kind, relation.dst_kind) == (_ORG, "source", "connection")
+        assert (relation.org_id, relation.from_kind, relation.to_kind) == (_ORG, "source", "connection")
 
     def test_a_missing_source_raises(self, store: Store, connection: Component):
         missing = uuid4()
 
         with pytest.raises(NotFoundError, match=f"Component {missing} not found"):
-            store.relations.add(missing, name="connection", dst_id=connection.id)
+            store.relations.add(missing, relation="connection", to_id=connection.id)
 
     def test_a_cross_org_target_raises(self, store: Store, connection: Component):
         source = store.components.create(
@@ -401,7 +401,7 @@ class TestAdd:
         foreign = store.components.create(uuid4(), kind="connection", key="wire_connection", config={}, encrypted=False)
 
         with pytest.raises(NotFoundError, match=f"Component {foreign.id} not found"):
-            store.relations.add(source.id, name="connection", dst_id=foreign.id)
+            store.relations.add(source.id, relation="connection", to_id=foreign.id)
 
 
 class TestRemove:
@@ -411,18 +411,18 @@ class TestRemove:
         upstream = store.components.create(_ORG, kind="asset", key="guard_upstream")
         required = store.components.create(_ORG, kind="asset", key="guard_required", relations={"up": [upstream.id]})
 
-        store.relations.delete(required.id, name="up", dst_id=upstream.id)
+        store.relations.delete(required.id, relation="up", to_id=upstream.id)
 
         with Session(component_db) as session:
             assert _relations(session, required.id) == []
-        (edge,) = store.relations.list(_ORG, RelationQuery(name="up", limit=None)).items
-        assert (edge.src_id, edge.dst_id) == (required.id, upstream.id)
+        (edge,) = store.relations.list(_ORG, RelationQuery(relation="up", limit=None)).items
+        assert (edge.from_id, edge.to_id) == (required.id, upstream.id)
 
     def test_last_row_of_an_optional_relation_detaches(self, store: Store, component_db: Engine):
         upstream = store.components.create(_ORG, kind="asset", key="guard_upstream")
         optional = store.components.create(_ORG, kind="asset", key="guard_optional", relations={"up": [upstream.id]})
 
-        store.relations.delete(optional.id, name="up", dst_id=upstream.id)
+        store.relations.delete(optional.id, relation="up", to_id=upstream.id)
 
         with Session(component_db) as session:
             assert _relations(session, optional.id) == []
@@ -431,7 +431,7 @@ class TestRemove:
         upstream = store.components.create(_ORG, kind="asset", key="guard_upstream")
         optional = store.components.create(_ORG, kind="asset", key="guard_optional")
 
-        store.relations.delete(optional.id, name="up", dst_id=upstream.id)
+        store.relations.delete(optional.id, relation="up", to_id=upstream.id)
 
         with Session(component_db) as session:
             assert _relations(session, optional.id) == []
@@ -445,24 +445,24 @@ class TestList:
         store.components.create(_ORG, kind="asset", key="guard_required", relations={"up": [upstream.id]})
         store.components.create(_ORG, kind="source", key="wire_down_source", relations={"connection": [connection.id]})
 
-        rows = store.relations.list(_ORG, RelationQuery(src_kind="asset", dst_kind="asset", limit=None)).items
+        rows = store.relations.list(_ORG, RelationQuery(from_kind="asset", to_kind="asset", limit=None)).items
 
-        assert {row.name for row in rows} == {"up"}
+        assert {row.relation for row in rows} == {"up"}
 
     def test_filters_by_name(self, store: Store, connection: Component):
         store.components.create(_ORG, kind="source", key="wire_down_source", relations={"connection": [connection.id]})
 
-        assert len(store.relations.list(_ORG, RelationQuery(name="connection", limit=None)).items) == 1
-        assert store.relations.list(_ORG, RelationQuery(name="up", limit=None)).items == []
+        assert len(store.relations.list(_ORG, RelationQuery(relation="connection", limit=None)).items) == 1
+        assert store.relations.list(_ORG, RelationQuery(relation="up", limit=None)).items == []
 
     def test_filters_by_destination(self, store: Store, connection: Component):
         upstream = store.components.create(_ORG, kind="asset", key="guard_upstream")
         store.components.create(_ORG, kind="asset", key="guard_required", relations={"up": [upstream.id]})
         store.components.create(_ORG, kind="source", key="wire_down_source", relations={"connection": [connection.id]})
 
-        rows = store.relations.list(_ORG, RelationQuery(dst_id=[connection.id], limit=None)).items
+        rows = store.relations.list(_ORG, RelationQuery(to_id=[connection.id], limit=None)).items
 
-        assert [(row.name, row.dst_id) for row in rows] == [("connection", connection.id)]
+        assert [(row.relation, row.to_id) for row in rows] == [("connection", connection.id)]
 
     def test_is_scoped_to_the_organisation(self, store: Store, connection: Component):
         store.components.create(_ORG, kind="source", key="wire_down_source", relations={"connection": [connection.id]})
@@ -479,7 +479,7 @@ class TestList:
         store.components.create(_ORG, kind="source", key="wire_down_source", relations={"connection": [connection.id]})
 
         everything = store.relations.list(_ORG, RelationQuery(limit=1))
-        ups = store.relations.list(_ORG, RelationQuery(name="up", limit=1))
+        ups = store.relations.list(_ORG, RelationQuery(relation="up", limit=1))
 
         assert len(everything.items) == 1
         assert everything.total == 3
@@ -503,7 +503,7 @@ class TestSyncRelations:
         store.components.update(matcher.id, relations={"campaigns": [_child(second, "campaigns").id]})
 
         with Session(component_db) as session:
-            assert [r.dst_id for r in _relations(session, matcher.id, "campaigns")] == [_child(second, "campaigns").id]
+            assert [r.to_id for r in _relations(session, matcher.id, "campaigns")] == [_child(second, "campaigns").id]
 
     def test_leaves_the_names_it_is_not_given_alone(self, store: Store, connection: Component, component_db: Engine):
         destination = store.components.create(_ORG, kind="destination", key="dest")
@@ -534,8 +534,8 @@ class TestSyncRelations:
 
         store.components.update(required.id, relations={"up": [second.id]})
 
-        (row,) = store.relations.list(_ORG, RelationQuery(name="up", limit=None)).items
-        assert row.dst_id == second.id
+        (row,) = store.relations.list(_ORG, RelationQuery(relation="up", limit=None)).items
+        assert row.to_id == second.id
 
     def test_rejects_an_undeclared_name(self, store: Store, connection: Component):
         with pytest.raises(ConfigError, match="declares no relation 'nope'"):
@@ -561,7 +561,7 @@ class TestSelfEdge:
         campaigns = _child(source, "campaigns")
 
         with pytest.raises(ConfigError, match="cannot point at the component itself"):
-            store.relations.add(campaigns.id, name="peers", dst_id=campaigns.id)
+            store.relations.add(campaigns.id, relation="peers", to_id=campaigns.id)
 
     def test_a_replacement_refuses_the_component_itself(self, store: Store):
         source = store.components.create(_ORG, kind="source", key="self_campaign_source")
@@ -579,18 +579,18 @@ class TestSiblingInstanceScope:
         second = store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "b"})
 
         with pytest.raises(ConfigError, match="belongs to another source instance"):
-            store.relations.add(_child(first, "totals").id, name="rows", dst_id=_child(second, "rows").id)
+            store.relations.add(_child(first, "totals").id, relation="rows", to_id=_child(second, "rows").id)
 
     def test_a_qualified_key_accepts_either_instance(self, store: Store, component_db: Engine):
         first = store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "a"})
         second = store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "b"})
         qualified = _child(store.components.create(_ORG, kind="source", key="consumer_source"), "qualified")
 
-        store.relations.add(qualified.id, name="rows", dst_id=_child(first, "rows").id)
-        store.relations.add(qualified.id, name="rows", dst_id=_child(second, "rows").id)
+        store.relations.add(qualified.id, relation="rows", to_id=_child(first, "rows").id)
+        store.relations.add(qualified.id, relation="rows", to_id=_child(second, "rows").id)
 
         with Session(component_db) as session:
-            assert {row.dst_id for row in _relations(session, qualified.id, "rows")} == {
+            assert {row.to_id for row in _relations(session, qualified.id, "rows")} == {
                 _child(first, "rows").id,
                 _child(second, "rows").id,
             }
@@ -600,11 +600,11 @@ class TestSiblingInstanceScope:
         second = store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "b"})
         wild = _child(store.components.create(_ORG, kind="source", key="consumer_source"), "wild")
 
-        store.relations.add(wild.id, name="rows", dst_id=_child(first, "rows").id)
-        store.relations.add(wild.id, name="rows", dst_id=_child(second, "rows").id)
+        store.relations.add(wild.id, relation="rows", to_id=_child(first, "rows").id)
+        store.relations.add(wild.id, relation="rows", to_id=_child(second, "rows").id)
 
         with Session(component_db) as session:
-            assert {row.dst_id for row in _relations(session, wild.id, "rows")} == {
+            assert {row.to_id for row in _relations(session, wild.id, "rows")} == {
                 _child(first, "rows").id,
                 _child(second, "rows").id,
             }
@@ -616,15 +616,15 @@ class TestIntraSourceWiring:
     def test_creating_a_source_wires_its_sibling_relations(self, store: Store):
         source = store.components.create(_ORG, kind="source", key="wire_up_source")
 
-        (row,) = store.relations.list(_ORG, RelationQuery(name="rows", limit=None)).items
-        assert (row.src_id, row.dst_id) == (_child(source, "totals").id, _child(source, "rows").id)
+        (row,) = store.relations.list(_ORG, RelationQuery(relation="rows", limit=None)).items
+        assert (row.from_id, row.to_id) == (_child(source, "totals").id, _child(source, "rows").id)
 
     def test_two_declared_keys_on_a_single_valued_relation_wire_one_edge(self, store: Store):
         source = store.components.create(_ORG, kind="source", key="two_key_source")
 
-        (row,) = store.relations.list(_ORG, RelationQuery(name="rows", limit=None)).items
+        (row,) = store.relations.list(_ORG, RelationQuery(relation="rows", limit=None)).items
         sibling_key = TwoKeySource.sibling_bindings()["totals"]["rows"]
-        assert (row.src_id, row.dst_id) == (_child(source, "totals").id, _child(source, sibling_key).id)
+        assert (row.from_id, row.to_id) == (_child(source, "totals").id, _child(source, sibling_key).id)
 
     def test_a_key_naming_the_assets_own_key_wires_no_self_edge(self, store: Store):
         store.components.create(_ORG, kind="source", key="self_key_source")
@@ -635,13 +635,13 @@ class TestIntraSourceWiring:
     def test_a_relation_mixing_bare_and_qualified_keys_wires_the_bare_one(self, store: Store):
         source = store.components.create(_ORG, kind="source", key="mixed_key_source")
 
-        (row,) = store.relations.list(_ORG, RelationQuery(name="rows", limit=None)).items
-        assert (row.src_id, row.dst_id) == (_child(source, "totals").id, _child(source, "rows").id)
+        (row,) = store.relations.list(_ORG, RelationQuery(relation="rows", limit=None)).items
+        assert (row.from_id, row.to_id) == (_child(source, "totals").id, _child(source, "rows").id)
 
 
 def _edges(store: Store, org_id: UUID = _ORG) -> set[tuple[UUID, str, UUID]]:
-    listed = store.relations.list(org_id, RelationQuery(src_kind="asset", dst_kind="asset", limit=None)).items
-    return {(edge.src_id, edge.name, edge.dst_id) for edge in listed}
+    listed = store.relations.list(org_id, RelationQuery(from_kind="asset", to_kind="asset", limit=None)).items
+    return {(edge.from_id, edge.relation, edge.to_id) for edge in listed}
 
 
 @contextmanager
@@ -675,10 +675,10 @@ class TestAutomatic:
         first = store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "a"})
         store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "b"})
         qualified = _child(store.components.create(_ORG, kind="source", key="consumer_source"), "qualified")
-        store.relations.add(qualified.id, name="rows", dst_id=_child(first, "rows").id)
+        store.relations.add(qualified.id, relation="rows", to_id=_child(first, "rows").id)
 
-        listed = store.relations.list(_ORG, RelationQuery(name="rows", src_kind="asset", limit=None)).items
-        assert {edge.dst_id for edge in listed if edge.src_id == qualified.id} == {_child(first, "rows").id}
+        listed = store.relations.list(_ORG, RelationQuery(relation="rows", from_kind="asset", limit=None)).items
+        assert {edge.to_id for edge in listed if edge.from_id == qualified.id} == {_child(first, "rows").id}
 
     def test_automatic_matches_a_disabled_asset_but_never_a_drifted_one(self, store: Store, component_db: Engine):
         disabled = store.components.create(
@@ -704,12 +704,12 @@ class TestAutomatic:
     def test_list_returns_rows_and_matches_in_one_window(self, store: Store, connection: Component):
         store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "a"})
         store.components.create(_ORG, kind="source", key="consumer_source")
-        query = RelationQuery(src_kind="asset", dst_kind="asset", limit=None)
+        query = RelationQuery(from_kind="asset", to_kind="asset", limit=None)
         every = store.relations.list(_ORG, query).items
 
-        page = store.relations.list(_ORG, RelationQuery(src_kind="asset", dst_kind="asset", limit=1, offset=1))
+        page = store.relations.list(_ORG, RelationQuery(from_kind="asset", to_kind="asset", limit=1, offset=1))
         assert page.total == len(every) == 3
-        assert [(edge.src_id, edge.dst_id) for edge in page.items] == [(every[1].src_id, every[1].dst_id)]
+        assert [(edge.from_id, edge.to_id) for edge in page.items] == [(every[1].from_id, every[1].to_id)]
 
     def test_creating_a_source_writes_no_sibling_rows(self, store: Store, component_db: Engine):
         source = store.components.create(_ORG, kind="source", key="wire_up_source")
@@ -733,7 +733,7 @@ class TestAutomatic:
         store.components.create(_ORG, kind="source", key="consumer_source")
 
         with _statements(component_db) as sent:
-            page = store.relations.list(_ORG, RelationQuery(src_kind="asset", dst_kind="asset", limit=1, offset=1))
+            page = store.relations.list(_ORG, RelationQuery(from_kind="asset", to_kind="asset", limit=1, offset=1))
 
         assert page.total == 3
         assert len(sent) == 2
@@ -743,15 +743,15 @@ class TestAutomatic:
         second = store.components.create(_ORG, kind="source", key="instance_source", config={"account_id": "b"})
         consumer = store.components.create(_ORG, kind="source", key="consumer_source")
 
-        query = RelationQuery(name="rows", dst_id=[_child(second, "rows").id], limit=None)
+        query = RelationQuery(relation="rows", to_id=[_child(second, "rows").id], limit=None)
         listed = store.relations.list(_ORG, query).items
 
-        assert {(edge.src_id, edge.dst_id) for edge in listed} == {
+        assert {(edge.from_id, edge.to_id) for edge in listed} == {
             (_child(consumer, "qualified").id, _child(second, "rows").id),
             (_child(consumer, "wild").id, _child(second, "rows").id),
             (_child(second, "totals").id, _child(second, "rows").id),
         }
-        assert _child(first, "rows").id not in {edge.dst_id for edge in listed}
+        assert _child(first, "rows").id not in {edge.to_id for edge in listed}
 
     def test_check_bound_accepts_an_unbound_upstream_relation(self, store: Store):
         store.components.create(_ORG, kind="asset", key="matcher")

@@ -44,7 +44,7 @@ export function useDestinationBadge() {
 
     function getBadgeForSource(source: ComponentRecord): DestinationBadge | null {
         return getBadgeForDestinations(
-            relationRefs(source, 'destinations').map(ref => ({ key: ref.dst_key, name: ref.dst_name })),
+            relationRefs(source, 'destinations').map(ref => ({ key: ref.to_key, name: ref.to_name })),
         )
     }
 

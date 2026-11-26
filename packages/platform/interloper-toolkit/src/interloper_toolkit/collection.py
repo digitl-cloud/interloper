@@ -260,12 +260,12 @@ def delete_component(ctx: ToolkitContext, component_id: str) -> ComponentDeleted
 
 
 @requires_role("editor")
-def bind_relation(ctx: ToolkitContext, component_id: str, name: str, dst_id: str) -> BindResult | ToolError:
-    """Bind one component to another under a declared relation name.
+def bind_relation(ctx: ToolkitContext, component_id: str, relation: str, to_id: str) -> BindResult | ToolError:
+    """Bind one component to another under a relation its class declares.
 
     Works on any kind: a source's connection, a job's watched assets, a
-    destination target, whatever the component's own class declares under
-    that name. A ``many`` name accumulates; a single-valued one repoints, so
+    destination target, whatever relation the component's own class
+    declares. A ``many`` relation accumulates; a single-valued one repoints, so
     rebinding it needs no prior unbind_relation call. An asset's upstream
     relation needs no binding: unbound, it follows every matching asset of
     the organisation, accounts added later included; binding it narrows it to
@@ -273,22 +273,22 @@ def bind_relation(ctx: ToolkitContext, component_id: str, name: str, dst_id: str
     explicit confirmation BEFORE calling this.
 
     Args:
-        component_id: UUID of the component the relation originates from.
-        name: Relation name, which the component's class must declare.
-        dst_id: UUID of the destination component the relation points at.
-            Must belong to the same organisation as the source.
+        component_id: UUID of the component the row goes from.
+        relation: The relation, which the component's class must declare.
+        to_id: UUID of the component the row points at. Must belong to the
+            same organisation.
     """
     try:
         src = ctx.store.components.get(UUID(component_id), org_id=ctx.org_id)
-        row = ctx.store.relations.add(src.id, name=name, dst_id=UUID(dst_id))
+        row = ctx.store.relations.add(src.id, relation=relation, to_id=UUID(to_id))
     except (ConfigError, NotFoundError, ValueError) as e:
         return ToolError(error=str(e))
-    return BindResult(src_id=str(row.src_id), name=row.name, dst_id=str(row.dst_id), dst_kind=row.dst_kind)
+    return BindResult(from_id=str(row.from_id), relation=row.relation, to_id=str(row.to_id), to_kind=row.to_kind)
 
 
 @requires_role("editor")
-def unbind_relation(ctx: ToolkitContext, component_id: str, name: str, dst_id: str) -> UnbindResult | ToolError:
-    """Detach one component from another under a declared relation name.
+def unbind_relation(ctx: ToolkitContext, component_id: str, relation: str, to_id: str) -> UnbindResult | ToolError:
+    """Detach one component from another under one of its relations.
 
     A non-optional relation cannot be emptied, only repointed with
     bind_relation, except an asset's upstream relation: removing its last
@@ -297,17 +297,17 @@ def unbind_relation(ctx: ToolkitContext, component_id: str, name: str, dst_id: s
     BEFORE calling this.
 
     Args:
-        component_id: UUID of the component the relation originates from.
-        name: Relation name the edge is filed under.
-        dst_id: UUID of the destination the removed edge points at. Removing
-            an edge that isn't there is a no-op.
+        component_id: UUID of the component the row goes from.
+        relation: The relation the row belongs to.
+        to_id: UUID of the component the removed row points at. Removing a
+            row that isn't there is a no-op.
     """
     try:
         src = ctx.store.components.get(UUID(component_id), org_id=ctx.org_id)
-        ctx.store.relations.delete(src.id, name=name, dst_id=UUID(dst_id))
+        ctx.store.relations.delete(src.id, relation=relation, to_id=UUID(to_id))
     except (ConfigError, NotFoundError, ValueError) as e:
         return ToolError(error=str(e))
-    return UnbindResult(src_id=component_id, name=name, dst_id=dst_id)
+    return UnbindResult(from_id=component_id, relation=relation, to_id=to_id)
 
 
 # -- Connections (kind-specific by nature) ---------------------------------------

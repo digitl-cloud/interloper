@@ -44,14 +44,14 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
     {
         id: 'watches',
         header: 'Watches',
-        accessorFn: (row: ComponentRecord) => watchedBy(row).map(w => w.dst_name ?? w.dst_key).join(', '),
+        accessorFn: (row: ComponentRecord) => watchedBy(row).map(w => w.to_name ?? w.to_key).join(', '),
         cell: ({ row }) => {
             const watched = watchedBy(row.original)
             if (watched.length === 0) return h('span', { class: 'text-muted' }, '—')
             const first = watched[0]!
             return h(EntityBadge, {
-                icon: componentIcon(first.dst_key),
-                label: first.dst_name ?? first.dst_key,
+                icon: componentIcon(first.to_key),
+                label: first.to_name ?? first.to_key,
                 extra: watched.length - 1,
             })
         },

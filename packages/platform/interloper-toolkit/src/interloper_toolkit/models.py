@@ -299,22 +299,22 @@ class ConnectionCheck(CheckResult):
 
 
 class BindResult(BaseModel):
-    """One relation edge created or repointed by ``bind_relation``."""
+    """One relation row created or repointed by ``bind_relation``."""
 
     status: Literal["success"] = "success"
-    src_id: str
-    name: str
-    dst_id: str
-    dst_kind: str
+    from_id: str
+    relation: str
+    to_id: str
+    to_kind: str
 
 
 class UnbindResult(BaseModel):
-    """One relation edge removed by ``unbind_relation``."""
+    """One relation row removed by ``unbind_relation``."""
 
     status: Literal["success"] = "success"
-    src_id: str
-    name: str
-    dst_id: str
+    from_id: str
+    relation: str
+    to_id: str
 
 
 # -- Sources and jobs -----------------------------------------------------------
@@ -387,7 +387,7 @@ class RelationEdge(BaseModel):
     """A direct asset-to-asset relation edge from the perspective of one asset."""
 
     asset_id: str
-    param_name: str
+    relation: str
     asset_key: str
     source_id: str
 
@@ -451,7 +451,7 @@ class CrossSourceEdge(BaseModel):
     downstream: AssetRef
     upstream_asset_id: str
     upstream: AssetRef
-    param_name: str
+    relation: str
 
 
 class CrossSourceDependencies(BaseModel):
