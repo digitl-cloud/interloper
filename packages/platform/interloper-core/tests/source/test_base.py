@@ -13,6 +13,7 @@ from pydantic import ValidationError
 import interloper as il
 from interloper.asset.base import AssetDefinition
 from interloper.component import Component
+from interloper.component.relation import UPSTREAM
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.serializable import Spec
 from interloper.source import SourceDefinition
@@ -1040,3 +1041,51 @@ class TestSpecRule:
         finance = il.Source.from_spec(spec, resolve={shop.orders.id: shop.orders}.__getitem__)
 
         assert finance.revenue.orders is shop.orders
+
+
+class TestUpstreamSourceRelation:
+    def test_a_source_whose_assets_read_other_sources_carries_an_upstream_relation(self) -> None:
+        assert Finance.relations[UPSTREAM].keys == ["shop"]
+        assert Finance.Revenue.relations[UPSTREAM].keys == ["shop"]
+        assert UPSTREAM not in Shop.relations
+        assert UPSTREAM not in Shop.Orders.relations and UPSTREAM not in Shop.Revenue.relations
+
+    def test_a_parentless_asset_reading_sources_carries_its_own(self) -> None:
+        class Rollup(il.Asset):
+            campaigns: list[il.Asset] = il.Relation("asset", "*.campaigns", many=True)
+
+        assert Rollup.relations[UPSTREAM].keys == []
+
+    def test_a_key_naming_the_own_source_is_dropped_once_the_source_is_known(self) -> None:
+        class Ledger(il.Source):
+            class Entries(il.Asset):
+                orders: il.Asset | None = il.Relation("asset", "ledger.orders", optional=True)
+
+            class Orders(il.Asset):
+                pass
+
+        assert UPSTREAM not in Ledger.relations and UPSTREAM not in Ledger.Entries.relations
+
+    def test_a_subclass_inherits_the_relation_and_may_widen_it(self) -> None:
+        class Narrow(il.Asset):
+            orders: il.Asset | None = il.Relation("asset", "shop.orders", optional=True)
+
+        class Wider(Narrow):
+            refunds: il.Asset | None = il.Relation("asset", "crm.refunds", optional=True)
+
+        assert Narrow.relations[UPSTREAM].keys == ["shop"]
+
+        assert sorted(Wider.relations[UPSTREAM].keys) == ["crm", "shop"]
+
+    def test_upstream_is_reserved(self) -> None:
+        with pytest.raises(TypeError, match="reserved"):
+
+            class Bad(il.Source):
+                upstream: list[il.Source] = il.Relation("source", many=True)
+
+    def test_upstream_is_reserved_as_a_data_parameter(self) -> None:
+        with pytest.raises(TypeError, match="reserved"):
+
+            class Bad(il.Asset):
+                def data(self, upstream: il.Upstream) -> Any:  # pragma: no cover
+                    return []

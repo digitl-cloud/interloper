@@ -209,12 +209,12 @@ class TestBuiltClass:
         assert rows.relations["destinations"].keys == [il.MemoryDestination.key]
 
     def test_an_upstream_relation_is_declared_through_the_channel(self):
-        @il.asset(relations={"upstream": il.Relation("asset", "shop.orders")})
+        @il.asset(relations={"orders": il.Relation("asset", "shop.orders")})
         def rows() -> list[dict[str, Any]]:
             return []
 
-        upstream = rows.relations["upstream"]
-        assert (upstream.kind, upstream.key, upstream.name) == ("asset", "shop.orders", "upstream")
+        orders = rows.relations["orders"]
+        assert (orders.kind, orders.key, orders.name) == ("asset", "shop.orders", "orders")
 
 
 class TestTyping:

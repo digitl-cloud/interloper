@@ -142,6 +142,19 @@ class TestFromDocuments:
         assert Declarations.from_documents(ORG, "other.yaml", [_spec()], catalog).rows[0].id != here
 
 
+class TestUpstreamSources:
+    def test_a_spec_binds_upstream_sources(self):
+        catalog = il.Catalog.from_assets([Upstreams, Downstreams])
+        upstreams = il.Spec(path=f"{__name__}.Upstreams", id="up", init={})
+        downstreams = il.Spec(path=f"{__name__}.Downstreams", init={il.UPSTREAM: [{"ref": "up"}]})
+
+        rows = Declarations.from_documents(ORG, FILE, [upstreams, downstreams], catalog).rows
+
+        upstream = next(row for row in rows if row.key == "upstreams")
+        downstream = next(row for row in rows if row.key == "downstreams")
+        assert downstream.relations == {il.UPSTREAM: [upstream.id]}
+
+
 class TestFromInstances:
     def test_a_module_attribute_names_its_component(self):
         connection = Weather(token="secret")

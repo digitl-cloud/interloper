@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from dataclasses import replace
 from typing import Any, ClassVar
 from uuid import UUID, uuid4, uuid5
 
@@ -552,6 +553,18 @@ class TestServedCollection:
         )
         return [up, downstream]
 
+    def test_declared_upstream_sources_are_applied_as_rows_that_narrow(self, store: Store):
+        up, down = self._wired(consumer_reads_rows=False)
+        narrowed = replace(down, relations={il.UPSTREAM: [up.id]})
+
+        store.components.apply(_ORG, [up, narrowed])
+
+        rows = store.relations.list(_ORG, RelationQuery(relation=il.UPSTREAM)).items
+        assert [(edge.from_id, edge.to_id) for edge in rows] == [(down.id, up.id)]
+        reader = Declaration.child_id(down.id, "reader")
+        followed = store.relations.list(_ORG, RelationQuery(relation="rows")).items
+        assert {edge.to_id for edge in followed if edge.from_id == reader} == {Declaration.child_id(up.id, "rows")}
+
     def test_a_declaration_creates_its_rows_with_their_ids(self, store: Store):
         source = self._source()
 
@@ -869,6 +882,30 @@ class TestDeleteImpact:
     def test_an_unknown_id_is_not_found(self, store: Store):
         with pytest.raises(NotFoundError):
             store.components.delete_impact([uuid4()])
+
+
+class TestUpstreamSourceGuard:
+    """A source another component binds as an upstream source cannot be deleted while bound."""
+
+    def test_an_upstream_source_cannot_be_deleted(self, store: Store):
+        up = store.components.create(_ORG, kind="source", key="wire_up_source", name="Up")
+        down = store.components.create(_ORG, kind="source", key="wire_down_optional_source", name="Down")
+        store.relations.add(down.id, relation=il.UPSTREAM, to_id=up.id)
+
+        impact = store.components.delete_impact([up.id])
+
+        assert [referrer["id"] for referrer in impact.blocking] == [str(down.id)]
+        with pytest.raises(InUseError):
+            store.components.delete(up.id)
+
+    def test_an_assets_upstream_sources_block_through_its_owner(self, store: Store):
+        up = store.components.create(_ORG, kind="source", key="wire_up_source", name="Up")
+        down = store.components.create(_ORG, kind="source", key="wire_down_optional_source", name="Down")
+        store.relations.add(_child(down, "reader").id, relation=il.UPSTREAM, to_id=up.id)
+
+        impact = store.components.delete_impact([up.id])
+
+        assert [referrer["id"] for referrer in impact.blocking] == [str(down.id)]
 
 
 class TestIntraSourceWiring:

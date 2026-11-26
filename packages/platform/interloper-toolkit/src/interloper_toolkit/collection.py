@@ -269,8 +269,11 @@ def bind_relation(ctx: ToolkitContext, component_id: str, relation: str, to_id: 
     rebinding it needs no prior unbind_relation call. An asset's upstream
     relation needs no binding: unbound, it follows every matching asset of
     the organisation, accounts added later included; binding it narrows it to
-    exactly what is bound. Recap what the binding changes and get the user's
-    explicit confirmation BEFORE calling this.
+    exactly what is bound. A source or asset declaring ``upstream`` narrows
+    its upstream relations to sources instead: bind ``upstream`` to each
+    source to read, an asset's own upstream sources replace its source's, and
+    a relation none of whose sources is bound there reads nothing. Recap what the binding changes and
+    get the user's explicit confirmation BEFORE calling this.
 
     Args:
         component_id: UUID of the component the row goes from.

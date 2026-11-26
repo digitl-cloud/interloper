@@ -17,7 +17,7 @@ from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.operation import Operation, Workload
 from interloper.resource.fields import InputField, SelectField
 from interloper.retry import RetryPolicy
-from interloper.serializable import ClassBody, IgnoredDescriptor
+from interloper.serializable import ClassBody, IgnoredDescriptor, SerializationContext, Spec
 from interloper.utils.text import to_identifier, validate_key
 
 if TYPE_CHECKING:
@@ -286,6 +286,28 @@ class Source(Component, Workload):
         self._check_locations()
         self._bind_siblings()
 
+    def to_spec(self, *, context: SerializationContext | None = None) -> Spec:
+        """Serialize this source, or only name it in a document that does not carry it.
+
+        A closed document (a graph's) reaches a source it does not carry only
+        as another component's upstream source, which reads nothing of it but
+        its id: it is written with its settings alone, no relations and no
+        assets, so a run never receives the credentials of a source it does
+        not execute.
+
+        Args:
+            context: The state shared with the other roots of one document.
+                ``None`` starts a context for this source alone.
+
+        Returns:
+            A Spec capturing this source's state, identity and bindings.
+        """
+        if context is None or not context.closed or self.id in context.components:
+            return super().to_spec(context=context)
+        context.add(self)
+        init = self._fields_init(without=self._owned_by_field())
+        return self._build_spec(init=init or None).model_copy(update={"id": self.id})
+
     def _owned_by_field(self) -> dict[str, list[Component]]:
         """A source owns its assets.
 
@@ -429,7 +451,9 @@ class Source(Component, Workload):
         Each collected class is owned by this source and installed as a class
         attribute under its key; an asset class is its own descriptor (see
         `AssetMeta`), so ``Shop.orders`` is the class and ``Shop().orders`` the
-        live asset.
+        live asset. Once the source's key scopes their bare keys, each asset
+        carries the `UPSTREAM` relation its relations call for, and the source
+        one over all of them (see `Relation.upstream_source_relation`).
 
         Raises:
             TypeError: If an asset class already belongs to another source, or
@@ -451,7 +475,13 @@ class Source(Component, Workload):
                 )
             asset_class._source_type = cls
             setattr(cls, asset_class.key, asset_class)
+            asset_class._carry_upstream(Relation.upstream_source_relation(asset_class.relations.values(), cls.key))
         cls.asset_types = collected
+        cls._carry_upstream(
+            Relation.upstream_source_relation(
+                [relation for asset_class in collected for relation in asset_class.relations.values()], cls.key
+            )
+        )
 
     @classmethod
     def sibling_bindings(cls) -> dict[str, dict[str, str]]:

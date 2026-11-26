@@ -215,8 +215,12 @@ class Hydrator:
         or that an enabled asset's unbound upstream relation follows, a list
         when the declared relation is ``many`` and a single value otherwise:
         a parentless target is hydrated and handed over, an owned
-        one (an asset) is owed, since its source is built as a whole. A
-        source's children embed as the ``assets`` override map, their own
+        one (an asset) is owed, since its source is built as a whole. Its
+        `UPSTREAM` sources are owed too: they own what the component may
+        follow, so they are built once through the cache either way, and
+        binding them once the component exists is what lets two components
+        bind each other as upstream sources. A source's children embed as the
+        ``assets`` override map, their own
         config and relations read the same way; a child the parent's
         declaration has dropped is refused as drift by :meth:`_check_declared`
         before its relations are read, since those are declared by the class
@@ -262,6 +266,9 @@ class Hydrator:
                     f"Component {db_component.id} ({db_component.kind}) holds {len(targets)} rows under "
                     f"single-valued relation '{name}'"
                 )
+            if name == il.UPSTREAM:
+                owed.append((db_component.id, name, [target.id for target in targets]))
+                continue
             built = [self._load(target.id, cache, chain) for target in targets if target.parent_id is None]
             owned = [target.id for target in targets if target.parent_id is not None]
             if built:

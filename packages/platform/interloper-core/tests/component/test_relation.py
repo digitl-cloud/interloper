@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 import interloper as il
-from interloper.component.relation import ANY_SOURCE, ComponentIdentity, Relation
+from interloper.component.relation import ANY_SOURCE, UPSTREAM, ComponentIdentity, Relation
 
 
 class Conn(il.Connection):
@@ -202,3 +202,29 @@ class TestMatches:
 
     def test_a_relation_without_keys_fills_nothing(self) -> None:
         assert not Relation("asset").fills(ComponentIdentity("shop", "revenue"), ComponentIdentity("shop", "orders"))
+
+
+class TestUpstreamSourceRelation:
+    def test_other_sources_names_the_sources_outside_the_owner(self) -> None:
+        relation = Relation("asset", ["shop.orders", "orders", "*.refunds"])
+        assert relation.other_sources("finance") == {"shop", ANY_SOURCE}
+        assert Relation("asset", ["finance.orders", "orders"]).other_sources("finance") == frozenset()
+        assert Relation("asset").other_sources("finance") == frozenset()
+
+    def test_upstream_source_relation_accepts_the_sources_the_relations_read(self) -> None:
+        upstream = Relation.upstream_source_relation(
+            [Relation("asset", "shop.orders"), Relation("asset", "refunds")], "finance"
+        )
+        assert upstream is not None
+        assert (upstream.name, upstream.kinds, upstream.keys) == (UPSTREAM, ["source"], ["shop"])
+        assert (upstream.many, upstream.optional, upstream.on_delete) == (True, True, "block")
+
+    def test_a_wildcard_lets_it_accept_any_source(self) -> None:
+        upstream = Relation.upstream_source_relation([Relation("asset", "*.campaigns", many=True)], "rollup")
+        assert upstream is not None and upstream.keys == []
+
+    def test_relations_reading_nothing_outside_carry_none(self) -> None:
+        assert Relation.upstream_source_relation([Relation("asset", "refunds")], "finance") is None
+
+    def test_only_relations_accepting_assets_count(self) -> None:
+        assert Relation.upstream_source_relation([Relation("connection", "shop_connection")], "finance") is None

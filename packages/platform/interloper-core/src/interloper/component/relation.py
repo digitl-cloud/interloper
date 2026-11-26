@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection, Hashable, Mapping
+from collections.abc import Collection, Hashable, Iterable, Mapping
 from types import UnionType
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple, TypeVar, Union, get_args, get_origin, overload
+from typing import TYPE_CHECKING, Any, Final, Literal, NamedTuple, TypeVar, Union, get_args, get_origin, overload
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from pydantic_settings import BaseSettings
@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from interloper.component.base import Component
 
 ANY_SOURCE = "*"
+UPSTREAM: Final = "upstream"
 K = TypeVar("K", bound=Hashable)
 
 
@@ -405,6 +406,50 @@ class Relation(BaseModel):
             identity as an asset.
         """
         return bool(self.keys) and self.accepts("asset", identity, owner=owner)
+
+    def other_sources(self, own_source_key: str | None) -> frozenset[str]:
+        """The sources outside the owner's own that this relation's keys name.
+
+        Args:
+            own_source_key: Key of the source declaring the relation, which a
+                bare key is scoped to. ``None`` when it is not known yet (an
+                asset class before its source collects it) or there is none.
+
+        Returns:
+            The source keys its qualified keys name other than
+            ``own_source_key``, `ANY_SOURCE` for a wildcard key; empty for a
+            relation whose keys are all local, or that declares none.
+        """
+        sources = {ComponentIdentity.resolve(key, own_source_key=own_source_key).source_key for key in self.keys}
+        return frozenset(source for source in sources if source is not None and source != own_source_key)
+
+    @classmethod
+    def upstream_source_relation(cls, relations: Iterable[Relation], own_source_key: str | None) -> Relation | None:
+        """The `UPSTREAM` relation a component carries for relations reading other sources' assets.
+
+        It binds the upstream sources those relations read: an asset holding
+        rows of it reads only those sources' assets, else its source's
+        upstream sources, else every asset its relations match. The framework
+        gives it, so no author declares it, and it accepts the sources the
+        relations name, or any source when one of them is a wildcard.
+
+        Args:
+            relations: The relations of an asset, or of every asset of a source.
+            own_source_key: Key of the source owning them, which bare keys are
+                scoped to; ``None`` when not known yet or there is none.
+
+        Returns:
+            The relation, named `UPSTREAM`, of kind ``source``, many,
+            optional and blocking the deletion of a bound source; ``None``
+            when no relation accepting assets names another source.
+        """
+        sources = frozenset().union(
+            *(relation.other_sources(own_source_key) for relation in relations if "asset" in relation.kinds)
+        )
+        if not sources:
+            return None
+        keys = "" if ANY_SOURCE in sources else sorted(sources)
+        return cls("source", keys, many=True, optional=True, on_delete="block").model_copy(update={"name": UPSTREAM})
 
     @property
     def has_fallback(self) -> bool:

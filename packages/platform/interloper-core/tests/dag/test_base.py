@@ -27,19 +27,19 @@ from interloper.serializable import Spec
 class FakeAsset(il.Asset):
     """Plain asset fixture; its optional relation accepts any asset."""
 
-    upstream: il.Asset | None = il.Relation("asset", optional=True)
+    feed: il.Asset | None = il.Relation("asset", optional=True)
 
 
 class FakeOtherAsset(il.Asset):
     """Second asset class used for subclass-identity and list tests."""
 
-    upstream: il.Asset | None = il.Relation("asset", optional=True)
+    feed: il.Asset | None = il.Relation("asset", optional=True)
 
 
 class FakeThirdAsset(il.Asset):
     """Third asset class used for multi-level topology tests."""
 
-    upstream: il.Asset | None = il.Relation("asset", optional=True)
+    feed: il.Asset | None = il.Relation("asset", optional=True)
 
 
 class FakePartitionedAsset(il.Asset):
@@ -52,19 +52,19 @@ class FakeDefinitionAsset(il.Asset):
     """Asset that reads no upstream data, the shape of a view."""
 
     reads_upstream_data: ClassVar[bool] = False
-    upstream: il.Asset | None = il.Relation("asset", optional=True)
+    feed: il.Asset | None = il.Relation("asset", optional=True)
 
 
 class FakeAssetRequiringFake(il.Asset):
     """Asset whose relation expects an upstream keyed ``fake_asset``."""
 
-    upstream: FakeAsset = il.Relation("asset", "fake_asset")
+    feed: FakeAsset = il.Relation("asset", "fake_asset")
 
 
 class FakeAssetOptionallyRequiringFake(il.Asset):
     """Asset whose optional relation expects ``fake_asset`` but tolerates its absence."""
 
-    upstream: FakeAsset | None = il.Relation("asset", "fake_asset", optional=True)
+    feed: FakeAsset | None = il.Relation("asset", "fake_asset", optional=True)
 
 
 class FakeSource(il.Source):
@@ -145,7 +145,7 @@ class FakeDaily(il.Asset):
     """Daily asset."""
 
     partitioning: ClassVar[PartitionConfig | None] = il.TimePartitionConfig(column="date")
-    upstream: il.Asset | None = il.Relation("asset", optional=True)
+    feed: il.Asset | None = il.Relation("asset", optional=True)
 
 
 class FakeSnapshot(il.Asset):
@@ -231,6 +231,44 @@ class FinanceSingle(il.Source):
 
         def data(self, context: il.ExecutionContext, orders: il.Upstream) -> Any:  # pragma: no cover
             return [{"revenue": 1}]
+
+
+class FakeAdsConnection(il.Connection):
+    """Credentials an account source binds."""
+
+    token: str = ""
+
+
+class FakeAccount(il.Source):
+    """Account source exposing ``campaigns``, bound to its connection."""
+
+    connection: FakeAdsConnection
+
+    class Campaigns(il.Asset):
+        """One campaign row."""
+
+        def data(self, context: il.ExecutionContext) -> Any:  # pragma: no cover
+            return []
+
+
+class FakeRollup(il.Source):
+    """Source whose asset reads campaigns from any source, one shop's orders and a sibling."""
+
+    class Base(il.Asset):
+        """The sibling the rollup reads."""
+
+        def data(self, context: il.ExecutionContext) -> Any:  # pragma: no cover
+            return []
+
+    class Totals(il.Asset):
+        """Totals over every campaigns asset, the orders of ``shop_a`` and the sibling."""
+
+        campaigns: list[il.Asset] = il.Relation("asset", "*.campaigns", many=True, optional=True)
+        orders: il.Asset | None = il.Relation("asset", "shop_a.orders", optional=True)
+        base: il.Asset | None = il.Relation("asset", "base", optional=True)
+
+        def data(self, context: il.ExecutionContext) -> Any:  # pragma: no cover
+            return []
 
 
 # -- Larger topology fixtures --------------------------------------------------
@@ -496,7 +534,7 @@ class TestGraph:
 
     def test_predecessors_wired_from_deps(self):
         upstream = FakeAsset()
-        downstream = FakeOtherAsset(upstream=upstream)
+        downstream = FakeOtherAsset(feed=upstream)
         dag = DAG(upstream, downstream)
         assert dag.predecessors[downstream.id] == [upstream.id]
         assert dag.successors[upstream.id] == [downstream.id]
@@ -534,21 +572,21 @@ class TestGraph:
         # Non-enabled assets are parents, not roots, so their predecessors
         # are not computed (they don't need to execute).
         upstream = FakeAsset(enabled=False)
-        downstream = FakeOtherAsset(upstream=upstream)
+        downstream = FakeOtherAsset(feed=upstream)
         dag = DAG(upstream, downstream)
         assert upstream.id not in dag.predecessors
         assert dag.predecessors[downstream.id] == [upstream.id]
 
     def test_a_bound_upstream_outside_the_dag_joins_read_only(self):
         upstream = FakeAsset()
-        downstream = FakeAssetRequiringFake(upstream=upstream)
+        downstream = FakeAssetRequiringFake(feed=upstream)
         dag = DAG(downstream)
         assert dag.operation_map[upstream.id].enabled is False
         assert dag.predecessors[downstream.id] == [upstream.id]
 
     def test_an_optional_bound_upstream_outside_the_dag_joins_read_only_too(self):
         upstream = FakeAsset()
-        asset = FakeAssetOptionallyRequiringFake(upstream=upstream)
+        asset = FakeAssetOptionallyRequiringFake(feed=upstream)
         dag = DAG(asset)
         assert dag.operation_map[upstream.id].enabled is False
         assert dag.predecessors[asset.id] == [upstream.id]
@@ -560,26 +598,26 @@ class TestGraph:
 class TestValidation:
     def test_valid_requires_contract_passes(self):
         upstream = FakeAsset()
-        downstream = FakeAssetRequiringFake(upstream=upstream)
+        downstream = FakeAssetRequiringFake(feed=upstream)
         DAG(upstream, downstream)  # no raise
 
     def test_circular_dependency_raises(self):
         a = FakeAsset(id="aaaaaaaa")
         b = FakeOtherAsset(id="bbbbbbbb")
-        a.upstream = b
-        b.upstream = a
+        a.feed = b
+        b.feed = a
         with pytest.raises(CircularDependencyError):
             DAG(a, b)
 
     def test_non_partitioned_depending_on_partitioned_raises(self):
         upstream = FakePartitionedAsset()
-        downstream = FakeAsset(upstream=upstream)
+        downstream = FakeAsset(feed=upstream)
         with pytest.raises(DAGError):
             DAG(upstream, downstream)
 
     def test_an_asset_reading_no_upstream_data_may_depend_on_a_partitioned_one(self):
         upstream = FakePartitionedAsset()
-        downstream = FakeDefinitionAsset(upstream=upstream)
+        downstream = FakeDefinitionAsset(feed=upstream)
         dag = DAG(upstream, downstream)
         assert dag.get_predecessors(downstream.id) == [upstream.id]
 
@@ -598,7 +636,7 @@ class TestGranularityAcrossEdges:
 
     def test_equal_granularity_passes(self):
         upstream = FakeDaily()
-        downstream = FakeDaily(upstream=upstream)
+        downstream = FakeDaily(feed=upstream)
         DAG(upstream, downstream)  # no raise
 
     def test_a_list_upstream_of_a_time_dependent_is_rejected(self):
@@ -724,6 +762,108 @@ class TestDeclaredResolution:
 # -- Read-only upstreams -------------------------------------------------------
 
 
+class TestUpstreamSources:
+    def test_a_sources_upstream_sources_narrow_what_its_assets_follow(self) -> None:
+        a, b = FbLike(), TtLike()
+        rollup = FakeRollup()
+        rollup.bind(il.UPSTREAM, a)
+        DAG(a, b, rollup)
+        assert rollup.totals.bound("campaigns") == [a.campaigns]
+
+    def test_an_assets_own_upstream_sources_replace_its_sources(self) -> None:
+        a, b = FbLike(), TtLike()
+        rollup = FakeRollup()
+        rollup.bind(il.UPSTREAM, a)
+        rollup.totals.bind(il.UPSTREAM, b)
+        DAG(a, b, rollup)
+        assert rollup.totals.bound("campaigns") == [b.campaigns]
+
+    def test_upstream_sources_naming_none_of_a_relations_sources_read_nothing(self) -> None:
+        a, shop = FbLike(), ShopA()
+        rollup = FakeRollup()
+        rollup.bind(il.UPSTREAM, a)
+        DAG(a, shop, rollup)
+        assert rollup.totals.bound("orders") is None
+
+    def test_upstream_sources_never_narrow_siblings(self) -> None:
+        a = FbLike()
+        rollup = FakeRollup()
+        rollup.bind(il.UPSTREAM, a)
+        DAG(a, rollup)
+        assert rollup.totals.bound("base") is rollup.base
+
+    def test_without_upstream_sources_relations_follow_the_dag(self) -> None:
+        a, b = FbLike(), TtLike()
+        rollup = FakeRollup()
+        DAG(a, b, rollup)
+        assert {asset.id for asset in rollup.totals.bound("campaigns")} == {a.campaigns.id, b.campaigns.id}
+
+    def test_unbinding_every_upstream_source_follows_the_dag_again(self) -> None:
+        a, b = FbLike(), TtLike()
+        rollup = FakeRollup()
+        rollup.bind(il.UPSTREAM, a)
+        rollup.unbind(il.UPSTREAM, a)
+        DAG(a, b, rollup)
+        assert {asset.id for asset in rollup.totals.bound("campaigns")} == {a.campaigns.id, b.campaigns.id}
+
+    def test_upstream_sources_reads_the_asset_then_its_source(self) -> None:
+        a, b = FbLike(), TtLike()
+        rollup = FakeRollup()
+        assert rollup.totals.upstream_sources() is None
+        rollup.bind(il.UPSTREAM, a)
+        assert rollup.totals.upstream_sources() == [a]
+        rollup.totals.bind(il.UPSTREAM, b)
+        assert rollup.totals.upstream_sources() == [b]
+        assert rollup.base.upstream_sources() is None
+
+
+class TestUpstreamSourceSpecs:
+    @staticmethod
+    def _specs_of(document: Any, component_id: str) -> list[dict[str, Any]]:
+        found: list[dict[str, Any]] = []
+        if isinstance(document, dict):
+            if document.get("id") == component_id and "path" in document:
+                found.append(document)
+            for value in document.values():
+                found.extend(TestUpstreamSourceSpecs._specs_of(value, component_id))
+        elif isinstance(document, list):
+            for value in document:
+                found.extend(TestUpstreamSourceSpecs._specs_of(value, component_id))
+        return found
+
+    @staticmethod
+    def _totals(dag: DAG) -> il.Asset:
+        totals = next(operation for operation in dag.operations if operation.key == "totals")
+        assert isinstance(totals, il.Asset)
+        return totals
+
+    def test_an_upstream_source_in_the_graph_is_written_once(self) -> None:
+        a, b = FbLike(), TtLike()
+        rollup = FakeRollup()
+        rollup.bind(il.UPSTREAM, a)
+        document = DAG(rollup, a, b).to_spec().model_dump(mode="json")
+
+        assert len(self._specs_of(document, a.id)) == 1
+        totals = self._totals(DAG.from_spec(DAGSpec.model_validate(document)))
+        campaigns = totals.bound("campaigns")
+        assert [source.id for source in totals.upstream_sources() or []] == [a.id]
+        assert isinstance(campaigns, list) and [asset.id for asset in campaigns] == [a.campaigns.id]
+
+    def test_an_upstream_source_outside_the_graph_is_written_without_its_relations_or_assets(self) -> None:
+        upstream = FakeAccount(connection=FakeAdsConnection(token="secret"))
+        b = TtLike()
+        rollup = FakeRollup()
+        rollup.bind(il.UPSTREAM, upstream)
+        document = DAG(b, rollup).to_spec().model_dump(mode="json")
+
+        (written,) = self._specs_of(document, upstream.id)
+        assert "connection" not in (written.get("init") or {}) and "assets" not in (written.get("init") or {})
+        assert "secret" not in str(document)
+        totals = self._totals(DAG.from_spec(DAGSpec.model_validate(document)))
+        assert [source.id for source in totals.upstream_sources() or []] == [upstream.id]
+        assert totals.bound("campaigns") == []
+
+
 class TestReadOnlyUpstreams:
     def test_bound_upstream_outside_workloads_joins_read_only(self):
         fb, matcher = FbLike(), Matcher()
@@ -762,8 +902,8 @@ class TestTraversal:
 
     def test_topological_generations_linear_chain(self):
         a = FakeAsset()
-        b = FakeOtherAsset(upstream=a)
-        c = FakeThirdAsset(upstream=b)
+        b = FakeOtherAsset(feed=a)
+        c = FakeThirdAsset(feed=b)
         dag = DAG(a, b, c)
         levels = dag.topological_generations()
         assert len(levels) == 3
@@ -773,8 +913,8 @@ class TestTraversal:
 
     def test_topological_generations_parallel_branches(self):
         a = FakeAsset()
-        b = FakeOtherAsset(upstream=a)
-        c = FakeThirdAsset(upstream=a)
+        b = FakeOtherAsset(feed=a)
+        c = FakeThirdAsset(feed=a)
         dag = DAG(a, b, c)
         levels = dag.topological_generations()
         assert levels[0] == [a]
@@ -816,21 +956,21 @@ class TestTraversal:
         # Mini-DAG shape: a skipped parent upstream of a live target. The
         # parent's edge counts as satisfied, and only the target appears.
         a = FakeAsset()
-        b = FakeOtherAsset(upstream=a)
+        b = FakeOtherAsset(feed=a)
         dag = DAG(a(enabled=False), b)
         levels = dag.topological_generations()
         assert [[asset.id for asset in level] for level in levels] == [[b.id]]
 
     def test_topological_generations_on_mini_dag(self):
         a = FakeAsset()
-        b = FakeOtherAsset(upstream=a)
+        b = FakeOtherAsset(feed=a)
         mini = DAG(a, b).mini_dag(b.id)
         levels = mini.topological_generations()
         assert [[asset.id for asset in level] for level in levels] == [[b.id]]
 
     def test_get_predecessors_returns_upstream_ids(self):
         upstream = FakeAsset()
-        downstream = FakeOtherAsset(upstream=upstream)
+        downstream = FakeOtherAsset(feed=upstream)
         dag = DAG(upstream, downstream)
         assert dag.get_predecessors(downstream.id) == [upstream.id]
 
@@ -841,7 +981,7 @@ class TestTraversal:
 
     def test_get_successors_returns_downstream_ids(self):
         upstream = FakeAsset()
-        downstream = FakeOtherAsset(upstream=upstream)
+        downstream = FakeOtherAsset(feed=upstream)
         dag = DAG(upstream, downstream)
         assert dag.get_successors(upstream.id) == [downstream.id]
 
@@ -857,7 +997,7 @@ class TestTraversal:
 class TestMiniDag:
     def test_mini_dag_contains_target_and_parents(self):
         a = FakeAsset()
-        b = FakeOtherAsset(upstream=a)
+        b = FakeOtherAsset(feed=a)
         dag = DAG(a, b)
         mini = dag.mini_dag(b.id)
 
@@ -867,7 +1007,7 @@ class TestMiniDag:
 
     def test_mini_dag_marks_parents_non_enabled(self):
         a = FakeAsset()
-        b = FakeOtherAsset(upstream=a)
+        b = FakeOtherAsset(feed=a)
         dag = DAG(a, b)
         mini = dag.mini_dag(b.id)
 
@@ -936,7 +1076,7 @@ class TestSerialization:
 
     def test_roundtrip_preserves_predecessor_wiring(self):
         upstream = FakeAsset()
-        downstream = FakeOtherAsset(upstream=upstream)
+        downstream = FakeOtherAsset(feed=upstream)
         dag = DAG(upstream, downstream)
         restored = DAG.from_spec(dag.to_spec())
 
@@ -958,7 +1098,7 @@ class TestSerialization:
 
     def test_roundtrip_via_json_string(self):
         upstream = FakeAsset()
-        downstream = FakeOtherAsset(upstream=upstream)
+        downstream = FakeOtherAsset(feed=upstream)
         dag = DAG(upstream, downstream)
 
         json_str = dag.to_spec().model_dump_json()
@@ -967,7 +1107,7 @@ class TestSerialization:
         assert len(reloaded.operations) == 2
         downstream_restored = next(a for a in reloaded.operations if type(a).key == "fake_other_asset")
         upstream_restored = next(a for a in reloaded.operations if type(a).key == "fake_asset")
-        assert downstream_restored.bound("upstream") is upstream_restored
+        assert downstream_restored.bound("feed") is upstream_restored
 
     def test_roundtrip_preserves_source_owned_assets(self):
         dag = DAG(FakeSource())
@@ -977,7 +1117,7 @@ class TestSerialization:
 
     def test_roundtrip_preserves_mini_dag_shape(self):
         a = FakeAsset()
-        b = FakeOtherAsset(upstream=a)
+        b = FakeOtherAsset(feed=a)
         dag = DAG(a, b)
         mini = dag.mini_dag(b.id)
 
