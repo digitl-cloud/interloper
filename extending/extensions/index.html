@@ -2983,6 +2983,11 @@ files stop declaring is deleted. The files hold everything, credentials included
 environment references), since nothing made in the app joins a collection served from files.
 Without them, <code>dev</code> serves the collection you build in the app. <code>uv run interloper run
 weather.paris</code> runs the same instance in the terminal.</p>
+<p>The SQLite files in <code>.interloper/</code> are never migrated. When a release needs another revision than
+a file is at, <code>dev</code> names the file and both revisions and offers to delete it and start afresh,
+losing the components made in the app and the run history; what the files or targets declare is
+written again on start. Declined, or with no terminal to ask on, <code>dev</code> stops and says to delete
+the file, with its <code>-wal</code> and <code>-shm</code> files. A configured Postgres is migrated instead.</p>
 <p>To work on a UI with hot reload, install its Python package editable and run <code>make dev-up</code>:
 <code>interloper dev</code> serves every extension UI the project holds from its own Vite dev server
 (<code>uv pip install -e examples/extension</code> for the example, which is not a workspace package and is

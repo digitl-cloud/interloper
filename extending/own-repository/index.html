@@ -2503,7 +2503,9 @@ dependency: it carries the platform you run locally and the <code>interloper ext
 <li><code>interloper.yaml</code> is the configuration every <code>interloper</code> command run in this directory reads,
   with a key that encrypts what the local instance stores. It holds that key, so <code>init</code> adds it
   to <code>.gitignore</code>. The local instance keeps its state in SQLite files in <code>.interloper/</code>, which
-  ignores itself; add a <code>postgres</code> section to keep it in a Postgres you run instead.</li>
+  ignores itself and which <code>interloper dev</code> offers to start afresh when a release changes the
+  database (<a href="../extensions/#building-it-with-the-sdk">Extensions</a>); add a <code>postgres</code> section to
+  keep it in a Postgres you run instead.</li>
 </ul>
 <h2 id="add-what-it-declares">Add what it declares<a class="headerlink" href="#add-what-it-declares" title="Permanent link">&para;</a></h2>
 <p><code>add</code> writes one part, its files and its manifest entry, and adds the dependency the part needs.
