@@ -33,7 +33,9 @@ uv run interloper extension init
 - `interloper.yaml` is the configuration every `interloper` command run in this directory reads,
   with a key that encrypts what the local instance stores. It holds that key, so `init` adds it
   to `.gitignore`. The local instance keeps its state in SQLite files in `.interloper/`, which
-  ignores itself; add a `postgres` section to keep it in a Postgres you run instead.
+  ignores itself and which `interloper dev` offers to start afresh when a release changes the
+  database ([Extensions](extensions.md#building-it-with-the-sdk)); add a `postgres` section to
+  keep it in a Postgres you run instead.
 
 ## Add what it declares
 

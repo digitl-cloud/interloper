@@ -9,6 +9,7 @@ from interloper_db.errors import (
     NotFoundError,
     QuotaExceededError,
     ReadOnlyError,
+    SQLiteRevisionError,
 )
 from interloper_db.models import (
     ACTIVE_BACKFILL_STATUSES,
@@ -100,6 +101,7 @@ __all__ = [
     "Run",
     "RunQuery",
     "RunStatus",
+    "SQLiteRevisionError",
     "Store",
     "Token",
     "TokenKind",

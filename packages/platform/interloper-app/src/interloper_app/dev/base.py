@@ -173,14 +173,14 @@ class DevCommand(Command):
 
     @staticmethod
     def _check_database(root: Path) -> None:
-        """Bring the app's database up, its tables created, or say where it was looked for.
+        """Bring the databases dev keeps up, their tables created, or say where they were looked for.
 
         Args:
-            root: The project root, whose ``.interloper/`` holds the database when no Postgres is configured.
+            root: The project root, whose ``.interloper/`` holds the databases when no Postgres is configured.
         """
         from interloper_app.dev.database import DevDatabase
 
-        DevDatabase.from_settings(root).bootstrap()
+        DevDatabase.from_settings(root).prepare()
 
     @classmethod
     def _serve(

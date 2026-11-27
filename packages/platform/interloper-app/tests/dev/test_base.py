@@ -86,13 +86,13 @@ def test_a_busy_port_is_refused_by_name(project: DevProject, monkeypatch: pytest
         DevCommand().run(_args())
 
 
-def test_the_project_s_database_is_brought_up(monkeypatch: pytest.MonkeyPatch):
-    brought_up: list[Path] = []
-    monkeypatch.setattr(DevDatabase, "bootstrap", lambda self, files=False: brought_up.append(self.root))
+def test_the_project_s_databases_are_brought_up(monkeypatch: pytest.MonkeyPatch):
+    prepared: list[Path] = []
+    monkeypatch.setattr(DevDatabase, "prepare", lambda self: prepared.append(self.root))
 
     DevCommand._check_database(Path("/work/acme"))
 
-    assert brought_up == [Path("/work/acme")]
+    assert prepared == [Path("/work/acme")]
 
 
 def test_it_serves_the_project_then_stops_everything(project: DevProject, served, monkeypatch: pytest.MonkeyPatch):

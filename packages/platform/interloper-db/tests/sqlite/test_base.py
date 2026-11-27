@@ -14,6 +14,7 @@ from sqlmodel import SQLModel
 
 from interloper_db import engine as engine_module
 from interloper_db.engine import init_engine
+from interloper_db.errors import SQLiteRevisionError
 from interloper_db.provision import _alembic_config
 from interloper_db.sqlite import SQLiteFolds, SQLiteNotifications, SQLiteSchema
 
@@ -112,5 +113,9 @@ class TestCreate:
         with engine.begin() as connection:
             connection.exec_driver_sql("UPDATE alembic_version SET version_num = '0002'")
 
-        with pytest.raises(SystemExit, match=r"at revision 0002.*delete it"):
+        with pytest.raises(SQLiteRevisionError, match=r"at revision 0002.*delete it") as raised:
             SQLiteSchema(engine).create(_alembic_config(engine))
+
+        assert raised.value.path == Path(str(engine.url.database))
+        assert raised.value.revision == "0002"
+        assert raised.value.head == ScriptDirectory.from_config(_alembic_config(engine)).get_current_head()

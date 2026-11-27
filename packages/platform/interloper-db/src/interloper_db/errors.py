@@ -6,6 +6,8 @@ InterloperError`` catches them along with the framework's own.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from interloper.errors import InterloperError
 
 
@@ -104,3 +106,33 @@ class ComponentDriftError(InterloperError):
     the API layer can treat drift as a recoverable, user-resolvable state
     rather than a hard failure.
     """
+
+
+class SQLiteRevisionError(InterloperError):
+    """A SQLite database is at another migration revision than this release's head.
+
+    SQLite databases are never migrated, so such a file can only be deleted,
+    with its ``-wal`` and ``-shm`` files, and made anew. Raised by
+    `SQLiteSchema`; what owns the file decides whether to.
+
+    Attributes:
+        path: The database file.
+        revision: The revision the file is stamped at.
+        head: The revision this release needs.
+    """
+
+    def __init__(self, path: Path, revision: str, head: str) -> None:
+        """Initialize with the file and both revisions, the message saying how to start afresh.
+
+        Args:
+            path: The database file.
+            revision: The revision the file is stamped at.
+            head: The revision this release needs.
+        """
+        super().__init__(
+            f"the SQLite database {path} is at revision {revision}, and this release needs {head}. SQLite databases "
+            "are never migrated: delete it, with its -wal and -shm files, to start afresh."
+        )
+        self.path = path
+        self.revision = revision
+        self.head = head
