@@ -2108,6 +2108,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#interloper.Destination.head" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;head
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#interloper.Destination.model_post_init" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2938,7 +2949,8 @@ whole of an unpartitioned asset. The contract is three hooks:
 partition, and <code>partition_row_counts</code> for the coverage view.
 <code>write</code> and <code>read</code> own the rest, splitting a window write into
 one call per partition and joining a window read into one table, so a
-destination is partition-correct by construction. A
+destination is partition-correct by construction, and <code>head</code> reads the
+first rows through <code>read</code> unless the backend can stop early. A
 backend that does not store per partition (a database that clears each
 partition and inserts a window in one batch) overrides <code>write</code> or
 <code>read</code> instead. Two more hooks, <code>reference</code> and <code>create_view</code>, serve
@@ -3195,6 +3207,126 @@ destination's own terms.</p>
             <td>
               <div class="doc-md-description">
                 <p>Always; this destination holds no views.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.Destination.head" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">head</span>
+
+
+<a href="#interloper.Destination.head" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">head</span><span class="p">(</span><span class="n">context</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;IOContext&lt;/span&gt; (&lt;code&gt;interloper.destination.context.IOContext&lt;/code&gt;)" href="./#interloper.IOContext">IOContext</a></span><span class="p">,</span> <span class="n">limit</span><span class="p">:</span> <span class="n"><span title="int">int</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.Any">Any</span></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Read at most <em>limit</em> rows of the data the context covers.</p>
+<p>A window, or an unpartitioned asset, is read through <code>read</code> and its
+first rows kept. A partitioned asset read without a window has no
+whole to read here, since this destination stores it per partition:
+the partitions <code>partition_row_counts</code> lists are read newest first,
+through <code>read_partition</code>, until <em>limit</em> rows are gathered. A backend
+that can stop early (a <code>LIMIT</code>, a paged listing) overrides this.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>context</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;IOContext&lt;/span&gt; (&lt;code&gt;interloper.destination.context.IOContext&lt;/code&gt;)" href="./#interloper.IOContext">IOContext</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>IO context carrying the target asset, the window and the effective schema.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>limit</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The most rows to return.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The first <em>limit</em> rows, in the representation <code>read</code> returns them in.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;DataNotFoundError&lt;/span&gt; (&lt;code&gt;interloper.errors.DataNotFoundError&lt;/code&gt;)" href="../errors/#interloper.errors.DataNotFoundError">DataNotFoundError</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If no partition of a partitioned asset was
+written; <code>read</code> raises it for the rest.</p>
               </div>
             </td>
           </tr>

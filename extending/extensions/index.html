@@ -1813,6 +1813,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#asset-uis" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Asset UIs
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#building-it-with-the-sdk" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2876,7 +2887,7 @@ the bundle (<code>external</code> in any bundler):</p>
 </tr>
 <tr>
 <td><code>@interloper/host</code></td>
-<td>the app itself: <code>defineExtension</code>, <code>useExtension</code>, <code>useApi</code>, <code>useOrgApi</code>, <code>useRealtimeSubscription</code>, <code>useToast</code>, <code>useConfirm</code>, the organisation, user, catalog and components stores, <code>errorToast</code>, <code>componentIcon</code>, the <code>AppNavbar</code>, <code>CardHeader</code>, <code>DataTable</code>, <code>LoadError</code> and <code>StatusBadge</code> components and a set of Nuxt UI components (<code>UButton</code>, <code>UCard</code>, <code>UDashboardPanel</code>, <code>UTable</code>, <code>UModal</code>, <code>UForm</code>, ...) that render with the app's theme</td>
+<td>the app itself: <code>defineExtension</code>, <code>useExtension</code>, <code>useAssetRows</code>, <code>useApi</code>, <code>useOrgApi</code>, <code>useRealtimeSubscription</code>, <code>useToast</code>, <code>useConfirm</code>, the organisation, user, catalog, components and runs stores, <code>errorToast</code>, <code>componentIcon</code>, the <code>AppNavbar</code>, <code>AssetRowsTable</code>, <code>AssetTableEditor</code>, <code>CardHeader</code>, <code>DataTable</code>, <code>LoadError</code> and <code>StatusBadge</code> components and a set of Nuxt UI components (<code>UButton</code>, <code>UCard</code>, <code>UDashboardPanel</code>, <code>UTable</code>, <code>UModal</code>, <code>UForm</code>, ...) that render with the app's theme</td>
 </tr>
 </tbody>
 </table>
@@ -2910,6 +2921,130 @@ without repeating its key:</p>
 a page's path as <code>addRoute</code> does. A sidebar entry, its <code>views</code> a submenu, follows the app's own
 and is found by the command palette under its label and keywords. An extension that fails to
 load is reported in a toast and skipped; the app and the other extensions carry on.</p>
+<h3 id="asset-uis">Asset UIs<a class="headerlink" href="#asset-uis" title="Permanent link">&para;</a></h3>
+<p>An extension can give an asset a UI of its own. <code>addAssetUI</code> names the asset definition by its
+qualified key, the label and icon the app shows for it, and the component it renders:</p>
+<div class="language-js highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">defineAsyncComponent</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">'vue'</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">defineExtension</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">'@interloper/host'</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="k">export</span><span class="w"> </span><span class="k">default</span><span class="w"> </span><span class="nx">defineExtension</span><span class="p">({</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">    </span><span class="nx">setup</span><span class="p">(</span><span class="nx">host</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="w">        </span><span class="nx">host</span><span class="p">.</span><span class="nx">addAssetUI</span><span class="p">({</span>
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="w">            </span><span class="nx">asset</span><span class="o">:</span><span class="w"> </span><span class="s1">'campaign_matcher.campaign_matches'</span><span class="p">,</span>
+</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="w">            </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="s1">'Bucket builder'</span><span class="p">,</span>
+</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="w">            </span><span class="nx">icon</span><span class="o">:</span><span class="w"> </span><span class="s1">'i-lucide-boxes'</span><span class="p">,</span>
+</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a><span class="w">            </span><span class="nx">component</span><span class="o">:</span><span class="w"> </span><span class="nx">defineAsyncComponent</span><span class="p">(()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="k">import</span><span class="p">(</span><span class="s1">'./BucketBuilder.vue'</span><span class="p">)),</span>
+</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="w">        </span><span class="p">})</span>
+</span><span id="__span-13-12"><a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a><span class="w">    </span><span class="p">},</span>
+</span><span id="__span-13-13"><a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a><span class="p">})</span>
+</span></code></pre></div>
+<p>Every asset of a source opens from the Assets page: from a button in its side pane, labelled with
+its UI's label, "Edit" for a <a href="../../guide/views/#decision-tables">decision table</a> and "Rows" for
+any other asset, and, in a graph the user may edit, from an icon on its card when it has a UI. It
+opens in one modal per source, titled with the source's name: a tab for every asset of the source
+that has a UI, in the source's order, the asset it opened on selected, plus that asset's rows when
+it has no UI. An asset's UI is the one an extension contributed, else the grid editor when it is a
+decision table. A second UI for the same asset replaces the first, with a warning in the console.</p>
+<p>The component receives one prop, <code>context</code>, an <code>AssetUIContext</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>What it holds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>asset</code></td>
+<td>the asset instance the tab shows</td>
+</tr>
+<tr>
+<td><code>source</code></td>
+<td>the source that owns it</td>
+</tr>
+<tr>
+<td><code>assets</code></td>
+<td>the source's assets by bare key: <code>context.assets.buckets</code></td>
+</tr>
+<tr>
+<td><code>canEdit</code></td>
+<td>whether the user may write the source's decision tables and run it: an editor or an admin</td>
+</tr>
+</tbody>
+</table>
+<p>An asset UI owns no storage and no routes: it is a client of the platform's rows API, and keeps to
+one rule. <strong>An asset UI reads any asset of its source (and that source's upstreams), writes only its
+source's decision tables, and runs only its source.</strong> <code>useExtension()</code> belongs to an extension's
+pages and throws anywhere else; an asset UI has its context instead, and <code>useAssetRows()</code>:</p>
+<div class="language-js highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">useAssetRows</span><span class="p">,</span><span class="w"> </span><span class="nx">useRunsStore</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">'@interloper/host'</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="kd">const</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">read</span><span class="p">,</span><span class="w"> </span><span class="nx">write</span><span class="p">,</span><span class="w"> </span><span class="nx">run</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">useAssetRows</span><span class="p">()</span>
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="kd">const</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">buckets</span><span class="p">,</span><span class="w"> </span><span class="nx">campaign_matches</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">props</span><span class="p">.</span><span class="nx">context</span><span class="p">.</span><span class="nx">assets</span>
+</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>
+</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="kd">const</span><span class="w"> </span><span class="nx">matches</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">read</span><span class="p">(</span><span class="nx">campaign_matches</span><span class="p">.</span><span class="nx">id</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">search</span><span class="o">:</span><span class="w"> </span><span class="s1">'black friday'</span><span class="p">,</span><span class="w"> </span><span class="nx">limit</span><span class="o">:</span><span class="w"> </span><span class="mf">10</span><span class="nx">_000</span><span class="w"> </span><span class="p">})</span>
+</span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="kd">const</span><span class="w"> </span><span class="nx">table</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">read</span><span class="p">(</span><span class="nx">buckets</span><span class="p">.</span><span class="nx">id</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">limit</span><span class="o">:</span><span class="w"> </span><span class="mf">10</span><span class="nx">_000</span><span class="w"> </span><span class="p">})</span>
+</span><span id="__span-14-8"><a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="k">await</span><span class="w"> </span><span class="nx">write</span><span class="p">(</span><span class="nx">buckets</span><span class="p">.</span><span class="nx">id</span><span class="p">,</span><span class="w"> </span><span class="p">[...</span><span class="nx">table</span><span class="p">.</span><span class="nx">rows</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">bucket_id</span><span class="o">:</span><span class="w"> </span><span class="s1">'b7'</span><span class="p">,</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">'Black Friday'</span><span class="p">,</span><span class="w"> </span><span class="nx">active</span><span class="o">:</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}],</span><span class="w"> </span><span class="nx">table</span><span class="p">.</span><span class="nx">version</span><span class="p">)</span>
+</span><span id="__span-14-9"><a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="kd">const</span><span class="w"> </span><span class="nx">runId</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">run</span><span class="p">(</span><span class="nx">props</span><span class="p">.</span><span class="nx">context</span><span class="p">.</span><span class="nx">source</span><span class="p">.</span><span class="nx">id</span><span class="p">)</span>
+</span><span id="__span-14-10"><a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="nx">useRunsStore</span><span class="p">().</span><span class="nx">findById</span><span class="p">(</span><span class="nx">runId</span><span class="p">)</span><span class="o">?</span><span class="p">.</span><span class="nx">status</span><span class="w">   </span><span class="c1">// the run, live</span>
+</span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Call</th>
+<th>Request</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>read(assetId, { search, limit, offset })</code></td>
+<td><code>GET /api/organisations/{org_id}/assets/{asset_id}/rows?search=&amp;limit=&amp;offset=</code></td>
+<td>A page of the rows, for a viewer.</td>
+</tr>
+<tr>
+<td><code>write(assetId, rows, version)</code></td>
+<td><code>PUT</code> on the same path, <code>{"rows": [...], "version": "..."}</code></td>
+<td>Rewrites a decision table whole, for an editor.</td>
+</tr>
+<tr>
+<td><code>run(componentId)</code></td>
+<td><code>POST /api/organisations/{org_id}/runs</code></td>
+<td>Queues a run of a source or an asset, through the runs store, and returns its id.</td>
+</tr>
+</tbody>
+</table>
+<p>A read goes through the asset's default destination and answers an <code>AssetRows</code>: <code>columns</code> (the
+schema's, in its order, when it declares one, else the data's), <code>rows</code> (JSON-safe: dates and
+instants as ISO text, a missing value as <code>null</code>), <code>total</code>, <code>truncated</code> and <code>version</code>. <code>limit</code> runs
+from 1 to 10,000, 100 by default. <code>search</code> keeps the rows with a text cell that contains it, case
+ignored. No read goes past 10,000 rows: a page without a search reads up to its own end, and
+<code>truncated</code> says more rows follow it; a page with a search, and any read of a decision table, reads
+the first 10,000 rows and searches them, so <code>total</code> counts the matches among them and <code>truncated</code>
+says the table holds more. Either way a truncated table reads as "more than
+<code>total</code> rows". A table never written answers no rows. A destination that fails answers 502 with
+its message.</p>
+<p>Anything narrower than a search is the UI's own: it reads the rows, up to the cap, and narrows
+them in the browser.</p>
+<p>A decision table's read carries its <code>version</code>, a hash of every row whatever their order, and its
+write names the version the rows were read at: a table that changed since answers 409, and is not
+written. A write replaces the table in every destination of the asset, an empty list emptying it;
+it refuses more than 10,000 rows and a row that fails the schema (422, naming the row and the
+field), and answers the new table's first page and version.</p>
+<p>The app's own UIs are exported for an asset UI to embed, each taking a <code>context</code> like its own (<code>{
+...context, asset: context.assets.buckets }</code> for another asset of the source):</p>
+<ul>
+<li><code>AssetRowsTable</code>, an asset's rows: 100 a page, a search for words in its text columns, and the
+  "more than N rows" note when the read stops short.</li>
+<li><code>AssetTableEditor</code>, a decision table's grid: a column per field of its schema (text, number,
+  switch, date, date and time, and a select for an enum; a list or an object shows as JSON and
+  keeps its values), required fields marked, rows added, edited and deleted, then "Save and run"
+  writes the table with its version and runs its source: at once, or, when an asset of the
+  source is partitioned, through the source's run dialog, which asks for the partition as the
+  source's own Run does. A table changed meanwhile is
+  not overwritten: the editor says so and offers to reload it. A viewer sees the rows read-only,
+  and so does everyone when the table holds more than the 10,000 rows a read reaches, since
+  saving it would drop the rest.</li>
+</ul>
 <h3 id="building-it-with-the-sdk">Building it with the SDK<a class="headerlink" href="#building-it-with-the-sdk" title="Permanent link">&para;</a></h3>
 <p><code>@interloper/ui</code> (<code>packages/platform/interloper-app/sdk/</code>) builds an extension's UI the way the
 app is built: Vue single-file components, Nuxt UI components used in templates without an
@@ -2917,20 +3052,20 @@ import, Tailwind classes that resolve to the app's theme, and types for <code>@i
 repository's pnpm workspace holds the app, the SDK, every <code>packages/extensions/*/ui</code> and the
 examples' UIs; a first-party extension keeps its UI there, beside its Python package.
 <code>examples/extension/</code> is a complete one, an API route and a page:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>examples/extension/
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>  pyproject.toml
-</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>  src/interloper_example/
-</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>    extension.yaml         routes and ui entries
-</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>    routes.py
-</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>    ui.py                  UI = UIBundle.from_vite(Path(__file__).parent / "static")
-</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>    static/                the UI's build, gitignored
-</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>  ui/
-</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>    package.json           devDependencies: @interloper/ui, vite, vue, typescript, vue-tsc
-</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>    vite.config.ts         export default interloper({ outDir: '../src/interloper_example/static' })
-</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a>    tsconfig.json          { "extends": "@interloper/ui/tsconfig", "include": ["src"] }
-</span><span id="__span-13-12"><a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a>    src/index.ts           export default defineExtension({ setup(host) { ... } })
-</span><span id="__span-13-13"><a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a>    src/main.css           @import "@interloper/ui/tailwind.css";
-</span><span id="__span-13-14"><a id="__codelineno-13-14" name="__codelineno-13-14" href="#__codelineno-13-14"></a>    src/pages/Greeting.vue
+<div class="language-text highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>examples/extension/
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>  pyproject.toml
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>  src/interloper_example/
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>    extension.yaml         routes and ui entries
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>    routes.py
+</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>    ui.py                  UI = UIBundle.from_vite(Path(__file__).parent / "static")
+</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>    static/                the UI's build, gitignored
+</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>  ui/
+</span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a>    package.json           devDependencies: @interloper/ui, vite, vue, typescript, vue-tsc
+</span><span id="__span-15-10"><a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a>    vite.config.ts         export default interloper({ outDir: '../src/interloper_example/static' })
+</span><span id="__span-15-11"><a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a>    tsconfig.json          { "extends": "@interloper/ui/tsconfig", "include": ["src"] }
+</span><span id="__span-15-12"><a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a>    src/index.ts           export default defineExtension({ setup(host) { ... } })
+</span><span id="__span-15-13"><a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a>    src/main.css           @import "@interloper/ui/tailwind.css";
+</span><span id="__span-15-14"><a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a>    src/pages/Greeting.vue
 </span></code></pre></div>
 <p><code>interloper()</code> is the whole Vite configuration: it leaves the shared modules to the import map,
 resolves the components <code>@interloper/host</code> exports (<code>UButton</code>, <code>UCard</code>, <code>AppNavbar</code>, ...) where
@@ -2941,10 +3076,10 @@ app's page already carries the preflight and the theme, so <code>text-muted</cod
 sets.</p>
 <p>The SDK derives what it knows of the app from the app itself, so it is built after the app is
 prepared, and again when <code>host.ts</code> or the theme changes:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>pnpm<span class="w"> </span>install<span class="w">                                </span><span class="c1"># the workspace; prepares the app</span>
-</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>pnpm<span class="w"> </span>--filter<span class="w"> </span>@interloper/ui<span class="w"> </span>build<span class="w">          </span><span class="c1"># @interloper/host's types, its components, the theme</span>
-</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>pnpm<span class="w"> </span>--filter<span class="w"> </span>@interloper/example<span class="w"> </span>build<span class="w">     </span><span class="c1"># the UI, into the Python package</span>
-</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>pnpm<span class="w"> </span>--filter<span class="w"> </span>@interloper/example<span class="w"> </span>typecheck
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>pnpm<span class="w"> </span>install<span class="w">                                </span><span class="c1"># the workspace; prepares the app</span>
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>pnpm<span class="w"> </span>--filter<span class="w"> </span>@interloper/ui<span class="w"> </span>build<span class="w">          </span><span class="c1"># @interloper/host's types, its components, the theme</span>
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>pnpm<span class="w"> </span>--filter<span class="w"> </span>@interloper/example<span class="w"> </span>build<span class="w">     </span><span class="c1"># the UI, into the Python package</span>
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>pnpm<span class="w"> </span>--filter<span class="w"> </span>@interloper/example<span class="w"> </span>typecheck
 </span></code></pre></div>
 <p>The types are the app's own declarations of <code>host.ts</code> and every file it reaches, so a page is
 checked against the stores, composables and component props the app runs; a declaration error
@@ -3011,27 +3146,27 @@ warning.</p>
 installed manifest and names each manifest, section or entry that fails, and each section no
 registry reads, which is usually a misspelt section name. It exits non-zero when it names
 anything:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>$<span class="w"> </span>interloper<span class="w"> </span>extension<span class="w"> </span>check
-</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>package<span class="w"> </span><span class="s1">'interloper_acme'</span>,<span class="w"> </span>section<span class="w"> </span><span class="s1">'runner'</span>:<span class="w"> </span>no<span class="w"> </span>registry<span class="w"> </span>reads<span class="w"> </span>this<span class="w"> </span>section
-</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>Checked<span class="w"> </span><span class="m">48</span><span class="w"> </span>entries<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="m">8</span><span class="w"> </span>sections:<span class="w"> </span><span class="m">1</span><span class="w"> </span>problem<span class="o">(</span>s<span class="o">)</span>.
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>$<span class="w"> </span>interloper<span class="w"> </span>extension<span class="w"> </span>check
+</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>package<span class="w"> </span><span class="s1">'interloper_acme'</span>,<span class="w"> </span>section<span class="w"> </span><span class="s1">'runner'</span>:<span class="w"> </span>no<span class="w"> </span>registry<span class="w"> </span>reads<span class="w"> </span>this<span class="w"> </span>section
+</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>Checked<span class="w"> </span><span class="m">48</span><span class="w"> </span>entries<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="m">8</span><span class="w"> </span>sections:<span class="w"> </span><span class="m">1</span><span class="w"> </span>problem<span class="o">(</span>s<span class="o">)</span>.
 </span></code></pre></div>
 <h2 id="the-registry-primitive">The registry primitive<a class="headerlink" href="#the-registry-primitive" title="Permanent link">&para;</a></h2>
 <p>Every registry is an instance of <code>il.Registry</code>: a lazily-populated name-to-object mapping,
 optionally fed by one manifest section:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">interloper</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">il</span>
-</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.oauth</span><span class="w"> </span><span class="kn">import</span> <span class="n">PROVIDERS</span>
-</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.representation</span><span class="w"> </span><span class="kn">import</span> <span class="n">REPRESENTATIONS</span>
-</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.runner</span><span class="w"> </span><span class="kn">import</span> <span class="n">RUNNERS</span>
-</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>
-</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="n">il</span><span class="o">.</span><span class="n">KINDS</span><span class="p">[</span><span class="s2">"connection"</span><span class="p">]</span>          <span class="c1"># the anchor class; KeyError with the available names on a miss</span>
-</span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="n">PROVIDERS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"google"</span><span class="p">)</span>         <span class="c1"># None on a miss</span>
-</span><span id="__span-16-8"><a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="s2">"dataframe"</span> <span class="ow">in</span> <span class="n">REPRESENTATIONS</span>
-</span><span id="__span-16-9"><a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a><span class="n">RUNNERS</span><span class="o">.</span><span class="n">keys</span><span class="p">(),</span> <span class="n">RUNNERS</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="nb">len</span><span class="p">(</span><span class="n">RUNNERS</span><span class="p">)</span>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">interloper</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">il</span>
+</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.oauth</span><span class="w"> </span><span class="kn">import</span> <span class="n">PROVIDERS</span>
+</span><span id="__span-18-3"><a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.representation</span><span class="w"> </span><span class="kn">import</span> <span class="n">REPRESENTATIONS</span>
+</span><span id="__span-18-4"><a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.runner</span><span class="w"> </span><span class="kn">import</span> <span class="n">RUNNERS</span>
+</span><span id="__span-18-5"><a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>
+</span><span id="__span-18-6"><a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="n">il</span><span class="o">.</span><span class="n">KINDS</span><span class="p">[</span><span class="s2">"connection"</span><span class="p">]</span>          <span class="c1"># the anchor class; KeyError with the available names on a miss</span>
+</span><span id="__span-18-7"><a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a><span class="n">PROVIDERS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"google"</span><span class="p">)</span>         <span class="c1"># None on a miss</span>
+</span><span id="__span-18-8"><a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a><span class="s2">"dataframe"</span> <span class="ow">in</span> <span class="n">REPRESENTATIONS</span>
+</span><span id="__span-18-9"><a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a><span class="n">RUNNERS</span><span class="o">.</span><span class="n">keys</span><span class="p">(),</span> <span class="n">RUNNERS</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="nb">len</span><span class="p">(</span><span class="n">RUNNERS</span><span class="p">)</span>
 </span></code></pre></div>
 <p>A package that wants extensions of its own builds one, naming its section:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">Registry</span>
-</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>
-</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="n">WIDGETS</span><span class="p">:</span> <span class="n">Registry</span><span class="p">[</span><span class="nb">type</span><span class="p">[</span><span class="n">Widget</span><span class="p">]]</span> <span class="o">=</span> <span class="n">Registry</span><span class="p">(</span><span class="s2">"acme_widgets"</span><span class="p">)</span>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">Registry</span>
+</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>
+</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="n">WIDGETS</span><span class="p">:</span> <span class="n">Registry</span><span class="p">[</span><span class="nb">type</span><span class="p">[</span><span class="n">Widget</span><span class="p">]]</span> <span class="o">=</span> <span class="n">Registry</span><span class="p">(</span><span class="s2">"acme_widgets"</span><span class="p">)</span>
 </span></code></pre></div>
 <p>Registration is first-wins and idempotent. Loading happens once, on first lookup, serialized
 across threads so concurrent first lookups never observe a half-populated registry, and a failed
@@ -3039,8 +3174,8 @@ read retries on the next lookup. An <code>adopt</code> transform lets a registry
 own <code>key</code> rather than the declared name, which is why providers and representations are found
 under their declared keys.</p>
 <p>Code can also register explicitly, for tests or dynamic composition:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.runner</span><span class="w"> </span><span class="kn">import</span> <span class="n">RUNNERS</span>
-</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="n">RUNNERS</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"fake"</span><span class="p">,</span> <span class="n">FakeRunner</span><span class="p">)</span>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.runner</span><span class="w"> </span><span class="kn">import</span> <span class="n">RUNNERS</span>
+</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="n">RUNNERS</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"fake"</span><span class="p">,</span> <span class="n">FakeRunner</span><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="kinds-versus-components">Kinds versus components<a class="headerlink" href="#kinds-versus-components" title="Permanent link">&para;</a></h2>
 <p><code>kinds</code> says what kinds exist; <code>components</code> says what classes exist. Kind anchors are framework,

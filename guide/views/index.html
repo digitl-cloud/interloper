@@ -862,6 +862,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="References">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#decision-tables" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Decision tables
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2510,7 +2527,8 @@
 <h1 id="views-references">Views &amp; references<a class="headerlink" href="#views-references" title="Permanent link">&para;</a></h1>
 <p>Two kinds of asset besides the one that writes rows. A <strong>view</strong> materializes its definition: its
 destination creates a warehouse view from what <code>data()</code> returns. A <strong>reference</strong> materializes
-nothing: it points at a table that already exists and reads it. Both are assets in every other
+nothing: it points at a table that already exists, or at a decision table whose rows people edit
+in the app, and reads it. Both are assets in every other
 respect, with lineage, relations, a schema and a place in the catalog.</p>
 <table>
 <thead>
@@ -2595,8 +2613,36 @@ that defines <code>ibis_view</code>s pulls in no database driver.</p>
 <p>A reference names its table as written, wildcard and all; the dataset is the asset's, the source's
 by default. Either may name a field of the source in braces (<code>dataset="analytics_{property_id}"</code>),
 filled per instance, which is how the GA4 export points <code>events</code> at the property's own dataset.
-Nothing is created or written. Downstream assets read it like any asset, and views build on it like
-any table.</p>
+Without a <code>table</code>, a reference refers to its own table, named as any asset's is. Nothing is created
+or written by a run. Downstream assets read it like any asset, and views build on it like any table.</p>
+<h3 id="decision-tables">Decision tables<a class="headerlink" href="#decision-tables" title="Permanent link">&para;</a></h3>
+<p><code>editable=True</code> makes a reference a <strong>decision table</strong>: rows people decide (a bucket, an
+assignment), which the app edits in a grid and rewrites whole, in every destination of the asset.
+Everything computed from those decisions is an ordinary asset reading the table as an upstream.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Bucket</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Schema</span><span class="p">):</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">bucket_id</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="n">active</span><span class="p">:</span> <span class="nb">bool</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="nd">@il</span><span class="o">.</span><span class="n">source</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="k">class</span><span class="w"> </span><span class="nc">CampaignMatcher</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Source</span><span class="p">):</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">reference</span><span class="p">(</span><span class="n">editable</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="n">Bucket</span><span class="p">)</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">buckets</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">        </span><span class="sd">"""The buckets campaigns are sorted into."""</span>
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>
+</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span>
+</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">campaign_matches</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">buckets</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Upstream</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>        <span class="o">...</span>
+</span></code></pre></div>
+<p>A decision table declares a <code>schema</code>, which every write is checked against, and no <code>partitioning</code>,
+since it is only ever written whole; either is refused when the class is defined. A run does
+nothing for it, and a table nobody has written yet reads as no data, as any missing upstream does:
+an optional relation receives <code>None</code>. The catalog marks it with <code>editable</code> on its definition.</p>
+<p>The API reads any asset's rows through its default destination, paged, capped and searched
+(<code>GET /api/organisations/{org_id}/assets/{asset_id}/rows</code>), and rewrites a
+decision table with the editor role (<code>PUT</code> on the same path), refusing rows that fail the schema
+and a write over rows that changed since they were read.</p>
 <p>A source whose tables exist in one warehouse only says so with a narrowed <code>destinations</code> relation,
 checked when a destination is bound: the GA4 export declares
 <code>relations={"destinations": il.Relation("destination", "bigquery_destination", many=True, optional=True)}</code>
