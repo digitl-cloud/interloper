@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import io
+import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
 from interloper_db import engine as engine_module
 from interloper_db.settings import PostgresSettings
+from sqlalchemy import Engine, create_engine, inspect
 from sqlalchemy.exc import OperationalError
 
 from interloper_app.dev import database as database_module
@@ -23,6 +26,44 @@ def _unconfigured() -> PostgresSettings:
 def _postgres(**fields: Any) -> PostgresSettings:
     # Built from these fields alone: the repository's interloper.yaml configures a Postgres of its own.
     return PostgresSettings.model_construct(**fields)
+
+
+class _Terminal(io.StringIO):
+    def isatty(self) -> bool:
+        return True
+
+
+def _bring_up(database: DevDatabase, *, files: bool = False) -> Engine:
+    try:
+        return database.bootstrap(files=files)
+    finally:
+        engine_module._engine = None
+
+
+def _outdated(database: DevDatabase, *, files: bool = False) -> None:
+    """Leave the database at revision 0002, holding a table no fresh one has."""
+    engine = _bring_up(database, files=files)
+    with engine.begin() as connection:
+        connection.exec_driver_sql("UPDATE alembic_version SET version_num = '0002'")
+        connection.exec_driver_sql("CREATE TABLE kept (id INTEGER)")
+    engine.dispose()
+
+
+def _tables(path: Path) -> list[str]:
+    engine = create_engine(f"sqlite:///{path}")
+    try:
+        return inspect(engine).get_table_names()
+    finally:
+        engine.dispose()
+
+
+def _revision(path: Path) -> str:
+    engine = create_engine(f"sqlite:///{path}")
+    try:
+        with engine.connect() as connection:
+            return connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
+    finally:
+        engine.dispose()
 
 
 class TestUrl:
@@ -116,6 +157,122 @@ class TestBootstrap:
 
         with pytest.raises(SystemExit, match=r"the SQLite database in .*\.interloper cannot be opened"):
             DevDatabase(tmp_path, _unconfigured()).bootstrap()
+
+
+class TestAnotherRevision:
+    """A SQLite file at another revision, recreated on the person's word and kept otherwise."""
+
+    @pytest.fixture
+    def database(self, tmp_path: Path) -> DevDatabase:
+        """A project whose app database is at revision 0002.
+
+        Args:
+            tmp_path: Pytest's temporary directory, the project root.
+
+        Returns:
+            The project's database.
+        """
+        database = DevDatabase(tmp_path, _unconfigured())
+        _outdated(database)
+        return database
+
+    def test_on_yes_it_is_deleted_and_brought_up_afresh(
+        self, database: DevDatabase, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        asked: list[str] = []
+        monkeypatch.setattr(sys, "stdin", _Terminal())
+        monkeypatch.setattr("builtins.input", lambda prompt: asked.append(prompt) or "y")
+
+        _bring_up(database).dispose()
+
+        head = _revision(database.path())
+        assert "kept" not in _tables(database.path())
+        assert head != "0002"
+        assert asked == [
+            (
+                f"The SQLite database {database.path()} is at revision 0002, and this release needs {head}. SQLite "
+                "databases are never migrated: starting afresh deletes it, and with it the components made in the "
+                "app and the run history. What a spec file or a target declares is applied again on start.\nDelete "
+                "it and start afresh? [y/N] "
+            )
+        ]
+
+    def test_on_no_dev_stops_and_the_file_is_kept(self, database: DevDatabase, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(sys, "stdin", _Terminal())
+        monkeypatch.setattr("builtins.input", lambda prompt: "n")
+
+        with pytest.raises(SystemExit, match=r"^Error: the SQLite database .* is at revision 0002.*delete it"):
+            _bring_up(database)
+
+        assert "kept" in _tables(database.path())
+
+    def test_without_a_terminal_dev_stops_unasked_and_the_file_is_kept(
+        self, database: DevDatabase, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(sys, "stdin", io.StringIO())
+        monkeypatch.setattr("builtins.input", lambda prompt: pytest.fail("asked without a terminal"))
+
+        with pytest.raises(SystemExit, match=r"^Error: the SQLite database .* is at revision 0002.*delete it"):
+            _bring_up(database)
+
+        assert "kept" in _tables(database.path())
+
+
+class TestPrepare:
+    """Every database dev keeps brought up before anything is served."""
+
+    @pytest.fixture
+    def brought_up(self, monkeypatch: pytest.MonkeyPatch) -> list[bool]:
+        """Record which database each bring-up is for, without bringing any up.
+
+        Args:
+            monkeypatch: Pytest's monkeypatch, which replaces `DevDatabase.bootstrap`.
+
+        Returns:
+            Whether each bring-up was file mode's, in order.
+        """
+        calls: list[bool] = []
+        engine = create_engine("sqlite://")
+        monkeypatch.setattr(DevDatabase, "bootstrap", lambda self, files=False: calls.append(files) or engine)
+        return calls
+
+    def test_the_app_s_database_is_brought_up(self, tmp_path: Path, brought_up: list[bool]) -> None:
+        DevDatabase(tmp_path, _unconfigured()).prepare()
+
+        assert brought_up == [False]
+
+    def test_file_mode_s_sqlite_file_is_brought_up_when_there_is_one(
+        self, tmp_path: Path, brought_up: list[bool]
+    ) -> None:
+        database = DevDatabase(tmp_path, _unconfigured())
+        database.path(files=True).parent.mkdir()
+        database.path(files=True).touch()
+
+        database.prepare()
+
+        assert brought_up == [False, True]
+
+    def test_on_postgres_file_mode_s_database_is_left_to_the_platform(
+        self, tmp_path: Path, brought_up: list[bool]
+    ) -> None:
+        DevDatabase(tmp_path, _postgres(database="interloper")).prepare()
+
+        assert brought_up == [False]
+
+    def test_an_outdated_file_mode_database_is_recreated_up_front(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        database = DevDatabase(tmp_path, _unconfigured())
+        _outdated(database, files=True)
+        monkeypatch.setattr(sys, "stdin", _Terminal())
+        monkeypatch.setattr("builtins.input", lambda prompt: "yes")
+
+        try:
+            database.prepare()
+        finally:
+            engine_module._engine = None
+
+        assert "kept" not in _tables(database.path(files=True))
 
 
 def test_connect_binds_the_app_s_collection(monkeypatch: pytest.MonkeyPatch) -> None:

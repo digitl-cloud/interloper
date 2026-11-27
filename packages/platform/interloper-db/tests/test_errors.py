@@ -1,12 +1,13 @@
 """Tests for ``interloper_db.errors``."""
 
 import importlib
+from pathlib import Path
 
 import pytest
 from interloper.errors import InterloperError
 
 import interloper_db
-from interloper_db import ConflictError, InUseError, NotFoundError, QuotaExceededError
+from interloper_db import ConflictError, InUseError, NotFoundError, QuotaExceededError, SQLiteRevisionError
 
 PLATFORM_ERRORS = [
     "NotFoundError",
@@ -15,6 +16,7 @@ PLATFORM_ERRORS = [
     "QuotaExceededError",
     "HydrationError",
     "ComponentDriftError",
+    "SQLiteRevisionError",
 ]
 
 
@@ -72,3 +74,22 @@ class TestQuotaExceededError:
 
         assert str(error) == "Too many sources"
         assert (error.quota, error.limit, error.used) == ("max_sources", 10, 10)
+
+
+class TestSQLiteRevisionError:
+    """A SQLite file this release cannot serve, named with both revisions for what owns it to act on."""
+
+    def test_the_file_and_both_revisions_are_carried(self):
+        path = Path("/work/acme/.interloper/interloper.db")
+
+        error = SQLiteRevisionError(path, "0004", "0006")
+
+        assert (error.path, error.revision, error.head) == (path, "0004", "0006")
+
+    def test_the_message_says_how_to_start_afresh(self):
+        error = SQLiteRevisionError(Path("/work/acme/.interloper/interloper.db"), "0004", "0006")
+
+        assert str(error) == (
+            "the SQLite database /work/acme/.interloper/interloper.db is at revision 0004, and this release needs "
+            "0006. SQLite databases are never migrated: delete it, with its -wal and -shm files, to start afresh."
+        )

@@ -387,6 +387,12 @@ environment references), since nothing made in the app joins a collection served
 Without them, `dev` serves the collection you build in the app. `uv run interloper run
 weather.paris` runs the same instance in the terminal.
 
+The SQLite files in `.interloper/` are never migrated. When a release needs another revision than
+a file is at, `dev` names the file and both revisions and offers to delete it and start afresh,
+losing the components made in the app and the run history; what the files or targets declare is
+written again on start. Declined, or with no terminal to ask on, `dev` stops and says to delete
+the file, with its `-wal` and `-shm` files. A configured Postgres is migrated instead.
+
 To work on a UI with hot reload, install its Python package editable and run `make dev-up`:
 `interloper dev` serves every extension UI the project holds from its own Vite dev server
 (`uv pip install -e examples/extension` for the example, which is not a workspace package and is

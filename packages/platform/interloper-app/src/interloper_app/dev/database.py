@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import hashlib
+import logging
+import sys
 from pathlib import Path
 from typing import ClassVar
 
+from interloper_db.engine import get_engine
+from interloper_db.errors import SQLiteRevisionError
 from interloper_db.provision import bootstrap, connect
 from interloper_db.settings import PostgresSettings
 from sqlalchemy import Engine
 from sqlalchemy.exc import OperationalError
+
+logger = logging.getLogger(__name__)
 
 
 class DevDatabase:
@@ -18,6 +24,10 @@ class DevDatabase:
     File mode keeps a database of its own, so the files' instances never touch
     the app's: ``files.db`` beside ``interloper.db``, or on Postgres one beside
     the configured database, one per checkout.
+
+    A SQLite file is never migrated: one at another revision than this
+    release's is deleted and made anew on the person's word, asked on the
+    terminal ``dev`` runs in, and stops ``dev`` otherwise.
     """
 
     FOLDER: ClassVar[str] = ".interloper"
@@ -44,6 +54,17 @@ class DevDatabase:
         """
         return cls(root, PostgresSettings.get())
 
+    def path(self, *, files: bool = False) -> Path:
+        """The SQLite file of the collection made in the app, or of file mode's, which serves when no Postgres does.
+
+        Args:
+            files: Whether it is file mode's.
+
+        Returns:
+            ``interloper.db`` or ``files.db`` in the project's `FOLDER`.
+        """
+        return self.root / self.FOLDER / ("files.db" if files else "interloper.db")
+
     def url(self, *, files: bool = False) -> str:
         """The URL of the collection made in the app, or of file mode's.
 
@@ -54,13 +75,60 @@ class DevDatabase:
             The configured Postgres's URL (file mode's database beside it), or a SQLite file's.
         """
         if not self.postgres.configured:
-            return f"sqlite:///{self.root / self.FOLDER / ('files.db' if files else 'interloper.db')}"
+            return f"sqlite:///{self.path(files=files)}"
         if not files:
             return self.postgres.dsn
         return self.postgres.model_copy(update={"database": self._files_database()}).dsn
 
+    def prepare(self) -> None:
+        """Bring up, before anything is served, every database ``dev`` keeps: the app's, and file mode's SQLite file.
+
+        File mode's is brought up only when its file exists: the platform
+        process brings it up again in file mode, but has no terminal to ask
+        on, so a file at another revision is recreated here, where the person
+        still can be asked. This process holds no connection afterwards.
+        """
+        self.bootstrap().dispose()
+        if not self.postgres.configured and self.path(files=True).exists():
+            self.bootstrap(files=True).dispose()
+
     def bootstrap(self, *, files: bool = False) -> Engine:
         """Bring the database up and bind the process engine to it.
+
+        A SQLite file at another revision than this release's is deleted and
+        brought up anew when the person, asked on the terminal, says so.
+
+        Args:
+            files: Whether it is file mode's.
+
+        Returns:
+            The bound engine.
+
+        Raises:
+            SystemExit: When the database cannot be reached or opened, naming where it was looked for, or is a SQLite
+                file at another revision that is kept, saying how to start afresh.
+        """
+        if not self.postgres.configured:
+            self._create_folder()
+        try:
+            return self._bring_up(files)
+        except SQLiteRevisionError as error:
+            if not self._delete_if_confirmed(error):
+                raise SystemExit(f"Error: {error}") from error
+        return self._bring_up(files)
+
+    def connect(self) -> Engine:
+        """Bind the process engine to the collection made in the app, which ``dev`` brought up.
+
+        Returns:
+            The bound engine.
+        """
+        return connect(self.url(), statement_timeout=self.postgres.statement_timeout)
+
+    # -- Internals -------------------------------------------------------------
+
+    def _bring_up(self, files: bool) -> Engine:
+        """Bring the database up and bind the process engine to it, or say where it was looked for.
 
         Args:
             files: Whether it is file mode's.
@@ -71,8 +139,6 @@ class DevDatabase:
         Raises:
             SystemExit: When the database cannot be reached or opened, naming where it was looked for.
         """
-        if not self.postgres.configured:
-            self._create_folder()
         try:
             return bootstrap(self.url(files=files), statement_timeout=self.postgres.statement_timeout)
         except OperationalError as error:
@@ -86,15 +152,35 @@ class DevDatabase:
                 f"the section to keep dev's state in {self.FOLDER}/.\n{error.orig}"
             ) from error
 
-    def connect(self) -> Engine:
-        """Bind the process engine to the collection made in the app, which ``dev`` brought up.
+    @staticmethod
+    def _delete_if_confirmed(error: SQLiteRevisionError) -> bool:
+        """Ask on the terminal whether to delete a SQLite file at another revision, with its WAL, and delete it on yes.
+
+        Args:
+            error: The refusal, naming the file and both revisions.
 
         Returns:
-            The bound engine.
+            Whether the file was deleted: never without a terminal to ask on.
         """
-        return connect(self.url(), statement_timeout=self.postgres.statement_timeout)
-
-    # -- Internals -------------------------------------------------------------
+        if not sys.stdin.isatty():
+            return False
+        try:
+            answer = input(
+                f"The SQLite database {error.path} is at revision {error.revision}, and this release needs "
+                f"{error.head}. SQLite databases are never migrated: starting afresh deletes it, and with it the "
+                "components made in the app and the run history. What a spec file or a target declares is applied "
+                "again on start.\nDelete it and start afresh? [y/N] "
+            )
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return False
+        if answer.strip().lower() not in ("y", "yes"):
+            return False
+        get_engine().dispose()
+        for suffix in ("", "-wal", "-shm"):
+            error.path.with_name(error.path.name + suffix).unlink(missing_ok=True)
+        logger.info("Deleted %s: starting afresh", error.path)
+        return True
 
     def _create_folder(self) -> None:
         """Create `FOLDER` holding a ``.gitignore`` of ``*``, as uv does ``.venv``, so no checkout picks it up."""
